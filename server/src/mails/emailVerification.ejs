@@ -1,0 +1,49 @@
+<%# Email Verification Template %>
+<%- include('./layouts/base', {
+  title: 'Verify Your Email - yHealth',
+  preheader: `${firstName}, please verify your email to get started with yHealth`,
+  greeting: `Hi ${firstName}!`,
+  content: `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A855F7 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 40px; line-height: 80px;">✉️</span>
+      </div>
+    </div>
+
+    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px;">
+      Thanks for signing up for <strong>yHealth</strong>! We're excited to have you join our community of people committed to better health and wellbeing.
+    </p>
+
+    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px;">
+      Please verify your email address to activate your account and start your journey with your personal AI Life Coach.
+    </p>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+      <tr>
+        <td style="padding: 16px; background: #F3F4F6; border-radius: 12px; border-left: 4px solid #6366F1;">
+          <p style="margin: 0; font-size: 14px; color: #6B7280;">
+            <strong style="color: #1F2937;">Why verify?</strong><br>
+            Verification helps us ensure account security and enables you to receive important updates about your health journey.
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin: 24px 0 0 0; font-size: 14px; color: #6B7280;">
+      This link will expire in <strong>24 hours</strong>. If you didn't create an account with yHealth, you can safely ignore this email.
+    </p>
+  `,
+  ctaButton: {
+    text: 'Verify My Email',
+    url: verificationUrl
+  },
+  secondaryContent: `
+    <p style="margin: 0 0 8px 0; font-size: 13px; color: #6B7280;">
+      Button not working? Copy and paste this link into your browser:
+    </p>
+    <p style="margin: 0; font-size: 12px; word-break: break-all;">
+      <a href="${verificationUrl}" style="color: #6366F1;">${verificationUrl}</a>
+    </p>
+  `,
+  footerText: 'Need help? Reply to this email or contact us at support@yhealth.app'
+}) %>

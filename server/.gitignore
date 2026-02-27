@@ -1,0 +1,88 @@
+############################
+# Dependencies
+############################
+node_modules/
+
+############################
+# Environment & secrets
+############################
+.env
+.env.*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+############################
+# Build outputs
+############################
+dist/
+build/
+out/
+
+############################
+# Logs & debug
+############################
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+logs/
+
+############################
+# Testing & coverage
+############################
+coverage/
+.nyc_output/
+jest-html-reporters-*.html
+jest-coverage/
+
+############################
+# TypeScript
+############################
+*.tsbuildinfo
+
+############################
+# Prisma
+############################
+prisma/dev.db
+prisma/dev.db-journal
+prisma/test.db
+prisma/test.db-journal
+prisma/migrations/
+
+############################
+# Cache & temp
+############################
+.cache/
+.parcel-cache/
+.turbo/
+.vite/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+
+############################
+# OS / Editor cruft
+############################
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.stackdump
+.vscode/
+.idea/
+*.iml
+
+############################
+# Misc
+############################
+.eslintcache
+.stylelintcache
+.prettier-cache/
+.npm/
+.yarn/
+.pnp.*

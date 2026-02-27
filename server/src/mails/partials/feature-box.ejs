@@ -1,0 +1,15 @@
+<%# Feature/Benefit Box Component %>
+<%# Usage: <%- include('../partials/feature-box', { icon: 'emoji', title: 'Title', description: 'Description' }) %> %>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 16px 0;">
+  <tr>
+    <td width="48" valign="top" style="padding-right: 16px;">
+      <div style="width: 48px; height: 48px; background: #F3F4F6; border-radius: 12px; text-align: center; line-height: 48px; font-size: 24px;">
+        <%= icon %>
+      </div>
+    </td>
+    <td valign="top">
+      <p style="margin: 0 0 4px 0; font-weight: 600; color: #1F2937; font-size: 15px;"><%= title %></p>
+      <p style="margin: 0; color: #6B7280; font-size: 14px; line-height: 20px;"><%= description %></p>
+    </td>
+  </tr>
+</table>

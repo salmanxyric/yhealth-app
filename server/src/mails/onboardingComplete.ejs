@@ -1,0 +1,85 @@
+<%# Onboarding Complete Template %>
+<%- include('./layouts/base', {
+  title: "You're All Set! - yHealth",
+  preheader: `${firstName}, your yHealth setup is complete! Let's start your journey.`,
+  greeting: `Congratulations, ${firstName}!`,
+  content: `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="width: 100px; height: 100px; background: linear-gradient(135deg, #10B981 0%, #059669 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 50px; line-height: 100px;">🏆</span>
+      </div>
+      <h2 style="margin: 0; font-size: 24px; color: #1F2937;">Setup Complete!</h2>
+    </div>
+
+    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px;">
+      You've completed all the setup steps and your <strong>AI Life Coach</strong> is now fully personalized for you. This is the beginning of something amazing!
+    </p>
+
+    <!-- Progress Summary -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0; background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border-radius: 12px;">
+      <tr>
+        <td style="padding: 24px;">
+          <h3 style="margin: 0 0 16px 0; font-size: 16px; color: #065F46;">What you've accomplished:</h3>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Created your account</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Verified your email</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Completed health assessment</span>
+              </td>
+            </tr>
+            <% if (typeof connectedDevices !== 'undefined' && connectedDevices > 0) { %>
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Connected <%= connectedDevices %> device<%= connectedDevices > 1 ? 's' : '' %></span>
+              </td>
+            </tr>
+            <% } %>
+            <% if (typeof goalsSet !== 'undefined' && goalsSet > 0) { %>
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Set <%= goalsSet %> goal<%= goalsSet > 1 ? 's' : '' %></span>
+              </td>
+            </tr>
+            <% } %>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">What's next?</h2>
+
+    <%- include('../partials/feature-box', { icon: '💬', title: 'Chat with Your Coach', description: 'Start a conversation with your AI coach - ask anything about health, fitness, or wellbeing' }) %>
+    <%- include('../partials/feature-box', { icon: '📱', title: 'Enable Notifications', description: 'Get gentle reminders and insights delivered throughout your day' }) %>
+    <%- include('../partials/feature-box', { icon: '📊', title: 'Explore Your Dashboard', description: 'View your health metrics and track progress over time' }) %>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+      <tr>
+        <td style="padding: 16px; background: #EEF2FF; border-radius: 12px; border-left: 4px solid #6366F1;">
+          <p style="margin: 0; font-size: 14px; color: #3730A3;">
+            <strong>Pro tip:</strong> The more you interact with your AI coach, the better it understands you. Start with a quick check-in every morning for the best results!
+          </p>
+        </td>
+      </tr>
+    </table>
+  `,
+  ctaButton: {
+    text: 'Go to My Dashboard',
+    url: dashboardUrl,
+    color: 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
+  },
+  footerText: "Your journey to better health starts now. We're cheering you on!"
+}) %>

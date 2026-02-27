@@ -1,0 +1,45 @@
+import type { MetadataRoute } from "next";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yhealth.app";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: ["/", "/about", "/blogs", "/blogs/*", "/auth/signup"],
+        disallow: [
+          "/dashboard",
+          "/profile",
+          "/settings",
+          "/notifications",
+          "/messages",
+          "/chat",
+          "/chat-history",
+          "/goals",
+          "/activity",
+          "/activity-status",
+          "/workouts",
+          "/nutrition",
+          "/progress",
+          "/achievements",
+          "/wellbeing",
+          "/wellbeing/*",
+          "/ai-coach",
+          "/voice-assistant",
+          "/voice-call",
+          "/admin",
+          "/admin/*",
+          "/onboarding",
+          "/auth/signin",
+          "/auth/forgot-password",
+          "/auth/reset-password",
+          "/auth/verify",
+          "/auth/whoop/*",
+          "/api/*",
+        ],
+      },
+    ],
+    sitemap: `${SITE_URL}/sitemap.xml`,
+  };
+}

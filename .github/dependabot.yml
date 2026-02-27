@@ -1,0 +1,144 @@
+# ============================================
+# Dependabot Configuration
+# ============================================
+# Automatically creates PRs to update dependencies
+# Helps keep dependencies secure and up-to-date
+
+version: 2
+updates:
+  # ============================================
+  # Client Dependencies
+  # ============================================
+  - package-ecosystem: "npm"
+    directory: "/client"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "client"
+      - "automated"
+    commit-message:
+      prefix: "chore(client)"
+      include: "scope"
+    reviewers:
+      - "yhealth-team/frontend-team"
+    assignees:
+      - "yhealth-team/frontend-team"
+    # Group related updates
+    groups:
+      react:
+        patterns:
+          - "react*"
+          - "@types/react*"
+      nextjs:
+        patterns:
+          - "next*"
+      ui:
+        patterns:
+          - "@radix-ui/*"
+          - "@shadcn/*"
+      testing:
+        patterns:
+          - "@testing-library/*"
+          - "jest*"
+    # Ignore major version updates (review manually)
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ============================================
+  # Server Dependencies
+  # ============================================
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "server"
+      - "automated"
+    commit-message:
+      prefix: "chore(server)"
+      include: "scope"
+    reviewers:
+      - "yhealth-team/backend-team"
+    assignees:
+      - "yhealth-team/backend-team"
+    # Group related updates
+    groups:
+      express:
+        patterns:
+          - "express*"
+      typescript:
+        patterns:
+          - "typescript"
+          - "@types/*"
+      testing:
+        patterns:
+          - "jest*"
+          - "@types/jest*"
+    # Ignore major version updates
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ============================================
+  # Shared Dependencies
+  # ============================================
+  - package-ecosystem: "npm"
+    directory: "/shared"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "shared"
+      - "automated"
+    commit-message:
+      prefix: "chore(shared)"
+      include: "scope"
+
+  # ============================================
+  # GitHub Actions
+  # ============================================
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    reviewers:
+      - "yhealth-team/devops-team"
+
+  # ============================================
+  # Docker (if using Dockerfile)
+  # ============================================
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"
+

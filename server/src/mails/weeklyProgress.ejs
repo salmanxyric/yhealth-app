@@ -1,0 +1,82 @@
+<%# Weekly Progress Report Template %>
+<%- include('./layouts/base', {
+  title: 'Your Weekly Progress - yHealth',
+  preheader: `${firstName}, here's your health journey update for the week`,
+  greeting: `Great week, ${firstName}!`,
+  content: `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="font-size: 48px; margin-bottom: 8px;">📈</div>
+      <p style="margin: 0; font-size: 14px; color: #6B7280; text-transform: uppercase; letter-spacing: 1px;">
+        Week of <%= weekStart %> - <%= weekEnd %>
+      </p>
+    </div>
+
+    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px;">
+      Here's a snapshot of your health journey this week. <%= typeof coachMessage !== 'undefined' ? coachMessage : "You're making progress - keep it up!" %>
+    </p>
+
+    <!-- Weekly Stats -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+      <tr>
+        <td style="background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); border-radius: 12px; padding: 24px;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <tr>
+              <td width="33%" style="text-align: center; padding: 12px;">
+                <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #6366F1;"><%= typeof checkIns !== 'undefined' ? checkIns : '0' %></p>
+                <p style="margin: 0; font-size: 12px; color: #6B7280;">Check-ins</p>
+              </td>
+              <td width="33%" style="text-align: center; padding: 12px; border-left: 1px solid #C7D2FE; border-right: 1px solid #C7D2FE;">
+                <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #10B981;"><%= typeof goalsProgress !== 'undefined' ? goalsProgress : '0' %>%</p>
+                <p style="margin: 0; font-size: 12px; color: #6B7280;">Goal Progress</p>
+              </td>
+              <td width="33%" style="text-align: center; padding: 12px;">
+                <p style="margin: 0 0 4px 0; font-size: 28px; font-weight: 700; color: #F59E0B;"><%= typeof streak !== 'undefined' ? streak : '0' %></p>
+                <p style="margin: 0; font-size: 12px; color: #6B7280;">Day Streak</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <% if (typeof highlights !== 'undefined' && highlights.length > 0) { %>
+    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">This Week's Highlights</h2>
+    <% highlights.forEach(function(highlight) { %>
+      <%- include('../partials/feature-box', { icon: highlight.icon || '⭐', title: highlight.title, description: highlight.description }) %>
+    <% }); %>
+    <% } %>
+
+    <% if (typeof insights !== 'undefined' && insights.length > 0) { %>
+    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">AI Coach Insights</h2>
+    <% insights.forEach(function(insight) { %>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 12px 0;">
+      <tr>
+        <td style="padding: 16px; background: #F9FAFB; border-radius: 12px; border-left: 4px solid #6366F1;">
+          <p style="margin: 0; font-size: 14px; color: #4B5563; line-height: 22px;">
+            💡 <%= insight %>
+          </p>
+        </td>
+      </tr>
+    </table>
+    <% }); %>
+    <% } %>
+
+    <% if (typeof nextWeekFocus !== 'undefined' && nextWeekFocus) { %>
+    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">Focus for Next Week</h2>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 12px 0;">
+      <tr>
+        <td style="padding: 20px; background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border-radius: 12px;">
+          <p style="margin: 0; font-size: 15px; color: #065F46; line-height: 24px;">
+            🎯 <%= nextWeekFocus %>
+          </p>
+        </td>
+      </tr>
+    </table>
+    <% } %>
+  `,
+  ctaButton: {
+    text: 'View Full Report',
+    url: dashboardUrl
+  },
+  footerText: "Keep up the great work! Your AI coach is here whenever you need guidance."
+}) %>

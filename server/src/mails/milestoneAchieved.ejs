@@ -1,0 +1,85 @@
+<%# Milestone Achieved Template %>
+<%- include('./layouts/base', {
+  title: 'Milestone Achieved! - yHealth',
+  preheader: `${firstName}, you've reached an amazing milestone!`,
+  greeting: `Incredible, ${firstName}!`,
+  content: `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="width: 120px; height: 120px; background: linear-gradient(135deg, #F59E0B 0%, #D97706 50%, #B45309 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 40px rgba(245, 158, 11, 0.3);">
+        <span style="font-size: 60px; line-height: 120px;">🏅</span>
+      </div>
+      <h2 style="margin: 16px 0 8px 0; font-size: 28px; color: #1F2937;">Milestone Achieved!</h2>
+      <p style="margin: 0; font-size: 14px; color: #6B7280; text-transform: uppercase; letter-spacing: 2px;">
+        <%= milestoneCategory %>
+      </p>
+    </div>
+
+    <!-- Milestone Card -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 32px 0;">
+      <tr>
+        <td style="background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%); border-radius: 16px; padding: 32px; text-align: center; border: 2px solid #F59E0B;">
+          <p style="margin: 0 0 8px 0; font-size: 48px;"><%= typeof milestoneIcon !== 'undefined' ? milestoneIcon : '🌟' %></p>
+          <h3 style="margin: 0 0 8px 0; font-size: 24px; color: #92400E;"><%= milestoneTitle %></h3>
+          <p style="margin: 0; font-size: 16px; color: #B45309;"><%= milestoneDescription %></p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px;">
+      This achievement represents real progress on your health journey. Take a moment to celebrate - you've earned it!
+    </p>
+
+    <% if (typeof stats !== 'undefined') { %>
+    <!-- Achievement Stats -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0; background: #F9FAFB; border-radius: 12px;">
+      <tr>
+        <td style="padding: 20px;">
+          <h3 style="margin: 0 0 16px 0; font-size: 14px; color: #6B7280; text-transform: uppercase; letter-spacing: 1px;">Your Journey So Far</h3>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <% if (stats.daysActive) { %>
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #1F2937; font-size: 14px;">Days Active</span>
+                <span style="color: #6366F1; font-size: 14px; font-weight: 700; float: right;"><%= stats.daysActive %></span>
+              </td>
+            </tr>
+            <% } %>
+            <% if (stats.totalCheckIns) { %>
+            <tr>
+              <td style="padding: 8px 0; border-top: 1px solid #E5E7EB;">
+                <span style="color: #1F2937; font-size: 14px;">Total Check-ins</span>
+                <span style="color: #10B981; font-size: 14px; font-weight: 700; float: right;"><%= stats.totalCheckIns %></span>
+              </td>
+            </tr>
+            <% } %>
+            <% if (stats.goalsCompleted) { %>
+            <tr>
+              <td style="padding: 8px 0; border-top: 1px solid #E5E7EB;">
+                <span style="color: #1F2937; font-size: 14px;">Goals Completed</span>
+                <span style="color: #F59E0B; font-size: 14px; font-weight: 700; float: right;"><%= stats.goalsCompleted %></span>
+              </td>
+            </tr>
+            <% } %>
+          </table>
+        </td>
+      </tr>
+    </table>
+    <% } %>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+      <tr>
+        <td style="padding: 16px; background: #EEF2FF; border-radius: 12px; border-left: 4px solid #6366F1;">
+          <p style="margin: 0; font-size: 14px; color: #3730A3;">
+            <strong>What's next?</strong> Your AI coach has identified new opportunities for growth. Check your dashboard to see your next challenge!
+          </p>
+        </td>
+      </tr>
+    </table>
+  `,
+  ctaButton: {
+    text: 'See My Progress',
+    url: dashboardUrl,
+    color: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)'
+  },
+  footerText: "Every milestone is a step toward your best self. Keep going!"
+}) %>

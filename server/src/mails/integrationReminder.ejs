@@ -1,0 +1,68 @@
+<%# Integration Reminder Template %>
+<%- include('./layouts/base', {
+  title: 'Connect Your Devices - yHealth',
+  preheader: `${firstName}, connect your devices to unlock powerful health insights`,
+  greeting: `Hi ${firstName},`,
+  content: `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="font-size: 48px; margin-bottom: 8px;">🔗</div>
+    </div>
+
+    <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 26px;">
+      <%= connectedCount > 0
+        ? 'Great job connecting ' + connectedCount + ' device' + (connectedCount > 1 ? 's' : '') + '! Want to unlock even more insights?'
+        : "Connect your fitness devices and apps to unlock the full power of yHealth's cross-domain insights." %>
+    </p>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+      <tr>
+        <td style="padding: 16px; background: #ECFDF5; border-radius: 12px; border-left: 4px solid #10B981;">
+          <p style="margin: 0; font-size: 14px; color: #065F46;">
+            <strong>Did you know?</strong> Users who connect 2+ devices discover 3x more actionable insights about their health patterns.
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <h2 style="margin: 24px 0 16px 0; font-size: 18px; color: #1F2937;">Available integrations:</h2>
+
+    <!-- Integration Icons Grid -->
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background: #F3F4F6; border-radius: 12px; margin-bottom: 24px;">
+      <tr>
+        <td width="25%" style="text-align: center; padding: 16px;">
+          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
+            <span style="font-size: 24px;">⌚</span>
+          </div>
+          <p style="margin: 0; font-size: 11px; color: #6B7280;">WHOOP</p>
+        </td>
+        <td width="25%" style="text-align: center; padding: 16px;">
+          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
+            <span style="font-size: 24px;">⌚</span>
+          </div>
+          <p style="margin: 0; font-size: 11px; color: #6B7280;">Fitbit</p>
+        </td>
+        <td width="25%" style="text-align: center; padding: 16px;">
+          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
+            <span style="font-size: 24px;">⌚</span>
+          </div>
+          <p style="margin: 0; font-size: 11px; color: #6B7280;">Garmin</p>
+        </td>
+        <td width="25%" style="text-align: center; padding: 16px;">
+          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
+            <span style="font-size: 24px;">💍</span>
+          </div>
+          <p style="margin: 0; font-size: 11px; color: #6B7280;">Oura</p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin: 0; font-size: 14px; color: #6B7280; text-align: center;">
+      + Strava, Apple Health, Google Fit, and more...
+    </p>
+  `,
+  ctaButton: {
+    text: 'Connect Devices',
+    url: integrationsUrl
+  },
+  footerText: 'Your data is always encrypted and under your control.'
+}) %>

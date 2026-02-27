@@ -1,0 +1,102 @@
+# ============================================
+# yHealth - Root .gitignore
+# ============================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Environment & Secrets (CRITICAL - Never commit these!)
+.env
+.env.*
+!.env.example
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.cert
+secrets/
+.secrets/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.vercel/
+*.tsbuildinfo
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+jest-html-reporters-*.html
+jest-coverage/
+*.log
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Cache & Temp
+.cache/
+.parcel-cache/
+.turbo/
+.vite/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+.eslintcache
+.stylelintcache
+.prettier-cache/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.stackdump
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Docker
+.dockerignore
+
+# Misc
+.npm/
+.yarn/
+.pnp.*
+bun.lockb
+
+# Documentation builds
+*.docx
+presentation/auth-state.json
+
+# Railway
+.railway/
+
+# Claude local settings
+.claude/settings.local.json
+

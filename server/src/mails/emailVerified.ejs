@@ -1,0 +1,57 @@
+<%# Email Verified Confirmation Template %>
+<%- include('./layouts/base', {
+  title: 'Email Verified! - yHealth',
+  preheader: `${firstName}, your email is verified! Welcome to yHealth.`,
+  greeting: `You're all set, ${firstName}!`,
+  content: `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <div style="width: 100px; height: 100px; background: linear-gradient(135deg, #10B981 0%, #059669 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 50px; line-height: 100px;">✓</span>
+      </div>
+      <h2 style="margin: 0; font-size: 24px; color: #1F2937;">Email Verified!</h2>
+    </div>
+
+    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px; text-align: center;">
+      Your email address has been successfully verified. You now have full access to all yHealth features!
+    </p>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+      <tr>
+        <td style="padding: 20px; background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border-radius: 12px;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Email verified</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Account activated</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0;">
+                <span style="color: #10B981; font-size: 18px; margin-right: 12px;">✓</span>
+                <span style="color: #1F2937; font-size: 14px;">Ready to start your journey</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">What's next?</h2>
+
+    <%- include('../partials/feature-box', { icon: '📋', title: 'Complete Your Assessment', description: 'Take a quick 2-3 minute assessment to personalize your experience' }) %>
+    <%- include('../partials/feature-box', { icon: '🔗', title: 'Connect Your Devices', description: 'Link your fitness trackers for unified health insights' }) %>
+    <%- include('../partials/feature-box', { icon: '💬', title: 'Chat with Your AI Coach', description: 'Start a conversation and set your first health goal' }) %>
+  `,
+  ctaButton: {
+    text: 'Go to Dashboard',
+    url: dashboardUrl,
+    color: 'linear-gradient(135deg, #10B981 0%, #059669 100%)'
+  },
+  footerText: "Your AI Life Coach is ready and waiting. Let's make great things happen!"
+}) %>

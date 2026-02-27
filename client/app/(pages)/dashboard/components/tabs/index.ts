@@ -1,0 +1,17 @@
+export { OverviewTab } from "./OverviewTab";
+export { GoalsTab } from "./GoalsTab";
+export { PlansTab } from "./PlansTab";
+export { WorkoutsTab } from "./WorkoutsTab";
+export { NutritionTab } from "./NutritionTab";
+export { ProgressTab } from "./ProgressTab";
+export { ActivityTab } from "./ActivityTab";
+export { AchievementsTab } from "./AchievementsTab";
+export { AICoachTab } from "./AICoachTab";
+export { VoiceAssistantTab } from "./VoiceAssistantTab";
+export { VoiceCallTab } from "./VoiceCallTab";
+export { NotificationsTab } from "./NotificationsTab";
+export { ChatHistoryTab } from "./ChatHistoryTab";
+export { PreferencesTab } from "./PreferencesTab";
+export { SettingsTab } from "./SettingsTab";
+export { ProfileTab } from "./ProfileTab";
+export { WellbeingTab } from "./WellbeingTab";

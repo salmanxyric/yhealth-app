@@ -1,0 +1,6 @@
+{
+  "name": "yhealth-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "yHealth monorepo root — used by Docker and Next.js standalone to detect project root"
+}

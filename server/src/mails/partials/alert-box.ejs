@@ -1,0 +1,20 @@
+<%# Alert/Notification Box Component %>
+<%# Usage: <%- include('../partials/alert-box', { type: 'info|warning|success|error', message: 'Your message' }) %> %>
+<%
+const colors = {
+  info: { bg: '#EEF2FF', border: '#6366F1', textColor: '#3730A3' },
+  warning: { bg: '#FFFBEB', border: '#F59E0B', textColor: '#92400E' },
+  success: { bg: '#ECFDF5', border: '#10B981', textColor: '#065F46' },
+  error: { bg: '#FEF2F2', border: '#EF4444', textColor: '#991B1B' }
+};
+const style = colors[type] || colors.info;
+%>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 20px 0;">
+  <tr>
+    <td style="background: <%= style.bg %>; border-left: 4px solid <%= style.border %>; border-radius: 0 8px 8px 0; padding: 16px 20px;">
+      <p style="margin: 0; font-size: 14px; color: <%= style.textColor %>; line-height: 20px;">
+        <%- message %>
+      </p>
+    </td>
+  </tr>
+</table>
