@@ -21,6 +21,8 @@ import {
   SPEAKING_FINGER_CHANNELS,
   EMOTION_HAND_OFFSETS,
   STATE_POSE_OFFSETS,
+  EMOTION_SPEAKING_POSES,
+  ARM_CLAMP_LIMITS,
   ALL_ANIMATED_BONES,
   type IdleAnimChannel,
 } from "@/lib/avatar/vrmPoses";
@@ -433,7 +435,12 @@ export function useThreeVrm({
           );
         }
 
-        const stateOffset = STATE_POSE_OFFSETS[currentState];
+        // For speaking state, use emotion-specific pose; fallback to default
+        let stateOffset = STATE_POSE_OFFSETS[currentState];
+        if (currentState === "speaking") {
+          const emotionPose = EMOTION_SPEAKING_POSES[emotionModRef.current];
+          if (emotionPose) stateOffset = emotionPose;
+        }
         if (stateOffset) {
           applyStatePose(vrm, stateOffset, stateBlendRef.current, restQuats);
         }
@@ -482,8 +489,46 @@ export function useThreeVrm({
 
         // 5. Layer speaking gestures + finger channels (only when speaking)
         if (currentState === "speaking") {
-          applyChannelsModulated(vrm, SPEAKING_GESTURE_CHANNELS, elapsed);
-          applyChannelsModulated(vrm, SPEAKING_FINGER_CHANNELS, elapsed);
+          // Gesture phase drift — slowly shifts patterns for natural variety (~7s cycle)
+          const gesturePhaseShift = elapsed * 0.15;
+
+          // Apply gesture channels modulated by emotion (gestureScale/gestureSpeed)
+          applyChannelsModulated(
+            vrm, SPEAKING_GESTURE_CHANNELS,
+            elapsed + gesturePhaseShift,
+            mod.gestureScale, mod.gestureSpeed,
+          );
+          applyChannelsModulated(
+            vrm, SPEAKING_FINGER_CHANNELS, elapsed,
+            mod.gestureScale, mod.gestureSpeed,
+          );
+
+          // 5b. Arm rotation clamping — prevent backward/spreading after all gesture layers
+          const clampEuler = tempEulerRef.current;
+          for (const side of ["left", "right"] as const) {
+            const upperName = side === "left" ? "leftUpperArm" : "rightUpperArm";
+            const upperBone = vrm.humanoid?.getNormalizedBoneNode(upperName as VRMHumanBoneName);
+            if (upperBone) {
+              clampEuler.setFromQuaternion(upperBone.quaternion, "XYZ");
+              // Clamp forward/back (X)
+              clampEuler.x = Math.max(ARM_CLAMP_LIMITS.upperArmX.min, Math.min(ARM_CLAMP_LIMITS.upperArmX.max, clampEuler.x));
+              // Clamp spread (Z) — mirrored for right arm
+              if (side === "left") {
+                clampEuler.z = Math.max(ARM_CLAMP_LIMITS.upperArmZ.min, Math.min(ARM_CLAMP_LIMITS.upperArmZ.max, clampEuler.z));
+              } else {
+                clampEuler.z = Math.max(-ARM_CLAMP_LIMITS.upperArmZ.max, Math.min(-ARM_CLAMP_LIMITS.upperArmZ.min, clampEuler.z));
+              }
+              upperBone.quaternion.setFromEuler(clampEuler);
+            }
+
+            const lowerName = side === "left" ? "leftLowerArm" : "rightLowerArm";
+            const lowerBone = vrm.humanoid?.getNormalizedBoneNode(lowerName as VRMHumanBoneName);
+            if (lowerBone) {
+              clampEuler.setFromQuaternion(lowerBone.quaternion, "XYZ");
+              clampEuler.x = Math.max(ARM_CLAMP_LIMITS.lowerArmX.min, Math.min(ARM_CLAMP_LIMITS.lowerArmX.max, clampEuler.x));
+              lowerBone.quaternion.setFromEuler(clampEuler);
+            }
+          }
         }
 
         // 6. Enhanced blink (emotion-modulated interval + double-blink)

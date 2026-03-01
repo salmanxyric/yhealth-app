@@ -187,17 +187,131 @@ export const STATE_POSE_OFFSETS: Record<string, VrmPose> = {
   speaking: {
     spine: { rotation: [0.044, 0, 0, 0.999] },              // 5° engaged forward lean
     upperChest: { rotation: [0.026, 0, 0, 1.0] },           // 3° chest lift
-    // Arms raised forward for visible gesturing — DRAMATIC pose
-    // eulerDegToQuat(45, 10, -40) — arms 45° forward, 40° down, 10° spread
-    leftUpperArm: { rotation: [0.331, 0.206, -0.283, 0.876] },
-    rightUpperArm: { rotation: [0.331, -0.206, 0.283, 0.876] },
-    // Elbows deeply bent (80°) — hands at chest level — eulerDegToQuat(-80, 0, 0)
-    leftLowerArm: { rotation: [-0.643, 0, 0, 0.766] },
-    rightLowerArm: { rotation: [-0.643, 0, 0, 0.766] },
-    // Wrist curl + slight turn — eulerDegToQuat(-15, ±5, 0)
-    leftHand: { rotation: [-0.130, 0.043, -0.006, 0.991] },
-    rightHand: { rotation: [-0.130, -0.043, 0.006, 0.991] },
+    // Arms forward but CLOSE to body — eulerDegToQuat(35, 5, -58)
+    // Z=-58° keeps arms close to body (idle is Z=-65°). Previous Z=-40° was BUG.
+    leftUpperArm: { rotation: [0.243, 0.182, -0.450, 0.840] },
+    rightUpperArm: { rotation: [0.243, -0.182, 0.450, 0.840] },
+    // 70° elbow bend — hands at chest level — eulerDegToQuat(-70, 0, 0)
+    leftLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
+    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
+    // 12° wrist curl — eulerDegToQuat(-12, 0, 0)
+    leftHand: { rotation: [-0.105, 0, 0, 0.995] },
+    rightHand: { rotation: [-0.105, 0, 0, 0.995] },
   },
+};
+
+// ============================================
+// EMOTION-SPECIFIC SPEAKING POSES
+// ============================================
+
+/**
+ * Per-emotion ABSOLUTE target poses while speaking.
+ * Overrides STATE_POSE_OFFSETS.speaking when the RAF loop detects a speaking state.
+ * Each emotion maps to the user's 6 gesture states:
+ *   neutral → Neutral Speaking, happy → Motivational/Energetic,
+ *   relaxed → Calm/Supportive, sad → Gentle/Empathetic,
+ *   angry → Strong Warning, surprised → Emergency Support.
+ *
+ * All quaternions pre-computed via eulerDegToQuat.
+ */
+export const EMOTION_SPEAKING_POSES: Record<string, VrmPose> = {
+  // Neutral Speaking: Relaxed forward-resting position
+  neutral: {
+    spine: { rotation: [0.044, 0, 0, 0.999] },
+    upperChest: { rotation: [0.026, 0, 0, 1.0] },
+    // eulerDegToQuat(35, 5, -58) — 35° forward, close to body
+    leftUpperArm: { rotation: [0.243, 0.182, -0.450, 0.840] },
+    rightUpperArm: { rotation: [0.243, -0.182, 0.450, 0.840] },
+    leftLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° elbow
+    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
+    leftHand: { rotation: [-0.105, 0, 0, 0.995] },
+    rightHand: { rotation: [-0.105, 0, 0, 0.995] },
+  },
+
+  // Motivational/Energetic: Higher arms, bigger gestures
+  happy: {
+    spine: { rotation: [0.035, 0, 0, 0.999] },
+    upperChest: { rotation: [0.035, 0, 0, 0.999] },
+    // eulerDegToQuat(45, 8, -50) — arms higher, slightly more open for energy
+    leftUpperArm: { rotation: [0.319, 0.220, -0.365, 0.847] },
+    rightUpperArm: { rotation: [0.319, -0.220, 0.365, 0.847] },
+    leftLowerArm: { rotation: [-0.500, 0, 0, 0.866] },   // 60° elbow
+    rightLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
+    leftHand: { rotation: [-0.087, 0, 0, 0.996] },
+    rightHand: { rotation: [-0.087, 0, 0, 0.996] },
+  },
+
+  // Calm/Supportive: Lower arms, close to body, gentle
+  relaxed: {
+    spine: { rotation: [0.026, 0, 0, 1.0] },
+    upperChest: { rotation: [0.017, 0, 0, 1.0] },
+    // eulerDegToQuat(25, 3, -62) — arms low, close
+    leftUpperArm: { rotation: [0.172, 0.133, -0.498, 0.840] },
+    rightUpperArm: { rotation: [0.172, -0.133, 0.498, 0.840] },
+    leftLowerArm: { rotation: [-0.383, 0, 0, 0.924] },   // 45° elbow
+    rightLowerArm: { rotation: [-0.383, 0, 0, 0.924] },
+    leftHand: { rotation: [-0.070, 0, 0, 0.998] },
+    rightHand: { rotation: [-0.070, 0, 0, 0.998] },
+  },
+
+  // Gentle/Empathetic: Similar to calm, slightly more closed
+  sad: {
+    spine: { rotation: [0.044, 0, 0, 0.999] },
+    upperChest: { rotation: [0.017, 0, 0, 1.0] },
+    // eulerDegToQuat(25, 3, -62) — low, close, protective
+    leftUpperArm: { rotation: [0.172, 0.133, -0.498, 0.840] },
+    rightUpperArm: { rotation: [0.172, -0.133, 0.498, 0.840] },
+    leftLowerArm: { rotation: [-0.423, 0, 0, 0.906] },   // 50° elbow
+    rightLowerArm: { rotation: [-0.423, 0, 0, 0.906] },
+    leftHand: { rotation: [-0.087, 0, 0, 0.996] },
+    rightHand: { rotation: [-0.087, 0, 0, 0.996] },
+  },
+
+  // Strong Warning: Tight, controlled, aggressive forward lean
+  angry: {
+    spine: { rotation: [0.052, 0, 0, 0.999] },
+    upperChest: { rotation: [0.035, 0, 0, 0.999] },
+    // eulerDegToQuat(40, 5, -55) — forward, tight
+    leftUpperArm: { rotation: [0.284, 0.194, -0.420, 0.840] },
+    rightUpperArm: { rotation: [0.284, -0.194, 0.420, 0.840] },
+    leftLowerArm: { rotation: [-0.643, 0, 0, 0.766] },   // 80° elbow — fists close
+    rightLowerArm: { rotation: [-0.643, 0, 0, 0.766] },
+    leftHand: { rotation: [-0.130, 0, 0, 0.992] },
+    rightHand: { rotation: [-0.130, 0, 0, 0.992] },
+  },
+
+  // Emergency Support: Open palms, calming gesture
+  surprised: {
+    spine: { rotation: [0.035, 0, 0, 0.999] },
+    upperChest: { rotation: [0.026, 0, 0, 1.0] },
+    // eulerDegToQuat(30, 5, -55) — forward, open
+    leftUpperArm: { rotation: [0.210, 0.157, -0.436, 0.861] },
+    rightUpperArm: { rotation: [0.210, -0.157, 0.436, 0.861] },
+    leftLowerArm: { rotation: [-0.423, 0, 0, 0.906] },   // 50° elbow — open hands visible
+    rightLowerArm: { rotation: [-0.423, 0, 0, 0.906] },
+    // Slight upward wrist for palm-forward calming gesture
+    leftHand: { rotation: [0.044, 0.026, 0, 0.999] },
+    rightHand: { rotation: [0.044, -0.026, 0, 0.999] },
+  },
+};
+
+// ============================================
+// ARM ROTATION CLAMP LIMITS
+// ============================================
+
+/**
+ * Euler-angle clamp ranges (radians) for arm bones while speaking.
+ * Applied as post-processing after all gesture layers to prevent
+ * unnatural backward rotations or spreading.
+ *
+ * Upper arm X: forward/back — prevent backward rotation (negative X)
+ * Upper arm Z: spread — prevent T-pose spreading (left: more negative = closer)
+ * Lower arm X: elbow bend — never fully straight or over-bent
+ */
+export const ARM_CLAMP_LIMITS = {
+  upperArmX: { min: -0.087, max: 1.047 },  // -5° to 60° forward
+  upperArmZ: { min: -1.222, max: -0.698 },  // -70° to -40° (left side; negate for right)
+  lowerArmX: { min: -1.745, max: -0.262 },  // -100° to -15° elbow bend
 };
 
 // ============================================

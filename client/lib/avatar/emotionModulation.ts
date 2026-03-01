@@ -32,6 +32,10 @@ export interface EmotionModulators {
   fingerMicroScale: number;
   /** Weight-shift amplitude multiplier. */
   weightShiftScale: number;
+  /** Speaking gesture amplitude multiplier (1.0 = default). */
+  gestureScale: number;
+  /** Speaking gesture frequency multiplier (1.0 = default). */
+  gestureSpeed: number;
 }
 
 // ============================================
@@ -51,6 +55,8 @@ export const EMOTION_MODULATORS: Record<string, EmotionModulators> = {
     fingerCurlOffset: 0,
     fingerMicroScale: 1.0,
     weightShiftScale: 1.0,
+    gestureScale: 1.0,    // Natural, medium gestures
+    gestureSpeed: 1.0,
   },
   happy: {
     amplitudeScale: 1.3,
@@ -64,6 +70,8 @@ export const EMOTION_MODULATORS: Record<string, EmotionModulators> = {
     fingerCurlOffset: -0.02, // more open hand
     fingerMicroScale: 1.3,
     weightShiftScale: 1.4,
+    gestureScale: 1.5,    // Motivational — bigger, wider gestures
+    gestureSpeed: 1.3,    // Faster, more energetic
   },
   sad: {
     amplitudeScale: 0.6,
@@ -77,6 +85,8 @@ export const EMOTION_MODULATORS: Record<string, EmotionModulators> = {
     fingerCurlOffset: 0.02, // slightly curled
     fingerMicroScale: 0.5,
     weightShiftScale: 0.5,
+    gestureScale: 0.4,    // Gentle — smaller, slower gestures
+    gestureSpeed: 0.6,
   },
   angry: {
     amplitudeScale: 0.7, // tense, restricted
@@ -90,6 +100,8 @@ export const EMOTION_MODULATORS: Record<string, EmotionModulators> = {
     fingerCurlOffset: 0.08, // fist tendency
     fingerMicroScale: 0.3, // tight, minimal movement
     weightShiftScale: 0.6,
+    gestureScale: 0.8,    // Strong warning — sharp, controlled, contained
+    gestureSpeed: 1.4,    // Quick, sharp movements
   },
   relaxed: {
     amplitudeScale: 1.1,
@@ -103,6 +115,8 @@ export const EMOTION_MODULATORS: Record<string, EmotionModulators> = {
     fingerCurlOffset: -0.01,
     fingerMicroScale: 0.8,
     weightShiftScale: 1.2,
+    gestureScale: 0.6,    // Calm — slower, smaller, soothing
+    gestureSpeed: 0.7,
   },
   surprised: {
     amplitudeScale: 0.3, // brief freeze
@@ -116,6 +130,8 @@ export const EMOTION_MODULATORS: Record<string, EmotionModulators> = {
     fingerCurlOffset: -0.04, // fingers spread
     fingerMicroScale: 1.5,
     weightShiftScale: 0.4,
+    gestureScale: 0.3,    // Emergency — minimal gestures, hands open, calming
+    gestureSpeed: 0.5,
   },
 };
 
@@ -133,6 +149,8 @@ export const MODULATOR_NUMERIC_KEYS: (keyof EmotionModulators)[] = [
   "fingerCurlOffset",
   "fingerMicroScale",
   "weightShiftScale",
+  "gestureScale",
+  "gestureSpeed",
 ];
 
 /** Tuple keys that need per-element lerp. */
