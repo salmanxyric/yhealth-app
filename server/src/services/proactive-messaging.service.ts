@@ -15,7 +15,7 @@ import { userCoachingProfileService } from './user-coaching-profile.service.js';
 import { dailyAnalysisService } from './daily-analysis.service.js';
 import type { DailyAnalysisReport, StructuredInsight, CrossDomainInsight, CoachingDirective } from './daily-analysis.service.js';
 import type { StableTraits } from './user-coaching-profile.service.js';
-import { env } from '../config/env.config.js';
+
 
 // ============================================
 // CONSTANTS
@@ -59,7 +59,6 @@ export interface MessageCandidate {
 
 class ProactiveMessagingService {
   private llm: ChatOpenAI;
-  private llmPro: ChatOpenAI;
 
   // Per-user insight cache to avoid redundant DB calls within the same job cycle.
   // buildInsightDrivenContext() is called up to 8× per user per hour — this ensures
@@ -72,14 +71,10 @@ class ProactiveMessagingService {
   private static readonly INSIGHT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
+    // Use gpt-4o for ALL proactive messages — best model for strict, contextual coaching
     this.llm = new ChatOpenAI({
-      modelName: env.openai.model || 'gpt-4o-mini',
-      maxTokens: 600,
-    });
-    // Higher-quality model for deep coaching analysis
-    this.llmPro = new ChatOpenAI({
       modelName: 'gpt-4o',
-      maxTokens: 1000,
+      maxTokens: 800,
     });
   }
 
@@ -1028,25 +1023,25 @@ class ProactiveMessagingService {
           type: 'recovery_advice',
           eligible: !!(context.whoop?.isConnected && recovery != null && recovery < 40 && !sent('recovery_advice')),
           timeWindowValid: hour >= 6 && hour < 10,
-          score: 75 + (hasPlans ? 10 : 0),
+          score: 85 + (hasPlans ? 10 : 0),
         },
         {
           type: 'sleep',
           eligible: !!(context.whoop?.isConnected && sleepData && sleepData.hoursAgo < 24 && isPoorSleep && !sent('sleep')),
           timeWindowValid: hour >= 6 && hour < 10,
-          score: 70 + (recovery != null && recovery < 40 ? 10 : 0),
+          score: 80 + (recovery != null && recovery < 40 ? 10 : 0),
         },
         {
           type: 'coach_pro_analysis',
           eligible: !sent('coach_pro_analysis'),
           timeWindowValid: hour >= 14 && hour < 17,
-          score: 70 + (context.nutrition?.adherenceRate != null && context.nutrition.adherenceRate < 40 ? 10 : 0),
+          score: 80 + (context.nutrition?.adherenceRate != null && context.nutrition.adherenceRate < 40 ? 10 : 0),
         },
         {
           type: 'workout',
           eligible: missedWorkouts > 0 && !sent('workout'),
           timeWindowValid: hour >= 14 && hour < 18,
-          score: 65 + (hasPlans ? 10 : 0),
+          score: 75 + (hasPlans ? 10 : 0),
         },
         {
           type: 'goal_stalled',
@@ -1058,7 +1053,7 @@ class ProactiveMessagingService {
           type: 'nutrition',
           eligible: todayMealCount === 0 && !sent('nutrition'),
           timeWindowValid: hour >= 14 && hour < 18,
-          score: 55 + (context.nutrition?.activeDietPlan ? 10 : 0),
+          score: 70 + (context.nutrition?.activeDietPlan ? 10 : 0),
         },
         {
           type: 'habit_missed',
@@ -1252,9 +1247,7 @@ class ProactiveMessagingService {
       const completionRate = context.userContext?.workouts?.completionRate;
       const dailyScore = context.userContext?.dailyScore?.latestScore;
 
-      // Determine if this is a high-value message type that needs the pro model
-      const proMessageTypes: ProactiveMessageType[] = ['coach_pro_analysis', 'morning_briefing', 'weekly_digest', 'recovery_advice'];
-      const useProModel = proMessageTypes.includes(context.type);
+      // All messages now use gpt-4o for best coaching quality
 
       switch (context.type) {
         case 'sleep':
@@ -1265,7 +1258,7 @@ class ProactiveMessagingService {
 ${recovery ? `- WHOOP recovery: ${recovery.score}%` : ''}
 ${streak ? `- Active streak: ${streak} days` : ''}
 ${dailyScore ? `- Yesterday's daily score: ${dailyScore}/100` : ''}`;
-          prompt = `Analyze their sleep data like a sports scientist would. Connect sleep quality to their recovery score if available. Explain what ${context.data.sleepHours?.toFixed(1)}h of sleep means for today's performance. Give one specific actionable tip for tonight (e.g., "aim for lights off by 10:30 PM"). Ask what kept them up.`;
+          prompt = `Be a STRICT teacher. ${context.data.sleepHours?.toFixed(1)}h of sleep is UNACCEPTABLE for someone with health goals. Don't gently ask about it — CONFRONT them: "This is unacceptable. [X] hours is destroying your recovery, spiking your cortisol, and making you crave junk food." Reference ALL available biometrics: recovery score, HRV (ms), resting heart rate (bpm), skin temperature changes. Connect sleep to EVERYTHING: recovery, workout performance, nutrition cravings, mood. DEMAND a specific bedtime tonight: "You are going to bed by 10 PM. No screens after 9:30. Non-negotiable." Calculate the damage: "At this rate, you're losing [X]% of your muscle recovery and adding [Y] days to your goal." Ask what kept them up — but don't accept excuses.`;
           break;
 
         case 'whoop_sync':
@@ -1283,7 +1276,7 @@ ${completionRate !== undefined ? `- Weekly completion rate: ${completionRate}%` 
 ${plans?.length ? `- Active plan: "${plans[0].name}" — ${plans[0].progress}% complete` : '- No active workout plan'}
 ${streak ? `- Current streak: ${streak} days` : ''}
 ${recovery ? `- Recovery: ${recovery.score}%` : ''}`;
-          prompt = `Don't just say "you missed workouts." Analyze the pattern — ${context.data.missedWorkouts} missed in 7 days is a ${completionRate !== undefined ? completionRate : '?'}% rate. If they have an active plan, reference it by name and explain how missed sessions affect their progress timeline. If recovery is low, acknowledge that might be why. Offer to adjust the plan difficulty, not just "get back on track."`;
+          prompt = `Be ANGRY about this. ${context.data.missedWorkouts} missed workouts is a PATTERN of failure, not a one-off. CONFRONT them: "You've missed ${context.data.missedWorkouts} workouts. That's a ${completionRate !== undefined ? completionRate : '?'}% completion rate. At this rate, you will NEVER reach your goals." If they have an active plan, say: "Your '${plans?.[0]?.name || 'workout plan'}' is at ${plans?.[0]?.progress || '?'}% — and it's going BACKWARDS." Calculate the timeline damage: "${context.data.missedWorkouts} missed sessions adds [X] weeks to reaching your goal." DON'T just suggest getting back on track — RESCHEDULE: "I'm moving your missed sessions to [specific days]. Here's your adjusted schedule for the rest of the week. No excuses." If recovery is low, acknowledge it but don't let it be a permanent excuse. Ask what specifically prevented them from training.`;
           break;
 
         case 'nutrition':
@@ -1294,7 +1287,7 @@ ${context.userContext?.nutrition?.activeDietPlan ? `- Active diet plan: "${conte
 - Protein target: ${context.userContext.nutrition.activeDietPlan.protein || 'not set'}g` : '- No active diet plan'}
 ${dailyScore ? `- Yesterday's daily score: ${dailyScore}/100` : ''}
 ${context.userContext?.nutrition?.adherenceRate ? `- Nutrition adherence: ${context.userContext.nutrition.adherenceRate}%` : ''}`;
-          prompt = `Don't just ask "have you eaten?" — explain what missing meal logs means for their goals. If they have a calorie target, explain they're ${context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 0} kcal behind for the day. Connect nutrition tracking to their specific goals (muscle building, weight loss, etc). Suggest logging their next meal with specific macro targets.`;
+          prompt = `CONFRONT them about nutrition neglect. Don't gently ask "have you eaten?" — be a strict teacher: "It's after 2 PM and you haven't tracked a SINGLE meal. Your body needed ${context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 'your target'} calories by now — you've logged ZERO. Every hour without proper nutrition, your metabolism SLOWS, muscle tissue BREAKS DOWN, and your body holds onto fat." If they have a calorie/macro target, do the math: "You're ${context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 0} kcal behind. That's roughly ${Math.ceil((context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 2000) / 3)} calories per remaining meal to catch up." Connect to their specific goals. DEMAND action: "Log your next meal RIGHT NOW. I need to see protein, carbs, and fat numbers. No excuses about being busy — it takes 30 seconds." If they have an active diet plan, reference it by name and their adherence rate.`;
           break;
 
         case 'wellbeing':
@@ -1409,12 +1402,14 @@ ${context.data.todayWorkout ? `- Scheduled workout: "${context.data.todayWorkout
 ${context.data.sleepHours ? `- Last night's sleep: ${context.data.sleepHours}h` : ''}
 ${context.data.strain ? `- Yesterday's strain: ${context.data.strain}/21` : ''}
 ${context.data.hrvStatus ? `- HRV status: ${context.data.hrvStatus}` : ''}`;
-          prompt = `This is a critical health message. Analyze like a sports physiologist:
-1. STATE: ${context.data.recoveryScore}% recovery means their body is still processing yesterday's stress
-${context.data.strain ? `2. CAUSE: Yesterday's strain was ${context.data.strain}/21 ${parseFloat(context.data.strain) > 15 ? '(high — likely contributing to low recovery)' : ''}` : ''}
-3. RECOMMENDATION: ${context.data.todayWorkout ? `Modify "${context.data.todayWorkout}" — reduce volume by 30-40% or swap for active recovery (mobility work, light cardio zone 1-2)` : 'Today should be active recovery — light walk, stretching, mobility work'}
-4. RECOVERY PROTOCOL: Specific tips (hydration, sleep timing, stress management)
-Be authoritative but caring. This protects them from overtraining.`;
+          prompt = `This is a CRITICAL health intervention. Be a strict teacher who REFUSES to let them hurt themselves:
+"Your recovery is at ${context.data.recoveryScore}% — your body is SCREAMING at you to stop. I am CANCELING any intense workout today. This is non-negotiable."
+1. STATE: ${context.data.recoveryScore}% means their autonomic nervous system is overwhelmed. Reference HRV, resting heart rate, and skin temperature if available.
+${context.data.strain ? `2. CAUSE: Yesterday's strain was ${context.data.strain}/21 ${parseFloat(context.data.strain) > 15 ? '— that is TOO HIGH for your current recovery capacity. You pushed past your limit.' : ''}` : ''}
+3. DEMAND: ${context.data.todayWorkout ? `"I'm replacing '${context.data.todayWorkout}' with active recovery — 20min light walk + 15min mobility/stretching. No arguments. I'm rescheduling the intense session to when your recovery is above 60%."` : '"Today is MANDATORY active recovery — light walk, stretching, mobility work. No exceptions."'}
+4. RECOVERY PROTOCOL: Specific demands — "Drink 2L of water by 3 PM. No caffeine after 2 PM. Lights off by 10 PM. This is how we FIX this."
+5. CONSEQUENCE: "Pushing through ${context.data.recoveryScore}% recovery is how injuries happen and how people lose MONTHS of progress in one stupid decision."
+Factor in their age for recovery timeline expectations.`;
           break;
 
         case 'competition_update':
@@ -1515,14 +1510,28 @@ This should read like a professional sports coach's analysis, not a motivational
       const toneOverride = context.coachingDirective?.toneRecommendation;
       const headlineHint = context.coachingDirective?.headline;
 
-      const systemPrompt = `You are ${assistantName}, a professional health & performance coach for ${userName || 'your client'}. You have deep knowledge of sports science, nutrition science, and behavioral psychology. You've been tracking their data daily and know their patterns intimately.
+      const systemPrompt = `You are ${assistantName}, a STRICT teacher and real human coach for ${userName || 'your client'}. You have deep knowledge of sports science, nutrition science, and behavioral psychology. You've been tracking their data daily and know their patterns intimately. You are NOT a gentle notification system — you are an accountability partner who DEMANDS results.
 ${stableTraitsSection}
+## Your Coaching Voice — STRICT TEACHER MODE
+You are NOT a gentle reminder app. You are a STRICT teacher and real human coach who CARES enough to be HARSH.
+When data shows the user is failing, you CONFRONT them directly:
+- Use STRONG words: "This is unacceptable", "You're failing yourself", "I refuse to watch you waste your potential", "I'm disappointed"
+- Show ANGER when they miss workouts or ignore nutrition: "You skipped [X] workouts. While claiming you want results. Explain yourself."
+- SCARE with consequences: specific health impacts, timeline delays, goal destruction
+- DEMAND action: "Here's what you're going to do TODAY. No negotiation."
+- Reference EVERY metric available: sleep hours, recovery %, HRV, resting HR, skin temp, calories, streak
+- Connect ALL dots: "Your 4.8h sleep → 38% recovery → failed workout → junk food craving → declining score. See the cascade?"
+- When workouts are missed: "I'm rescheduling your missed sessions. No excuses. Here's your new plan."
+- When nutrition is off: "You're [X] calories behind. That's [Y] meals worth of fuel your body NEEDED."
+- Be a TEACHER who cares deeply: "I'm hard on you BECAUSE I see your potential. Stop wasting it."
+- NEVER soften bad news: no "just a quick nudge", no "no judgment", no "it's okay". It's NOT okay when goals are at stake.
+
 ## Your Voice
 - Speak like a professional coach who genuinely cares — knowledgeable, direct, and actionable
 - Reference SPECIFIC numbers from their data (never round or approximate when exact data is given)
 - Connect data points to each other — show patterns, not just isolated facts
 - Every message must contain at least ONE cross-domain insight connecting 2+ health pillars
-- Be warm but substantive — care shows through analysis, not just cheerful words
+- Care shows through ANALYSIS and TOUGH LOVE, not cheerful words
 - Use their name naturally once at the start
 
 ## This Message
@@ -1579,8 +1588,7 @@ Return ONLY the markdown-formatted message text.`;
         new HumanMessage('Generate the proactive coaching message.'),
       ];
 
-      const model = useProModel ? this.llmPro : this.llm;
-      const response = await model.invoke(messages);
+      const response = await this.llm.invoke(messages);
       const message = typeof response.content === 'string'
         ? response.content.trim()
         : String(response.content).trim();
