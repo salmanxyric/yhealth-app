@@ -2,6 +2,7 @@
 
 import { memo } from 'react';
 import { format } from 'date-fns';
+import { Lock, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageBubble, MessageStatus, MessageMedia } from '@/components/chat';
 import { AudioPlayer } from './AudioPlayer';
@@ -33,6 +34,8 @@ export interface ChatMessageItemData {
   reactions?: Array<{ emoji: string; count: number; userIds: string[] }>;
   isStarred?: boolean;
   isPinned?: boolean;
+  isViewOnce?: boolean;
+  viewOnceOpenedAt?: string | null;
 }
 
 interface ChatMessageItemProps {
@@ -48,6 +51,7 @@ interface ChatMessageItemProps {
   onPin?: (messageId: string) => void;
   onReaction?: (messageId: string, emoji: string) => void;
   onUserClick?: (userId: string, userName: string, userAvatar?: string | null) => void;
+  onViewOnce?: (messageId: string) => void;
 }
 
 export const ChatMessageItem = memo(function ChatMessageItem({
@@ -63,15 +67,29 @@ export const ChatMessageItem = memo(function ChatMessageItem({
   onPin,
   onReaction,
   onUserClick,
+  onViewOnce,
 }: ChatMessageItemProps) {
   // Use senderId comparison for accurate user detection
   const isUser = message.senderId === currentUserId;
-  const showMedia = message.mediaUrl && message.mediaType !== 'audio';
-  const showAudio = message.mediaUrl && message.mediaType === 'audio';
+  // View-once logic
+  const isViewOnce = message.isViewOnce;
+  const viewOnceOpened = isViewOnce && !!message.viewOnceOpenedAt;
+  // For view-once: hide media if opened (or if recipient hasn't opened yet, show locked placeholder)
+  const showMedia = !isViewOnce
+    ? (message.mediaUrl && message.mediaType !== 'audio')
+    : false; // View-once media is never shown via normal MediaMessage
+  const showAudio = !isViewOnce
+    ? (message.mediaUrl && message.mediaType === 'audio')
+    : false;
   // Only show text bubble if there's actual content (not just whitespace)
   const hasTextContent = message.content && message.content.trim().length > 0;
   // Check if this is a system message
   const isSystemMessage = message.contentType === 'system';
+
+  // Get content type label for view-once
+  const viewOnceLabel = message.mediaType === 'video' ? 'video'
+    : message.mediaType === 'audio' ? 'audio'
+    : 'photo';
 
   // Get initials from sender name
   const getInitials = (name?: string): string => {
@@ -161,6 +179,59 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
         <div className={cn('flex items-end gap-2', isUser ? 'flex-row-reverse' : 'flex-row')}>
           <div className={cn('flex flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
+            {/* View-once message card */}
+            {isViewOnce && (
+              viewOnceOpened ? (
+                // Already opened — show "Opened" status
+                <div className={cn(
+                  'flex items-center gap-2 px-4 py-3 rounded-2xl',
+                  isUser
+                    ? 'bg-emerald-600/20 border border-emerald-500/30'
+                    : 'bg-slate-200/60 dark:bg-slate-700/60 border border-slate-300/30 dark:border-slate-600/30'
+                )}>
+                  <Eye className="h-4 w-4 text-slate-400" />
+                  <span className="text-sm text-slate-500 dark:text-slate-400 italic">
+                    {isUser ? `View once ${viewOnceLabel} \u2022 Opened` : `Opened`}
+                  </span>
+                </div>
+              ) : isUser ? (
+                // Sender: waiting for recipient to open
+                <div className={cn(
+                  'flex items-center gap-2 px-4 py-3 rounded-2xl',
+                  'bg-emerald-600/20 border border-emerald-500/30'
+                )}>
+                  <EyeOff className="h-4 w-4 text-emerald-400" />
+                  <span className="text-sm text-emerald-600 dark:text-emerald-400">
+                    View once {viewOnceLabel} &bull; Waiting...
+                  </span>
+                </div>
+              ) : (
+                // Recipient: locked, tap to open
+                <button
+                  onClick={() => onViewOnce?.(message.id)}
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer transition-all',
+                    'bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800',
+                    'border border-slate-300/50 dark:border-slate-600/50',
+                    'hover:border-emerald-400 hover:shadow-md hover:shadow-emerald-500/10',
+                    'active:scale-[0.98]'
+                  )}
+                >
+                  <div className="h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Lock className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                      View once {viewOnceLabel}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Tap to open
+                    </p>
+                  </div>
+                </button>
+              )
+            )}
+
             {/* Media */}
             {showMedia && message.mediaType && message.mediaUrl && (
               <MessageMedia

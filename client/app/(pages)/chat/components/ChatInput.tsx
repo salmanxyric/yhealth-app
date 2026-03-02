@@ -27,7 +27,7 @@ const EmojiPicker = dynamic(
 }>;
 
 interface ChatInputProps {
-  onSend: (message: string, options?: { mediaFiles?: File[]; repliedToId?: string }) => void;
+  onSend: (message: string, options?: { mediaFiles?: File[]; repliedToId?: string; isViewOnce?: boolean }) => void;
   isLoading?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -54,6 +54,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [isViewOnce, setIsViewOnce] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -145,9 +146,11 @@ export function ChatInput({
       onSend(trimmedMessage, {
         mediaFiles: mediaFiles.length > 0 ? mediaFiles : undefined,
         repliedToId: replyTo?.id,
+        isViewOnce: isViewOnce && mediaFiles.length > 0 ? true : undefined,
       });
       setMessage('');
       setMediaFiles([]);
+      setIsViewOnce(false);
       onCancelReply?.();
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -225,6 +228,8 @@ export function ChatInput({
                 key={index}
                 file={file}
                 onRemove={() => handleRemoveMedia(index)}
+                isViewOnce={isViewOnce}
+                onToggleViewOnce={() => setIsViewOnce((prev) => !prev)}
               />
             ))}
           </div>

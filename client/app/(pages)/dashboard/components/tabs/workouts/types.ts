@@ -14,6 +14,7 @@ export interface Exercise {
   completed: boolean;
   muscleGroup: string;
   libraryExerciseId?: string;
+  thumbnailUrl?: string;
 }
 
 // Progressive overload settings
@@ -44,6 +45,8 @@ export interface DayWorkout {
   multiplier?: number; // Progressive overload multiplier for this day
   isRestDay?: boolean;
   notes?: string;
+  scheduledDate?: string; // YYYY-MM-DD — auto-computed from plan startDate + day offset
+  scheduledTime?: string; // HH:mm — user-defined per day
 }
 
 // Week-level plan structure
@@ -130,6 +133,7 @@ export interface CreateWorkoutFormData {
   aiPrompt: string;
   workoutsPerWeek?: number;
   selectedDays?: string[]; // Selected days of the week: ['monday', 'tuesday', etc.]
+  startDate: string; // YYYY-MM-DD — plan start date
 }
 
 // AI Generation form data
@@ -143,6 +147,7 @@ export interface AIGenerationFormData {
   workoutLocation: "home" | "gym" | "outdoor";
   goalCategory: string;
   selectedDays?: string[]; // Selected days of the week
+  startDate: string; // YYYY-MM-DD — plan start date
 }
 
 export interface AIGeneratedPlan {

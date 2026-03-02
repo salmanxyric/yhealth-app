@@ -6,6 +6,7 @@ import { VoiceAssistantModal } from "@/components/common/voice-assistant-modal";
 import { AlarmProvider } from "./providers/AlarmProvider";
 import { ConfirmDialogProvider } from "@/components/common/ConfirmDialog";
 import { VisitorTracker } from "@/components/VisitorTracker";
+import { organizationJsonLd, webSiteJsonLd } from "@/lib/structured-data";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -90,6 +91,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd()) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd()) }}
+        />
+      </head>
       <body
         className={`${inter.variable} ${poppins.variable} font-sans antialiased`}
       >

@@ -18,6 +18,8 @@ import {
   Check,
 } from "lucide-react";
 import { workoutsService } from "@/src/shared/services";
+import type { ExerciseListItem } from "@/src/shared/services/exercises.service";
+import { ExerciseSearchInput } from "./ExerciseSearchInput";
 import { workoutLogger } from "./logger";
 import {
   PRESET_EXERCISES,
@@ -43,6 +45,8 @@ interface CreateWorkoutModalProps {
 
 type CreationMode = "manual" | "ai";
 
+const getTodayDateStr = () => new Date().toISOString().split('T')[0];
+
 const initialFormData: CreateWorkoutFormData = {
   name: "",
   description: "",
@@ -54,6 +58,7 @@ const initialFormData: CreateWorkoutFormData = {
   aiPrompt: "",
   workoutsPerWeek: 4, // Default to 4 days per week
   selectedDays: ['monday', 'tuesday', 'thursday', 'friday'], // Default days for 4 days/week
+  startDate: getTodayDateStr(),
 };
 
 const initialAIFormData: AIGenerationFormData = {
@@ -66,6 +71,7 @@ const initialAIFormData: AIGenerationFormData = {
   workoutLocation: "home",
   goalCategory: "overall_optimization",
   selectedDays: ['monday', 'wednesday', 'friday'], // Default days for 3 days/week
+  startDate: getTodayDateStr(),
 };
 
 export function CreateWorkoutModal({
@@ -81,6 +87,7 @@ export function CreateWorkoutModal({
   const [aiWorkoutTips, setAIWorkoutTips] = useState<string[]>([]);
   const [generatedSchedule, setGeneratedSchedule] = useState<Record<string, DayWorkout | null> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
 
   // Reset form
   const resetForm = useCallback(() => {
@@ -171,6 +178,27 @@ export function CreateWorkoutModal({
     }));
     workoutLogger.debug('Exercise added to form', { exercise: exerciseName, muscleGroup });
   }, []);
+
+  // Add exercise from search (with DB data)
+  const addExerciseFromSearch = useCallback((ex: ExerciseListItem) => {
+    if (formData.exercises.some(e => e.name.toLowerCase() === ex.name.toLowerCase())) return;
+    const newExercise: Exercise = {
+      id: `db-${ex.id}-${Date.now()}`,
+      name: ex.name,
+      sets: ex.default_sets || 3,
+      reps: ex.default_reps ? String(ex.default_reps) : "10-12",
+      restSeconds: ex.default_rest_seconds || 60,
+      muscleGroup: ex.primary_muscle_group || ex.body_part || "Full Body",
+      completed: false,
+      thumbnailUrl: ex.thumbnail_url || ex.animation_url || undefined,
+    };
+    setFormData(prev => ({
+      ...prev,
+      exercises: [...prev.exercises, newExercise],
+    }));
+    setExerciseSearchQuery("");
+    workoutLogger.debug('Exercise added from DB search', { exercise: ex.name, id: ex.id });
+  }, [formData.exercises]);
 
   // Remove exercise from form
   const removeExercise = useCallback((exerciseId: string) => {
@@ -281,6 +309,7 @@ export function CreateWorkoutModal({
         equipment: aiFormData.equipment,
         workoutLocation: aiFormData.workoutLocation,
         timePerWorkout: aiFormData.timePerWorkout,
+        startDate: aiFormData.startDate,
       });
 
       if (response.data?.plan) {
@@ -443,6 +472,7 @@ export function CreateWorkoutModal({
         weeklySchedule,
         workoutsPerWeek: workoutsPerWeek,
         isActive: true,
+        startDate: formData.startDate,
       });
 
       if (response.data?.plan) {
@@ -578,6 +608,20 @@ export function CreateWorkoutModal({
                     placeholder="E.g., I want to build muscle and lose fat. Focus on upper body strength with some cardio. I'm a beginner with limited time..."
                     rows={3}
                     className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 resize-none"
+                  />
+                </div>
+
+                {/* Start Date */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <Calendar className="w-4 h-4 inline mr-2 text-violet-400" />
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={aiFormData.startDate}
+                    onChange={(e) => setAIFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-violet-500"
                   />
                 </div>
 
@@ -833,17 +877,32 @@ export function CreateWorkoutModal({
                   />
                 </div>
 
-                {/* Schedule Time */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Scheduled Time
-                  </label>
-                  <input
-                    type="time"
-                    value={formData.scheduledTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
-                  />
+                {/* Start Date & Scheduled Time */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      <Calendar className="w-4 h-4 inline mr-2 text-orange-400" />
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.startDate}
+                      onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      <Clock className="w-4 h-4 inline mr-2 text-slate-400" />
+                      Scheduled Time
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.scheduledTime}
+                      onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
+                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
                 </div>
 
                 {/* Workouts Per Week */}
@@ -966,6 +1025,16 @@ export function CreateWorkoutModal({
                     Exercises ({formData.exercises.length})
                   </label>
 
+                  {/* Search from Exercise Library */}
+                  <div className="mb-4">
+                    <ExerciseSearchInput
+                      value={exerciseSearchQuery}
+                      onChange={setExerciseSearchQuery}
+                      onExerciseSelect={addExerciseFromSearch}
+                      placeholder="Search 1,500+ exercises..."
+                    />
+                  </div>
+
                   {/* Added Exercises */}
                   {formData.exercises.length > 0 && (
                     <div className="space-y-2 mb-4">
@@ -974,7 +1043,17 @@ export function CreateWorkoutModal({
                           key={exercise.id}
                           className="flex items-center gap-3 p-3 rounded-xl bg-slate-800 border border-slate-700"
                         >
-                          <GripVertical className="w-4 h-4 text-slate-600" />
+                          {/* Thumbnail */}
+                          <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-slate-700">
+                            {exercise.thumbnailUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={exercise.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Dumbbell className="w-4 h-4 text-slate-500" />
+                              </div>
+                            )}
+                          </div>
                           <div className="flex-1 grid grid-cols-4 gap-2">
                             <span className="text-white text-sm col-span-1 truncate">{exercise.name}</span>
                             <input
@@ -1010,9 +1089,10 @@ export function CreateWorkoutModal({
                     </div>
                   )}
 
-                  {/* Add Exercise from Preset */}
+                  {/* Quick Add from Preset */}
                   {formData.muscleGroups.length > 0 && (
                     <div className="space-y-3">
+                      <p className="text-xs text-slate-400 font-medium">Quick Add</p>
                       {formData.muscleGroups.map((group) => (
                         <div key={group}>
                           <p className="text-xs text-slate-500 mb-2">{group}</p>

@@ -55,9 +55,11 @@ export const getDashboardStats = asyncHandler(async (req: AuthenticatedRequest, 
   // Calculate current streak
   const streakData = await calculateStreak(userId);
 
-  // Get this week's completion rate
+  // Get this week's completion rate (Monday-based week)
   const startOfWeek = new Date(today);
-  startOfWeek.setDate(today.getDate() - today.getDay() + 1); 
+  const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  startOfWeek.setDate(today.getDate() + mondayOffset);
   // Get all logs for the week
   const thisWeekLogs = await query<ActivityLogRow>(
     `SELECT * FROM activity_logs

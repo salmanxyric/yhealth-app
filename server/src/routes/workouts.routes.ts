@@ -16,6 +16,43 @@ import { JobPriorities } from '../config/queue.config.js';
 
 const router = Router();
 
+/** Format a Date as YYYY-MM-DD in local timezone (avoids UTC shift from toISOString) */
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Inject computed scheduledDate into each DayWorkout based on plan startDate.
+ * Finds the Monday of the start date's week and assigns YYYY-MM-DD to each day.
+ */
+function injectDatesIntoSchedule(
+  schedule: Record<string, DayWorkout | null>,
+  startDateStr: string
+): Record<string, DayWorkout | null> {
+  const startDate = new Date(startDateStr + 'T00:00:00');
+  const dayOfWeek = startDate.getDay(); // 0=Sun, 1=Mon...
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(startDate);
+  monday.setDate(startDate.getDate() + mondayOffset);
+
+  const dayOffsets: Record<string, number> = {
+    monday: 0, tuesday: 1, wednesday: 2, thursday: 3,
+    friday: 4, saturday: 5, sunday: 6,
+  };
+
+  for (const [day, workout] of Object.entries(schedule)) {
+    if (workout && dayOffsets[day] !== undefined) {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + dayOffsets[day]);
+      workout.scheduledDate = formatLocalDate(date);
+    }
+  }
+  return schedule;
+}
+
 // All routes require authentication
 router.use(authenticate);
 
@@ -185,6 +222,7 @@ router.post(
       exercises = [],
       weeklySchedule = {},
       isActive = false,
+      startDate: clientStartDate,
     } = req.body;
 
     if (!name?.trim()) {
@@ -195,9 +233,9 @@ router.post(
       return;
     }
 
-    // Calculate start and end dates
-    const startDate = new Date();
-    const endDate = new Date();
+    // Use client-provided start date or default to today
+    const startDate = clientStartDate ? new Date(clientStartDate + 'T00:00:00') : new Date();
+    const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + durationWeeks * 7);
 
     // If setting as active, deactivate other plans
@@ -209,12 +247,20 @@ router.post(
     }
 
     // Create the workout plan
-    // Note: scheduled_time column doesn't exist yet - migration needed
     // Ensure weeklySchedule is properly formatted as JSONB
-    const weeklyScheduleJson = weeklySchedule && Object.keys(weeklySchedule).length > 0 
-      ? weeklySchedule 
+    // Inject computed dates into each day based on start date
+    let weeklyScheduleJson = weeklySchedule && Object.keys(weeklySchedule).length > 0
+      ? weeklySchedule
       : {};
-    
+
+    if (Object.keys(weeklyScheduleJson).length > 0) {
+      const startDateStr = formatLocalDate(startDate);
+      weeklyScheduleJson = injectDatesIntoSchedule(
+        weeklyScheduleJson as Record<string, DayWorkout | null>,
+        startDateStr
+      );
+    }
+
     const result = await dbQuery(
       `INSERT INTO workout_plans (
         user_id, name, description, goal_category,
@@ -234,8 +280,8 @@ router.post(
         JSON.stringify(weeklyScheduleJson),
         availableEquipment,
         workoutLocation,
-        startDate.toISOString().split('T')[0],
-        endDate.toISOString().split('T')[0],
+        formatLocalDate(startDate),
+        formatLocalDate(endDate),
         isActive ? 'active' : 'draft',
         false,
       ]
@@ -625,6 +671,7 @@ router.post(
       equipment = [],
       workoutLocation = 'home',
       timePerWorkout = 45,
+      startDate: clientStartDate,
     } = req.body;
 
     if (!description?.trim()) {
@@ -737,9 +784,18 @@ Generate a complete, well-structured workout plan with appropriate exercises for
       }
 
       // Save the plan to database
-      const startDate = new Date();
-      const endDate = new Date();
+      const startDate = clientStartDate ? new Date(clientStartDate + 'T00:00:00') : new Date();
+      const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + durationWeeks * 7);
+
+      // Inject computed dates into each day of the schedule
+      const startDateStr = formatLocalDate(startDate);
+      if (planData.weeklySchedule && Object.keys(planData.weeklySchedule).length > 0) {
+        planData.weeklySchedule = injectDatesIntoSchedule(
+          planData.weeklySchedule as Record<string, DayWorkout | null>,
+          startDateStr
+        );
+      }
 
       // Deactivate other plans
       await dbQuery(
@@ -766,8 +822,8 @@ Generate a complete, well-structured workout plan with appropriate exercises for
           JSON.stringify(planData.weeklySchedule || {}),
           equipment,
           workoutLocation,
-          startDate.toISOString().split('T')[0],
-          endDate.toISOString().split('T')[0],
+          formatLocalDate(startDate),
+          formatLocalDate(endDate),
           response.provider,
         ]
       );
@@ -1133,7 +1189,7 @@ router.post(
 
     // logWorkout already awards XP internally
     const log = await workoutPlanService.logWorkout(userId, workoutPlanId || null, {
-      scheduledDate: scheduledDate || new Date().toISOString().split('T')[0],
+      scheduledDate: scheduledDate || formatLocalDate(new Date()),
       workoutName,
       exercisesCompleted: exercisesCompleted || [],
       durationMinutes,

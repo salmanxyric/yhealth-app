@@ -30,16 +30,25 @@ function toISOString(date: Date | null | undefined): string | null | undefined {
  * Transform message to API format with proper timestamp conversion
  */
 function transformMessage(message: MessageWithRelations): Record<string, unknown> {
-  return {
+  const transformed: Record<string, unknown> = {
     ...message,
     created_at: toISOString(message.created_at),
     updated_at: toISOString(message.updated_at),
     edited_at: toISOString(message.edited_at),
     deleted_at: toISOString(message.deleted_at),
     pinned_at: toISOString(message.pinned_at),
+    view_once_opened_at: toISOString(message.view_once_opened_at),
     replied_to: message.replied_to ? transformMessage(message.replied_to) : null,
     forwarded_from: message.forwarded_from ? transformMessage(message.forwarded_from) : null,
   };
+
+  // Strip media URLs from opened view-once messages (security: prevent replay)
+  if (message.is_view_once && message.view_once_opened_at) {
+    transformed.media_url = null;
+    transformed.media_thumbnail = null;
+  }
+
+  return transformed;
 }
 
 /**
@@ -96,6 +105,7 @@ export const sendMessage = asyncHandler(
       mediaSize: req.body.mediaSize,
       mediaDuration: req.body.mediaDuration,
       repliedToId: repliedTo || undefined,
+      isViewOnce: req.body.isViewOnce || false,
     });
 
     // Emit socket event for real-time updates
@@ -411,6 +421,33 @@ export const markChatAsRead = asyncHandler(
     });
 
     ApiResponse.success(res, null, 'All messages marked as read', 200, req);
+  }
+);
+
+/**
+ * POST /api/messages/:id/view-once
+ * Open a view-once message (one-time media access)
+ */
+export const openViewOnceMessage = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized();
+
+    const { id } = req.params;
+
+    const result = await messageService.openViewOnceMessage(id, userId);
+
+    // Emit socket event so sender sees "Opened" status
+    socketService.emitToChat(result.chatId, 'viewOnceOpened', {
+      messageId: id,
+      openedBy: userId,
+      openedAt: new Date().toISOString(),
+    });
+
+    ApiResponse.success(res, {
+      mediaUrl: result.mediaUrl,
+      mediaThumbnail: result.mediaThumbnail,
+    }, 'View once message opened', 200, req);
   }
 );
 

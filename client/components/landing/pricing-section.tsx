@@ -228,7 +228,7 @@ function PricingCard({
 
 // ─── PRICING SECTION ─────────────────────────────────────────────────
 export function PricingSection() {
-  const [isYearly, setIsYearly] = useState(true);
+  const [isYearly, setIsYearly] = useState(false);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loading, setLoading] = useState(true);
   const sectionRef = useRef(null);

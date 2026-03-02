@@ -21,6 +21,7 @@ import { leaderboardMaterializationJob } from "./jobs/leaderboard-materializatio
 import { competitionAutoCreateJob } from "./jobs/competition-auto-create.job.js";
 import { coachProfileGenerationJob } from "./jobs/coach-profile-generation.job.js";
 import { dailyAnalysisJob } from "./jobs/daily-analysis.job.js";
+import { whoopSyncJob } from "./jobs/whoop-sync.job.js";
 import { activityEventProcessor } from "./workers/activity-event-processor.worker.js";
 import { ensureDefaultPlans } from "./services/subscription.service.js";
 
@@ -212,6 +213,11 @@ async function startServer(): Promise<void> {
         coachProfileGenerationJob.start();
         logger.info("Coach profile generation job started (staggered 180s)");
       }, 180_000);
+
+      setTimeout(() => {
+        whoopSyncJob.start();
+        logger.info("WHOOP daily sync job started (staggered 240s)");
+      }, 240_000);
     });
 
     // Store server reference for graceful shutdown

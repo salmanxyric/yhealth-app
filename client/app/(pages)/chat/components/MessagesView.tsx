@@ -21,6 +21,7 @@ import { ChatEmptyState } from './ChatEmptyState';
 import { GroupInfoModal } from './GroupInfoModal';
 import { EditChatDialog } from './EditChatDialog';
 import { ForwardMessageDialog } from './ForwardMessageDialog';
+import { ViewOnceViewer } from './ViewOnceViewer';
 import { UserHealthProfileModal } from './UserHealthProfileModal';
 import { chatService, type Chat } from '@/src/shared/services/chat.service';
 import { type ChatMessageItemData } from './ChatMessageItem';
@@ -63,6 +64,12 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
     id: string;
     name: string;
     avatar?: string | null;
+  } | null>(null);
+  const [viewOnceMedia, setViewOnceMedia] = useState<{
+    messageId: string;
+    mediaUrl: string;
+    mediaThumbnail?: string;
+    mediaType: 'image' | 'video' | 'audio';
   } | null>(null);
 
   // Keep toast ref up to date
@@ -245,6 +252,16 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           console.error('Failed to reload chat after user joined event:', error);
         }
       },
+      onViewOnceOpened: (data) => {
+        // Update the message locally to show "Opened" state (sender sees this)
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === data.messageId
+              ? { ...msg, viewOnceOpenedAt: data.openedAt, mediaUrl: undefined, mediaThumbnail: undefined }
+              : msg
+          )
+        );
+      },
     });
 
     return cleanupChat;
@@ -423,7 +440,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
   }, [reloadMessages]);
 
   const handleSendMessage = useCallback(
-    async (message: string, options?: { mediaFiles?: File[]; repliedToId?: string }) => {
+    async (message: string, options?: { mediaFiles?: File[]; repliedToId?: string; isViewOnce?: boolean }) => {
       if (!chatId || (!message.trim() && !options?.mediaFiles?.length)) return;
 
       try {
@@ -492,6 +509,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           mediaThumbnail?: string;
           mediaSize?: number;
           repliedTo?: string;
+          isViewOnce?: boolean;
         } = {
           chatId,
           contentType,
@@ -519,6 +537,11 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           messagePayload.repliedTo = options.repliedToId;
         }
 
+        // Include view-once flag if set
+        if (options?.isViewOnce) {
+          messagePayload.isViewOnce = true;
+        }
+
         const sentMessage = await chatService.sendMessage(messagePayload);
 
         // Convert and add to messages
@@ -539,6 +562,42 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
     },
     [chatId, user?.id, toast]
   );
+
+  const handleViewOnce = useCallback(async (messageId: string) => {
+    try {
+      const result = await chatService.openViewOnceMessage(messageId);
+      const message = messages.find((m) => m.id === messageId);
+      const mediaType = (message?.mediaType || 'image') as 'image' | 'video' | 'audio';
+
+      // Open the viewer
+      setViewOnceMedia({
+        messageId,
+        mediaUrl: result.mediaUrl,
+        mediaThumbnail: result.mediaThumbnail,
+        mediaType,
+      });
+
+      // Update the message locally to mark as opened
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, viewOnceOpenedAt: new Date().toISOString(), mediaUrl: undefined, mediaThumbnail: undefined }
+            : msg
+        )
+      );
+    } catch (error) {
+      console.error('Failed to open view-once message:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to open view-once message',
+        variant: 'destructive',
+      });
+    }
+  }, [messages, toast]);
+
+  const handleCloseViewOnce = useCallback(() => {
+    setViewOnceMedia(null);
+  }, []);
 
   const handleReply = useCallback((messageId: string) => {
     const message = messages.find((m) => m.id === messageId);
@@ -756,6 +815,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           onStar={handleStar}
           onPin={handlePin}
           onReaction={handleReaction}
+          onViewOnce={handleViewOnce}
           onUserClick={(userId, userName, userAvatar) => {
             setSelectedUser({ id: userId, name: userName, avatar: userAvatar });
           }}
@@ -823,6 +883,17 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           userId={selectedUser.id}
           userName={selectedUser.name}
           userAvatar={selectedUser.avatar}
+        />
+      )}
+
+      {/* View Once Viewer */}
+      {viewOnceMedia && (
+        <ViewOnceViewer
+          isOpen={!!viewOnceMedia}
+          mediaUrl={viewOnceMedia.mediaUrl}
+          mediaThumbnail={viewOnceMedia.mediaThumbnail}
+          mediaType={viewOnceMedia.mediaType}
+          onClose={handleCloseViewOnce}
         />
       )}
 

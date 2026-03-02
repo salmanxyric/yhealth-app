@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Play, FileText, Music2 } from 'lucide-react';
+import { X, Play, FileText, Music2, Eye } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -9,10 +9,12 @@ import { motion } from 'framer-motion';
 interface MediaPreviewProps {
   file: File;
   onRemove: () => void;
+  isViewOnce?: boolean;
+  onToggleViewOnce?: () => void;
   className?: string;
 }
 
-export function MediaPreview({ file, onRemove, className }: MediaPreviewProps) {
+export function MediaPreview({ file, onRemove, isViewOnce, onToggleViewOnce, className }: MediaPreviewProps) {
   const isImage = file.type.startsWith('image/');
   const isVideo = file.type.startsWith('video/');
   const isAudio = file.type.startsWith('audio/');
@@ -90,6 +92,31 @@ export function MediaPreview({ file, onRemove, className }: MediaPreviewProps) {
             <p className="text-sm font-medium truncate">{file.name}</p>
             <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
           </div>
+        </div>
+      )}
+
+      {/* View Once toggle */}
+      {onToggleViewOnce && (isImage || isVideo || isAudio) && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            'absolute top-2 left-2 h-7 w-7 rounded-full backdrop-blur-sm border-0 transition-colors',
+            isViewOnce
+              ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+              : 'bg-black/60 hover:bg-black/80 text-white/80'
+          )}
+          onClick={onToggleViewOnce}
+          title={isViewOnce ? 'View once enabled' : 'Enable view once'}
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+      )}
+
+      {/* View once badge */}
+      {isViewOnce && (
+        <div className="absolute bottom-1 left-2 bg-emerald-500/90 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">
+          View once
         </div>
       )}
 

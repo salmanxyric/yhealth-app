@@ -51,5 +51,8 @@ router.post('/:id/forward', messageController.forwardMessage);
 // Mark message as read
 router.post('/:id/read', messageController.markMessageAsRead);
 
+// Open view-once message (one-time media access)
+router.post('/:id/view-once', messageController.openViewOnceMessage);
+
 export default router;
 

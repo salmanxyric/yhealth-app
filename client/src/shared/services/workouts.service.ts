@@ -149,6 +149,7 @@ export interface CreateWorkoutPlanInput {
   exercises?: WorkoutExercise[];
   weeklySchedule?: Record<string, unknown>;
   isActive?: boolean;
+  startDate?: string; // YYYY-MM-DD — defaults to today on server
 }
 
 // Update workout plan input
@@ -207,6 +208,7 @@ export interface GenerateAIPlanInput {
   equipment?: string[];
   workoutLocation?: string;
   timePerWorkout?: number;
+  startDate?: string; // YYYY-MM-DD — defaults to today on server
 }
 
 /**

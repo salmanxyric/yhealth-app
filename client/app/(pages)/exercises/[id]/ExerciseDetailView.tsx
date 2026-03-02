@@ -222,7 +222,7 @@ export function ExerciseDetailView() {
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative aspect-square sm:aspect-[4/3] rounded-3xl overflow-hidden bg-slate-800 border border-white/[0.06] group"
+          className="relative lg:aspect-[4/3] rounded-3xl overflow-hidden bg-slate-800 border border-white/[0.06] group"
         >
           {hasImage ? (
             <>
@@ -235,7 +235,7 @@ export function ExerciseDetailView() {
                   loop
                   playsInline
                   onError={() => setImageError(true)}
-                  className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -243,7 +243,7 @@ export function ExerciseDetailView() {
                   src={exercise.animation_url || exercise.thumbnail_url || ""}
                   alt={exercise.name}
                   onError={() => setImageError(true)}
-                  className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
               )}
             </>

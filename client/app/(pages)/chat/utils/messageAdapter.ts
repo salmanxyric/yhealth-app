@@ -71,6 +71,8 @@ export function adaptMessageToChatMessageItem(
     })),
     isStarred: message.isStarred,
     isPinned: message.isPinned,
+    isViewOnce: message.isViewOnce,
+    viewOnceOpenedAt: message.viewOnceOpenedAt,
   };
 }
 

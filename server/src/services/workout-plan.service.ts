@@ -51,6 +51,8 @@ export interface DayWorkout {
   multiplier?: number; // Progressive overload multiplier for this day
   isRestDay?: boolean;
   notes?: string;
+  scheduledDate?: string; // YYYY-MM-DD — auto-computed from plan startDate + day offset
+  scheduledTime?: string; // HH:mm — user-defined per day
 }
 
 // Progressive overload settings
@@ -180,6 +182,14 @@ export interface DifficultyFeedback {
 // ============================================
 
 class WorkoutPlanService {
+  /** Format a Date as YYYY-MM-DD in local timezone (avoids UTC shift from toISOString) */
+  private formatLocalDate(d: Date): string {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   /**
    * Get all exercises from the library
    */
@@ -307,8 +317,8 @@ class WorkoutPlanService {
         JSON.stringify(schedule),
         input.availableEquipment,
         input.workoutLocation,
-        startDate.toISOString().split('T')[0],
-        endDate.toISOString().split('T')[0],
+        this.formatLocalDate(startDate),
+        this.formatLocalDate(endDate),
       ]
     );
 
@@ -689,11 +699,11 @@ class WorkoutPlanService {
       status: row.status as string,
       startDate: typeof row.start_date === 'string'
         ? row.start_date
-        : (row.start_date as Date).toISOString().split('T')[0],
+        : this.formatLocalDate(row.start_date as Date),
       endDate: row.end_date
         ? (typeof row.end_date === 'string'
           ? row.end_date
-          : (row.end_date as Date).toISOString().split('T')[0])
+          : this.formatLocalDate(row.end_date as Date))
         : undefined,
       weeks: (() => {
         const w = row.weeks;
@@ -716,7 +726,7 @@ class WorkoutPlanService {
       workoutPlanId: row.workout_plan_id as string | undefined,
       scheduledDate: typeof row.scheduled_date === 'string'
         ? row.scheduled_date
-        : (row.scheduled_date as Date).toISOString().split('T')[0],
+        : this.formatLocalDate(row.scheduled_date as Date),
       scheduledDayOfWeek: row.scheduled_day_of_week as string | undefined,
       workoutName: row.workout_name as string | undefined,
       startedAt: row.started_at
@@ -1087,7 +1097,7 @@ class WorkoutPlanService {
        WHERE workout_plan_id = $1
          AND scheduled_date >= $2
          AND scheduled_date <= $3`,
-      [planId, startOfMonth.toISOString().split('T')[0], endOfMonth.toISOString().split('T')[0]]
+      [planId, this.formatLocalDate(startOfMonth), this.formatLocalDate(endOfMonth)]
     );
 
     const completedDates = new Set(
@@ -1108,7 +1118,7 @@ class WorkoutPlanService {
     
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = this.formatLocalDate(date);
       const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
 
       // Calculate which week of the plan this day falls into
@@ -1206,7 +1216,7 @@ class WorkoutPlanService {
          WHERE workout_plan_id = $1
            AND scheduled_date >= $2
            AND scheduled_date <= $3`,
-        [planId, startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+        [planId, this.formatLocalDate(startDate), this.formatLocalDate(endDate)]
       );
 
       const total = parseInt(logsResult.rows[0].total, 10);

@@ -36,6 +36,8 @@ export interface MessageRow {
   replied_to_id: string | null;
   forwarded_from_id: string | null;
   forwarded_by: string | null;
+  is_view_once: boolean;
+  view_once_opened_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -70,6 +72,7 @@ interface CreateMessageParams {
   mediaSize?: number;
   mediaDuration?: number;
   repliedToId?: string;
+  isViewOnce?: boolean;
 }
 
 interface ForwardMessageParams {
@@ -205,8 +208,8 @@ class MessageService {
         `INSERT INTO messages (
           chat_id, sender_id, content, content_type,
           media_url, media_thumbnail, media_size, media_duration,
-          replied_to_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          replied_to_id, is_view_once, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
         RETURNING *`,
         [
           chatId,
@@ -218,6 +221,7 @@ class MessageService {
           params.mediaSize || null,
           params.mediaDuration || null,
           repliedToId || null,
+          params.isViewOnce || false,
         ]
       );
 
@@ -1054,6 +1058,59 @@ class MessageService {
       mediaUrl: uploadResult.publicUrl || uploadResult.url,
       mediaThumbnail: uploadResult.publicUrl,
       mediaSize: uploadResult.size,
+    };
+  }
+
+  /**
+   * Open a view-once message (one-time media access)
+   * Returns the media URL for single-time viewing, then marks it as opened.
+   */
+  async openViewOnceMessage(messageId: string, userId: string): Promise<{
+    mediaUrl: string;
+    mediaThumbnail?: string;
+    chatId: string;
+  }> {
+    const result = await query<MessageRow>(
+      `SELECT * FROM messages WHERE id = $1`,
+      [messageId]
+    );
+
+    if (result.rows.length === 0) {
+      throw ApiError.notFound('Message not found');
+    }
+
+    const message = result.rows[0];
+
+    if (!message.is_view_once) {
+      throw ApiError.badRequest('This message is not a view-once message');
+    }
+
+    // Sender can't "open" their own view-once message
+    if (message.sender_id === userId) {
+      throw ApiError.forbidden('Cannot open your own view-once message');
+    }
+
+    // Verify user is a participant of the chat
+    await chatService.getChatById(message.chat_id, userId);
+
+    // Already opened
+    if (message.view_once_opened_at) {
+      throw ApiError.badRequest('This view-once message has already been opened');
+    }
+
+    // Mark as opened
+    await query(
+      `UPDATE messages SET view_once_opened_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [messageId]
+    );
+
+    // Invalidate cache
+    chatCacheService.invalidateMessages(message.chat_id);
+
+    return {
+      mediaUrl: message.media_url!,
+      mediaThumbnail: message.media_thumbnail || undefined,
+      chatId: message.chat_id,
     };
   }
 }

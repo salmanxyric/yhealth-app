@@ -780,11 +780,10 @@ export async function getUserHealthProfile(
     dataTypes = anyDataCheck.rows[0]?.data_types || [];
   }
 
-  logger.debug('[getUserHealthProfile] WHOOP status check', {
-    userId,
-    hasIntegration,
-    hasAnyData,
-  });
+  // Only log WHOOP status when user actually has an integration (reduces noise)
+  if (hasIntegration) {
+    logger.debug('[getUserHealthProfile] WHOOP status', { userId, hasAnyData });
+  }
 
   // If WHOOP is connected but no data exists, log a warning
   if (hasIntegration && !hasAnyData) {
@@ -924,7 +923,7 @@ export async function getUserHealthProfile(
 
   // Fallback: If no WHOOP health_data_records, try daily_health_metrics and users table
   if (!currentRecovery && !currentSleep && !todayStrainData) {
-    logger.debug('[getUserHealthProfile] No WHOOP records, trying fallback data sources', { userId });
+    // Most users won't have WHOOP — don't log at debug level to reduce noise
 
     // Try daily_health_metrics table first (historical records)
     const dailyMetrics = await query<{

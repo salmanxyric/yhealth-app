@@ -118,8 +118,8 @@ interface PR {
 
 // Helper to dynamically calculate the current week from plan start date
 function calculateCurrentWeek(startDateStr: string, durationWeeks: number): number {
-  const start = new Date(startDateStr);
-  start.setHours(0, 0, 0, 0);
+  // Parse as local date (append T00:00:00 to avoid UTC interpretation of YYYY-MM-DD)
+  const start = new Date(startDateStr + 'T00:00:00');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const daysSinceStart = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
@@ -129,8 +129,7 @@ function calculateCurrentWeek(startDateStr: string, durationWeeks: number): numb
 
 // Helper to check if a program has passed its end date
 function isProgramPastEndDate(startDateStr: string, durationWeeks: number): boolean {
-  const start = new Date(startDateStr);
-  start.setHours(0, 0, 0, 0);
+  const start = new Date(startDateStr + 'T00:00:00');
   const endDate = new Date(start);
   endDate.setDate(start.getDate() + durationWeeks * 7);
   const today = new Date();
@@ -337,6 +336,7 @@ export function WorkoutsTab() {
     workoutLocation: "home",
     goalCategory: "muscle_building",
     selectedDays: ['monday', 'wednesday', 'friday'],
+    startDate: new Date().toISOString().split('T')[0],
   });
   const [_generatedPlan, setGeneratedPlan] = useState<{
     name: string;
@@ -448,8 +448,8 @@ export function WorkoutsTab() {
     
     if (planStartDate && weekNumber) {
       // Calculate dates for the specific week based on plan start date
-      const planStart = new Date(planStartDate);
-      planStart.setHours(0, 0, 0, 0);
+      // Append T00:00:00 to parse as local timezone (YYYY-MM-DD alone parses as UTC)
+      const planStart = new Date(planStartDate + 'T00:00:00');
       
       // Get the day of week for the plan start (0 = Sunday, 1 = Monday, etc.)
       const planStartDayOfWeek = planStart.getDay();
@@ -639,8 +639,7 @@ export function WorkoutsTab() {
     const loadCalendarProgress = async () => {
       try {
         // Calculate plan date range
-        const planStart = new Date(plan.startDate!);
-        planStart.setHours(0, 0, 0, 0);
+        const planStart = new Date(plan.startDate! + 'T00:00:00');
         const startDay = planStart.getDay();
         const normalizedStart = new Date(planStart);
         normalizedStart.setDate(planStart.getDate() - (startDay === 0 ? 6 : startDay - 1));
@@ -1187,6 +1186,7 @@ export function WorkoutsTab() {
       workoutLocation: "home",
       goalCategory: "muscle_building",
       selectedDays: ['monday', 'wednesday', 'friday'],
+      startDate: new Date().toISOString().split('T')[0],
     });
     setGeneratedPlan(null);
     setAIWorkoutTips([]);
@@ -2664,6 +2664,7 @@ export function WorkoutsTab() {
               weeks={selectedWorkout.weeks}
               weeklySchedule={selectedWorkout.weeklySchedule}
               dailyProgress={dailyProgress}
+              startDate={selectedWorkout.startDate}
               onWeekChange={async (weekNumber) => {
                 // Recalculate progress for the selected week
                 if (selectedWorkout && selectedWorkout.startDate) {

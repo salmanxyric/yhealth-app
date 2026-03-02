@@ -188,6 +188,7 @@ export function subscribeToChatEvents(
     onStopTyping?: (data: { userId: string; chatId: string }) => void;
     onUserLeftGroup?: (data: { chatId: string; userId: string; leftAt: string }) => void;
     onUserJoinedGroup?: (data: { chatId: string; userId: string; userName: string; joinedAt: string }) => void;
+    onViewOnceOpened?: (data: { messageId: string; openedBy: string; openedAt: string }) => void;
   }
 ): () => void {
   const socket = getSocket();
@@ -223,6 +224,9 @@ export function subscribeToChatEvents(
   if (handlers.onUserJoinedGroup) {
     socket.on('userJoinedGroup', handlers.onUserJoinedGroup);
   }
+  if (handlers.onViewOnceOpened) {
+    socket.on('viewOnceOpened', handlers.onViewOnceOpened);
+  }
 
   // Return cleanup function
   return () => {
@@ -235,6 +239,7 @@ export function subscribeToChatEvents(
       if (handlers.onStopTyping) socket.off('stopTyping', handlers.onStopTyping);
       if (handlers.onUserLeftGroup) socket.off('userLeftGroup', handlers.onUserLeftGroup);
       if (handlers.onUserJoinedGroup) socket.off('userJoinedGroup', handlers.onUserJoinedGroup);
+      if (handlers.onViewOnceOpened) socket.off('viewOnceOpened', handlers.onViewOnceOpened);
       leaveChat(chatId);
     }
   };

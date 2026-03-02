@@ -111,6 +111,8 @@ export interface Message {
   }>;
   isStarred?: boolean;
   readBy?: string[];
+  isViewOnce?: boolean;
+  viewOnceOpenedAt?: string | null;
 }
 
 interface _CreateChatParams {
@@ -130,6 +132,7 @@ interface SendMessageParams {
   mediaSize?: number;
   mediaDuration?: number;
   repliedTo?: string;
+  isViewOnce?: boolean;
 }
 
 // ============================================================================
@@ -351,6 +354,19 @@ class ChatService {
     if (!response.success) {
       throw new Error('Failed to add reaction');
     }
+  }
+
+  /**
+   * Open a view-once message (one-time media access)
+   */
+  async openViewOnceMessage(messageId: string): Promise<{ mediaUrl: string; mediaThumbnail?: string }> {
+    const response = await api.post<{ mediaUrl: string; mediaThumbnail?: string }>(
+      `${this.messagesUrl}/${messageId}/view-once`
+    );
+    if (!response.success || !response.data) {
+      throw new Error('Failed to open view-once message');
+    }
+    return response.data;
   }
 
   /**

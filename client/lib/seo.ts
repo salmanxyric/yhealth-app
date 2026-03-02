@@ -6,6 +6,8 @@ const SITE_NAME = "YHealth";
 /**
  * Creates consistent metadata for any page.
  */
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
+
 export function createMetadata({
   title,
   description,
@@ -24,6 +26,7 @@ export function createMetadata({
   ogType?: "website" | "article";
 }): Metadata {
   const url = `${SITE_URL}${path}`;
+  const image = ogImage || DEFAULT_OG_IMAGE;
   return {
     title,
     description,
@@ -36,13 +39,13 @@ export function createMetadata({
       siteName: SITE_NAME,
       type: ogType,
       locale: "en_US",
-      ...(ogImage && { images: [{ url: ogImage, width: 1200, height: 630, alt: title }] }),
+      images: [{ url: image, width: 1200, height: 630, alt: title }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      ...(ogImage && { images: [ogImage] }),
+      images: [image],
     },
     robots: noIndex
       ? { index: false, follow: false }
@@ -710,5 +713,67 @@ export const SEO = {
       "YHealth announcements",
     ],
     path: "/press",
+  }),
+  // --- Contact ---
+  contact: createMetadata({
+    title: "Contact Us - Get in Touch with YHealth",
+    description:
+      "Have questions about YHealth? Reach out to our team for support, partnerships, or general inquiries. We're here to help you on your wellness journey.",
+    keywords: [
+      "contact YHealth",
+      "YHealth support",
+      "health app contact",
+      "wellness platform help",
+      "get in touch YHealth",
+    ],
+    path: "/contact",
+  }),
+
+  // --- Fitness & Social ---
+  exercises: createMetadata({
+    title: "Exercise Library - Browse AI-Curated Workouts | YHealth",
+    description:
+      "Explore hundreds of AI-curated exercises with step-by-step guides, muscle group targeting, difficulty levels, and video demonstrations. Build your perfect workout routine.",
+    keywords: [
+      "exercise library",
+      "workout database",
+      "AI curated exercises",
+      "exercise guides",
+      "muscle group workouts",
+      "fitness exercises",
+      "strength training exercises",
+      "cardio exercises",
+    ],
+    path: "/exercises",
+  }),
+
+  leaderboard: createMetadata({
+    title: "Leaderboard - Compete & Track Your Fitness Rank | YHealth",
+    description:
+      "See how you stack up against other health enthusiasts. Track your ranking, compete in fitness challenges, and climb the leaderboard with consistent healthy habits.",
+    keywords: [
+      "fitness leaderboard",
+      "health ranking",
+      "fitness competition",
+      "wellness leaderboard",
+      "fitness challenge ranking",
+      "health app leaderboard",
+    ],
+    path: "/leaderboard",
+  }),
+
+  competitions: createMetadata({
+    title: "Competitions - Join Health & Fitness Challenges | YHealth",
+    description:
+      "Join exciting health and fitness competitions. Challenge friends, track team progress, earn rewards, and stay motivated with community-driven wellness challenges.",
+    keywords: [
+      "fitness competitions",
+      "health challenges",
+      "wellness competitions",
+      "fitness challenge app",
+      "team fitness challenge",
+      "health competition platform",
+    ],
+    path: "/competitions",
   }),
 } as const;

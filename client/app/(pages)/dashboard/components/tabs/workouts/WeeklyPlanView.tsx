@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -33,6 +33,7 @@ interface WeeklyPlanViewProps {
   dailyProgress?: Record<string, number>; // day -> percentage or week_day -> percentage
   onWeekChange?: (weekNumber: number) => void;
   onDayClick?: (dayOfWeek: string, workout: DayWorkout) => void;
+  startDate?: string; // YYYY-MM-DD — plan start date for computing calendar dates
 }
 
 const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -48,8 +49,14 @@ export function WeeklyPlanView({
   dailyProgress = {},
   onWeekChange,
   onDayClick,
+  startDate,
 }: WeeklyPlanViewProps) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
+
+  // Sync selectedWeek when currentWeek changes (e.g., from async plan data)
+  useEffect(() => {
+    setSelectedWeek(currentWeek);
+  }, [currentWeek]);
 
   const handleWeekChange = (week: number) => {
     setSelectedWeek(week);
@@ -119,6 +126,47 @@ export function WeeklyPlanView({
     if (!workout) return WORKOUT_TYPE_COLORS.rest;
     const workoutType = workout.focusArea?.toLowerCase() || workout.workoutName?.toLowerCase() || "full body";
     return WORKOUT_TYPE_COLORS[workoutType] || WORKOUT_TYPE_COLORS["full body"];
+  };
+
+  // Format a Date object as YYYY-MM-DD in local timezone (avoids UTC shift from toISOString)
+  const toLocalDateStr = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Compute the calendar date for a given day of the selected week
+  const getDayDate = (dayIndex: number): string | null => {
+    // First check if the DayWorkout itself has a scheduledDate (from server JSONB)
+    const dayName = DAYS_ORDER[dayIndex];
+    const workout = weekDays[dayName];
+    if (workout?.scheduledDate) {
+      // Adjust for selected week offset from week 1
+      if (selectedWeek === 1) return workout.scheduledDate;
+      // For later weeks, add (selectedWeek - 1) * 7 days
+      const baseDate = new Date(workout.scheduledDate + 'T00:00:00');
+      baseDate.setDate(baseDate.getDate() + (selectedWeek - 1) * 7);
+      return toLocalDateStr(baseDate);
+    }
+
+    // Fallback: compute from plan startDate
+    if (!startDate) return null;
+    const planStart = new Date(startDate + 'T00:00:00');
+    const dow = planStart.getDay(); // 0=Sun, 1=Mon...
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(planStart);
+    monday.setDate(planStart.getDate() + mondayOffset);
+    // Add week offset + day offset
+    const targetDate = new Date(monday);
+    targetDate.setDate(monday.getDate() + (selectedWeek - 1) * 7 + dayIndex);
+    return toLocalDateStr(targetDate);
+  };
+
+  // Format date string as "Mar 2" style
+  const formatShortDate = (dateStr: string): string => {
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   return (
@@ -217,10 +265,14 @@ export function WeeklyPlanView({
             const workout = weekDays[day];
             const progress = getDayProgress(day);
             const isRestDay = !workout;
+            const dayDate = getDayDate(index);
 
             return (
               <div key={day} className="text-center">
-                <p className="text-xs text-slate-500 mb-2 uppercase tracking-wider">{DAY_SHORT[index]}</p>
+                <p className="text-xs text-slate-500 mb-1 uppercase tracking-wider">{DAY_SHORT[index]}</p>
+                {dayDate && (
+                  <p className="text-[10px] text-slate-600 mb-1">{formatShortDate(dayDate)}</p>
+                )}
                 {isRestDay ? (
                   <div className="w-12 h-12 mx-auto rounded-full bg-slate-700/50 flex items-center justify-center">
                     <span className="text-xs text-slate-500">Rest</span>
@@ -284,6 +336,7 @@ export function WeeklyPlanView({
             const color = getWorkoutColor(workout);
             const isRestDay = !workout;
             const progress = getDayProgress(day);
+            const dayDate = getDayDate(index);
 
             return (
               <motion.div
@@ -295,8 +348,8 @@ export function WeeklyPlanView({
                 onClick={() => workout && onDayClick?.(day, workout)}
                 className={`
                   relative p-5 rounded-2xl border transition-all overflow-hidden
-                  ${workout 
-                    ? `${color.bg} ${color.border} cursor-pointer hover:scale-[1.02] hover:shadow-lg` 
+                  ${workout
+                    ? `${color.bg} ${color.border} cursor-pointer hover:scale-[1.02] hover:shadow-lg`
                     : "bg-slate-800/30 border-slate-700/30 cursor-pointer hover:bg-slate-800/50"
                   }
                 `}
@@ -308,9 +361,14 @@ export function WeeklyPlanView({
 
                 {/* Day Header */}
                 <div className="flex items-center justify-between mb-4 relative">
-                  <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                    {DAY_FULL_LABELS[day]}
-                  </span>
+                  <div>
+                    <span className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                      {DAY_FULL_LABELS[day]}
+                    </span>
+                    {dayDate && (
+                      <span className="ml-2 text-xs text-slate-500">{formatShortDate(dayDate)}</span>
+                    )}
+                  </div>
                   {isRestDay ? (
                     <span className="px-2.5 py-1 text-xs bg-slate-700/50 text-slate-400 rounded-lg font-medium">
                       Rest Day

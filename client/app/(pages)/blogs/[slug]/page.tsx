@@ -1,90 +1,62 @@
-"use client";
+import type { Metadata } from 'next';
+import BlogDetailPageContent from './BlogDetailPageContent';
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Loader2, BookOpen } from "lucide-react";
-import { MainLayout } from "@/components/layout";
-import { BlogDetailContent } from "./BlogDetailContent";
-import { api, ApiError } from "@/lib/api-client";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://yhealth.app';
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
 
-interface BlogDetail {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt: string | null;
-  content: string;
-  markdown_content?: string | null;
-  featured_image: string | null;
-  author_first_name: string;
-  author_last_name: string;
-  author_avatar: string | null;
-  published_at: string | null;
-  reading_time: number;
-  views?: number;
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  try {
+    const res = await fetch(`${API_URL}/blogs/${slug}`, {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) {
+      return { title: 'Blog Post - YHealth' };
+    }
+    const data = await res.json();
+    const blog = data?.data;
+    if (!blog) {
+      return { title: 'Blog Post - YHealth' };
+    }
+
+    const title = blog.title;
+    const description = blog.excerpt || blog.title;
+    const image = blog.featured_image || DEFAULT_OG_IMAGE;
+    const authorName = `${blog.author_first_name || ''} ${blog.author_last_name || ''}`.trim() || 'YHealth Team';
+
+    return {
+      title,
+      description,
+      openGraph: {
+        title,
+        description,
+        type: 'article',
+        url: `${SITE_URL}/blogs/${slug}`,
+        images: [{ url: image, width: 1200, height: 630, alt: title }],
+        publishedTime: blog.published_at || undefined,
+        authors: [authorName],
+        siteName: 'YHealth',
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: [image],
+      },
+      alternates: {
+        canonical: `${SITE_URL}/blogs/${slug}`,
+      },
+    };
+  } catch {
+    return { title: 'Blog Post - YHealth' };
+  }
 }
 
 export default function BlogDetailPage() {
-  const params = useParams();
-  const slug = params?.slug as string;
-
-  const [blog, setBlog] = useState<BlogDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-useEffect(() => {
-    if (!slug) return;
-    const fetchBlog = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const res = await api.get<BlogDetail>(`/blogs/${slug}`);
-        if (res.success && res.data) {
-          setBlog(res.data);
-        } else {
-          throw new Error("Blog not found");
-        }
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Blog not found");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchBlog();
-  }, [slug]);
-
-  if (isLoading) {
-    return (
-      <MainLayout>
-        <div className="min-h-[60vh] flex flex-col items-center justify-center">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-4">
-            <Loader2 className="w-12 h-12 animate-spin text-emerald-500" />
-            <p className="text-muted-foreground">Loading article...</p>
-          </motion.div>
-        </div>
-      </MainLayout>
-    );
-  }
-
-  if (error || !blog) {
-    return (
-      <MainLayout>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4"
-        >
-          <BookOpen className="w-16 h-16 text-muted-foreground mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Article Not Found</h1>
-          <p className="text-muted-foreground mb-6">{error || "This article may have been removed."}</p>
-        </motion.div>
-      </MainLayout>
-    );
-  }
-
-  return (
-    <MainLayout>
-      <BlogDetailContent blog={blog} />
-    </MainLayout>
-  );
+  return <BlogDetailPageContent />;
 }

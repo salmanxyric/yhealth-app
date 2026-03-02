@@ -109,7 +109,7 @@ export function ExerciseExecutionDrawer({
       .finally(() => setLoadingLibrary(false));
   }, [isOpen, exercise]);
 
-  // Initialize sets from exercise data
+  // Initialize sets from exercise data — preserve completed state
   useEffect(() => {
     if (!exercise) return;
     const repsStr = exercise.reps || "10";
@@ -120,16 +120,18 @@ export function ExerciseExecutionDrawer({
     const newSets: SetState[] = Array.from({ length: exercise.sets || 3 }, () => ({
       reps: repsNum,
       weight: weightNum,
-      completed: false,
+      completed: exercise.completed || false,
     }));
     setSets(newSets);
     setPlateWeight(weightNum);
     setShowPlateCalc(false);
-    // Reset timers
-    setRestTimer(0);
-    setIsResting(false);
-    setStopwatch(0);
-    setIsStopwatchRunning(false);
+    // Only reset timers if exercise is not already completed
+    if (!exercise.completed) {
+      setRestTimer(0);
+      setIsResting(false);
+      setStopwatch(0);
+      setIsStopwatchRunning(false);
+    }
   }, [exercise]);
 
   // Rest timer countdown
@@ -310,7 +312,7 @@ export function ExerciseExecutionDrawer({
                     <Loader2 className="w-6 h-6 text-slate-500 animate-spin" />
                   </div>
                 ) : hasImage ? (
-                  <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 aspect-[16/10]">
+                  <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 min-h-[200px]">
                     {isVideo ? (
                       <video
                         src={libraryExercise?.animation_url || ""}
@@ -319,14 +321,14 @@ export function ExerciseExecutionDrawer({
                         muted
                         loop
                         playsInline
-                        className="w-full h-full object-contain"
+                        className="w-full min-h-[200px] object-cover"
                       />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={libraryExercise?.animation_url || libraryExercise?.thumbnail_url || ""}
                         alt={exercise.name}
-                        className="w-full h-full object-contain"
+                        className="w-full min-h-[200px] object-cover"
                       />
                     )}
                   </div>

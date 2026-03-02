@@ -9,7 +9,6 @@ import { query, transaction } from '../database/pg.js';
 import { logger } from './logger.service.js';
 import { messageService } from './message.service.js';
 import { socketService } from './socket.service.js';
-import { comprehensiveUserContextService } from './comprehensive-user-context.service.js';
 import { gamificationService } from './gamification.service.js';
 import { userCoachingProfileService } from './user-coaching-profile.service.js';
 import { dailyAnalysisService } from './daily-analysis.service.js';
@@ -119,7 +118,7 @@ class ProactiveMessagingService {
    */
   async checkAndSendSleepMessage(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       // Check if WHOOP shows poor sleep from previous night
       if (context.whoop.isConnected && context.whoop.lastSleep) {
@@ -170,7 +169,7 @@ class ProactiveMessagingService {
    */
   async checkAndSendWhoopSyncMessage(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       // Check if WHOOP is connected but needs sync
       if (context.whoop.isConnected && context.whoop.needsSync) {
@@ -208,7 +207,7 @@ class ProactiveMessagingService {
    */
   async checkAndSendWorkoutReminder(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       // Check if user has missed workouts recently
       if (context.workouts.missedWorkouts && context.workouts.missedWorkouts > 0) {
@@ -251,7 +250,7 @@ class ProactiveMessagingService {
    */
   async checkAndSendNutritionReminder(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       // Check if user hasn't logged meals today (after 2 PM)
       const now = new Date();
@@ -296,7 +295,7 @@ class ProactiveMessagingService {
    */
   async checkAndSendWellbeingReminder(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       // Check what's missing today
       const missing: string[] = [];
@@ -342,7 +341,7 @@ class ProactiveMessagingService {
   async checkAndSendGoalDeadlineMessage(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
       if (cooldown && cooldown.dailyCount >= 4) return false;
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       const urgentGoal = context.goals.activeGoals?.find(
         (g: any) => g.daysRemaining >= 0 && g.daysRemaining <= 7 && g.progress < 80
@@ -391,7 +390,7 @@ class ProactiveMessagingService {
 
         const goal = stalledResult.rows[0];
         const progress = Math.round((goal.current_value / goal.target_value) * 100);
-        const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+        const context = cachedContext;
 
         const proactiveContext: ProactiveContext = {
           type: 'goal_stalled',
@@ -436,7 +435,7 @@ class ProactiveMessagingService {
         if (daysDiff >= 1) {
           if (cooldown?.sentTypes.has('streak_risk')) return false;
 
-          const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+          const context = cachedContext;
           const proactiveContext: ProactiveContext = {
             type: 'streak_risk',
             data: { currentStreak: stats.currentStreak, longestStreak: stats.longestStreak },
@@ -468,7 +467,7 @@ class ProactiveMessagingService {
       if (isMilestone) {
         if (cooldown?.sentTypes.has('streak_celebration')) return false;
 
-        const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+        const context = cachedContext;
         const proactiveContext: ProactiveContext = {
           type: 'streak_celebration',
           data: {
@@ -495,7 +494,7 @@ class ProactiveMessagingService {
   async checkAndSendHabitMissedMessage(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
       if (cooldown && cooldown.dailyCount >= 4) return false;
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       if (context.habits.totalActiveHabits && context.habits.totalActiveHabits > 0) {
         const completed = context.habits.todayCompletionCount || 0;
@@ -532,7 +531,7 @@ class ProactiveMessagingService {
   async checkAndSendWaterIntakeMessage(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
       if (cooldown && cooldown.dailyCount >= 4) return false;
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       const pct = context.waterIntake.todayPercentage || 0;
       if (context.waterIntake.todayTargetMl && pct < 50) {
@@ -567,7 +566,7 @@ class ProactiveMessagingService {
       if (cooldown && cooldown.dailyCount >= 4) return false;
       if (cooldown?.sentTypes.has('morning_briefing')) return false;
 
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       // Only send if user has some active engagement (plans, goals, or habits)
       const hasPlans = (context.workouts.activePlans?.length || 0) > 0;
@@ -620,7 +619,7 @@ class ProactiveMessagingService {
       if (cooldown && cooldown.dailyCount >= 4) return false;
       if (cooldown?.sentTypes.has('weekly_digest')) return false;
 
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       // Aggregate week data
       const scoreResult = await query<{ avg_score: string }>(
@@ -700,7 +699,7 @@ class ProactiveMessagingService {
       const isLevelUp = levelUpResult.rows.length > 0;
 
       if (isLevelUp || isMilestone) {
-        const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+        const context = cachedContext;
         const proactiveContext: ProactiveContext = {
           type: 'achievement_unlock',
           data: {
@@ -728,7 +727,7 @@ class ProactiveMessagingService {
   async checkAndSendRecoveryAdviceMessage(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
       if (cooldown && cooldown.dailyCount >= 4) return false;
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       if (context.whoop.isConnected && context.whoop.lastRecovery && context.whoop.lastRecovery.score < 40) {
         if (cooldown?.sentTypes.has('recovery_advice')) return false;
@@ -777,7 +776,7 @@ class ProactiveMessagingService {
   async checkAndSendCompetitionUpdateMessage(userId: string, cachedContext?: any, cooldown?: { dailyCount: number; sentTypes: Set<string> }): Promise<boolean> {
     try {
       if (cooldown && cooldown.dailyCount >= 4) return false;
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       const endingSoon = context.competitions.activeCompetitions?.find((c: any) => c.daysRemaining <= 2);
       if (endingSoon) {
@@ -830,7 +829,7 @@ class ProactiveMessagingService {
       if (cooldown?.sentTypes.has('app_inactive')) return false;
 
       const daysSinceLogin = Math.floor(hoursSinceLogin / 24);
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       const proactiveContext: ProactiveContext = {
         type: 'app_inactive',
@@ -871,7 +870,7 @@ class ProactiveMessagingService {
       // Need at least a profile or analysis report to generate meaningful content
       if (!profile && !analysisReport) return false;
 
-      const context = cachedContext ?? await comprehensiveUserContextService.getComprehensiveContext(userId);
+      const context = cachedContext;
 
       const proactiveContext: ProactiveContext = {
         type: 'coach_pro_analysis',
