@@ -20,6 +20,7 @@ import {
   Mail,
   Star,
 } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -139,9 +140,7 @@ export function AdminSidebar() {
             animate={{ opacity: 1 }}
             className="flex items-center gap-2"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center">
-              <Shield className="w-4 h-4 text-white" />
-            </div>
+            <Image src="/logo1.png" alt="yHealth" width={32} height={32} className="object-contain" />
             <div>
               <h2 className="text-sm font-semibold">Admin Panel</h2>
               <p className="text-xs text-muted-foreground">Control Center</p>
@@ -152,9 +151,9 @@ export function AdminSidebar() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-sky-500 flex items-center justify-center mx-auto"
+            className="mx-auto"
           >
-            <Shield className="w-4 h-4 text-white" />
+            <Image src="/logo1.png" alt="yHealth" width={32} height={32} className="object-contain" />
           </motion.div>
         )}
         <Button

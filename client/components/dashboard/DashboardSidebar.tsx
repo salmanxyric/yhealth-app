@@ -21,7 +21,6 @@ import {
   LogOut,
   Menu,
   X,
-  Heart,
   MessageSquare,
   HelpCircle,
   MessageCircle,
@@ -30,6 +29,7 @@ import {
   Dumbbell,
   Star,
 } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -406,10 +406,7 @@ export function DashboardSidebar({
             transition={{ duration: 0.3 }}
             className="flex items-center gap-2.5"
           >
-            <div className="relative">
-              <Heart className="w-6 h-6 text-cyan-400 stroke-2" />
-              <div className="absolute inset-0 bg-cyan-400/20 blur-md" />
-            </div>
+            <Image src="/logo1.png" alt="yHealth" width={28} height={28} className="object-contain" />
             <span className="text-lg font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-sky-400 bg-clip-text text-transparent">
               yHealth
             </span>
@@ -422,10 +419,7 @@ export function DashboardSidebar({
             transition={{ duration: 0.3 }}
             className="flex justify-center w-full"
           >
-            <div className="relative">
-              <Heart className="w-6 h-6 text-cyan-400 stroke-2" />
-              <div className="absolute inset-0 bg-cyan-400/20 blur-md" />
-            </div>
+            <Image src="/logo1.png" alt="yHealth" width={28} height={28} className="object-contain" />
           </motion.div>
         )}
         <Button

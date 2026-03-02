@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 export interface LoadingScreenProps {
@@ -72,17 +72,23 @@ export function LoadingScreen({
         className="flex flex-col items-center gap-4"
       >
         <div className="relative">
-          <div
-            className={cn(
-              "rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center",
-              sizeClass.container
-            )}
+          <motion.div
+            className={cn("flex items-center justify-center", sizeClass.container)}
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
           >
-            <Loader2 className={cn("text-white animate-spin", sizeClass.icon)} />
-          </div>
+            <Image
+              src="/logo1.png"
+              alt="yHealth"
+              width={size === "lg" ? 64 : size === "md" ? 48 : 36}
+              height={size === "lg" ? 64 : size === "md" ? 48 : 36}
+              className="object-contain"
+              priority
+            />
+          </motion.div>
           <motion.div
             className={cn(
-              "absolute bg-gradient-to-br from-blue-500/20 to-purple-600/20 blur-xl",
+              "absolute bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 blur-xl",
               sizeClass.blur
             )}
             animate={{ opacity: [0.5, 1, 0.5] }}

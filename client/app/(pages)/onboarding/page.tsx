@@ -16,6 +16,7 @@ import { PlanGenerationStep } from "./steps/PlanGenerationStep";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, ArrowLeft } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 function OnboardingContent() {
@@ -131,9 +132,7 @@ function OnboardingContent() {
               {/* Logo - Centered */}
               <div className="text-center">
                 <div className="inline-flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                    <Sparkles className="w-4 h-4 text-white" />
-                  </div>
+                  <Image src="/logo1.png" alt="yHealth" width={32} height={32} className="object-contain" />
                   <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
                     yHealth
                   </h1>
