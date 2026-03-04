@@ -88,6 +88,7 @@ export interface NutritionContext {
   activeDietPlan?: {
     name: string;
     dailyCalories: number;
+    mealsPerDay?: number;
     adherence?: number; // percentage
   };
   todayMealCount?: number;
@@ -815,8 +816,9 @@ class ComprehensiveUserContextService {
       const dietPlanResult = await query<{
         plan_name: string;
         daily_calories: number;
+        meals_per_day: number;
       }>(
-        `SELECT name as plan_name, daily_calories
+        `SELECT name as plan_name, daily_calories, COALESCE(meals_per_day, 3) as meals_per_day
          FROM diet_plans
          WHERE user_id = $1 AND status = 'active'
          ORDER BY created_at DESC
@@ -829,6 +831,7 @@ class ComprehensiveUserContextService {
         context.activeDietPlan = {
           name: plan.plan_name,
           dailyCalories: parseInt(plan.daily_calories as unknown as string, 10),
+          mealsPerDay: parseInt(plan.meals_per_day as unknown as string, 10) || 3,
         };
       }
 

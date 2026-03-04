@@ -17,6 +17,7 @@ import {
   IDLE_REST_POSE,
   IDLE_ANIM_CHANNELS,
   SPEAKING_GESTURE_CHANNELS,
+  LISTENING_GESTURE_CHANNELS,
   FINGER_IDLE_CHANNELS,
   SPEAKING_FINGER_CHANNELS,
   EMOTION_HAND_OFFSETS,
@@ -31,8 +32,14 @@ import {
   MODULATOR_NUMERIC_KEYS,
   MODULATOR_TUPLE_KEYS,
   type EmotionModulators,
+  getEmotionModulator,
+  blendEmotionModulators,
 } from "@/lib/avatar/emotionModulation";
 import { lerp } from "@/lib/avatar/smoothing";
+import {
+  createMicroExpressionEngine,
+  type MicroExpressionEngine,
+} from "@/lib/avatar/microExpressions";
 
 // ============================================
 // CAMERA CONSTANTS
@@ -121,9 +128,16 @@ export function useThreeVrm({
   // Emotion modulator — smoothly lerped toward target each frame
   const currentModRef = useRef<EmotionModulators>({ ...EMOTION_MODULATORS.neutral });
 
+  // Micro-expression engine for brief emotional flashes
+  const microExprEngineRef = useRef<MicroExpressionEngine>(createMicroExpressionEngine());
+
+  // Breathing phase offset for smooth emotion-based breathing
+  const breathingPhaseRef = useRef<number>(0);
+
   // Reusable temporaries (allocated once, reused each frame)
   const tempQuatRef = useRef(new THREE.Quaternion());
   const tempEulerRef = useRef(new THREE.Euler());
+  const tempVec3Ref = useRef(new THREE.Vector3());
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +173,7 @@ export function useThreeVrm({
               }
             }
           });
+          vrmRef.current = null;
         }
 
         // Disable frustum culling to prevent disappearing
@@ -167,10 +182,15 @@ export function useThreeVrm({
         });
 
         scene.add(vrm.scene);
-        vrmRef.current = vrm;
 
         // Apply natural idle rest pose (fixes T-pose)
-        vrm.humanoid?.setNormalizedPose(IDLE_REST_POSE);
+        if (vrm.humanoid) {
+          vrm.humanoid.setNormalizedPose(IDLE_REST_POSE);
+
+          // Force immediate normalized→raw bone sync so the rest pose is
+          // visible on the very first render frame.
+          vrm.update(0);
+        }
 
         // Capture hips base position for breathing/weight-shift animation
         const hips = vrm.humanoid?.getNormalizedBoneNode("hips");
@@ -179,7 +199,9 @@ export function useThreeVrm({
           hipsBaseXRef.current = hips.position.x;
         }
 
-        // Cache rest-pose bone quaternions so the RAF loop can reset + layer
+        // Cache rest-pose bone quaternions so the RAF loop can reset + layer.
+        // IMPORTANT: This must complete BEFORE setting vrmRef so the RAF loop
+        // never sees the VRM without valid rest quaternions.
         const boneQuats = new Map<string, THREE.Quaternion>();
         for (const boneName of ALL_ANIMATED_BONES) {
           const node = vrm.humanoid?.getNormalizedBoneNode(boneName as VRMHumanBoneName);
@@ -188,6 +210,9 @@ export function useThreeVrm({
           }
         }
         restQuatsRef.current = boneQuats;
+
+        // Make VRM visible to RAF loop AFTER rest quats are cached
+        vrmRef.current = vrm;
 
         setIsLoading(false);
       } catch (err) {
@@ -277,6 +302,9 @@ export function useThreeVrm({
       elapsed: number,
       ampScale: number = 1.0,
       freqScale: number = 1.0,
+      isBreathing: boolean = false,
+      breathingRate: number = 1.0,
+      breathingDepth: number = 1.0,
     ) => {
       const tempEuler = tempEulerRef.current;
       const tempQuat = tempQuatRef.current;
@@ -285,9 +313,18 @@ export function useThreeVrm({
         const bone = vrm.humanoid?.getNormalizedBoneNode(ch.boneName as VRMHumanBoneName);
         if (!bone) continue;
 
+        // Apply breathing rate/depth modifiers for breathing channels
+        let finalFreq = ch.frequency * freqScale;
+        let finalAmp = ch.amplitude * ampScale;
+
+        if (isBreathing && (ch.boneName === "hips" || ch.boneName === "spine" || ch.boneName === "leftShoulder" || ch.boneName === "rightShoulder")) {
+          finalFreq *= breathingRate;
+          finalAmp *= breathingDepth;
+        }
+
         const value =
-          Math.sin(elapsed * ch.frequency * freqScale * Math.PI * 2 + ch.phase) *
-          ch.amplitude * ampScale;
+          Math.sin(elapsed * finalFreq * Math.PI * 2 + ch.phase) *
+          finalAmp;
 
         if (ch.type === "rotation") {
           tempEuler.set(
@@ -396,6 +433,7 @@ export function useThreeVrm({
     };
 
     // ---- RAF Loop ----
+    let frameCount = 0;
     const animate = () => {
       rafIdRef.current = requestAnimationFrame(animate);
 
@@ -404,13 +442,32 @@ export function useThreeVrm({
       const vrm = vrmRef.current;
 
       if (vrm) {
+        try {
+        frameCount++;
+        if (frameCount === 1) {
+          console.log("[useThreeVrm] RAF loop active — VRM detected, rest quats:", restQuatsRef.current.size, "bones");
+        }
         // 0. Lerp emotion modulators toward target (~1s smooth transition)
         const targetMod =
           EMOTION_MODULATORS[emotionModRef.current] || EMOTION_MODULATORS.neutral;
         const mod = currentModRef.current;
         lerpModulators(mod, targetMod, 0.03);
 
-        // 1. Update VRM (spring bones)
+        // 0b. Update micro-expression engine
+        const microEngine = microExprEngineRef.current;
+        const microExpr = microEngine.tick(elapsed * 1000);
+
+        // Calculate effective modulators blending base emotion with micro-expression
+        let effectiveMod = mod;
+        if (microExpr.expression && microExpr.intensity > 0) {
+          const microMod = getEmotionModulator(microExpr.expression);
+          effectiveMod = blendEmotionModulators(mod, microMod, microExpr.intensity);
+        }
+
+        // Update breathing phase with emotion-based rate
+        breathingPhaseRef.current += delta * effectiveMod.breathingRate;
+
+        // 1. Update VRM (spring bones + normalized→raw bone sync)
         vrm.update(delta);
 
         // 2. Reset all animated bones to rest-pose quaternions
@@ -445,40 +502,54 @@ export function useThreeVrm({
           applyStatePose(vrm, stateOffset, stateBlendRef.current, restQuats);
         }
 
-        // 3b. Emotion posture modulation (spine lean + shoulder offset)
-        if (mod.postureLean !== 0) {
+        // 3b. Emotion posture modulation (spine lean + shoulder offset + head tilt + head nod)
+        if (effectiveMod.postureLean !== 0) {
           const spine = vrm.humanoid?.getNormalizedBoneNode("spine" as VRMHumanBoneName);
           if (spine) {
-            tempEulerRef.current.set(mod.postureLean, 0, 0);
+            tempEulerRef.current.set(effectiveMod.postureLean, 0, 0);
             tempQuatRef.current.setFromEuler(tempEulerRef.current);
             spine.quaternion.multiply(tempQuatRef.current);
           }
         }
-        if (mod.shoulderOffset !== 0) {
+        if (effectiveMod.shoulderOffset !== 0) {
           const lShoulder = vrm.humanoid?.getNormalizedBoneNode("leftShoulder" as VRMHumanBoneName);
           const rShoulder = vrm.humanoid?.getNormalizedBoneNode("rightShoulder" as VRMHumanBoneName);
           if (lShoulder) {
-            tempEulerRef.current.set(0, 0, mod.shoulderOffset);
+            tempEulerRef.current.set(0, 0, effectiveMod.shoulderOffset);
             tempQuatRef.current.setFromEuler(tempEulerRef.current);
             lShoulder.quaternion.multiply(tempQuatRef.current);
           }
           if (rShoulder) {
-            tempEulerRef.current.set(0, 0, -mod.shoulderOffset);
+            tempEulerRef.current.set(0, 0, -effectiveMod.shoulderOffset);
             tempQuatRef.current.setFromEuler(tempEulerRef.current);
             rShoulder.quaternion.multiply(tempQuatRef.current);
           }
         }
 
-        // 4. Layer idle sway animation channels (emotion-modulated)
+        // Apply head tilt and nod + micro-expression offsets
+        const head = vrm.humanoid?.getNormalizedBoneNode("head" as VRMHumanBoneName);
+        if (head) {
+          const totalTilt = effectiveMod.headTilt + microExpr.headTilt;
+          const totalNod = effectiveMod.headNod + microExpr.headNod;
+
+          if (totalTilt !== 0 || totalNod !== 0) {
+            tempEulerRef.current.set(totalNod, 0, totalTilt);
+            tempQuatRef.current.setFromEuler(tempEulerRef.current);
+            head.quaternion.multiply(tempQuatRef.current);
+          }
+        }
+
+        // 4. Layer idle sway animation channels (emotion-modulated with breathing)
         applyChannelsModulated(
           vrm, IDLE_ANIM_CHANNELS, elapsed,
-          mod.amplitudeScale, mod.frequencyScale,
+          effectiveMod.amplitudeScale, effectiveMod.frequencyScale,
+          true, effectiveMod.breathingRate, effectiveMod.breathingDepth,
         );
 
         // 4b. Layer finger idle micro-movements (emotion-modulated)
         applyChannelsModulated(
           vrm, FINGER_IDLE_CHANNELS, elapsed,
-          mod.fingerMicroScale * mod.amplitudeScale, mod.frequencyScale,
+          effectiveMod.fingerMicroScale * effectiveMod.amplitudeScale, effectiveMod.frequencyScale,
         );
 
         // 4c. Apply emotion-linked hand pose offsets (multiply — fine for fingers)
@@ -487,8 +558,9 @@ export function useThreeVrm({
           applyPoseMultiply(vrm, handOffset, stateBlendRef.current);
         }
 
-        // 5. Layer speaking gestures + finger channels (only when speaking)
+        // 5. Layer state-specific gestures
         if (currentState === "speaking") {
+          // 5a. Speaking gestures + finger channels
           // Gesture phase drift — slowly shifts patterns for natural variety (~7s cycle)
           const gesturePhaseShift = elapsed * 0.15;
 
@@ -496,14 +568,37 @@ export function useThreeVrm({
           applyChannelsModulated(
             vrm, SPEAKING_GESTURE_CHANNELS,
             elapsed + gesturePhaseShift,
-            mod.gestureScale, mod.gestureSpeed,
+            effectiveMod.gestureScale, effectiveMod.gestureSpeed,
           );
           applyChannelsModulated(
             vrm, SPEAKING_FINGER_CHANNELS, elapsed,
-            mod.gestureScale, mod.gestureSpeed,
+            effectiveMod.gestureScale, effectiveMod.gestureSpeed,
           );
 
-          // 5b. Arm rotation clamping — prevent backward/spreading after all gesture layers
+          // 5b. Occasionally trigger micro-expressions during speech
+          if (Math.random() < 0.01) {
+            microEngine.trigger("emphasizing", emotionModRef.current, elapsed * 1000);
+          }
+        } else if (currentState === "listening") {
+          // 5a. Listening gestures — subtle attentive movement so avatar isn't frozen
+          applyChannelsModulated(
+            vrm, LISTENING_GESTURE_CHANNELS, elapsed,
+            effectiveMod.amplitudeScale * 0.6, effectiveMod.frequencyScale * 0.8,
+          );
+
+          // 5b. Trigger listening micro-expressions
+          if (Math.random() < 0.005) {
+            microEngine.trigger("listening", emotionModRef.current, elapsed * 1000);
+          }
+        } else if (currentState === "thinking") {
+          // Trigger thinking micro-expressions
+          if (Math.random() < 0.008) {
+            microEngine.trigger("transitioning", emotionModRef.current, elapsed * 1000);
+          }
+        }
+
+        // 5b. Arm rotation clamping — prevent unnatural poses after all gesture layers
+        if (currentState === "speaking" || currentState === "listening") {
           const clampEuler = tempEulerRef.current;
           for (const side of ["left", "right"] as const) {
             const upperName = side === "left" ? "leftUpperArm" : "rightUpperArm";
@@ -531,8 +626,9 @@ export function useThreeVrm({
           }
         }
 
-        // 6. Enhanced blink (emotion-modulated interval + double-blink)
+        // 6. Enhanced blink (emotion-modulated interval + double-blink + micro-expression modifier)
         const blinkQueue = blinkQueueRef.current;
+        const blinkMultiplier = microExpr.blinkMultiplier;
 
         // Schedule new blink
         if (blinkQueue.length === 0 && blinkProgressRef.current < 0) {
@@ -540,12 +636,14 @@ export function useThreeVrm({
             blinkQueue.push({ startTime: elapsed, progress: 0 });
 
             // Roll for double-blink
-            if (Math.random() < mod.doubleBlinkProb) {
+            if (Math.random() < effectiveMod.doubleBlinkProb) {
               blinkQueue.push({ startTime: elapsed + 0.25, progress: 0 });
             }
 
-            // Schedule next blink from emotion modulator
-            const [minBlink, maxBlink] = mod.blinkInterval;
+            // Schedule next blink from emotion modulator, modified by micro-expressions
+            let [minBlink, maxBlink] = effectiveMod.blinkInterval;
+            minBlink /= blinkMultiplier;
+            maxBlink /= blinkMultiplier;
             nextBlinkRef.current = elapsed + minBlink + Math.random() * (maxBlink - minBlink);
           }
         }
@@ -607,6 +705,11 @@ export function useThreeVrm({
         const eyeValues = eyeValuesRef.current;
         for (const [name, value] of Object.entries(eyeValues)) {
           vrm.expressionManager?.setValue(name, value);
+        }
+
+        } catch (err) {
+          // Log but don't crash the RAF loop — avatar stays alive even if one frame errors
+          console.error("[useThreeVrm] RAF loop error:", err);
         }
       }
 

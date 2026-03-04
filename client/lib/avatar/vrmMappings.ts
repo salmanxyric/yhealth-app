@@ -15,7 +15,17 @@ export type AvatarExpression =
   | 'angry'
   | 'sad'
   | 'relaxed'
-  | 'surprised';
+  | 'surprised'
+  | 'curiosity'
+  | 'concern'
+  | 'confusion'
+  | 'disgust'
+  | 'fear'
+  | 'embarrassment'
+  | 'excitement'
+  | 'empathy'
+  | 'contemplation'
+  | 'determination';
 
 /** Application-level avatar states. */
 export type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking';
@@ -56,33 +66,65 @@ export const MOOD_TO_EXPRESSION: Record<string, AvatarExpression> = {
   happy: 'happy',
   neutral: 'neutral',
   sad: 'sad',
-  excited: 'surprised',
+  excited: 'excitement',
   calm: 'relaxed',
   stressed: 'angry',
-  motivated: 'happy',
+  motivated: 'determination',
+  curious: 'curiosity',
+  concerned: 'concern',
+  confused: 'confusion',
 };
 
-/** Map backend EmotionCategory (10 values) to 6 VRM expressions. */
+/** Map backend EmotionCategory to VRM expressions. */
 export const EMOTION_TO_EXPRESSION: Record<string, AvatarExpression> = {
   happy: 'happy',
   sad: 'sad',
   angry: 'angry',
-  anxious: 'sad',
+  anxious: 'concern',
   calm: 'relaxed',
   stressed: 'angry',
-  excited: 'surprised',
+  excited: 'excitement',
   tired: 'relaxed',
   neutral: 'neutral',
   distressed: 'sad',
+  curious: 'curiosity',
+  confused: 'confusion',
+  disgusted: 'disgust',
+  fearful: 'fear',
+  embarrassed: 'embarrassment',
+  empathetic: 'empathy',
+  contemplative: 'contemplation',
+  determined: 'determination',
 };
 
 /** Map backend PersonalityMode to default avatar expression. */
 export const PERSONALITY_TO_EXPRESSION: Record<string, AvatarExpression> = {
-  supportive_coach: 'happy',
-  competitive_challenger: 'surprised',
+  supportive_coach: 'empathy',
+  competitive_challenger: 'determination',
   tough_love: 'angry',
   calm_recovery: 'relaxed',
-  performance_strategist: 'neutral',
+  performance_strategist: 'contemplation',
+  motivational_mentor: 'excitement',
+  analytical_guide: 'curiosity',
+};
+
+/** Map coach's own emotional state to avatar expression. */
+export const COACH_EMOTION_TO_EXPRESSION: Record<string, AvatarExpression> = {
+  proud: 'happy',
+  worried: 'concern',
+  frustrated: 'angry',
+  excited: 'excitement',
+  disappointed: 'sad',
+  hopeful: 'happy',
+  protective: 'empathy',
+  neutral: 'neutral',
+  curious: 'curiosity',
+  confused: 'confusion',
+  concerned: 'concern',
+  determined: 'determination',
+  contemplative: 'contemplation',
+  embarrassed: 'embarrassment',
+  surprised: 'surprised',
 };
 
 // ============================================
@@ -121,6 +163,16 @@ export const ALL_EMOTION_EXPRESSIONS: AvatarExpression[] = [
   'sad',
   'relaxed',
   'surprised',
+  'curiosity',
+  'concern',
+  'confusion',
+  'disgust',
+  'fear',
+  'embarrassment',
+  'excitement',
+  'empathy',
+  'contemplation',
+  'determination',
 ];
 
 /** VRM 1.0 eye direction expression names. */

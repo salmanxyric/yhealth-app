@@ -18,6 +18,7 @@ import {
   MessageCircle,
   Video,
   Mail,
+  Send,
   Star,
 } from "lucide-react";
 import Image from "next/image";
@@ -82,6 +83,12 @@ const navItems: NavItem[] = [
     label: "Contacts",
     icon: <Mail className="w-5 h-5" />,
     href: "/admin/contacts",
+  },
+  {
+    id: "newsletter",
+    label: "Newsletter",
+    icon: <Send className="w-5 h-5" />,
+    href: "/admin/newsletter",
   },
   {
     id: "users",

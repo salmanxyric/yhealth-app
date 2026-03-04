@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
   // Experimental features for better chunk loading
   experimental: {
     // Optimize package imports to reduce chunk size
-    optimizePackageImports: ['@xyflow/react', 'framer-motion', 'lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
+    optimizePackageImports: ['@xyflow/react', 'framer-motion', 'gsap', 'lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
   },
   // Transpile packages that might have issues with Turbopack
   transpilePackages: [],
@@ -45,6 +45,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '*.r2.dev',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
       },
     ],
   },

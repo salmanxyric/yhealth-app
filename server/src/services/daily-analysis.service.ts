@@ -18,8 +18,9 @@ import { aiScoringService } from './ai-scoring.service.js';
 import type { DailyScore } from './ai-scoring.service.js';
 import { mentalRecoveryScoreService } from './mental-recovery-score.service.js';
 import { userCoachingProfileService } from './user-coaching-profile.service.js';
-import type { RiskFlag, Prediction, NextBestAction, CoachingProfile } from './user-coaching-profile.service.js';
+import type { RiskFlag, Prediction, NextBestAction, CoachingProfile, CoachEmotionalState, RelationshipDepth } from './user-coaching-profile.service.js';
 import { crossPillarIntelligenceService } from './cross-pillar-intelligence.service.js';
+import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
 
 // ============================================
 // TYPES
@@ -75,6 +76,8 @@ export interface CoachingDirective {
   toneRecommendation: 'supportive' | 'direct' | 'tough_love';
   focusAreas: string[];
   avoidTopics: string[];
+  coachEmotion?: CoachEmotionalState;
+  relationshipDepth?: RelationshipDepth;
 }
 
 export interface DailyAnalysisReport {
@@ -670,10 +673,18 @@ Return ONLY valid JSON array of insights.`;
         profile
       );
 
+      // Circuit breaker: skip LLM if quota is exhausted
+      if (!llmCircuitBreaker.isCallAllowed()) {
+        logger.debug('[DailyAnalysis] Circuit breaker OPEN, using default insights');
+        return defaults;
+      }
+
       const response = await this.llm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(humanMessage),
       ]);
+
+      llmCircuitBreaker.recordSuccess();
 
       const content =
         typeof response.content === 'string'
@@ -724,6 +735,9 @@ Return ONLY valid JSON array of insights.`;
         }))
         .slice(0, 5);
     } catch (error) {
+      if (llmCircuitBreaker.isRateLimitError(error)) {
+        llmCircuitBreaker.recordRateLimitError(error);
+      }
       logger.error('[DailyAnalysis] Error generating structured insights', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -769,11 +783,21 @@ Return ONLY valid JSON array of insights.`;
       avoidTopics.push('additional commitments', 'ambitious new goals');
     }
 
+    // --- Coach emotional state (deterministic) ---
+    let coachEmotion: CoachEmotionalState | undefined;
+    let relationshipDepth: RelationshipDepth | undefined;
+    if (profile) {
+      coachEmotion = userCoachingProfileService.computeCoachEmotionalState(profile);
+      relationshipDepth = userCoachingProfileService.computeRelationshipDepth(profile);
+    }
+
     return {
       headline,
       toneRecommendation,
       focusAreas,
       avoidTopics,
+      coachEmotion,
+      relationshipDepth,
     };
   }
 

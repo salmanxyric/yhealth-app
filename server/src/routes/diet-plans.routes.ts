@@ -14,6 +14,7 @@ import { logger } from '../services/logger.service.js';
 import { aiProviderService } from '../services/ai-provider.service.js';
 import { reminderSchedulerService } from '../services/reminder-scheduler.service.js';
 import { embeddingQueueService } from '../services/embedding-queue.service.js';
+import { proactiveMessagingService } from '../services/proactive-messaging.service.js';
 import { JobPriorities } from '../config/queue.config.js';
 
 const router = Router();
@@ -1177,6 +1178,11 @@ router.post(
       operation: 'create',
       priority: JobPriorities.MEDIUM,
     });
+
+    // Fire-and-forget: evaluate meal alignment against user goals
+    proactiveMessagingService.checkAndSendMealAlignmentFeedback(userId, {
+      mealType, mealName, calories, proteinGrams, carbsGrams, fatGrams, fiberGrams, foods,
+    }).catch(err => logger.warn('[Diet Plans] Meal alignment check failed', { userId, error: (err as Error).message }));
 
     res.status(201).json({
       success: true,

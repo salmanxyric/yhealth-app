@@ -170,54 +170,59 @@ async function startServer(): Promise<void> {
         );
       }
 
-      // Start background jobs (only on primary/single worker)
-      // Lightweight jobs — start immediately
-      reminderProcessorJob.start();
-      logger.info("Reminder processor job started");
+      // Start background jobs. Cron-style jobs run only on one worker in cluster mode to avoid N× repetition.
+      const isSchedulerWorker = !cluster.worker || cluster.worker.id === 0;
 
-      workoutAuditJob.start();
-      logger.info("Workout audit job started");
+      if (isSchedulerWorker) {
+        // Lightweight jobs — start immediately
+        reminderProcessorJob.start();
+        logger.info("Reminder processor job started");
 
-      nutritionAnalysisJob.start();
-      logger.info("Nutrition analysis job started");
+        workoutAuditJob.start();
+        logger.info("Workout audit job started");
 
-      scheduleAutomationJob.start();
-      logger.info("Schedule automation job started");
+        nutritionAnalysisJob.start();
+        logger.info("Nutrition analysis job started");
 
-      leaderboardMaterializationJob.start();
-      logger.info("Leaderboard materialization job started");
+        scheduleAutomationJob.start();
+        logger.info("Schedule automation job started");
 
-      competitionAutoCreateJob.start();
-      logger.info("Competition auto-create job started");
+        leaderboardMaterializationJob.start();
+        logger.info("Leaderboard materialization job started");
 
+        competitionAutoCreateJob.start();
+        logger.info("Competition auto-create job started");
+
+        // Heavy jobs — stagger startup to avoid query storm
+        setTimeout(() => {
+          proactiveMessagingJob.start();
+          logger.info("Proactive messaging job started (staggered 30s)");
+        }, 30_000);
+
+        setTimeout(() => {
+          dailyScoringJob.start();
+          logger.info("Daily scoring job started (staggered 60s)");
+        }, 60_000);
+
+        setTimeout(() => {
+          dailyAnalysisJob.start();
+          logger.info("Daily analysis job started (staggered 120s)");
+        }, 120_000);
+
+        setTimeout(() => {
+          coachProfileGenerationJob.start();
+          logger.info("Coach profile generation job started (staggered 180s)");
+        }, 180_000);
+
+        setTimeout(() => {
+          whoopSyncJob.start();
+          logger.info("WHOOP daily sync job started (staggered 240s)");
+        }, 240_000);
+      }
+
+      // Event-driven / queue consumer — start on all workers (or keep on scheduler only if it's a single consumer)
       activityEventProcessor.start();
       logger.info("Activity event processor started");
-
-      // Heavy jobs — stagger startup to avoid query storm
-      setTimeout(() => {
-        proactiveMessagingJob.start();
-        logger.info("Proactive messaging job started (staggered 30s)");
-      }, 30_000);
-
-      setTimeout(() => {
-        dailyScoringJob.start();
-        logger.info("Daily scoring job started (staggered 60s)");
-      }, 60_000);
-
-      setTimeout(() => {
-        dailyAnalysisJob.start();
-        logger.info("Daily analysis job started (staggered 120s)");
-      }, 120_000);
-
-      setTimeout(() => {
-        coachProfileGenerationJob.start();
-        logger.info("Coach profile generation job started (staggered 180s)");
-      }, 180_000);
-
-      setTimeout(() => {
-        whoopSyncJob.start();
-        logger.info("WHOOP daily sync job started (staggered 240s)");
-      }, 240_000);
     });
 
     // Store server reference for graceful shutdown

@@ -69,29 +69,22 @@ export const ChatMessageItem = memo(function ChatMessageItem({
   onUserClick,
   onViewOnce,
 }: ChatMessageItemProps) {
-  // Use senderId comparison for accurate user detection
   const isUser = message.senderId === currentUserId;
-  // View-once logic
   const isViewOnce = message.isViewOnce;
   const viewOnceOpened = isViewOnce && !!message.viewOnceOpenedAt;
-  // For view-once: hide media if opened (or if recipient hasn't opened yet, show locked placeholder)
   const showMedia = !isViewOnce
     ? (message.mediaUrl && message.mediaType !== 'audio')
-    : false; // View-once media is never shown via normal MediaMessage
+    : false;
   const showAudio = !isViewOnce
     ? (message.mediaUrl && message.mediaType === 'audio')
     : false;
-  // Only show text bubble if there's actual content (not just whitespace)
   const hasTextContent = message.content && message.content.trim().length > 0;
-  // Check if this is a system message
   const isSystemMessage = message.contentType === 'system';
 
-  // Get content type label for view-once
   const viewOnceLabel = message.mediaType === 'video' ? 'video'
     : message.mediaType === 'audio' ? 'audio'
     : 'photo';
 
-  // Get initials from sender name
   const getInitials = (name?: string): string => {
     if (!name) return '?';
     const parts = name.trim().split(/\s+/);
@@ -107,11 +100,10 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     }
   };
 
-  // System messages are displayed centered without bubble
   if (isSystemMessage) {
     return (
-      <div className="flex items-center justify-center px-4 py-2">
-        <div className="text-xs text-muted-foreground italic bg-muted/30 px-3 py-1 rounded-full">
+      <div className="flex items-center justify-center px-4 py-2.5">
+        <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/8 px-3 py-1 rounded-full font-medium">
           {message.content}
         </div>
       </div>
@@ -121,11 +113,11 @@ export const ChatMessageItem = memo(function ChatMessageItem({
   return (
     <div
       className={cn(
-        'group flex gap-2 px-4 py-1 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-colors',
+        'group flex gap-2.5 px-4 sm:px-6 py-1 transition-colors',
         isUser ? 'justify-end' : 'justify-start'
       )}
     >
-      {/* Avatar - Only show for other users' messages (left side) */}
+      {/* Avatar */}
       {!isUser && (
         <button
           onClick={() => {
@@ -133,11 +125,11 @@ export const ChatMessageItem = memo(function ChatMessageItem({
               onUserClick(message.senderId, message.senderName, message.senderAvatar);
             }
           }}
-          className="cursor-pointer hover:opacity-80 transition-opacity"
+          className="cursor-pointer hover:opacity-80 transition-opacity self-end mb-5"
         >
-          <Avatar className="h-8 w-8 shrink-0 ring-2 ring-emerald-200 dark:ring-emerald-600/30">
+          <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={message.senderAvatar || undefined} alt={message.senderName || 'User'} />
-            <AvatarFallback className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white text-xs">
+            <AvatarFallback className="bg-linear-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
               {getInitials(message.senderName || '')}
             </AvatarFallback>
           </Avatar>
@@ -146,9 +138,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
       {/* Message content */}
       <div
-        className={cn('flex flex-col gap-1 w-full', isUser ? 'items-end' : 'items-start')}
+        className={cn('flex flex-col gap-0.5 max-w-[75%] sm:max-w-[65%]', isUser ? 'items-end' : 'items-start')}
       >
-        {/* Sender name for group chats (only for other users' messages) */}
+        {/* Sender name for group chats */}
         {isGroupChat && !isUser && message.senderName && (
           <button
             onClick={() => {
@@ -156,7 +148,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 onUserClick(message.senderId, message.senderName, message.senderAvatar);
               }
             }}
-            className="text-[12.5px] text-emerald-600 dark:text-emerald-400 px-2 pb-0.5 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer font-medium"
+            className="text-[12px] text-emerald-600 dark:text-emerald-400 px-1 pb-0.5 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer font-semibold"
           >
             {message.senderName}
           </button>
@@ -166,28 +158,29 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         {message.repliedTo && (
           <div
             className={cn(
-              'text-xs text-muted-foreground mb-1 px-3 py-1 border-l-2 border-primary/50 bg-muted/50 rounded',
-              isUser ? 'border-r-2 border-l-0' : ''
+              'text-xs text-slate-500 dark:text-slate-400 mb-0.5 px-3 py-1.5 rounded-xl',
+              isUser
+                ? 'bg-emerald-500/10 border-r-2 border-emerald-500'
+                : 'bg-slate-100 dark:bg-white/8 border-l-2 border-slate-300 dark:border-white/20'
             )}
           >
             {message.repliedTo.senderName && (
-              <div className="font-medium">{message.repliedTo.senderName}</div>
+              <div className="font-semibold text-slate-700 dark:text-slate-300 text-[11px]">{message.repliedTo.senderName}</div>
             )}
             <div className="truncate">{message.repliedTo.content}</div>
           </div>
         )}
 
-        <div className={cn('flex items-end gap-2', isUser ? 'flex-row-reverse' : 'flex-row')}>
-          <div className={cn('flex flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
+        <div className={cn('flex items-end gap-1.5', isUser ? 'flex-row-reverse' : 'flex-row')}>
+          <div className={cn('flex flex-col gap-0.5', isUser ? 'items-end' : 'items-start')}>
             {/* View-once message card */}
             {isViewOnce && (
               viewOnceOpened ? (
-                // Already opened — show "Opened" status
                 <div className={cn(
                   'flex items-center gap-2 px-4 py-3 rounded-2xl',
                   isUser
-                    ? 'bg-emerald-600/20 border border-emerald-500/30'
-                    : 'bg-slate-200/60 dark:bg-slate-700/60 border border-slate-300/30 dark:border-slate-600/30'
+                    ? 'bg-emerald-500/10 border border-emerald-500/20'
+                    : 'bg-slate-100 dark:bg-white/8 border border-slate-200 dark:border-white/8'
                 )}>
                   <Eye className="h-4 w-4 text-slate-400" />
                   <span className="text-sm text-slate-500 dark:text-slate-400 italic">
@@ -195,36 +188,31 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                   </span>
                 </div>
               ) : isUser ? (
-                // Sender: waiting for recipient to open
-                <div className={cn(
-                  'flex items-center gap-2 px-4 py-3 rounded-2xl',
-                  'bg-emerald-600/20 border border-emerald-500/30'
-                )}>
-                  <EyeOff className="h-4 w-4 text-emerald-400" />
+                <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                  <EyeOff className="h-4 w-4 text-emerald-500" />
                   <span className="text-sm text-emerald-600 dark:text-emerald-400">
                     View once {viewOnceLabel} &bull; Waiting...
                   </span>
                 </div>
               ) : (
-                // Recipient: locked, tap to open
                 <button
                   onClick={() => onViewOnce?.(message.id)}
                   className={cn(
                     'flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer transition-all',
-                    'bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800',
-                    'border border-slate-300/50 dark:border-slate-600/50',
-                    'hover:border-emerald-400 hover:shadow-md hover:shadow-emerald-500/10',
+                    'bg-slate-50 dark:bg-white/5',
+                    'border border-slate-200 dark:border-white/8',
+                    'hover:border-emerald-400 hover:shadow-md hover:shadow-emerald-500/5',
                     'active:scale-[0.98]'
                   )}
                 >
-                  <div className="h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
                     <Lock className="h-5 w-5 text-emerald-500" />
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                       View once {viewOnceLabel}
                     </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
                       Tap to open
                     </p>
                   </div>
@@ -241,18 +229,18 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 fileName={message.fileName}
                 fileSize={message.fileSize}
                 isOwn={isUser}
-                className={hasTextContent ? "mb-2" : ""}
+                className={hasTextContent ? "mb-1" : ""}
               />
             )}
 
             {/* Audio */}
             {showAudio && (
-              <div className={hasTextContent ? "mb-2" : ""}>
+              <div className={hasTextContent ? "mb-1" : ""}>
                 <AudioPlayer src={message.mediaUrl!} isOwn={isUser} />
               </div>
             )}
 
-            {/* Message bubble - only show if there's text content */}
+            {/* Message bubble */}
             {hasTextContent && (
               <MessageBubble
                 content={message.content}
@@ -263,38 +251,26 @@ export const ChatMessageItem = memo(function ChatMessageItem({
               />
             )}
 
-            {/* Timestamp and status - Emerald theme */}
+            {/* Timestamp and status */}
             <div
               className={cn(
-                'flex items-center gap-1 text-[11.5px]',
-                // Position differently based on whether there's text content
-                hasTextContent ? 'px-2 mt-0.5' : (showMedia || showAudio) ? 'px-1 mt-1' : 'px-2 mt-0.5',
-                isUser ? 'flex-row-reverse text-white/90' : 'flex-row text-slate-500 dark:text-slate-400'
+                'flex items-center gap-1 text-[11px] font-medium',
+                hasTextContent ? 'px-1 mt-0.5' : (showMedia || showAudio) ? 'px-1 mt-1' : 'px-1 mt-0.5',
+                isUser ? 'flex-row-reverse text-slate-400 dark:text-slate-500' : 'flex-row text-slate-400 dark:text-slate-500'
               )}
             >
               {message.timestamp && (() => {
                 try {
-                  // Parse the timestamp - backend sends ISO strings (UTC)
-                  // If timestamp doesn't have timezone info, treat it as UTC
                   let timestampStr = message.timestamp;
-                  
-                  // If timestamp doesn't end with 'Z' or timezone offset, append 'Z' to treat as UTC
                   if (!timestampStr.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(timestampStr)) {
                     timestampStr = timestampStr + 'Z';
                   }
-                  
                   const date = new Date(timestampStr);
-                  
-                  // Validate the date
                   if (isNaN(date.getTime())) {
-                    console.warn('Invalid timestamp:', message.timestamp);
                     return null;
                   }
-                  
-                  // Format in user's local timezone with 12-hour format
                   return <span>{format(date, 'h:mm a')}</span>;
-                } catch (error) {
-                  console.error('Error formatting timestamp:', error);
+                } catch {
                   return null;
                 }
               })()}
@@ -304,7 +280,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             </div>
 
             {/* Reactions */}
-            <div className={cn('flex items-center gap-1 mt-1', isUser ? 'flex-row-reverse' : 'flex-row')}>
+            <div className={cn('flex items-center gap-1 mt-0.5', isUser ? 'flex-row-reverse' : 'flex-row')}>
               <MessageReactions
                 messageId={message.id}
                 reactions={message.reactions || []}
@@ -336,4 +312,3 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     </div>
   );
 });
-

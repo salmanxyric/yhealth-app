@@ -319,111 +319,90 @@ export function UserHealthProfileModal({
             </div>
           )}
 
-          {showMainMetrics && (
+          {showMainMetrics && hasData && (
             <div className="space-y-10">
-              {/* Main Metrics Grid - WHOOP Style - Always show Sleep, Recovery, Strain */}
+              {/* Main Metrics Grid - WHOOP Style - Only show when data exists */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10">
-                {/* Sleep - Always show */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={sleep?.score || 0}
-                    max={100}
-                    label="SLEEP"
-                    unit="%"
-                    icon={Moon}
-                    color="#3B82F6"
-                  />
-                  <div className="mt-4 text-center space-y-1">
-                    {sleep ? (
-                      <>
-                        <div className="text-sm text-slate-400">
-                          {Math.floor((sleep.duration_minutes || 0) / 60)}h {(sleep.duration_minutes || 0) % 60}m
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {sleep.efficiency?.toFixed(0)}% efficiency
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-xs text-slate-500">
-                        No data available
+                {/* Sleep */}
+                {sleep && (
+                  <div className="flex flex-col items-center">
+                    <CircularProgress
+                      value={sleep.score || 0}
+                      max={100}
+                      label="SLEEP"
+                      unit="%"
+                      icon={Moon}
+                      color="#3B82F6"
+                    />
+                    <div className="mt-4 text-center space-y-1">
+                      <div className="text-sm text-slate-400">
+                        {Math.floor((sleep.duration_minutes || 0) / 60)}h {(sleep.duration_minutes || 0) % 60}m
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Recovery - Always show */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={recovery?.score || 0}
-                    max={100}
-                    label="RECOVERY"
-                    unit="%"
-                    icon={Zap}
-                    color="#10B981"
-                  />
-                  <div className="mt-4 text-center space-y-1">
-                    {recovery ? (
-                      <>
-                        <div className="text-sm text-slate-400">
-                          HRV: {recovery.hrv?.toFixed(0)} ms
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          RHR: {recovery.rhr} bpm
-                        </div>
-                      </>
-                    ) : (
                       <div className="text-xs text-slate-500">
-                        No data available
+                        {sleep.efficiency?.toFixed(0)}% efficiency
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Strain - Always show */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={strain?.score || 0}
-                    max={21}
-                    label="STRAIN"
-                    icon={Activity}
-                    color="#A855F7"
-                  />
-                  <div className="mt-4 text-center space-y-1">
-                    {strain ? (
+                {/* Recovery */}
+                {recovery && (
+                  <div className="flex flex-col items-center">
+                    <CircularProgress
+                      value={recovery.score || 0}
+                      max={100}
+                      label="RECOVERY"
+                      unit="%"
+                      icon={Zap}
+                      color="#10B981"
+                    />
+                    <div className="mt-4 text-center space-y-1">
+                      <div className="text-sm text-slate-400">
+                        HRV: {recovery.hrv?.toFixed(0)} ms
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        RHR: {recovery.rhr} bpm
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Strain */}
+                {strain && (
+                  <div className="flex flex-col items-center">
+                    <CircularProgress
+                      value={strain.score || 0}
+                      max={21}
+                      label="STRAIN"
+                      icon={Activity}
+                      color="#A855F7"
+                    />
+                    <div className="mt-4 text-center space-y-1">
                       <div className="text-sm text-slate-400">
                         Normalized: {strain.normalized?.toFixed(1)}
                       </div>
-                    ) : (
-                      <div className="text-xs text-slate-500">
-                        No data available
-                      </div>
-                    )}
+                    </div>
                   </div>
-                </div>
+                )}
 
-
-                {/* Health Score - Always show */}
-                <div className="flex flex-col items-center">
-                  <CircularProgress
-                    value={healthScore}
-                    max={100}
-                    label="HEALTH SCORE"
-                    unit="%"
-                    icon={Gauge}
-                    color="#F59E0B"
-                  />
-                  <div className="mt-4 text-center space-y-1">
-                    {healthScore > 0 ? (
+                {/* Health Score */}
+                {healthScore > 0 && (
+                  <div className="flex flex-col items-center">
+                    <CircularProgress
+                      value={healthScore}
+                      max={100}
+                      label="HEALTH SCORE"
+                      unit="%"
+                      icon={Gauge}
+                      color="#F59E0B"
+                    />
+                    <div className="mt-4 text-center space-y-1">
                       <div className="text-sm text-slate-400">
                         {healthScore >= 75 ? 'Excellent' : healthScore >= 50 ? 'Good' : healthScore >= 25 ? 'Fair' : 'Needs Attention'}
                       </div>
-                    ) : (
-                      <div className="text-xs text-slate-500">
-                        No data available
-                      </div>
-                    )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Stress */}
                 {stress && (
@@ -671,13 +650,17 @@ export function UserHealthProfileModal({
           )}
 
           {showMainMetrics && !hasData && (
-            <div className="text-center py-8">
-              <p className="text-slate-400 text-sm mt-4">
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
+                <Activity className="w-8 h-8 text-slate-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">No Health Data Available</h3>
+              <p className="text-slate-400 text-sm max-w-md">
                 {healthData?._meta?.hasIntegration
                   ? healthData._meta.hasAnyData
                     ? 'No recent data available. Data may still be syncing.'
                     : 'WHOOP is connected but no data has been synced yet. Please wait for the initial sync to complete or trigger a manual sync.'
-                  : 'Connect your WHOOP device or sync your health data to see detailed metrics'}
+                  : 'This user has not connected a health device or synced any health data yet.'}
               </p>
             </div>
           )}

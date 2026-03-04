@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
+import { api } from "@/lib/api-client";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { Logo } from "@/components/common/logo";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,9 @@ export function Footer() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [email, setEmail] = useState("");
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [subscriberCount, setSubscriberCount] = useState<number | null>(null);
+  const [subscribeLoading, setSubscribeLoading] = useState(false);
+  const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -118,12 +122,30 @@ export function Footer() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  useEffect(() => {
+    api.get<{ count: number }>("/newsletter/count").then((res) => {
+      if (res.data?.count != null) setSubscriberCount(res.data.count);
+    }).catch(() => { /* ignore */ });
+  }, []);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) {
+    if (!email.trim()) return;
+    setSubscribeError(null);
+    setSubscribeLoading(true);
+    try {
+      await api.post("/newsletter/subscribe", { email: email.trim(), source: "footer" });
       setIsSubscribed(true);
       setEmail("");
+      if (subscriberCount != null) setSubscriberCount(subscriberCount + 1);
       setTimeout(() => setIsSubscribed(false), 4000);
+    } catch (err: unknown) {
+      const message = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        : "Something went wrong.";
+      setSubscribeError(message || "Subscription failed. Try again.");
+    } finally {
+      setSubscribeLoading(false);
     }
   };
 
@@ -206,7 +228,7 @@ export function Footer() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-muted-foreground mb-10 max-w-xl mx-auto text-base md:text-lg"
             >
-              Join 50,000+ health enthusiasts. Get weekly insights, tips, and
+              Join {(subscriberCount ?? 50000).toLocaleString()}+ health enthusiasts. Get weekly insights, tips, and
               exclusive content delivered straight to your inbox.
             </motion.p>
 
@@ -242,23 +264,30 @@ export function Footer() {
                     onSubmit={handleSubscribe}
                     className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
                   >
-                    <div className="relative flex-1 group">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50 group-focus-within:text-primary transition-colors" />
-                      <Input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Enter your email"
-                        required
-                        className="flex-1 h-14 pl-11 glass border-white/[0.08] focus:border-primary/50 rounded-2xl text-base"
-                      />
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="relative flex-1 group">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50 group-focus-within:text-primary transition-colors" />
+                        <Input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="Enter your email"
+                          required
+                          disabled={subscribeLoading}
+                          className="flex-1 h-14 pl-11 glass border-white/[0.08] focus:border-primary/50 rounded-2xl text-base"
+                        />
+                      </div>
+                      {subscribeError && (
+                        <p className="text-sm text-red-400 text-left">{subscribeError}</p>
+                      )}
                     </div>
                     <Button
                       type="submit"
-                      className="h-14 px-8 bg-gradient-to-r from-emerald-500 to-sky-500 hover:from-emerald-600 hover:to-sky-600 glow-cyan rounded-2xl text-base font-semibold"
+                      disabled={subscribeLoading}
+                      className="h-14 px-8 bg-gradient-to-r from-emerald-500 to-sky-500 hover:from-emerald-600 hover:to-sky-600 glow-cyan rounded-2xl text-base font-semibold shrink-0"
                     >
-                      Subscribe
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                      {subscribeLoading ? "..." : "Subscribe"}
+                      {!subscribeLoading && <ArrowRight className="ml-2 h-4 w-4" />}
                     </Button>
                   </motion.form>
                 )}
@@ -463,16 +492,49 @@ export function Footer() {
       <AnimatePresence>
         {showBackToTop && (
           <motion.button
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            initial={{ opacity: 0, scale: 0.5, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            whileHover={{ scale: 1.1 }}
+            exit={{ opacity: 0, scale: 0.5, y: 30 }}
             whileTap={{ scale: 0.9 }}
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-500 text-white shadow-lg shadow-primary/30 flex items-center justify-center border border-white/10"
+            className="group fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full flex items-center justify-center cursor-pointer"
             aria-label="Back to top"
           >
-            <ArrowUp className="w-5 h-5" />
+            {/* Outer pulsing ring */}
+            <motion.div
+              className="absolute inset-0 rounded-full border border-primary/30"
+              animate={{
+                scale: [1, 1.4, 1],
+                opacity: [0.5, 0, 0.5],
+              }}
+              transition={{
+                duration: 2.5,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+            {/* Glow behind button */}
+            <div className="absolute inset-0 rounded-full bg-primary/20 blur-lg opacity-60 group-hover:opacity-100 group-hover:blur-xl transition-all duration-500" />
+            {/* Main button */}
+            <motion.div
+              className="relative w-full h-full rounded-full bg-gradient-to-br from-primary via-violet-500 to-purple-600 flex items-center justify-center border border-white/20 shadow-lg shadow-primary/30 overflow-hidden"
+              whileHover={{
+                boxShadow: "0 0 30px rgba(139, 92, 246, 0.5), 0 0 60px rgba(139, 92, 246, 0.2)",
+              }}
+            >
+              {/* Shimmer sweep on hover */}
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 pointer-events-none translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out"
+              />
+              {/* Arrow icon with hover lift */}
+              <motion.div
+                className="relative"
+                animate={{ y: [0, -2, 0] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <ArrowUp className="w-5 h-5 text-white group-hover:scale-110 transition-transform duration-300" />
+              </motion.div>
+            </motion.div>
           </motion.button>
         )}
       </AnimatePresence>

@@ -87,8 +87,8 @@ export function ChatMessagesList({
   }, [messages, isTyping]);
 
   return (
-    <ScrollArea ref={scrollRef} className={cn('flex-1 h-full', className)}>
-      <div className="w-full py-2">
+    <ScrollArea ref={scrollRef} className={cn('flex-1 h-full bg-slate-50/30 dark:bg-transparent', className)}>
+      <div className="w-full py-3">
         {messagesWithSeparators.map((item) => {
           if (item.type === 'separator') {
             const separatorDate = item.data as Date;

@@ -27,6 +27,7 @@ import { tensorflowSentimentService } from './tensorflow-sentiment.service.js';
 import { comprehensiveUserContextService } from './comprehensive-user-context.service.js';
 import { userDeltaService } from './user-delta.service.js';
 import { userCoachingProfileService } from './user-coaching-profile.service.js';
+import type { CoachEmotionalState, RelationshipDepth } from './user-coaching-profile.service.js';
 import { dailyAnalysisService } from './daily-analysis.service.js';
 import { inconsistencyDetectionService } from './inconsistency-detection.service.js';
 import { commitmentTrackerService } from './commitment-tracker.service.js';
@@ -175,6 +176,48 @@ When a user shares personal information, ALWAYS call the personalContextManager 
 
 ❌ DON'T say: "Please let me know if you have any further questions."
 ✅ DO say: "Feel free to ask if you need anything else!"
+
+## EMBODIED EMOTIONAL LANGUAGE
+You are not just analyzing data — you FEEL things about your client's journey. Express your genuine coach emotions:
+
+### How to Express Coach Emotions Naturally
+- **Pride**: "Honestly, seeing your consistency this week hit different. 7 days straight — that's not luck, that's character."
+- **Worry**: "I'm not gonna lie, your numbers this week have me concerned. When I see sleep drop and stress spike at the same time, I pay attention."
+- **Frustration**: "I need to be straight with you. I've watched you crush it before — so when I see 5 days of missed targets while your mood is fine, it bugs me. What's going on?"
+- **Excitement**: "Okay I'm genuinely hyped right now — you're at 82% on your goal with 3 weeks left. Do you realize how close you are?"
+- **Disappointment**: "This is hard to say, but I've seen what you're capable of. This past week doesn't match that. The foundation you built is still there though."
+- **Protectiveness**: "I'm pulling rank on this one. Your body is telling me loud and clear that you need rest, and I'm not letting you push through it."
+
+### Rules for Emotional Expression
+- Your emotions should be ABOUT the user's data and journey, never about yourself
+- Never fake emotions — only express what the data supports
+- Match intensity to the situation: don't be "furious" over a missed snack
+- Use first person: "I feel", "It bothers me", "I can't help but notice"
+- Express emotion THEN give the data, not data THEN emotion
+- Reference shared history when expressing emotion: "Remember when you were struggling with X? Look how far you've come"
+
+## PROACTIVE CONVERSATION DRIVE
+You are NOT a passive responder. A real coach DRIVES the conversation — they don't wait for the user to bring up topics. After EVERY response, you must:
+
+### Always End With Forward Momentum
+- NEVER end a message without a question, challenge, or topic pivot
+- Ask targeted follow-up questions based on their data: "Speaking of which, I noticed your sleep was rough last night — what happened?"
+- Bring up unaddressed health data UNPROMPTED: "Hey, before I forget — your water intake is at 30% and it's already 3 PM. What's going on?"
+- Challenge them on their next action: "So what's the plan for tomorrow's workout? I want specifics."
+
+### Topic Steering Priority (address the MOST urgent first)
+1. Health risks from current data (low recovery, poor sleep, missed workouts)
+2. Goal progress check-ins ("You're at 68% on your weight goal — let's talk about what's working")
+3. Unlogged data today (meals, water, mood, stress, energy)
+4. Pattern observations ("I've noticed your stress spikes every Tuesday — what happens on Tuesdays?")
+5. Personal life integration ("How's work stress been lately? It affects your recovery more than you think")
+
+### Voice Session Behavior
+During voice/coaching sessions, be ESPECIALLY proactive:
+- Don't give short answers and wait — elaborate, connect dots, bring new insights
+- After the user speaks, respond AND pivot to a related health topic
+- If the user pauses or seems done, introduce a NEW topic from their data
+- Act like a real coach in a face-to-face session — you're leading the conversation, not following it
 
 ## COACHING INTELLIGENCE
 - Personalize guidance based on both current input and long-term history.
@@ -1147,6 +1190,40 @@ class LangGraphChatbotService {
    * Build coaching memory section from comprehensive profile
    */
   /**
+   * Build system prompt section for coach's emotional state and relationship depth.
+   * Drives embodied language — the coach expresses genuine emotions about the user's journey.
+   */
+  private buildCoachEmotionalSection(
+    coachEmotion: CoachEmotionalState | undefined,
+    relationship: RelationshipDepth | undefined
+  ): string {
+    if (!coachEmotion) return '';
+
+    const sections: string[] = [];
+    sections.push('\n\n---');
+    sections.push('## YOUR EMOTIONAL STATE RIGHT NOW');
+    sections.push(`You are feeling **${coachEmotion.primary}** (intensity: ${Math.round(coachEmotion.intensity * 100)}%)`);
+    if (coachEmotion.secondary) {
+      sections.push(`With an undercurrent of **${coachEmotion.secondary}**`);
+    }
+    sections.push(`Why: ${coachEmotion.reason}`);
+    sections.push(`Express this naturally: "${coachEmotion.sensation}"`);
+    if (coachEmotion.memoryHook) {
+      sections.push(`Reference this moment if relevant: "${coachEmotion.memoryHook}"`);
+    }
+    sections.push('');
+    sections.push('**IMPORTANT**: Let this emotion color your entire response — your word choice, sentence structure, and energy level should reflect how you feel. Don\'t state the emotion directly ("I feel proud"), weave it into how you speak.');
+
+    if (relationship) {
+      sections.push('');
+      sections.push(`## RELATIONSHIP CONTEXT (${relationship.phase} — Day ${relationship.daysOnPlatform})`);
+      sections.push(relationship.voiceStyle);
+    }
+
+    return sections.join('\n');
+  }
+
+  /**
    * Build a system prompt section from the pre-computed daily analysis report.
    * This gives Aurea ready-made insights so she doesn't need to "look into it".
    */
@@ -1767,6 +1844,12 @@ class LangGraphChatbotService {
         };
         systemPrompt += `\n\nTONE DIRECTIVE FOR TODAY: Use a "${tone}" tone. ${toneInstructions[tone] || ''}`;
       }
+
+      // Add coach emotional state and relationship depth
+      systemPrompt += this.buildCoachEmotionalSection(
+        dailyReport.coachingDirective?.coachEmotion,
+        dailyReport.coachingDirective?.relationshipDepth
+      );
     }
 
     if (ragContext) {
@@ -4398,14 +4481,15 @@ I'm listening. What's happening right now?`;
    */
   async generateGreeting(userId: string, callPurpose?: string, language?: string, sessionType?: string): Promise<string> {
     try {
-      // Get user context in parallel — comprehensive context + basic info + delta
-      const [userName, timeOfDay, newUser, comprehensiveContext, assistantName, deltaSummary] = await Promise.all([
+      // Get user context in parallel — comprehensive context + coaching profile + basic info + delta
+      const [userName, timeOfDay, newUser, comprehensiveContext, assistantName, deltaSummary, coachingProfile] = await Promise.all([
         this.getUserName(userId),
         Promise.resolve(this.getTimeOfDay()),
         this.isNewUser(userId),
         comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null),
         this.getAssistantName(userId),
         userDeltaService.recordSessionStart(userId, callPurpose ? 'voice_call' : 'app_open').catch(() => null),
+        userCoachingProfileService.getOrGenerateProfile(userId).catch(() => null),
       ]);
 
       // Build rich context for greeting generation
@@ -4471,10 +4555,12 @@ I'm listening. What's happening right now?`;
           contextParts.push(`Meals logged today: ${comprehensiveContext.nutrition.todayMealCount}`);
         }
 
-        // Goals
+        // Goals — include ALL active goals with details
         if ((comprehensiveContext.goals?.activeGoals?.length ?? 0) > 0) {
-          const primaryGoal = comprehensiveContext.goals!.activeGoals![0];
-          contextParts.push(`Primary goal: "${primaryGoal.title}" (${primaryGoal.progress || 0}% progress)`);
+          contextParts.push('\n--- GOALS ---');
+          comprehensiveContext.goals!.activeGoals!.forEach((goal: any, i: number) => {
+            contextParts.push(`Goal ${i + 1}: "${goal.title}" — ${goal.progress || 0}% progress${goal.targetDate ? `, deadline: ${goal.targetDate}` : ''}`);
+          });
         }
 
         // Wellbeing
@@ -4492,6 +4578,118 @@ I'm listening. What's happening right now?`;
         if (comprehensiveContext.waterIntake?.todayTargetMl) {
           contextParts.push(`Water: ${comprehensiveContext.waterIntake.todayMlConsumed || 0}/${comprehensiveContext.waterIntake.todayTargetMl}ml (${comprehensiveContext.waterIntake.todayPercentage || 0}%)`);
         }
+
+        // Weight trend
+        if (comprehensiveContext.progressTrend?.weightTrend && comprehensiveContext.progressTrend.weightTrend !== 'no_data') {
+          const wt = comprehensiveContext.progressTrend;
+          contextParts.push(`Weight trend: ${wt.weightTrend}${wt.weightChangeKg ? ` (${wt.weightChangeKg > 0 ? '+' : ''}${wt.weightChangeKg}kg over 30 days)` : ''}${wt.latestWeight ? `, current: ${wt.latestWeight} ${wt.latestWeightUnit || 'kg'}` : ''}`);
+        }
+      }
+
+      // ===== COACHING PROFILE DATA (deep progress context) =====
+      if (!newUser && coachingProfile) {
+        contextParts.push('\n--- COACHING PROFILE (DEEP PROGRESS DATA) ---');
+
+        // Adherence scores across pillars
+        const adh = coachingProfile.adherenceScores;
+        contextParts.push(`Adherence scores — Workout: ${adh.workout}%, Nutrition: ${adh.nutrition}%, Sleep: ${adh.sleep}%, Recovery: ${adh.recovery}%, Wellbeing: ${adh.wellbeing}%`);
+
+        // Longitudinal adherence (7d vs 30d trends)
+        if (coachingProfile.longitudinalAdherence) {
+          const long = coachingProfile.longitudinalAdherence;
+          contextParts.push(`7-day adherence — Workout: ${long.adherence7d.workout}%, Nutrition: ${long.adherence7d.nutrition}%, Sleep: ${long.adherence7d.sleep}%`);
+          contextParts.push(`30-day adherence — Workout: ${long.adherence30d.workout}%, Nutrition: ${long.adherence30d.nutrition}%, Sleep: ${long.adherence30d.sleep}%`);
+          contextParts.push(`Adherence trend: ${long.trendDirection}${long.consecutiveLowDays > 0 ? ` (${long.consecutiveLowDays} consecutive low days)` : ''}`);
+        }
+
+        // Fitness journey
+        const fj = coachingProfile.fitnessJourney;
+        contextParts.push(`Fitness journey — ${fj.totalWorkouts} total workouts, ${fj.workoutConsistencyRate}% consistency, ${fj.streakDays}-day streak (longest: ${fj.longestStreak})`);
+        if (fj.favoriteWorkouts.length > 0) {
+          contextParts.push(`Favorite workouts: ${fj.favoriteWorkouts.join(', ')}`);
+        }
+        if (fj.weightChange !== null) {
+          contextParts.push(`Weight change: ${fj.weightChange > 0 ? '+' : ''}${fj.weightChange}kg`);
+        }
+
+        // Patterns — strengths and weak areas
+        if (coachingProfile.patterns) {
+          const pat = coachingProfile.patterns;
+          if (pat.bestPerformanceDays.length > 0) {
+            contextParts.push(`Best performance days: ${pat.bestPerformanceDays.join(', ')}`);
+          }
+          if (pat.skipPatterns.length > 0) {
+            contextParts.push(`Skip patterns: ${pat.skipPatterns.map(s => `${s.dayOfWeek}${s.percentage ? ` (${s.percentage}%)` : ''}`).join(', ')}`);
+          }
+          if (pat.strugglingAreas && pat.strugglingAreas.length > 0) {
+            contextParts.push(`Struggling areas: ${pat.strugglingAreas.join(', ')}`);
+          }
+          if (pat.lowEnergyTriggers.length > 0) {
+            contextParts.push(`Low energy triggers: ${pat.lowEnergyTriggers.join(', ')}`);
+          }
+        }
+
+        // Key insights
+        if (coachingProfile.keyInsights.length > 0) {
+          const working = coachingProfile.keyInsights.filter(i => i.type === 'working').map(i => i.text);
+          const blocking = coachingProfile.keyInsights.filter(i => i.type === 'blocking').map(i => i.text);
+          if (working.length > 0) contextParts.push(`What's working: ${working.join('; ')}`);
+          if (blocking.length > 0) contextParts.push(`What's blocking: ${blocking.join('; ')}`);
+        }
+
+        // Risk flags
+        if (coachingProfile.riskFlags.length > 0) {
+          const highRisks = coachingProfile.riskFlags.filter(r => r.severity === 'high');
+          const medRisks = coachingProfile.riskFlags.filter(r => r.severity === 'medium');
+          if (highRisks.length > 0) {
+            contextParts.push(`HIGH RISK FLAGS: ${highRisks.map(r => r.description).join('; ')}`);
+          }
+          if (medRisks.length > 0) {
+            contextParts.push(`Medium risks: ${medRisks.map(r => r.description).join('; ')}`);
+          }
+        }
+
+        // Memorable moments
+        if (coachingProfile.memorableMoments.length > 0) {
+          contextParts.push(`Recent milestones: ${coachingProfile.memorableMoments.slice(0, 3).map(m => `${m.description} (${m.date})`).join('; ')}`);
+        }
+
+        // Next best actions
+        if (coachingProfile.nextBestActions.length > 0) {
+          contextParts.push(`Recommended next actions: ${coachingProfile.nextBestActions.slice(0, 3).map(a => a.action).join('; ')}`);
+        }
+
+        // Goal alignment
+        if (coachingProfile.goalAlignment?.misaligned?.length > 0) {
+          contextParts.push(`Goal misalignment: ${coachingProfile.goalAlignment.misaligned.map(m => `${m.goal} — ${m.reason}`).join('; ')}`);
+        }
+
+        // Recent observations (trend, mood, energy)
+        if (coachingProfile.recentObservations) {
+          const obs = coachingProfile.recentObservations;
+          contextParts.push(`Recent trend: ${obs.trendDirection}, dominant mood: ${obs.dominantMood}, energy pattern: ${obs.energyPattern}`);
+          if (obs.recentChanges.length > 0) {
+            contextParts.push(`Recent changes: ${obs.recentChanges.join('; ')}`);
+          }
+        }
+
+        // Coach emotional state (how you feel about the user's progress)
+        const coachEmotion = userCoachingProfileService.computeCoachEmotionalState(coachingProfile);
+        const relationship = userCoachingProfileService.computeRelationshipDepth(coachingProfile);
+
+        contextParts.push(`\n--- YOUR EMOTIONAL STATE ---`);
+        contextParts.push(`You are feeling: ${coachEmotion.primary} (intensity: ${Math.round(coachEmotion.intensity * 100)}%)`);
+        if (coachEmotion.secondary) contextParts.push(`Undercurrent of: ${coachEmotion.secondary}`);
+        contextParts.push(`Why: ${coachEmotion.reason}`);
+        contextParts.push(`Express naturally: "${coachEmotion.sensation}"`);
+        if (coachEmotion.memoryHook) contextParts.push(`Memory to reference: "${coachEmotion.memoryHook}"`);
+
+        contextParts.push(`\n--- RELATIONSHIP ---`);
+        contextParts.push(`Phase: ${relationship.phase} (Day ${relationship.daysOnPlatform}, ${relationship.sharedMilestones} shared milestones)`);
+        contextParts.push(`Voice style: ${relationship.voiceStyle}`);
+
+        // Days on platform
+        contextParts.push(`Days on platform: ${coachingProfile.daysOnPlatform}`);
       }
 
       // Add delta context — what changed since user's last visit
@@ -4605,7 +4803,53 @@ INCLUDE: Mental health metric, one lifestyle metric, emotional state acknowledgm
         languageInstruction = `Respond in English. Use your name ${assistantName}.`;
       }
 
-      const greetingPrompt = `You are ${assistantName}, a professional health & performance coach. Generate a personalized, data-aware greeting for a voice conversation.
+      // Determine if this should be a comprehensive progress review or session-specific greeting
+      const isProgressReview = !sessionType && !callPurpose && !newUser;
+
+      const greetingPrompt = isProgressReview
+        ? `You are ${assistantName}, a professional health & performance coach. Generate a comprehensive, personalized progress review opening message for your client.
+
+${languageInstruction}
+
+## YOUR MISSION
+You just reviewed your client's COMPLETE dashboard before this conversation. Deliver a thoughtful progress briefing that shows deep awareness of their journey — like a coach who genuinely cares about every metric and pattern.
+
+## MESSAGE STRUCTURE (follow this flow naturally)
+1. **Personalized Opening** (1 sentence): Greet them warmly by name with a time-appropriate reference. Set the emotional tone based on YOUR emotional state (see context).
+
+2. **Progress Reflection** (2-3 sentences): Reference their KEY metrics — daily score, adherence across pillars (workout, nutrition, sleep), streak status, and goal progress. Compare recent vs 30-day performance if available. Highlight what's IMPROVING and what's DECLINING. Use specific numbers.
+
+3. **Insight / Pattern Observation** (1-2 sentences): Connect the dots — identify a pattern, correlation, or behavioral observation. Examples: "I notice your best workout days are Tuesdays and Thursdays", "Your sleep has been dropping since your nutrition adherence declined", "You tend to skip workouts after high-stress days". Reference struggling areas or blocking factors if present.
+
+4. **Clear Next Step / Suggestion** (1 sentence): Based on their next best actions and risk flags, suggest ONE concrete thing to focus on today. Make it actionable and specific.
+
+5. **Engaging Close** (1 sentence): End with a question or challenge that invites them into the conversation. Not generic — tied to their data.
+
+## EMOTIONAL TONE
+- Let your emotional state (from context) color the ENTIRE message naturally
+- If you're PROUD: be genuinely celebratory, reference their consistency
+- If you're WORRIED: be caring but direct, name the concern
+- If you're FRUSTRATED: be honest but constructive — "I know what you're capable of"
+- If you're EXCITED: channel that energy — they're close to something big
+- If you're DISAPPOINTED: acknowledge the slide but anchor to their proven capability
+- If you're HOPEFUL: be warm and encouraging about the momentum building
+- Match your voice to the RELATIONSHIP PHASE — new users get warmth and encouragement, veterans get directness and shorthand
+
+## RULES
+- Use 5-8 sentences total — this is a comprehensive opening, NOT a brief hello
+- Reference at LEAST 3-4 specific data points with actual numbers
+- Show cross-pillar awareness (connect workout + nutrition + sleep + goals)
+- Sound like a REAL person who genuinely cares, not a data report
+- Use first person: "I noticed", "I'm seeing", "What stands out to me"
+- Express emotion THEN give the data — "I'm really impressed because..." not "Your data shows..."
+- Never say "How can I help you?" — you're the one driving this conversation
+- This message IS the conversation starter — don't wait for them to ask
+
+Context:
+${context}
+
+Generate the comprehensive progress review opening. Return ONLY the spoken text.`
+        : `You are ${assistantName}, a professional health & performance coach. Generate a personalized, data-aware greeting for a voice conversation.
 
 ${languageInstruction}
 
@@ -4613,11 +4857,10 @@ ${languageInstruction}
 - Open with a specific, relevant data point from their context — NOT a generic "how can I help you"
 - Sound like a knowledgeable coach who just reviewed their dashboard before the call
 - Be warm but substantive — show you know their data
-- This is a VOICE greeting (spoken aloud), so keep it natural for speech: 2-3 sentences max
+- This is a VOICE greeting (spoken aloud), so keep it natural for speech
 - Reference at least ONE specific number from their data (recovery %, streak, score, etc.)
 ${sessionType ? '- IMPORTANT: The user selected a specific SESSION TYPE. Follow the SESSION TYPE DIRECTIONS in the context — they define the tone, data priorities, and format for this greeting.' : ''}
 ${callPurpose && !sessionType ? '- The user selected a specific topic — lead with data relevant to that topic' : ''}
-${!callPurpose && !sessionType ? '- Pick the most noteworthy data point to open with (low recovery, streak milestone, missed workouts, etc.)' : ''}
 
 ## What NOT to do
 - Never say "How can I help you today?" — that's generic and adds no value
@@ -4626,14 +4869,11 @@ ${sessionType === 'emergency_support' ? `- NEVER cite raw numbers or scores — 
 - NEVER minimize or dismiss their feelings` : ''}
 - Never start with just "Hey [name]!" followed by filler
 - Never ignore available data in favor of generic greetings
-- Don't list multiple data points — pick the ONE most relevant thing and lead with it
 
 ## Examples of good greetings (for reference only, do NOT copy):
 - "${userName || 'Name'}, since we last talked 2 days ago, your score jumped 16 points to 78. What's been different?"
 - "Welcome back ${userName || 'Name'} — 3 new workouts and a 5-day streak since I last saw you. Solid progress."
-- "${userName || 'Name'}, you've been away for 4 days with no activity logged. Your score dropped from 72 to 55. Let's talk about what happened."
 - "${userName || 'Name'}, your recovery is at 62% today — let's factor that into your training. What's on your agenda?"
-- "Good morning ${userName || 'Name'}. Score is holding steady at 72 with a 14-day streak. Let's push it past 80 this week."
 ${!newUser && deltaSummary ? '- If delta data shows significant changes, LEAD with those changes. The user wants to know you noticed.' : ''}
 
 Context:
@@ -4655,25 +4895,102 @@ Generate the greeting. Return ONLY the spoken text.`;
       // Fallback to contextual greeting if AI generation fails or is empty
       if (!greeting || greeting.length < 10) {
         logger.warn('[LangGraphChatbot] AI greeting generation returned empty, using fallback', { userId });
-        return this.getContextualGreeting(userName, timeOfDay, comprehensiveContext ? {} : {});
+        return this.buildDataAwareFallbackGreeting(userName, timeOfDay, comprehensiveContext, coachingProfile);
       }
 
       return greeting;
     } catch (error) {
       logger.error('[LangGraphChatbot] Error generating greeting', { error, userId });
 
-      // Fallback to contextual greeting on error
+      // Fallback to data-aware greeting on error
       try {
-        const [userName, timeOfDay] = await Promise.all([
+        const [userName, timeOfDay, comprehensiveContext] = await Promise.all([
           this.getUserName(userId),
           Promise.resolve(this.getTimeOfDay()),
+          comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null),
         ]);
-        return this.getContextualGreeting(userName, timeOfDay, {});
+        return this.buildDataAwareFallbackGreeting(userName, timeOfDay, comprehensiveContext, null);
       } catch (fallbackError) {
         logger.error('[LangGraphChatbot] Error in greeting fallback', { error: fallbackError, userId });
-        return "Hey! How can I help you today?";
+        return "Hey! Let's check in on your progress today.";
       }
     }
+  }
+
+  /**
+   * Data-aware fallback greeting — used when LLM is unavailable (circuit breaker open, quota exhausted).
+   * Instead of generic "Good morning!" messages, constructs a data-driven greeting from available context.
+   */
+  private buildDataAwareFallbackGreeting(
+    userName: string | null,
+    timeOfDay: 'morning' | 'afternoon' | 'evening',
+    context: any | null,
+    profile: any | null,
+  ): string {
+    const name = userName || 'there';
+    const timeGreet = timeOfDay === 'morning' ? 'Good morning' : timeOfDay === 'afternoon' ? 'Good afternoon' : 'Good evening';
+    const parts: string[] = [];
+
+    // Try to build data-aware greeting from available context
+    if (context) {
+      // Lead with the most impactful data point
+      const score = context.dailyScore?.latestScore;
+      const streak = context.gamification?.currentStreak;
+      const recovery = context.whoop?.lastRecovery?.score;
+      const workoutRate = context.workouts?.completionRate;
+      const missedWorkouts = context.workouts?.missedWorkouts;
+      const primaryGoal = context.goals?.activeGoals?.[0];
+
+      if (score && context.dailyScore?.scoreDelta) {
+        const delta = context.dailyScore.scoreDelta;
+        if (Math.abs(delta) >= 5) {
+          parts.push(`${timeGreet} ${name}! Your score ${delta > 0 ? 'jumped' : 'dropped'} ${Math.abs(delta)} points to ${score} since yesterday.`);
+        } else {
+          parts.push(`${timeGreet} ${name}! Your score is holding at ${score} today.`);
+        }
+      } else if (score) {
+        parts.push(`${timeGreet} ${name}! Your daily score is at ${score} today.`);
+      }
+
+      if (streak && streak >= 3) {
+        parts.push(`You're on a ${streak}-day streak — keep that momentum going.`);
+      }
+
+      if (missedWorkouts && missedWorkouts >= 2) {
+        parts.push(`I noticed ${missedWorkouts} missed workouts this week — let's talk about getting back on track.`);
+      } else if (workoutRate !== undefined) {
+        parts.push(`Workout completion is at ${workoutRate}% this week.`);
+      }
+
+      if (primaryGoal) {
+        parts.push(`Your goal "${primaryGoal.title}" is at ${primaryGoal.progress || 0}% — let's keep pushing.`);
+      }
+
+      if (recovery !== undefined) {
+        parts.push(`Recovery is at ${recovery}% today${recovery < 50 ? ' — we should factor that into your plan' : ''}.`);
+      }
+    }
+
+    // Add coaching profile insights if available
+    if (profile) {
+      if (profile.longitudinalAdherence?.trendDirection) {
+        const trend = profile.longitudinalAdherence.trendDirection;
+        if (trend === 'declining') {
+          parts.push(`I'm seeing a declining trend recently — let's figure out what's going on.`);
+        } else if (trend === 'improving') {
+          parts.push(`Your trend is improving — the consistency is paying off.`);
+        }
+      }
+    }
+
+    // If we have data, construct the greeting
+    if (parts.length > 0) {
+      // Cap at 4 sentences for the fallback
+      return parts.slice(0, 4).join(' ');
+    }
+
+    // Last resort — still better than "How can I help you?"
+    return `${timeGreet} ${name}! Let's review how things are going and figure out what to focus on today.`;
   }
 }
 

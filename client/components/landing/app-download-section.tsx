@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-import { motion, useInView, AnimatePresence, useScroll, useTransform, type MotionValue } from "framer-motion";
-import { AnimatedGradientMesh } from "./shared";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { AnimatedGradientMesh, GSAPScrollReveal, GSAPParallax } from "./shared";
 import {
   Smartphone,
   Apple,
@@ -30,18 +30,18 @@ function PlayStoreIcon({ className }: { className?: string }) {
 const appFeatures = [
   {
     icon: Shield,
-    title: "Privacy First",
-    description: "Your health data stays secure",
+    title: "Enterprise-Grade Security",
+    description: "AES-256 encryption, HIPAA compliant",
   },
   {
     icon: Zap,
-    title: "Offline Mode",
-    description: "Track even without internet",
+    title: "Works Anywhere",
+    description: "Full offline tracking and sync",
   },
   {
     icon: Star,
-    title: "4.9 Rating",
-    description: "Loved by 50K+ users",
+    title: "4.9 Star Rating",
+    description: "Trusted by 50,000+ members",
   },
 ];
 
@@ -68,28 +68,28 @@ const storeButtons = [
 const screenVariants = [
   {
     id: "dashboard",
-    title: "Daily Score",
-    badge: "+12%",
-    score: "87",
+    title: "Wellness Score",
+    badge: "+18% this week",
+    score: "94",
     pillars: ["Fitness", "Nutrition", "Wellbeing"],
     icon: Brain,
     color: "from-primary to-purple-500",
   },
   {
     id: "fitness",
-    title: "Workout",
-    badge: "Active",
-    score: "75%",
-    pillars: ["HIIT", "25 min", "320 kcal"],
+    title: "Today's Workout",
+    badge: "In Progress",
+    score: "82%",
+    pillars: ["HIIT", "32 min", "480 kcal"],
     icon: Activity,
     color: "from-[#FF9800] to-[#F57C00]",
   },
   {
     id: "wellbeing",
-    title: "Wellbeing",
-    badge: "Improving",
-    score: "92",
-    pillars: ["Sleep", "Stress", "Heart"],
+    title: "Wellbeing Index",
+    badge: "Optimal",
+    score: "96",
+    pillars: ["Sleep 8.2h", "Recovery", "HRV 62ms"],
     icon: Heart,
     color: "from-[#5C9CE6] to-[#3B82F6]",
   },
@@ -107,13 +107,8 @@ function ShimmerWrapper({ children }: { children: React.ReactNode }) {
 }
 
 // ─── Animated phone with cycling screens ────────────────────────────
-function AnimatedPhone({ scrollProgress }: { scrollProgress: MotionValue<number> }) {
+function AnimatedPhone() {
   const [activeScreen, setActiveScreen] = useState(0);
-
-  // Parallax for floating badges
-  const badgeY1 = useTransform(scrollProgress, [0, 1], [-20, 30]);
-  const badgeY2 = useTransform(scrollProgress, [0, 1], [20, -25]);
-  const badgeY3 = useTransform(scrollProgress, [0, 1], [10, -15]);
 
   // Auto-cycle screens
   useEffect(() => {
@@ -153,7 +148,7 @@ function AnimatedPhone({ scrollProgress }: { scrollProgress: MotionValue<number>
                   <div>
                     <p className="text-sm font-semibold">Good morning!</p>
                     <p className="text-xs text-muted-foreground">
-                      Let&apos;s crush today
+                      Here&apos;s your daily briefing
                     </p>
                   </div>
                 </div>
@@ -273,74 +268,69 @@ function AnimatedPhone({ scrollProgress }: { scrollProgress: MotionValue<number>
         <div className="absolute -inset-8 bg-gradient-to-r from-primary/20 to-purple-500/20 rounded-full blur-3xl -z-10" />
       </motion.div>
 
-      {/* Floating elements with parallax */}
-      <motion.div
-        style={{ y: badgeY1 }}
-        initial={{ opacity: 0, x: -30 }}
-        whileInView={{ opacity: 1, x: 0 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.5 }}
-        className="absolute -left-4 sm:-left-12 top-1/4 glass-card rounded-xl p-3 shadow-lg hidden sm:block"
-      >
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
-            <CheckCircle className="w-4 h-4 text-white" />
+      {/* Floating elements with GSAP parallax */}
+      <GSAPParallax speed={0.15}>
+        <motion.div
+          initial={{ opacity: 0, x: -30 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.5 }}
+          className="absolute -left-4 sm:-left-12 top-1/4 glass-card rounded-xl p-3 shadow-lg hidden sm:block"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+              <CheckCircle className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-xs font-medium">Goal achieved!</p>
+              <p className="text-[10px] text-muted-foreground">10K steps</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium">Goal achieved!</p>
-            <p className="text-[10px] text-muted-foreground">10K steps</p>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </GSAPParallax>
 
-      <motion.div
-        style={{ y: badgeY2 }}
-        initial={{ opacity: 0, x: 30 }}
-        whileInView={{ opacity: 1, x: 0 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.6 }}
-        className="absolute -right-4 sm:-right-12 top-1/2 glass-card rounded-xl p-3 shadow-lg hidden sm:block"
-      >
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
-            <Star className="w-4 h-4 text-white fill-white" />
+      <GSAPParallax speed={0.2} direction="down">
+        <motion.div
+          initial={{ opacity: 0, x: 30 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.6 }}
+          className="absolute -right-4 sm:-right-12 top-1/2 glass-card rounded-xl p-3 shadow-lg hidden sm:block"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
+              <Star className="w-4 h-4 text-white fill-white" />
+            </div>
+            <div>
+              <p className="text-xs font-medium">New badge</p>
+              <p className="text-[10px] text-muted-foreground">7-day streak</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium">New badge</p>
-            <p className="text-[10px] text-muted-foreground">7-day streak</p>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </GSAPParallax>
 
-      <motion.div
-        style={{ y: badgeY3 }}
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.7 }}
-        className="absolute -bottom-4 left-1/2 -translate-x-1/2 glass-card rounded-full px-4 py-2 shadow-lg"
-      >
-        <div className="flex items-center gap-2">
-          <Smartphone className="w-4 h-4 text-primary" />
-          <span className="text-xs">Available now</span>
-        </div>
-      </motion.div>
+      <GSAPParallax speed={0.1}>
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.7 }}
+          className="absolute -bottom-4 left-1/2 -translate-x-1/2 glass-card rounded-full px-4 py-2 shadow-lg"
+        >
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-primary" />
+            <span className="text-xs">Available now</span>
+          </div>
+        </motion.div>
+      </GSAPParallax>
     </div>
   );
 }
 
 // ─── APP DOWNLOAD SECTION ───────────────────────────────────────────
 export function AppDownloadSection() {
-  const sectionRef = useRef(null);
-  const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
-
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start end", "end start"],
-  });
-
   return (
-    <section ref={sectionRef} className="py-12 relative overflow-hidden">
+    <section className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 cyber-grid opacity-20" />
       <AnimatedGradientMesh intensity={0.18} speed={0.9} blur={100} />
@@ -350,55 +340,34 @@ export function AppDownloadSection() {
       <div className="container mx-auto px-4 relative z-10">
         <div className="grid lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
           {/* Content */}
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ duration: 0.6 }}
+          <GSAPScrollReveal
+            direction="left"
+            distance={30}
+            duration={0.6}
             className="text-center lg:text-left order-2 lg:order-1"
           >
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 glass-card px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium mb-4 sm:mb-6"
-            >
+            <div className="inline-flex items-center gap-2 glass-card px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium mb-4 sm:mb-6">
               <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-              <span>Download the App</span>
-            </motion.div>
+              <span>Available on iOS and Android</span>
+            </div>
 
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6"
-            >
-              Your Health,{" "}
-              <span className="gradient-text-animated">In Your Pocket</span>
-            </motion.h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6">
+              Your AI Health Coach,{" "}
+              <span className="gradient-text-animated">Always With You</span>
+            </h2>
 
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-lg mx-auto lg:mx-0"
-            >
-              Download yHealth on your favorite device and start your wellness
-              journey today. Available on iOS and Android.
-            </motion.p>
+            <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-lg mx-auto lg:mx-0">
+              Personalized fitness plans, real-time nutrition guidance, and
+              wellbeing insights -- all powered by AI that learns your patterns
+              and adapts to your goals. Download yHealth and see results in weeks,
+              not months.
+            </p>
 
             {/* Features */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="grid grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8"
-            >
-              {appFeatures.map((feature, index) => (
-                <motion.div
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
+              {appFeatures.map((feature) => (
+                <div
                   key={feature.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={isInView ? { opacity: 1, y: 0 } : {}}
-                  transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
                   className="glass-card rounded-xl p-3 sm:p-4 text-center border border-white/10"
                 >
                   <feature.icon className="w-5 h-5 sm:w-6 sm:h-6 text-primary mx-auto mb-1 sm:mb-2" />
@@ -408,17 +377,12 @@ export function AppDownloadSection() {
                   <p className="text-[10px] sm:text-xs text-muted-foreground">
                     {feature.description}
                   </p>
-                </motion.div>
+                </div>
               ))}
-            </motion.div>
+            </div>
 
             {/* Store buttons with shimmer */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: 0.7 }}
-              className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start"
-            >
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start">
               {storeButtons.map((store) => (
                 <ShimmerWrapper key={store.name}>
                   <Button
@@ -444,28 +408,24 @@ export function AppDownloadSection() {
                   </Button>
                 </ShimmerWrapper>
               ))}
-            </motion.div>
+            </div>
 
             {/* QR Code hint */}
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={isInView ? { opacity: 1 } : {}}
-              transition={{ duration: 0.5, delay: 0.9 }}
-              className="text-xs text-muted-foreground mt-4 sm:mt-6"
-            >
-              Or scan the QR code with your phone camera
-            </motion.p>
-          </motion.div>
+            <p className="text-xs text-muted-foreground mt-4 sm:mt-6">
+              Scan the QR code to download instantly
+            </p>
+          </GSAPScrollReveal>
 
           {/* Phone mockup */}
-          <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ duration: 0.6, delay: 0.2 }}
+          <GSAPScrollReveal
+            direction="right"
+            distance={30}
+            duration={0.6}
+            delay={0.2}
             className="flex justify-center order-1 lg:order-2"
           >
-            <AnimatedPhone scrollProgress={scrollYProgress} />
-          </motion.div>
+            <AnimatedPhone />
+          </GSAPScrollReveal>
         </div>
       </div>
     </section>

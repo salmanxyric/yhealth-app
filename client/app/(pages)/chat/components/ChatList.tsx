@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, isToday, isYesterday, isThisWeek, isThisMonth } from 'date-fns';
 import { Search, MessageSquare, Users, UserPlus, UserRoundPlus, MoreVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { chatService, type Chat } from '@/src/shared/services/chat.service';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/app/context/AuthContext';
+import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
 import { JoinGroupDialog } from './JoinGroupDialog';
 import { CreateGroupDialog } from './CreateGroupDialog';
 
@@ -29,6 +31,7 @@ interface ChatListProps {
 
 export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatListProps) {
   const { user } = useAuth();
+  const { assistantName } = useVoiceAssistant();
   const { toast } = useToast();
   const toastRef = useRef(toast);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -98,7 +101,8 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
       }
     }
 
-    return 'Chat';
+    // For 1-on-1 chats with no other participant (AI coach), use assistant name
+    return assistantName || 'AI Coach';
   };
 
   const getChatAvatar = (chat: Chat): string | null => {
@@ -174,30 +178,24 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
 
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col bg-white dark:bg-slate-800">
-        {/* Header skeleton */}
-        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-3 flex items-center justify-between border-b border-emerald-700/50">
-          <Skeleton className="h-6 w-32 bg-white/20" />
-          <Skeleton className="h-8 w-8 rounded-full bg-white/20" />
+      <div className="flex h-full flex-col bg-white dark:bg-[#111827]">
+        <div className="px-5 py-4 flex items-center justify-between bg-emerald-600 dark:bg-emerald-700">
+          <Skeleton className="h-6 w-24 rounded-md bg-white/20" />
+          <Skeleton className="h-8 w-8 rounded-lg bg-white/20" />
         </div>
-        {/* Search skeleton */}
-        <div className="bg-emerald-50/50 dark:bg-slate-800/50 px-3 py-2.5 border-b border-emerald-200 dark:border-emerald-600/30">
-          <Skeleton className="h-9 w-full rounded-lg bg-emerald-200/30 dark:bg-slate-700/50" />
+        <div className="px-4 pb-3">
+          <Skeleton className="h-10 w-full rounded-xl" />
         </div>
-        {/* Chat item skeletons */}
-        <div className="flex-1 px-0">
-          <div className="px-4 py-2">
-            <Skeleton className="h-3 w-16 bg-emerald-200/40 dark:bg-emerald-800/30" />
-          </div>
+        <div className="flex-1 px-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 px-4 py-3">
-              <Skeleton className="h-12 w-12 shrink-0 rounded-full bg-emerald-200/50 dark:bg-slate-700" />
-              <div className="flex-1 min-w-0 space-y-2 border-b border-emerald-100 dark:border-emerald-900/30 pb-3">
+            <div key={i} className="flex items-center gap-3 px-3 py-3">
+              <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+              <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex items-center justify-between">
-                  <Skeleton className="h-4 bg-emerald-200/40 dark:bg-slate-700" style={{ width: `${60 + (i % 3) * 20}px` }} />
-                  <Skeleton className="h-3 w-12 bg-emerald-200/30 dark:bg-slate-700/50" />
+                  <Skeleton className="h-4 rounded" style={{ width: `${60 + (i % 3) * 20}px` }} />
+                  <Skeleton className="h-3 w-10 rounded" />
                 </div>
-                <Skeleton className="h-3 bg-emerald-200/30 dark:bg-slate-700/50" style={{ width: `${120 + (i % 4) * 30}px` }} />
+                <Skeleton className="h-3 rounded" style={{ width: `${120 + (i % 4) * 30}px` }} />
               </div>
             </div>
           ))}
@@ -207,28 +205,39 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
   }
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-slate-800">
-      {/* Header - Emerald theme */}
-      <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-3 flex items-center justify-between border-b border-emerald-700/50 shadow-sm">
-        <motion.h2
+    <div className="flex h-full flex-col bg-white dark:bg-[#111827]">
+      {/* Header */}
+      <div className="px-5 py-4 flex items-center justify-between bg-linear-to-r from-emerald-600 to-teal-600 dark:from-emerald-700 dark:to-teal-700">
+        <motion.div
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
-          className="text-lg font-semibold text-white"
+          className="flex items-center gap-2.5"
         >
-          Yhealth Chats
-        </motion.h2>
+          <div className="h-9 w-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            <Image
+              src="/logo1.png"
+              alt="yHealth"
+              width={24}
+              height={24}
+              className="object-contain"
+            />
+          </div>
+          <h2 className="text-lg font-bold text-white tracking-tight">
+            yHealth
+          </h2>
+        </motion.div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-white/90 hover:text-white hover:bg-white/20">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-white/80 hover:text-white hover:bg-white/15">
               <MoreVertical className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-emerald-200 dark:border-emerald-600/30 text-slate-900 dark:text-white">
-            <DropdownMenuItem onClick={() => setShowJoinDialog(true)} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+          <DropdownMenuContent align="end" className="rounded-xl shadow-xl border-slate-200 dark:border-slate-700">
+            <DropdownMenuItem onClick={() => setShowJoinDialog(true)}>
               <UserPlus className="mr-2 h-4 w-4" />
               Join Group
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowCreateDialog(true)} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+            <DropdownMenuItem onClick={() => setShowCreateDialog(true)}>
               <UserRoundPlus className="mr-2 h-4 w-4" />
               Create Group
             </DropdownMenuItem>
@@ -236,54 +245,46 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
         </DropdownMenu>
       </div>
 
-      {/* Search - Emerald theme */}
-      <div className="bg-emerald-50/50 dark:bg-slate-800/50 px-3 py-2.5 border-b border-emerald-200 dark:border-emerald-600/30">
+      {/* Search */}
+      <div className="px-4 py-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600 dark:text-emerald-400" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search or start new chat"
-            className="pl-9 bg-white dark:bg-slate-700 border-emerald-200 dark:border-emerald-600/30 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:border-emerald-500 rounded-lg h-9"
+            placeholder="Search chats..."
+            className="pl-10 bg-slate-50 dark:bg-white/5 border border-slate-200/60 dark:border-white/8 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-emerald-500/40 rounded-xl h-10"
           />
         </div>
       </div>
 
       {/* Chat List */}
-      <ScrollArea className="flex-1 bg-white dark:bg-slate-800">
+      <ScrollArea className="flex-1">
         {filteredChats.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex h-full flex-col items-center justify-center p-8 text-center"
           >
-            <motion.div
-              animate={{
-                scale: [1, 1.1, 1],
-                opacity: [0.5, 0.7, 0.5],
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-              className="mb-4"
-            >
-              <MessageSquare className="h-12 w-12 text-emerald-300 dark:text-emerald-600" />
-            </motion.div>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              {searchQuery ? 'No chats found' : 'No chats yet'}
+            <div className="mb-4 h-14 w-14 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200/60 dark:border-white/8 flex items-center justify-center">
+              <MessageSquare className="h-7 w-7 text-slate-400 dark:text-slate-500" />
+            </div>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+              {searchQuery ? 'No chats found' : 'No conversations yet'}
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              Start a new conversation
             </p>
           </motion.div>
         ) : (
-          <div>
+          <div className="px-2">
             {groupOrder.map((groupName) => {
               const groupChats = groupedChats[groupName];
               if (!groupChats || groupChats.length === 0) return null;
 
               return (
                 <div key={groupName}>
-                  <div className="px-4 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                  <div className="px-3 pt-4 pb-1.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500/80 uppercase tracking-widest">
                     {groupName}
                   </div>
                   {groupChats.map((chat) => {
@@ -299,28 +300,29 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
                     return (
                       <motion.button
                         key={chat.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.2 }}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.15 }}
                         onClick={() => onSelectChat(chat.id)}
                         className={cn(
-                          'group relative flex w-full items-center gap-3 px-4 py-3 text-left',
+                          'group relative flex w-full items-center gap-3 px-3 py-3 text-left rounded-xl',
                           'transition-all duration-150',
-                          'hover:bg-emerald-50 dark:hover:bg-emerald-900/20 active:bg-emerald-100 dark:active:bg-emerald-900/30',
-                          isSelected && 'bg-emerald-100 dark:bg-emerald-900/30 border-l-2 border-emerald-600'
+                          'hover:bg-slate-50 dark:hover:bg-white/5',
+                          'active:scale-[0.98]',
+                          isSelected && 'bg-emerald-50 dark:bg-emerald-500/10 shadow-sm shadow-emerald-500/5'
                         )}
                       >
-                        {/* Avatar - Emerald theme */}
-                        <div className="relative h-12 w-12 shrink-0  rounded-full ring-2 ring-emerald-200 dark:ring-emerald-600/30">
+                        {/* Avatar */}
+                        <div className="relative h-12 w-12 shrink-0 rounded-full">
                           {avatar ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={avatar} alt={title} className="h-full w-full object-cover rounded-full" />
                           ) : chat.isGroupChat ? (
-                            <div className="h-full w-full bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center rounded-full">
-                              <Users className="h-6 w-6 text-white" />
+                            <div className="h-full w-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center rounded-full">
+                              <Users className="h-5 w-5 text-white" />
                             </div>
                           ) : (
-                            <div className="h-full w-full bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center rounded-full">
+                            <div className="h-full w-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center rounded-full">
                               <span className="text-lg font-semibold text-white">
                                 {title.charAt(0).toUpperCase()}
                               </span>
@@ -330,32 +332,39 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
                             <motion.div
                               initial={{ scale: 0 }}
                               animate={{ scale: 1 }}
-                              className="absolute -right-1 -top-1 flex min-w-5 h-5 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-semibold text-white px-1.5 shadow-lg ring-2 ring-white dark:ring-slate-800">
+                              className="absolute -right-0.5 -top-0.5 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white px-1 ring-2 ring-white dark:ring-slate-900">
                               {unreadCount > 9 ? '9+' : unreadCount}
                             </motion.div>
+
                           )}
                         </div>
 
-                        {/* Chat Info - Emerald theme */}
-                        <div className="min-w-0 flex-1 border-b border-emerald-100 dark:border-emerald-900/30 pb-3 group-last:border-0">
-                          <div className="flex items-center justify-between gap-2 mb-1">
+                        {/* Chat Info */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
                             <h3 className={cn(
-                              'truncate font-medium text-[17px]',
-                              isSelected ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-900 dark:text-white'
+                              'truncate font-semibold text-[15px]',
+                              isSelected ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'
                             )}>
                               {title}
                             </h3>
                             {lastMessageTime && (
-                              <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                              <span className={cn(
+                                'shrink-0 text-[11px] font-medium',
+                                unreadCount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
+                              )}>
                                 {lastMessageTime}
                               </span>
                             )}
                           </div>
                           {lastMessage && (
                             <div className="flex items-center gap-2">
-                              <p className="truncate text-sm text-slate-600 dark:text-slate-300 flex-1">{lastMessage}</p>
+                              <p className={cn(
+                                'truncate text-[13px] flex-1',
+                                unreadCount > 0 ? 'text-slate-700 dark:text-slate-300 font-medium' : 'text-slate-500 dark:text-slate-400'
+                              )}>{lastMessage}</p>
                               {unreadCount > 0 && (
-                                <div className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
+                                <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
                               )}
                             </div>
                           )}

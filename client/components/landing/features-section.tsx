@@ -1,12 +1,14 @@
 "use client";
 
 import { useRef } from "react";
-import { motion, useInView, useScroll, useTransform } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import {
   Activity, Brain, Heart, Utensils, Moon, Zap, Target, TrendingUp,
-  Sparkles, MessageSquare, Smartphone, Watch,
+  Sparkles, MessageSquare, Smartphone, Watch, Mic, Users,
 } from "lucide-react";
-import { AnimatedGradientMesh, ScrollReveal, FloatingCard } from "./shared";
+import { useGSAP } from "@/hooks/use-gsap";
+import { gsap } from "@/lib/gsap-init";
+import { AnimatedGradientMesh, GSAPScrollReveal, GSAPParallax, FloatingCard } from "./shared";
 
 const pillars = [
   {
@@ -58,9 +60,11 @@ const pillars = [
 
 const aiCapabilities = [
   { icon: MessageSquare, title: "Conversational AI", description: "Talk naturally with your AI coach via voice or text" },
+  { icon: Mic, title: "Voice & Call Coach", description: "Hands-free voice assistant and live call with your AI coach" },
   { icon: Smartphone, title: "WhatsApp Integration", description: "Get coaching through your favorite messaging app" },
   { icon: Watch, title: "Device Sync", description: "Seamlessly connects with all your fitness devices" },
   { icon: Brain, title: "Predictive Insights", description: "AI anticipates your needs before you ask" },
+  { icon: Users, title: "Community & Competitions", description: "Leaderboards, challenges, and support from others" },
 ];
 
 // ─── Animated connection lines ───────────────────────────────────────
@@ -91,7 +95,7 @@ function PillarCard({ pillar, index }: { pillar: (typeof pillars)[0]; index: num
   const isInView = useInView(ref, { once: true, margin: "-100px" });
 
   return (
-    <ScrollReveal
+    <GSAPScrollReveal
       direction="up"
       distance={50}
       delay={index * 0.15}
@@ -186,7 +190,7 @@ function PillarCard({ pillar, index }: { pillar: (typeof pillars)[0]; index: num
           </div>
         </div>
       </FloatingCard>
-    </ScrollReveal>
+    </GSAPScrollReveal>
   );
 }
 
@@ -222,58 +226,91 @@ export function FeaturesSection() {
   const contentRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
 
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start end", "end start"],
-  });
+  // GSAP scroll-driven scale / opacity / y for the content wrapper
+  useGSAP(
+    () => {
+      if (!contentRef.current || !sectionRef.current) return;
 
-  const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [0.85, 1, 1, 0.9], { clamp: true });
-  const opacity = useTransform(scrollYProgress, [0, 0.15, 0.85, 1], [0.3, 1, 1, 0.3], { clamp: true });
-  const y = useTransform(scrollYProgress, [0, 0.5, 1], [60, 0, -60], { clamp: true });
-  const bgY1 = useTransform(scrollYProgress, [0, 1], [-50, 100], { clamp: true });
-  const bgY2 = useTransform(scrollYProgress, [0, 1], [50, -100], { clamp: true });
+      // Entrance: scale up, fade in, slide up
+      gsap.fromTo(
+        contentRef.current,
+        { scale: 0.85, opacity: 0.3, y: 60 },
+        {
+          scale: 1,
+          opacity: 1,
+          y: 0,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top bottom",   // scrollYProgress 0
+            end: "30% center",     // scrollYProgress ~0.3
+            scrub: 1,
+          },
+        }
+      );
+
+      // Exit: scale down, fade out, slide up
+      gsap.fromTo(
+        contentRef.current,
+        { scale: 1, opacity: 1, y: 0 },
+        {
+          scale: 0.9,
+          opacity: 0.3,
+          y: -60,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "70% center",   // scrollYProgress ~0.7
+            end: "bottom top",     // scrollYProgress 1
+            scrub: 1,
+          },
+        }
+      );
+    },
+    sectionRef,
+    []
+  );
 
   return (
-    <section ref={sectionRef} id="features" className="py-16 sm:py-20 md:py-24 relative overflow-hidden">
+    <section ref={sectionRef} id="features" className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       {/* Background with gradient mesh */}
       <div className="absolute inset-0 cyber-grid opacity-30" />
       <AnimatedGradientMesh intensity={0.2} speed={0.8} blur={120} />
-      <motion.div style={{ y: bgY1 }} className="absolute top-0 left-1/4 w-48 sm:w-72 md:w-96 h-48 sm:h-72 md:h-96 bg-primary/10 rounded-full blur-3xl" />
-      <motion.div style={{ y: bgY2 }} className="absolute bottom-0 right-1/4 w-40 sm:w-64 md:w-80 h-40 sm:h-64 md:h-80 bg-purple-500/10 rounded-full blur-3xl" />
+      <GSAPParallax speed={0.375} direction="down" className="absolute top-0 left-1/4">
+        <div className="w-48 sm:w-72 md:w-96 h-48 sm:h-72 md:h-96 bg-primary/10 rounded-full blur-3xl" />
+      </GSAPParallax>
+      <GSAPParallax speed={0.375} direction="up" className="absolute bottom-0 right-1/4">
+        <div className="w-40 sm:w-64 md:w-80 h-40 sm:h-64 md:h-80 bg-purple-500/10 rounded-full blur-3xl" />
+      </GSAPParallax>
       <ConnectionLines />
 
-      <motion.div 
-        ref={contentRef} 
-        style={{ 
-          scale, 
-          opacity, 
-          y,
-          willChange: "transform, opacity"
-        }} 
+      <div
+        ref={contentRef}
+        style={{ willChange: "transform, opacity" }}
         className="container mx-auto px-4 relative z-10"
       >
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 md:mb-16">
-          <ScrollReveal direction="up" distance={30} delay={0}>
+          <GSAPScrollReveal direction="up" distance={30} delay={0}>
             <div className="inline-flex items-center gap-2 glass-card px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium mb-4 sm:mb-6 border border-white/10 backdrop-blur-xl">
               <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
               <span>AI-Powered Platform</span>
             </div>
-          </ScrollReveal>
+          </GSAPScrollReveal>
 
-          <ScrollReveal direction="up" distance={40} delay={0.1}>
+          <GSAPScrollReveal direction="up" distance={40} delay={0.1}>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6">
               Three Pillars of
               <span className="block gradient-text-animated">Intelligent Wellness</span>
             </h2>
-          </ScrollReveal>
+          </GSAPScrollReveal>
 
-          <ScrollReveal direction="up" distance={40} delay={0.2}>
+          <GSAPScrollReveal direction="up" distance={40} delay={0.2}>
             <p className="text-sm sm:text-base md:text-lg text-muted-foreground px-2 sm:px-4">
               Our AI seamlessly integrates fitness, nutrition, and wellbeing into one unified coaching
               experience that understands the connections between all aspects of your health.
             </p>
-          </ScrollReveal>
+          </GSAPScrollReveal>
         </div>
 
         {/* Three Pillars Grid */}
@@ -328,7 +365,7 @@ export function FeaturesSection() {
             </div>
           </div>
         </motion.div>
-      </motion.div>
+      </div>
     </section>
   );
 }

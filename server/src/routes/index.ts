@@ -49,6 +49,8 @@ import adminUserRoutes from './admin-user.routes.js';
 import adminRoleRoutes from './admin-role.routes.js';
 import contactRoutes from './contact.routes.js';
 import adminContactRoutes from './admin-contact.routes.js';
+import newsletterRoutes from './newsletter.routes.js';
+import adminNewsletterRoutes from './admin-newsletter.routes.js';
 import helpRoutes from './help.routes.js';
 import adminHelpRoutes from './admin-help.routes.js';
 import communityRoutes from './community.routes.js';
@@ -271,6 +273,12 @@ router.use('/contact', contactRoutes);
 
 // Admin contact routes (Admin contact management)
 router.use('/admin/contacts', adminContactRoutes);
+
+// Newsletter (public subscribe + count)
+router.use('/newsletter', newsletterRoutes);
+
+// Admin newsletter (email signups from footer/lead magnet)
+router.use('/admin/newsletter', adminNewsletterRoutes);
 
 // Help Center routes (Public help articles)
 router.use('/help', helpRoutes);

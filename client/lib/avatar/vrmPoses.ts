@@ -98,19 +98,31 @@ export const IDLE_REST_POSE: VrmPose = {
   leftHand: { rotation: [-0.070, 0, 0, 0.998] },
   rightHand: { rotation: [-0.070, 0, 0, 0.998] },
 
-  // Fingers — relaxed curl (proximal joints only)
-  leftIndexProximal: { rotation: [-0.061, 0, 0, 0.998] },
-  leftMiddleProximal: { rotation: [-0.070, 0, 0, 0.998] },
-  leftRingProximal: { rotation: [-0.061, 0, 0, 0.998] },
-  leftLittleProximal: { rotation: [-0.052, 0, 0, 0.999] },
-  rightIndexProximal: { rotation: [-0.061, 0, 0, 0.998] },
-  rightMiddleProximal: { rotation: [-0.070, 0, 0, 0.998] },
-  rightRingProximal: { rotation: [-0.061, 0, 0, 0.998] },
-  rightLittleProximal: { rotation: [-0.052, 0, 0, 0.999] },
+  // Fingers — natural relaxed curl (proximal ~20°, intermediate ~15°)
+  // eulerDegToQuat(-20, 0, 0) → [-0.174, 0, 0, 0.985]
+  leftIndexProximal: { rotation: [-0.174, 0, 0, 0.985] },
+  leftMiddleProximal: { rotation: [-0.191, 0, 0, 0.982] },
+  leftRingProximal: { rotation: [-0.174, 0, 0, 0.985] },
+  leftLittleProximal: { rotation: [-0.156, 0, 0, 0.988] },
+  rightIndexProximal: { rotation: [-0.174, 0, 0, 0.985] },
+  rightMiddleProximal: { rotation: [-0.191, 0, 0, 0.982] },
+  rightRingProximal: { rotation: [-0.174, 0, 0, 0.985] },
+  rightLittleProximal: { rotation: [-0.156, 0, 0, 0.988] },
+  // Intermediate joints — slight curl for natural look (~15°)
+  leftIndexIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
+  leftMiddleIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
+  leftRingIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
+  leftLittleIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
+  rightIndexIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
+  rightMiddleIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
+  rightRingIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
+  rightLittleIntermediate: { rotation: [-0.131, 0, 0, 0.991] },
 
-  // Thumbs — slight inward rotation
-  leftThumbProximal: { rotation: [0, 0, -0.087, 0.996] },
-  rightThumbProximal: { rotation: [0, 0, 0.087, 0.996] },
+  // Thumbs — inward rotation (~12°)
+  leftThumbProximal: { rotation: [0, 0, -0.105, 0.995] },
+  rightThumbProximal: { rotation: [0, 0, 0.105, 0.995] },
+  leftThumbIntermediate: { rotation: [-0.087, 0, 0, 0.996] },
+  rightThumbIntermediate: { rotation: [-0.087, 0, 0, 0.996] },
 };
 
 // ============================================
@@ -293,6 +305,97 @@ export const EMOTION_SPEAKING_POSES: Record<string, VrmPose> = {
     leftHand: { rotation: [0.044, 0.026, 0, 0.999] },
     rightHand: { rotation: [0.044, -0.026, 0, 0.999] },
   },
+
+  // Curiosity: Leaning in, attentive
+  curiosity: {
+    spine: { rotation: [0.052, 0, 0, 0.999] },
+    upperChest: { rotation: [0.035, 0, 0, 0.999] },
+    // eulerDegToQuat(38, 5, -56) — forward lean
+    leftUpperArm: { rotation: [0.267, 0.196, -0.433, 0.844] },
+    rightUpperArm: { rotation: [0.267, -0.196, 0.433, 0.844] },
+    leftLowerArm: { rotation: [-0.530, 0, 0, 0.848] },   // 64° elbow
+    rightLowerArm: { rotation: [-0.530, 0, 0, 0.848] },
+    leftHand: { rotation: [-0.087, 0, 0, 0.996] },
+    rightHand: { rotation: [-0.087, 0, 0, 0.996] },
+  },
+
+  // Concern: Gentle, empathetic stance
+  concern: {
+    spine: { rotation: [0.035, 0, 0, 0.999] },
+    upperChest: { rotation: [0.017, 0, 0, 1.0] },
+    // eulerDegToQuat(30, 3, -60) — moderate forward
+    leftUpperArm: { rotation: [0.202, 0.144, -0.479, 0.846] },
+    rightUpperArm: { rotation: [0.202, -0.144, 0.479, 0.846] },
+    leftLowerArm: { rotation: [-0.469, 0, 0, 0.883] },   // 56° elbow
+    rightLowerArm: { rotation: [-0.469, 0, 0, 0.883] },
+    leftHand: { rotation: [-0.070, 0.015, 0, 0.998] },
+    rightHand: { rotation: [-0.070, -0.015, 0, 0.998] },
+  },
+
+  // Confusion: Slight tilt, questioning pose
+  confusion: {
+    spine: { rotation: [0.026, 0, 0.017, 0.999] },
+    upperChest: { rotation: [0.013, 0, 0.013, 1.0] },
+    // eulerDegToQuat(32, 8, -58) — slight confusion lean
+    leftUpperArm: { rotation: [0.221, 0.178, -0.459, 0.845] },
+    rightUpperArm: { rotation: [0.221, -0.178, 0.459, 0.845] },
+    leftLowerArm: { rotation: [-0.500, 0, 0, 0.866] },   // 60° elbow
+    rightLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
+    leftHand: { rotation: [-0.079, 0, 0.026, 0.997] },
+    rightHand: { rotation: [-0.079, 0, -0.026, 0.997] },
+  },
+
+  // Excitement: Energetic, expressive
+  excitement: {
+    spine: { rotation: [0.026, 0, 0, 1.0] },
+    upperChest: { rotation: [0.044, 0, 0, 0.999] },
+    // eulerDegToQuat(50, 10, -48) — high energy, arms more open
+    leftUpperArm: { rotation: [0.379, 0.284, -0.350, 0.817] },
+    rightUpperArm: { rotation: [0.379, -0.284, 0.350, 0.817] },
+    leftLowerArm: { rotation: [-0.454, 0, 0, 0.891] },   // 54° elbow
+    rightLowerArm: { rotation: [-0.454, 0, 0, 0.891] },
+    leftHand: { rotation: [-0.061, 0.035, 0, 0.998] },
+    rightHand: { rotation: [-0.061, -0.035, 0, 0.998] },
+  },
+
+  // Empathy: Warm, open, welcoming
+  empathy: {
+    spine: { rotation: [0.044, 0, 0, 0.999] },
+    upperChest: { rotation: [0.026, 0, 0, 1.0] },
+    // eulerDegToQuat(28, 4, -58) — open, warm stance
+    leftUpperArm: { rotation: [0.188, 0.151, -0.459, 0.855] },
+    rightUpperArm: { rotation: [0.188, -0.151, 0.459, 0.855] },
+    leftLowerArm: { rotation: [-0.444, 0, 0, 0.896] },   // 53° elbow
+    rightLowerArm: { rotation: [-0.444, 0, 0, 0.896] },
+    leftHand: { rotation: [-0.052, 0.022, 0, 0.998] },
+    rightHand: { rotation: [-0.052, -0.022, 0, 0.998] },
+  },
+
+  // Contemplation: Thoughtful, chin-stroking ready
+  contemplation: {
+    spine: { rotation: [0.017, 0, 0, 1.0] },
+    upperChest: { rotation: [0.009, 0, 0, 1.0] },
+    // eulerDegToQuat(25, 2, -62) — lower, reflective
+    leftUpperArm: { rotation: [0.172, 0.127, -0.498, 0.845] },
+    rightUpperArm: { rotation: [0.172, -0.127, 0.498, 0.845] },
+    leftLowerArm: { rotation: [-0.407, 0, 0, 0.913] },   // 48° elbow
+    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° — right hand up
+    leftHand: { rotation: [-0.070, 0, 0, 0.998] },
+    rightHand: { rotation: [0.044, 0, 0, 0.999] },      // tilted up
+  },
+
+  // Determination: Firm, resolute stance
+  determination: {
+    spine: { rotation: [0.035, 0, 0, 0.999] },
+    upperChest: { rotation: [0.026, 0, 0, 1.0] },
+    // eulerDegToQuat(38, 6, -54) — forward, confident
+    leftUpperArm: { rotation: [0.267, 0.196, -0.433, 0.844] },
+    rightUpperArm: { rotation: [0.267, -0.196, 0.433, 0.844] },
+    leftLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° elbow
+    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
+    leftHand: { rotation: [-0.114, 0, 0, 0.993] },
+    rightHand: { rotation: [-0.114, 0, 0, 0.993] },
+  },
 };
 
 // ============================================
@@ -309,9 +412,9 @@ export const EMOTION_SPEAKING_POSES: Record<string, VrmPose> = {
  * Lower arm X: elbow bend — never fully straight or over-bent
  */
 export const ARM_CLAMP_LIMITS = {
-  upperArmX: { min: -0.087, max: 1.047 },  // -5° to 60° forward
-  upperArmZ: { min: -1.222, max: -0.698 },  // -70° to -40° (left side; negate for right)
-  lowerArmX: { min: -1.745, max: -0.262 },  // -100° to -15° elbow bend
+  upperArmX: { min: -0.175, max: 1.396 },  // -10° to 80° forward (widened for expressive gestures)
+  upperArmZ: { min: -1.309, max: -0.436 },  // -75° to -25° (left side; negate for right) — wider spread
+  lowerArmX: { min: -1.745, max: -0.087 },  // -100° to -5° elbow bend (allow near-straight)
 };
 
 // ============================================
@@ -373,36 +476,60 @@ export const IDLE_ANIM_CHANNELS: IdleAnimChannel[] = [
  * Amplified for full-body camera view. Natural hand movement while speaking.
  */
 export const SPEAKING_GESTURE_CHANNELS: IdleAnimChannel[] = [
-  // Primary: forward/back arm pulse — BIG gestures visible at full body view
-  { boneName: "leftUpperArm", axis: "x", type: "rotation", amplitude: 0.18, frequency: 0.4, phase: 0, space: "parent" },
-  { boneName: "rightUpperArm", axis: "x", type: "rotation", amplitude: 0.15, frequency: 0.4, phase: 0.5, space: "parent" },
+  // Primary: forward/back arm pulse — BOLD gestures visible at full body view
+  { boneName: "leftUpperArm", axis: "x", type: "rotation", amplitude: 0.26, frequency: 0.38, phase: 0, space: "parent" },
+  { boneName: "rightUpperArm", axis: "x", type: "rotation", amplitude: 0.22, frequency: 0.38, phase: 0.5, space: "parent" },
   // Secondary: slower forward/back sweep for variety
-  { boneName: "leftUpperArm", axis: "x", type: "rotation", amplitude: 0.08, frequency: 0.18, phase: 1.0, space: "parent" },
-  { boneName: "rightUpperArm", axis: "x", type: "rotation", amplitude: 0.06, frequency: 0.22, phase: 0.8, space: "parent" },
-  // In/out gesture spread (wide gestures)
-  { boneName: "leftUpperArm", axis: "z", type: "rotation", amplitude: 0.08, frequency: 0.25, phase: 0.3, space: "parent" },
-  { boneName: "rightUpperArm", axis: "z", type: "rotation", amplitude: 0.06, frequency: 0.25, phase: Math.PI + 0.5, space: "parent" },
+  { boneName: "leftUpperArm", axis: "x", type: "rotation", amplitude: 0.12, frequency: 0.18, phase: 1.0, space: "parent" },
+  { boneName: "rightUpperArm", axis: "x", type: "rotation", amplitude: 0.09, frequency: 0.22, phase: 0.8, space: "parent" },
+  // In/out gesture spread (wide gestures) — amplified for expressiveness
+  { boneName: "leftUpperArm", axis: "z", type: "rotation", amplitude: 0.14, frequency: 0.25, phase: 0.3, space: "parent" },
+  { boneName: "rightUpperArm", axis: "z", type: "rotation", amplitude: 0.10, frequency: 0.25, phase: Math.PI + 0.5, space: "parent" },
   // Elbow flex pulse — dramatic (asymmetric — dominant arm gestures more)
-  { boneName: "leftLowerArm", axis: "x", type: "rotation", amplitude: 0.14, frequency: 0.45, phase: 0.2 },
-  { boneName: "rightLowerArm", axis: "x", type: "rotation", amplitude: 0.10, frequency: 0.45, phase: 0.8 },
+  { boneName: "leftLowerArm", axis: "x", type: "rotation", amplitude: 0.20, frequency: 0.42, phase: 0.2 },
+  { boneName: "rightLowerArm", axis: "x", type: "rotation", amplitude: 0.15, frequency: 0.42, phase: 0.8 },
   // Slower elbow wave for natural variety
-  { boneName: "leftLowerArm", axis: "x", type: "rotation", amplitude: 0.06, frequency: 0.15, phase: 2.0 },
-  { boneName: "rightLowerArm", axis: "x", type: "rotation", amplitude: 0.05, frequency: 0.20, phase: 1.5 },
+  { boneName: "leftLowerArm", axis: "x", type: "rotation", amplitude: 0.09, frequency: 0.15, phase: 2.0 },
+  { boneName: "rightLowerArm", axis: "x", type: "rotation", amplitude: 0.07, frequency: 0.20, phase: 1.5 },
   // Wrist curl emphasis — visible hand movement
-  { boneName: "leftHand", axis: "x", type: "rotation", amplitude: 0.10, frequency: 0.5, phase: 0.1 },
-  { boneName: "rightHand", axis: "x", type: "rotation", amplitude: 0.08, frequency: 0.5, phase: 0.7 },
+  { boneName: "leftHand", axis: "x", type: "rotation", amplitude: 0.14, frequency: 0.48, phase: 0.1 },
+  { boneName: "rightHand", axis: "x", type: "rotation", amplitude: 0.12, frequency: 0.48, phase: 0.7 },
   // Wrist twist (palm rotation during emphasis)
-  { boneName: "leftHand", axis: "y", type: "rotation", amplitude: 0.06, frequency: 0.3, phase: 0.4 },
-  { boneName: "rightHand", axis: "y", type: "rotation", amplitude: 0.05, frequency: 0.3, phase: 1.1 },
+  { boneName: "leftHand", axis: "y", type: "rotation", amplitude: 0.09, frequency: 0.3, phase: 0.4 },
+  { boneName: "rightHand", axis: "y", type: "rotation", amplitude: 0.07, frequency: 0.3, phase: 1.1 },
   // Shoulder emphasis (synced with speech pulse)
-  { boneName: "leftShoulder", axis: "z", type: "rotation", amplitude: 0.04, frequency: 0.4, phase: 0 },
-  { boneName: "rightShoulder", axis: "z", type: "rotation", amplitude: 0.03, frequency: 0.4, phase: 0.5 },
+  { boneName: "leftShoulder", axis: "z", type: "rotation", amplitude: 0.05, frequency: 0.4, phase: 0 },
+  { boneName: "rightShoulder", axis: "z", type: "rotation", amplitude: 0.04, frequency: 0.4, phase: 0.5 },
   // Head nod during speaking (emphasizes points) — prominent
-  { boneName: "head", axis: "x", type: "rotation", amplitude: 0.06, frequency: 0.5, phase: 0.3 },
-  { boneName: "head", axis: "y", type: "rotation", amplitude: 0.04, frequency: 0.25, phase: 1.0 },
+  { boneName: "head", axis: "x", type: "rotation", amplitude: 0.07, frequency: 0.48, phase: 0.3 },
+  { boneName: "head", axis: "y", type: "rotation", amplitude: 0.05, frequency: 0.25, phase: 1.0 },
   // Torso rotation (shifting weight during conversation)
-  { boneName: "spine", axis: "y", type: "rotation", amplitude: 0.03, frequency: 0.2, phase: 0 },
-  { boneName: "chest", axis: "y", type: "rotation", amplitude: 0.02, frequency: 0.2, phase: 0.3 },
+  { boneName: "spine", axis: "y", type: "rotation", amplitude: 0.04, frequency: 0.2, phase: 0 },
+  { boneName: "chest", axis: "y", type: "rotation", amplitude: 0.03, frequency: 0.2, phase: 0.3 },
+];
+
+// ============================================
+// LISTENING GESTURE CHANNELS
+// ============================================
+
+/**
+ * Subtle attentive gestures during listening state — hands shift gently,
+ * head tilts, slight weight shifts. Much smaller than speaking gestures
+ * but enough to avoid the avatar looking frozen/dead.
+ */
+export const LISTENING_GESTURE_CHANNELS: IdleAnimChannel[] = [
+  // Gentle hand weight shift — very slow, subtle
+  { boneName: "leftUpperArm", axis: "x", type: "rotation", amplitude: 0.04, frequency: 0.12, phase: 0, space: "parent" },
+  { boneName: "rightUpperArm", axis: "x", type: "rotation", amplitude: 0.03, frequency: 0.12, phase: Math.PI * 0.5, space: "parent" },
+  // Tiny elbow flex (attentive hand adjustment)
+  { boneName: "leftLowerArm", axis: "x", type: "rotation", amplitude: 0.03, frequency: 0.15, phase: 0.3 },
+  { boneName: "rightLowerArm", axis: "x", type: "rotation", amplitude: 0.025, frequency: 0.18, phase: 1.0 },
+  // Attentive head micro-nods (show engagement)
+  { boneName: "head", axis: "x", type: "rotation", amplitude: 0.025, frequency: 0.3, phase: 0 },
+  { boneName: "head", axis: "y", type: "rotation", amplitude: 0.015, frequency: 0.15, phase: 0.5 },
+  // Subtle wrist movement (relaxed fidget)
+  { boneName: "leftHand", axis: "x", type: "rotation", amplitude: 0.02, frequency: 0.2, phase: 0.8 },
+  { boneName: "rightHand", axis: "x", type: "rotation", amplitude: 0.02, frequency: 0.22, phase: 1.5 },
 ];
 
 // ============================================
@@ -411,35 +538,56 @@ export const SPEAKING_GESTURE_CHANNELS: IdleAnimChannel[] = [
 
 /** Subtle finger curl/uncurl — layered every frame, scaled by emotion modulator. */
 export const FINGER_IDLE_CHANNELS: IdleAnimChannel[] = [
-  // Left hand
-  { boneName: "leftIndexProximal", axis: "x", type: "rotation", amplitude: 0.015, frequency: 0.18, phase: 0 },
-  { boneName: "leftMiddleProximal", axis: "x", type: "rotation", amplitude: 0.012, frequency: 0.15, phase: 0.7 },
-  { boneName: "leftRingProximal", axis: "x", type: "rotation", amplitude: 0.010, frequency: 0.22, phase: 1.4 },
-  { boneName: "leftLittleProximal", axis: "x", type: "rotation", amplitude: 0.008, frequency: 0.20, phase: 2.1 },
-  { boneName: "leftThumbProximal", axis: "x", type: "rotation", amplitude: 0.006, frequency: 0.12, phase: 0.5 },
+  // Left hand — subtle but visible breathing-like curl
+  { boneName: "leftIndexProximal", axis: "x", type: "rotation", amplitude: 0.04, frequency: 0.18, phase: 0 },
+  { boneName: "leftMiddleProximal", axis: "x", type: "rotation", amplitude: 0.035, frequency: 0.15, phase: 0.7 },
+  { boneName: "leftRingProximal", axis: "x", type: "rotation", amplitude: 0.03, frequency: 0.22, phase: 1.4 },
+  { boneName: "leftLittleProximal", axis: "x", type: "rotation", amplitude: 0.025, frequency: 0.20, phase: 2.1 },
+  { boneName: "leftThumbProximal", axis: "x", type: "rotation", amplitude: 0.02, frequency: 0.12, phase: 0.5 },
+  // Left intermediate joints
+  { boneName: "leftIndexIntermediate", axis: "x", type: "rotation", amplitude: 0.03, frequency: 0.18, phase: 0.3 },
+  { boneName: "leftMiddleIntermediate", axis: "x", type: "rotation", amplitude: 0.025, frequency: 0.15, phase: 1.0 },
+  { boneName: "leftRingIntermediate", axis: "x", type: "rotation", amplitude: 0.02, frequency: 0.22, phase: 1.7 },
+  { boneName: "leftLittleIntermediate", axis: "x", type: "rotation", amplitude: 0.018, frequency: 0.20, phase: 2.4 },
   // Right hand (mirrored phases)
-  { boneName: "rightIndexProximal", axis: "x", type: "rotation", amplitude: 0.015, frequency: 0.18, phase: Math.PI },
-  { boneName: "rightMiddleProximal", axis: "x", type: "rotation", amplitude: 0.012, frequency: 0.15, phase: Math.PI + 0.7 },
-  { boneName: "rightRingProximal", axis: "x", type: "rotation", amplitude: 0.010, frequency: 0.22, phase: Math.PI + 1.4 },
-  { boneName: "rightLittleProximal", axis: "x", type: "rotation", amplitude: 0.008, frequency: 0.20, phase: Math.PI + 2.1 },
-  { boneName: "rightThumbProximal", axis: "x", type: "rotation", amplitude: 0.006, frequency: 0.12, phase: Math.PI + 0.5 },
+  { boneName: "rightIndexProximal", axis: "x", type: "rotation", amplitude: 0.04, frequency: 0.18, phase: Math.PI },
+  { boneName: "rightMiddleProximal", axis: "x", type: "rotation", amplitude: 0.035, frequency: 0.15, phase: Math.PI + 0.7 },
+  { boneName: "rightRingProximal", axis: "x", type: "rotation", amplitude: 0.03, frequency: 0.22, phase: Math.PI + 1.4 },
+  { boneName: "rightLittleProximal", axis: "x", type: "rotation", amplitude: 0.025, frequency: 0.20, phase: Math.PI + 2.1 },
+  { boneName: "rightThumbProximal", axis: "x", type: "rotation", amplitude: 0.02, frequency: 0.12, phase: Math.PI + 0.5 },
+  // Right intermediate joints
+  { boneName: "rightIndexIntermediate", axis: "x", type: "rotation", amplitude: 0.03, frequency: 0.18, phase: Math.PI + 0.3 },
+  { boneName: "rightMiddleIntermediate", axis: "x", type: "rotation", amplitude: 0.025, frequency: 0.15, phase: Math.PI + 1.0 },
+  { boneName: "rightRingIntermediate", axis: "x", type: "rotation", amplitude: 0.02, frequency: 0.22, phase: Math.PI + 1.7 },
+  { boneName: "rightLittleIntermediate", axis: "x", type: "rotation", amplitude: 0.018, frequency: 0.20, phase: Math.PI + 2.4 },
 ];
 
 // ============================================
 // SPEAKING FINGER CHANNELS
 // ============================================
 
-/** Finger open/close emphasis during speech — visible gesticulation. */
+/** Finger open/close emphasis during speech — dramatic gesticulation. */
 export const SPEAKING_FINGER_CHANNELS: IdleAnimChannel[] = [
-  // Finger curl during speech — dramatic, visible at full-body view
-  { boneName: "rightIndexProximal", axis: "x", type: "rotation", amplitude: 0.12, frequency: 0.5, phase: 0 },
-  { boneName: "rightMiddleProximal", axis: "x", type: "rotation", amplitude: 0.10, frequency: 0.5, phase: 0.4 },
-  { boneName: "rightRingProximal", axis: "x", type: "rotation", amplitude: 0.08, frequency: 0.5, phase: 0.7 },
-  { boneName: "rightLittleProximal", axis: "x", type: "rotation", amplitude: 0.07, frequency: 0.5, phase: 1.0 },
-  { boneName: "leftIndexProximal", axis: "x", type: "rotation", amplitude: 0.10, frequency: 0.45, phase: Math.PI },
-  { boneName: "leftMiddleProximal", axis: "x", type: "rotation", amplitude: 0.08, frequency: 0.45, phase: Math.PI + 0.4 },
-  { boneName: "leftRingProximal", axis: "x", type: "rotation", amplitude: 0.07, frequency: 0.45, phase: Math.PI + 0.7 },
-  { boneName: "leftLittleProximal", axis: "x", type: "rotation", amplitude: 0.06, frequency: 0.45, phase: Math.PI + 1.0 },
+  // Right hand — primary gesture hand, larger amplitude
+  { boneName: "rightIndexProximal", axis: "x", type: "rotation", amplitude: 0.18, frequency: 0.5, phase: 0 },
+  { boneName: "rightMiddleProximal", axis: "x", type: "rotation", amplitude: 0.16, frequency: 0.5, phase: 0.4 },
+  { boneName: "rightRingProximal", axis: "x", type: "rotation", amplitude: 0.14, frequency: 0.5, phase: 0.7 },
+  { boneName: "rightLittleProximal", axis: "x", type: "rotation", amplitude: 0.12, frequency: 0.5, phase: 1.0 },
+  // Right intermediate — follow-through for natural curl
+  { boneName: "rightIndexIntermediate", axis: "x", type: "rotation", amplitude: 0.14, frequency: 0.5, phase: 0.15 },
+  { boneName: "rightMiddleIntermediate", axis: "x", type: "rotation", amplitude: 0.12, frequency: 0.5, phase: 0.55 },
+  { boneName: "rightRingIntermediate", axis: "x", type: "rotation", amplitude: 0.10, frequency: 0.5, phase: 0.85 },
+  { boneName: "rightLittleIntermediate", axis: "x", type: "rotation", amplitude: 0.09, frequency: 0.5, phase: 1.15 },
+  // Left hand — supporting hand, slightly softer
+  { boneName: "leftIndexProximal", axis: "x", type: "rotation", amplitude: 0.14, frequency: 0.45, phase: Math.PI },
+  { boneName: "leftMiddleProximal", axis: "x", type: "rotation", amplitude: 0.12, frequency: 0.45, phase: Math.PI + 0.4 },
+  { boneName: "leftRingProximal", axis: "x", type: "rotation", amplitude: 0.10, frequency: 0.45, phase: Math.PI + 0.7 },
+  { boneName: "leftLittleProximal", axis: "x", type: "rotation", amplitude: 0.09, frequency: 0.45, phase: Math.PI + 1.0 },
+  // Left intermediate
+  { boneName: "leftIndexIntermediate", axis: "x", type: "rotation", amplitude: 0.10, frequency: 0.45, phase: Math.PI + 0.15 },
+  { boneName: "leftMiddleIntermediate", axis: "x", type: "rotation", amplitude: 0.09, frequency: 0.45, phase: Math.PI + 0.55 },
+  { boneName: "leftRingIntermediate", axis: "x", type: "rotation", amplitude: 0.08, frequency: 0.45, phase: Math.PI + 0.85 },
+  { boneName: "leftLittleIntermediate", axis: "x", type: "rotation", amplitude: 0.07, frequency: 0.45, phase: Math.PI + 1.15 },
 ];
 
 // ============================================
@@ -507,5 +655,133 @@ export const EMOTION_HAND_OFFSETS: Record<string, VrmPose> = {
     rightMiddleProximal: { rotation: [0.02, 0, -0.02, 1.0] },
     rightRingProximal: { rotation: [0.02, 0, 0.04, 0.999] },
     rightLittleProximal: { rotation: [0.02, 0, 0.07, 0.997] },
+  },
+
+  curiosity: {
+    // Inquisitive, fingers slightly curled as if touching chin
+    leftIndexProximal: { rotation: [-0.15, 0, 0.01, 0.99] },
+    leftMiddleProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    leftRingProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    leftLittleProximal: { rotation: [-0.08, 0, 0, 0.997] },
+    leftThumbProximal: { rotation: [-0.05, 0, -0.05, 0.998] },
+    rightIndexProximal: { rotation: [-0.15, 0, -0.01, 0.99] },
+    rightMiddleProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    rightRingProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    rightLittleProximal: { rotation: [-0.08, 0, 0, 0.997] },
+    rightThumbProximal: { rotation: [-0.05, 0, 0.05, 0.998] },
+  },
+
+  concern: {
+    // Gentle, slightly open hands showing care
+    leftIndexProximal: { rotation: [-0.05, 0, 0.03, 0.998] },
+    leftMiddleProximal: { rotation: [-0.06, 0, 0, 0.998] },
+    leftRingProximal: { rotation: [-0.05, 0, -0.02, 0.999] },
+    leftLittleProximal: { rotation: [-0.04, 0, -0.04, 0.999] },
+    rightIndexProximal: { rotation: [-0.05, 0, -0.03, 0.998] },
+    rightMiddleProximal: { rotation: [-0.06, 0, 0, 0.998] },
+    rightRingProximal: { rotation: [-0.05, 0, 0.02, 0.999] },
+    rightLittleProximal: { rotation: [-0.04, 0, 0.04, 0.999] },
+  },
+
+  confusion: {
+    // Slightly scrunched, puzzled hands
+    leftIndexProximal: { rotation: [-0.08, 0, 0.02, 0.997] },
+    leftMiddleProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    leftRingProximal: { rotation: [-0.08, 0, -0.01, 0.997] },
+    leftLittleProximal: { rotation: [-0.06, 0, -0.02, 0.998] },
+    leftThumbProximal: { rotation: [-0.08, 0, -0.08, 0.997] },
+    rightIndexProximal: { rotation: [-0.08, 0, -0.02, 0.997] },
+    rightMiddleProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    rightRingProximal: { rotation: [-0.08, 0, 0.01, 0.997] },
+    rightLittleProximal: { rotation: [-0.06, 0, 0.02, 0.998] },
+    rightThumbProximal: { rotation: [-0.08, 0, 0.08, 0.997] },
+  },
+
+  disgust: {
+    // Tense, slightly withdrawn hands
+    leftIndexProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    leftMiddleProximal: { rotation: [-0.14, 0, 0, 0.990] },
+    leftRingProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    leftLittleProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    rightIndexProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    rightMiddleProximal: { rotation: [-0.14, 0, 0, 0.990] },
+    rightRingProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    rightLittleProximal: { rotation: [-0.10, 0, 0, 0.995] },
+  },
+
+  fear: {
+    // Tense, ready hands
+    leftIndexProximal: { rotation: [-0.20, 0, 0.05, 0.98] },
+    leftMiddleProximal: { rotation: [-0.22, 0, 0.02, 0.975] },
+    leftRingProximal: { rotation: [-0.20, 0, -0.01, 0.98] },
+    leftLittleProximal: { rotation: [-0.18, 0, -0.04, 0.985] },
+    rightIndexProximal: { rotation: [-0.20, 0, -0.05, 0.98] },
+    rightMiddleProximal: { rotation: [-0.22, 0, -0.02, 0.975] },
+    rightRingProximal: { rotation: [-0.20, 0, 0.01, 0.98] },
+    rightLittleProximal: { rotation: [-0.18, 0, 0.04, 0.985] },
+  },
+
+  embarrassment: {
+    // Nervous, partially closed hands
+    leftIndexProximal: { rotation: [-0.15, 0, 0.02, 0.99] },
+    leftMiddleProximal: { rotation: [-0.18, 0, 0, 0.984] },
+    leftRingProximal: { rotation: [-0.15, 0, -0.01, 0.99] },
+    leftLittleProximal: { rotation: [-0.12, 0, -0.02, 0.993] },
+    rightIndexProximal: { rotation: [-0.15, 0, -0.02, 0.99] },
+    rightMiddleProximal: { rotation: [-0.18, 0, 0, 0.984] },
+    rightRingProximal: { rotation: [-0.15, 0, 0.01, 0.99] },
+    rightLittleProximal: { rotation: [-0.12, 0, 0.02, 0.993] },
+  },
+
+  excitement: {
+    // Open, expressive hands
+    leftIndexProximal: { rotation: [0.01, 0, 0.05, 0.999] },
+    leftMiddleProximal: { rotation: [0.01, 0, 0.02, 1.0] },
+    leftRingProximal: { rotation: [0.01, 0, -0.02, 1.0] },
+    leftLittleProximal: { rotation: [0.01, 0, -0.05, 0.999] },
+    rightIndexProximal: { rotation: [0.01, 0, -0.05, 0.999] },
+    rightMiddleProximal: { rotation: [0.01, 0, -0.02, 1.0] },
+    rightRingProximal: { rotation: [0.01, 0, 0.02, 1.0] },
+    rightLittleProximal: { rotation: [0.01, 0, 0.05, 0.999] },
+  },
+
+  empathy: {
+    // Gentle, open, welcoming hands
+    leftIndexProximal: { rotation: [-0.03, 0, 0.04, 0.999] },
+    leftMiddleProximal: { rotation: [-0.04, 0, 0.01, 0.999] },
+    leftRingProximal: { rotation: [-0.03, 0, -0.02, 0.999] },
+    leftLittleProximal: { rotation: [-0.02, 0, -0.04, 1.0] },
+    rightIndexProximal: { rotation: [-0.03, 0, -0.04, 0.999] },
+    rightMiddleProximal: { rotation: [-0.04, 0, -0.01, 0.999] },
+    rightRingProximal: { rotation: [-0.03, 0, 0.02, 0.999] },
+    rightLittleProximal: { rotation: [-0.02, 0, 0.04, 1.0] },
+  },
+
+  contemplation: {
+    // Thoughtful, chin-stroking pose ready
+    leftIndexProximal: { rotation: [-0.25, 0, 0, 0.968] },
+    leftIndexIntermediate: { rotation: [-0.30, 0, 0, 0.954] },
+    leftMiddleProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    leftRingProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    leftLittleProximal: { rotation: [-0.08, 0, 0, 0.997] },
+    leftThumbProximal: { rotation: [-0.10, 0, -0.20, 0.978] },
+    rightIndexProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    rightMiddleProximal: { rotation: [-0.12, 0, 0, 0.993] },
+    rightRingProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    rightLittleProximal: { rotation: [-0.08, 0, 0, 0.997] },
+  },
+
+  determination: {
+    // Firm, resolute hand position
+    leftIndexProximal: { rotation: [-0.08, 0, 0, 0.997] },
+    leftMiddleProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    leftRingProximal: { rotation: [-0.08, 0, 0, 0.997] },
+    leftLittleProximal: { rotation: [-0.06, 0, 0, 0.998] },
+    leftThumbProximal: { rotation: [-0.12, 0, -0.10, 0.987] },
+    rightIndexProximal: { rotation: [-0.08, 0, 0, 0.997] },
+    rightMiddleProximal: { rotation: [-0.10, 0, 0, 0.995] },
+    rightRingProximal: { rotation: [-0.08, 0, 0, 0.997] },
+    rightLittleProximal: { rotation: [-0.06, 0, 0, 0.998] },
+    rightThumbProximal: { rotation: [-0.12, 0, 0.10, 0.987] },
   },
 };

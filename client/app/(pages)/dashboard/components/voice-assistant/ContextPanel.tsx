@@ -43,7 +43,7 @@ export function ContextPanel({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.95 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-3xl  max-h-[10rem] overflow-y-auto  px-4 z-20"
+          className="absolute bottom-4 sm:bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 w-full max-w-3xl max-h-[10rem] overflow-y-auto px-3 sm:px-4 z-20"
         >
           <div
             className="relative backdrop-blur-xl rounded-lg border p-3 "

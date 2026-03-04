@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef } from "react";
-import { motion, useInView, useScroll, useTransform } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import { Users, Activity, Award, Heart, Zap, Globe } from "lucide-react";
-import { AnimatedGradientMesh, ScrollReveal, FloatingCard } from "./shared";
+import { AnimatedGradientMesh, GSAPScrollReveal, GSAPParallax, FloatingCard } from "./shared";
+import { useGSAP } from "@/hooks/use-gsap";
+import { gsap } from "@/lib/gsap-init";
 
 const stats = [
   {
@@ -141,7 +143,7 @@ function StatCard({ stat, index }: { stat: (typeof stats)[0]; index: number }) {
 
   return (
     <div ref={ref} className="relative group">
-      <ScrollReveal direction="up" distance={40} delay={index * 0.1} className="h-full">
+      <GSAPScrollReveal direction="up" distance={40} delay={index * 0.1} className="h-full">
         <FloatingCard
           intensity={10}
           perspective={800}
@@ -235,7 +237,7 @@ function StatCard({ stat, index }: { stat: (typeof stats)[0]; index: number }) {
             />
           </motion.div>
         </FloatingCard>
-      </ScrollReveal>
+      </GSAPScrollReveal>
     </div>
   );
 }
@@ -243,62 +245,96 @@ function StatCard({ stat, index }: { stat: (typeof stats)[0]; index: number }) {
 // ─── STATS SECTION ───────────────────────────────────────────────────
 export function StatsSection() {
   const sectionRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
 
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start end", "end start"],
-  });
+  // GSAP scroll-driven scale/opacity/y entrance for the content wrapper
+  useGSAP(
+    () => {
+      if (!contentRef.current || !sectionRef.current) return;
 
-  const scale = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [0.9, 1, 1, 0.95], { clamp: true });
-  const opacity = useTransform(scrollYProgress, [0, 0.2, 0.8, 1], [0.4, 1, 1, 0.4], { clamp: true });
-  const y = useTransform(scrollYProgress, [0, 0.5, 1], [50, 0, -50], { clamp: true });
-  const orbY1 = useTransform(scrollYProgress, [0, 1], [-30, 80], { clamp: true });
-  const orbY2 = useTransform(scrollYProgress, [0, 1], [30, -80], { clamp: true });
+      gsap.fromTo(
+        contentRef.current,
+        { scale: 0.9, opacity: 0.4, y: 50 },
+        {
+          scale: 1,
+          opacity: 1,
+          y: 0,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top bottom",
+            end: "center center",
+            scrub: 1,
+          },
+        }
+      );
+
+      // Exit animation: scale down and fade out on scroll past
+      gsap.fromTo(
+        contentRef.current,
+        { scale: 1, opacity: 1, y: 0 },
+        {
+          scale: 0.95,
+          opacity: 0.4,
+          y: -50,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "center center",
+            end: "bottom top",
+            scrub: 1,
+          },
+        }
+      );
+    },
+    sectionRef,
+    []
+  );
 
   return (
-    <section ref={sectionRef} className="py-16 sm:py-20 md:py-24 relative overflow-hidden">
+    <section ref={sectionRef} className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       <div className="absolute inset-0 cyber-grid opacity-20" />
       <AnimatedGradientMesh intensity={0.2} speed={0.85} blur={110} />
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent" />
       <ParticleField />
 
-      <motion.div style={{ y: orbY1 }} className="absolute top-20 left-10 w-64 h-64 bg-primary/10 rounded-full blur-3xl" />
-      <motion.div style={{ y: orbY2 }} className="absolute bottom-20 right-10 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+      <GSAPParallax speed={0.3} direction="down" className="absolute top-20 left-10">
+        <div className="w-64 h-64 bg-primary/10 rounded-full blur-3xl" />
+      </GSAPParallax>
+      <GSAPParallax speed={0.4} direction="up" className="absolute bottom-20 right-10">
+        <div className="w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+      </GSAPParallax>
 
-      <motion.div 
-        style={{ 
-          scale, 
-          opacity, 
-          y,
-          willChange: "transform, opacity"
-        }} 
+      <div
+        ref={contentRef}
         className="container mx-auto px-4 relative z-10"
+        style={{ willChange: "transform, opacity" }}
       >
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 md:mb-16">
-          <ScrollReveal direction="up" distance={30} delay={0}>
+          <GSAPScrollReveal direction="up" distance={30} delay={0}>
             <div className="inline-flex items-center gap-2 glass-card px-4 py-2 rounded-full text-sm font-medium mb-6 border border-white/10 backdrop-blur-xl">
               <Activity className="w-4 h-4 text-primary" />
               <span>By the Numbers</span>
             </div>
-          </ScrollReveal>
+          </GSAPScrollReveal>
 
-          <ScrollReveal direction="up" distance={40} delay={0.1}>
+          <GSAPScrollReveal direction="up" distance={40} delay={0.1}>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
               Trusted by a
               <span className="block gradient-text-animated">Global Community</span>
             </h2>
-          </ScrollReveal>
+          </GSAPScrollReveal>
 
-          <ScrollReveal direction="up" distance={40} delay={0.2}>
+          <GSAPScrollReveal direction="up" distance={40} delay={0.2}>
             <p className="text-sm sm:text-base md:text-lg text-muted-foreground">
               Join thousands of health-conscious individuals who have discovered
               the power of AI-driven wellness coaching.
             </p>
-          </ScrollReveal>
+          </GSAPScrollReveal>
 
-          <ScrollReveal direction="up" distance={30} delay={0.3}>
+          <GSAPScrollReveal direction="up" distance={30} delay={0.3}>
             <div className="flex flex-wrap justify-center gap-4 mt-6">
               {highlights.map((highlight) => (
                 <div
@@ -310,7 +346,7 @@ export function StatsSection() {
                 </div>
               ))}
             </div>
-          </ScrollReveal>
+          </GSAPScrollReveal>
         </div>
 
         {/* Stats Grid */}
@@ -327,7 +363,7 @@ export function StatsSection() {
           transition={{ duration: 1, delay: 0.8 }}
           className="mt-12 sm:mt-16 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"
         />
-      </motion.div>
+      </div>
     </section>
   );
 }

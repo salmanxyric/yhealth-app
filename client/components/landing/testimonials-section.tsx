@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { motion, useInView, useAnimationControls } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import { Star, CheckCircle, Quote, Sparkles, Crown, Dumbbell, Apple, Heart } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { AnimatedGradientMesh } from "./shared";
+import { useGSAP } from "@/hooks/use-gsap";
+import { gsap } from "@/lib/gsap-init";
+import { AnimatedGradientMesh, GSAPScrollReveal } from "./shared";
 
 interface Testimonial {
   id: string | number;
@@ -164,55 +166,74 @@ function TestimonialSkeleton() {
   );
 }
 
-// ─── Scrolling column with hover pause ───────────────────────────────
+// ─── Scrolling column with hover pause (GSAP) ───────────────────────
 function ScrollingColumn({
   items,
   direction,
   duration,
   onHoverStart,
   onHoverEnd,
-  isPaused,
 }: {
   items: Testimonial[];
   direction: "up" | "down";
   duration: number;
   onHoverStart: () => void;
   onHoverEnd: () => void;
-  isPaused: boolean;
 }) {
-  const controls = useAnimationControls();
   const columnRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const tweenRef = useRef<gsap.core.Tween | null>(null);
 
   // Triple the items for seamless loop
   const tripled = useMemo(() => [...items, ...items, ...items], [items]);
   const singleHeight = items.length * 220; // approximate card height
 
-  useEffect(() => {
-    const startY = direction === "up" ? 0 : -singleHeight;
-    const endY = direction === "up" ? -singleHeight : 0;
+  useGSAP(
+    () => {
+      if (!trackRef.current) return;
 
-    if (isPaused) {
-      controls.stop();
-    } else {
-      controls.start({
-        y: [startY, endY],
-        transition: {
-          y: { duration, repeat: Infinity, ease: "linear", repeatType: "loop" },
-        },
+      const startY = direction === "up" ? 0 : -singleHeight;
+      const endY = direction === "up" ? -singleHeight : 0;
+
+      // Set initial position
+      gsap.set(trackRef.current, { y: startY });
+
+      // Continuous infinite scroll tween
+      tweenRef.current = gsap.to(trackRef.current, {
+        y: endY,
+        duration,
+        ease: "none",
+        repeat: -1,
       });
+    },
+    columnRef,
+    [direction, duration, singleHeight]
+  );
+
+  const handleMouseEnter = useCallback(() => {
+    if (tweenRef.current) {
+      gsap.to(tweenRef.current, { timeScale: 0, duration: 0.5 });
     }
-  }, [isPaused, direction, duration, singleHeight, controls]);
+    onHoverStart();
+  }, [onHoverStart]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (tweenRef.current) {
+      gsap.to(tweenRef.current, { timeScale: 1, duration: 0.5 });
+    }
+    onHoverEnd();
+  }, [onHoverEnd]);
 
   return (
     <div
+      ref={columnRef}
       className="flex-1 overflow-hidden relative"
-      onMouseEnter={onHoverStart}
-      onMouseLeave={onHoverEnd}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      <motion.div
-        ref={columnRef}
-        className="flex flex-col"
-        animate={controls}
+      <div
+        ref={trackRef}
+        className="flex flex-col will-change-transform"
       >
         {tripled.map((testimonial, index) => (
           <TestimonialCard
@@ -221,7 +242,7 @@ function ScrollingColumn({
             featured={false}
           />
         ))}
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -262,7 +283,6 @@ export function TestimonialsSection() {
   const [testimonials, setTestimonials] = useState<Testimonial[]>(fallbackTestimonials);
   const [loading, setLoading] = useState(true);
   const [colCount, setColCount] = useState(4);
-  const [isPaused, setIsPaused] = useState(false);
   const sectionRef = useRef(null);
   const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
 
@@ -333,8 +353,8 @@ export function TestimonialsSection() {
     return cols;
   }, [colCount, testimonials]);
 
-  const handleHoverStart = useCallback(() => setIsPaused(true), []);
-  const handleHoverEnd = useCallback(() => setIsPaused(false), []);
+  const handleHoverStart = useCallback(() => {}, []);
+  const handleHoverEnd = useCallback(() => {}, []);
 
   // Compute dynamic stats
   const avgRating = useMemo(() => {
@@ -348,7 +368,7 @@ export function TestimonialsSection() {
   }, [testimonials]);
 
   return (
-    <section id="testimonials" className="py-16 sm:py-20 md:py-24 relative overflow-hidden">
+    <section id="testimonials" className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       <div className="absolute inset-0 cyber-grid opacity-20" />
       <AnimatedGradientMesh intensity={0.18} speed={0.9} blur={100} />
       <div className="absolute inset-0 bg-gradient-to-b from-background via-primary/5 to-background" />
@@ -361,98 +381,86 @@ export function TestimonialsSection() {
       <div ref={sectionRef} className="container mx-auto px-4 relative z-10">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-12">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 glass-card px-4 py-2 rounded-full text-sm font-medium mb-6 border border-white/[0.08]"
-          >
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-foreground/80">Real Stories, Real Results</span>
-          </motion.div>
+          <GSAPScrollReveal direction="up" distance={20} duration={0.5}>
+            <div className="inline-flex items-center gap-2 glass-card px-4 py-2 rounded-full text-sm font-medium mb-6 border border-white/[0.08]">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-foreground/80">Real Stories, Real Results</span>
+            </div>
+          </GSAPScrollReveal>
 
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6"
-          >
-            Loved by
-            <span className="block gradient-text-animated">Thousands Worldwide</span>
-          </motion.h2>
+          <GSAPScrollReveal direction="up" distance={20} duration={0.5} delay={0.1}>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
+              Loved by
+              <span className="block gradient-text-animated">Thousands Worldwide</span>
+            </h2>
+          </GSAPScrollReveal>
 
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-2xl mx-auto"
-          >
-            Join thousands of satisfied users who have transformed their health
-            journey with yHealth&apos;s AI-powered coaching and personalized wellness plans.
-          </motion.p>
+          <GSAPScrollReveal direction="up" distance={20} duration={0.5} delay={0.2}>
+            <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+              Join thousands of satisfied users who have transformed their health
+              journey with yHealth&apos;s AI-powered coaching and personalized wellness plans.
+            </p>
+          </GSAPScrollReveal>
         </div>
 
         {/* Testimonials columns */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={isInView ? { opacity: 1 } : {}}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="relative overflow-hidden h-[650px] sm:h-[700px]"
-        >
-          {/* Top/bottom fade masks */}
-          <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-background via-background/90 to-transparent z-10 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-background via-background/90 to-transparent z-10 pointer-events-none" />
+        <GSAPScrollReveal direction="fade" duration={0.5} delay={0.3}>
+          <div className="relative overflow-hidden h-[650px] sm:h-[700px]">
+            {/* Top/bottom fade masks */}
+            <div className="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-background via-background/90 to-transparent z-10 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-background via-background/90 to-transparent z-10 pointer-events-none" />
 
-          <div className="flex gap-4 h-full">
-            {loading
-              ? Array.from({ length: colCount }).map((_, idx) => (
-                  <div key={idx} className="flex-1 flex flex-col">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <TestimonialSkeleton key={i} />
-                    ))}
-                  </div>
-                ))
-              : columns.map((columnTestimonials, columnIndex) => (
-                  <ScrollingColumn
-                    key={columnIndex}
-                    items={columnTestimonials}
-                    direction={columnIndex % 2 === 0 ? "up" : "down"}
-                    duration={25 + columnIndex * 3}
-                    onHoverStart={handleHoverStart}
-                    onHoverEnd={handleHoverEnd}
-                    isPaused={isPaused}
-                  />
-                ))}
+            <div className="flex gap-4 h-full">
+              {loading
+                ? Array.from({ length: colCount }).map((_, idx) => (
+                    <div key={idx} className="flex-1 flex flex-col">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <TestimonialSkeleton key={i} />
+                      ))}
+                    </div>
+                  ))
+                : columns.map((columnTestimonials, columnIndex) => (
+                    <ScrollingColumn
+                      key={columnIndex}
+                      items={columnTestimonials}
+                      direction={columnIndex % 2 === 0 ? "up" : "down"}
+                      duration={25 + columnIndex * 3}
+                      onHoverStart={handleHoverStart}
+                      onHoverEnd={handleHoverEnd}
+                    />
+                  ))}
+            </div>
           </div>
-        </motion.div>
+        </GSAPScrollReveal>
 
         {/* Bottom Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          className="flex flex-wrap justify-center gap-8 sm:gap-12 mt-10 sm:mt-12 pt-6 sm:pt-8 border-t border-white/[0.08]"
+        <GSAPScrollReveal
+          direction="up"
+          distance={30}
+          duration={0.6}
+          delay={0.5}
+          stagger={0.1}
+          staggerSelector=".stat-item"
         >
-          {[
-            { value: "50K+", label: "Happy Users", icon: "users" },
-            { value: `${avgRating}/5`, label: "Average Rating", icon: "star" },
-            { value: "98%", label: "Would Recommend", icon: "percent" },
-            { value: `${fiveStarCount > 100 ? "10K+" : fiveStarCount.toString()}`, label: "5-Star Reviews", icon: "reviews" },
-          ].map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={isInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: 0.6 + index * 0.1 }}
-              className="text-center group"
-            >
-              <div className="text-xl sm:text-2xl md:text-3xl font-bold gradient-text group-hover:scale-110 transition-transform duration-300">
-                <AnimatedCounter value={stat.value} isInView={isInView} />
+          <div className="flex flex-wrap justify-center gap-8 sm:gap-12 mt-10 sm:mt-12 pt-6 sm:pt-8 border-t border-white/[0.08]">
+            {[
+              { value: "50K+", label: "Happy Users", icon: "users" },
+              { value: `${avgRating}/5`, label: "Average Rating", icon: "star" },
+              { value: "98%", label: "Would Recommend", icon: "percent" },
+              { value: `${fiveStarCount > 100 ? "10K+" : fiveStarCount.toString()}`, label: "5-Star Reviews", icon: "reviews" },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="stat-item text-center group"
+              >
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold gradient-text group-hover:scale-110 transition-transform duration-300">
+                  <AnimatedCounter value={stat.value} isInView={isInView} />
+                </div>
+                <div className="text-xs sm:text-sm text-muted-foreground/70 mt-1">{stat.label}</div>
               </div>
-              <div className="text-xs sm:text-sm text-muted-foreground/70 mt-1">{stat.label}</div>
-            </motion.div>
-          ))}
-        </motion.div>
+            ))}
+          </div>
+        </GSAPScrollReveal>
       </div>
     </section>
   );

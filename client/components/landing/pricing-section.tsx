@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 import type { PlanItem } from "@/components/subscription/PricingSection";
-import { AnimatedGradientMesh } from "./shared";
+import { AnimatedGradientMesh, GSAPScrollReveal } from "./shared";
 
 function getPlanIcon(slug: string) {
   if (slug === "starter") return Zap;
@@ -140,7 +140,6 @@ function PricingCard({
             ? "bg-card border-2 border-primary shadow-xl shadow-primary/10"
             : "bg-card/80 border border-border hover:border-primary/30 hover:shadow-lg"
         )}
-        // Floating animation for popular card
         animate={plan.popular ? { y: [0, -6, 0] } : {}}
         transition={plan.popular ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : {}}
       >
@@ -231,8 +230,6 @@ export function PricingSection() {
   const [isYearly, setIsYearly] = useState(false);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const sectionRef = useRef(null);
-  const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
 
   useEffect(() => {
     let cancelled = false;
@@ -263,62 +260,50 @@ export function PricingSection() {
   }, [plans, isYearly]);
 
   return (
-    <section id="pricing" className="py-16 sm:py-20 md:py-24 relative overflow-hidden">
+    <section id="pricing" className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       <div className="absolute inset-0 cyber-grid opacity-30" />
       <AnimatedGradientMesh intensity={0.2} speed={0.85} blur={110} />
       <div className="absolute top-0 left-1/4 w-48 sm:w-72 md:w-96 h-48 sm:h-72 md:h-96 bg-primary/5 rounded-full blur-3xl" />
       <div className="absolute bottom-0 right-1/4 w-40 sm:w-64 md:w-80 h-40 sm:h-64 md:h-80 bg-[#7C3AED]/5 rounded-full blur-3xl" />
 
-      <div ref={sectionRef} className="container mx-auto px-4 relative z-10">
+      <div className="container mx-auto px-4 relative z-10">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-10 md:mb-12">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 glass-card px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium mb-4 sm:mb-6"
-          >
+        <GSAPScrollReveal
+          direction="up"
+          distance={24}
+          stagger={0.1}
+          staggerSelector=".pricing-header-item"
+          className="text-center max-w-3xl mx-auto mb-8 sm:mb-10 md:mb-12"
+        >
+          <div className="pricing-header-item inline-flex items-center gap-2 glass-card px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium mb-4 sm:mb-6">
             <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
             <span>Simple Pricing</span>
-          </motion.div>
+          </div>
 
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6"
-          >
+          <h2 className="pricing-header-item text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6">
             Invest in Your <span className="gradient-text-animated">Health Journey</span>
-          </motion.h2>
+          </h2>
 
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-sm sm:text-base md:text-lg text-muted-foreground px-2 sm:px-4"
-          >
+          <p className="pricing-header-item text-sm sm:text-base md:text-lg text-muted-foreground px-2 sm:px-4">
             Choose the perfect plan for your wellness goals. All paid plans include a 14-day free trial.
-          </motion.p>
-        </div>
+          </p>
+        </GSAPScrollReveal>
 
         {/* Billing Toggle */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="flex items-center justify-center gap-2 sm:gap-3 md:gap-4 mb-8 sm:mb-10 md:mb-12"
-        >
-          <span className={cn("text-xs sm:text-sm font-medium transition-colors", !isYearly ? "text-foreground" : "text-muted-foreground")}>
-            Monthly
-          </span>
-          <Switch checked={isYearly} onCheckedChange={setIsYearly} className="data-[state=checked]:bg-primary" />
-          <span className={cn("text-xs sm:text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2", isYearly ? "text-foreground" : "text-muted-foreground")}>
-            Yearly
-            <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] sm:text-xs font-medium">
-              Save 20%
+        <GSAPScrollReveal direction="up" distance={20} delay={0.3}>
+          <div className="flex items-center justify-center gap-2 sm:gap-3 md:gap-4 mb-8 sm:mb-10 md:mb-12">
+            <span className={cn("text-xs sm:text-sm font-medium transition-colors", !isYearly ? "text-foreground" : "text-muted-foreground")}>
+              Monthly
             </span>
-          </span>
-        </motion.div>
+            <Switch checked={isYearly} onCheckedChange={setIsYearly} className="data-[state=checked]:bg-primary" />
+            <span className={cn("text-xs sm:text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2", isYearly ? "text-foreground" : "text-muted-foreground")}>
+              Yearly
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] sm:text-xs font-medium">
+                Save 20%
+              </span>
+            </span>
+          </div>
+        </GSAPScrollReveal>
 
         {/* Cards */}
         {loading ? (
@@ -339,23 +324,20 @@ export function PricingSection() {
         )}
 
         {/* Trust Badges */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 sm:gap-4 md:gap-8 mt-8 sm:mt-10 md:mt-12 pt-6 sm:pt-8 border-t border-border/50"
-        >
-          {[
-            { icon: Shield, text: "30-day money-back guarantee" },
-            { icon: Zap, text: "Cancel anytime" },
-            { icon: Check, text: "No hidden fees" },
-          ].map((badge) => (
-            <div key={badge.text} className="flex items-center justify-center gap-2 text-xs sm:text-sm text-muted-foreground">
-              <badge.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-              <span>{badge.text}</span>
-            </div>
-          ))}
-        </motion.div>
+        <GSAPScrollReveal direction="up" distance={24} delay={0.4}>
+          <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 sm:gap-4 md:gap-8 mt-8 sm:mt-10 md:mt-12 pt-6 sm:pt-8 border-t border-border/50">
+            {[
+              { icon: Shield, text: "30-day money-back guarantee" },
+              { icon: Zap, text: "Cancel anytime" },
+              { icon: Check, text: "No hidden fees" },
+            ].map((badge) => (
+              <div key={badge.text} className="flex items-center justify-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                <badge.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                <span>{badge.text}</span>
+              </div>
+            ))}
+          </div>
+        </GSAPScrollReveal>
       </div>
     </section>
   );

@@ -80,6 +80,28 @@ const EXPECTED_TABLES = [
   'testimonials',
   // AI Coaching Profiles
   'user_coaching_profiles',
+  // User Classification & Intensity
+  'user_classifications',
+  'intensity_prescriptions',
+  'personality_mode_events',
+  // User Interventions
+  'user_interventions',
+  // Cross-Pillar Contradictions
+  'cross_pillar_contradictions',
+  // Gamification Upgrade
+  'variable_rewards',
+  'daily_pledges',
+  'teams',
+  'team_members',
+  'achievement_definitions',
+  'user_achievements',
+  // Newsletter
+  'newsletter_subscriptions',
+  // Subscriptions (Stripe)
+  'subscription_plans',
+  'user_subscriptions',
+  // Visitor analytics
+  'visitor_visits',
 ];
 
 // List of expected enum types

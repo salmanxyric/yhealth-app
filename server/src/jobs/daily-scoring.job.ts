@@ -35,17 +35,18 @@ async function processDailyScoring(): Promise<void> {
     // Get current UTC time
     const now = new Date();
 
-    // Find users whose local midnight just passed (within the last hour)
-    // This is simplified - in production, you'd want more sophisticated timezone handling
+    // Find users whose local time is in the first hour of the day (00:00–00:59)
+    // so we only process when their local "yesterday" just ended.
     const result = await query<{
       id: string;
       timezone: string;
     }>(
-      `SELECT id, timezone 
-       FROM users 
-       WHERE timezone IS NOT NULL 
+      `SELECT id, timezone
+       FROM users
+       WHERE timezone IS NOT NULL
          AND is_active = true
-       LIMIT 1000`
+         AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE timezone)) = 0
+       LIMIT 500`
     );
 
     let processed = 0;
@@ -70,7 +71,6 @@ async function processDailyScoring(): Promise<void> {
         // Check if score already exists
         const existingScore = await aiScoringService.getDailyScore(user.id, localDate);
         if (existingScore) {
-          logger.debug('[DailyScoring] Score already exists', { userId: user.id, date: localDate });
           continue;
         }
 
@@ -81,12 +81,6 @@ async function processDailyScoring(): Promise<void> {
         await aiScoringService.saveDailyScore(score);
 
         processed++;
-
-        logger.debug('[DailyScoring] Calculated daily score', {
-          userId: user.id,
-          date: localDate,
-          totalScore: score.totalScore,
-        });
       } catch (error) {
         errors++;
         logger.error('[DailyScoring] Failed to process user', {

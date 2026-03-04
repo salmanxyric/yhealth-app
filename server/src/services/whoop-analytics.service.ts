@@ -1005,6 +1005,47 @@ export async function getUserHealthProfile(
         strain: fallbackStrain,
       });
     }
+
+    // Final fallback: try daily_user_scores (AI-calculated health scores)
+    if (!currentRecovery && !currentSleep && !todayStrainData) {
+      const dailyScores = await query<{
+        total_score: number;
+        component_scores: { biometrics?: number; workout?: number; wellbeing?: number };
+        date: Date;
+      }>(
+        `SELECT total_score, component_scores, date
+         FROM daily_user_scores
+         WHERE user_id = $1
+         ORDER BY date DESC LIMIT 1`,
+        [userId]
+      );
+
+      if (dailyScores.rows[0]) {
+        const scoreRow = dailyScores.rows[0];
+        const components = scoreRow.component_scores;
+        const scoreTimestamp = scoreRow.date instanceof Date
+          ? scoreRow.date.toISOString()
+          : new Date().toISOString();
+
+        // Map biometrics component to recovery score
+        if (components?.biometrics) {
+          currentRecovery = {
+            score: Math.round(components.biometrics),
+            hrv: 0,
+            rhr: 0,
+            spo2: undefined,
+            skinTemp: undefined,
+            timestamp: scoreTimestamp,
+          };
+        }
+
+        logger.debug('[getUserHealthProfile] Found daily_user_scores fallback', {
+          userId,
+          totalScore: scoreRow.total_score,
+          biometrics: components?.biometrics,
+        });
+      }
+    }
   }
 
   // Format water intake data

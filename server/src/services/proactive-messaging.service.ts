@@ -13,7 +13,8 @@ import { gamificationService } from './gamification.service.js';
 import { userCoachingProfileService } from './user-coaching-profile.service.js';
 import { dailyAnalysisService } from './daily-analysis.service.js';
 import type { DailyAnalysisReport, StructuredInsight, CrossDomainInsight, CoachingDirective } from './daily-analysis.service.js';
-import type { StableTraits } from './user-coaching-profile.service.js';
+import type { StableTraits, CoachEmotionalState, RelationshipDepth } from './user-coaching-profile.service.js';
+import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
 
 
 // ============================================
@@ -31,7 +32,9 @@ export type ProactiveMessageType =
   | 'goal_deadline' | 'goal_stalled' | 'streak_risk' | 'streak_celebration'
   | 'habit_missed' | 'water_intake' | 'morning_briefing' | 'weekly_digest'
   | 'achievement_unlock' | 'recovery_advice' | 'competition_update'
-  | 'app_inactive' | 'coach_pro_analysis';
+  | 'app_inactive' | 'coach_pro_analysis'
+  | 'meal_alignment' | 'daily_progress_review'
+  | 'score_declining';
 
 export interface ProactiveContext {
   type: ProactiveMessageType;
@@ -43,6 +46,9 @@ export interface ProactiveContext {
   crossDomainInsights?: CrossDomainInsight[];
   coachingDirective?: CoachingDirective | null;
   stableTraits?: StableTraits | null;
+  // Coach emotional intelligence
+  coachEmotion?: CoachEmotionalState;
+  relationshipDepth?: RelationshipDepth;
 }
 
 export interface MessageCandidate {
@@ -209,14 +215,25 @@ class ProactiveMessagingService {
     try {
       const context = cachedContext;
 
-      // Check if user has missed workouts recently
-      if (context.workouts.missedWorkouts && context.workouts.missedWorkouts > 0) {
+      // Check for today's scheduled-but-unfinished workout
+      const todayPending = await query<{ id: string }>(
+        `SELECT id FROM workout_schedule_tasks
+         WHERE user_id = $1 AND scheduled_date = CURRENT_DATE AND status = 'pending'
+         LIMIT 1`,
+        [userId]
+      ).catch(() => ({ rows: [] as { id: string }[] }));
+
+      const hasTodayPending = todayPending.rows.length > 0;
+      const hasMissed = context.workouts?.missedWorkouts && context.workouts.missedWorkouts > 0;
+
+      if (hasMissed || hasTodayPending) {
         if (cooldown?.sentTypes.has('workout')) return false;
 
         const proactiveContext: ProactiveContext = {
           type: 'workout',
           data: {
-            missedWorkouts: context.workouts.missedWorkouts,
+            missedWorkouts: context.workouts?.missedWorkouts || 0,
+            hasTodayPendingWorkout: hasTodayPending,
           },
           userContext: context,
         };
@@ -252,16 +269,19 @@ class ProactiveMessagingService {
     try {
       const context = cachedContext;
 
-      // Check if user hasn't logged meals today (after 2 PM)
-      const now = new Date();
-      const hour = now.getHours();
-      if (hour >= 14 && (!context.nutrition.todayMealCount || context.nutrition.todayMealCount === 0)) {
+      // Check if user hasn't logged enough meals today
+      // Time window gating is handled by scoreMessageCandidates — no duplicate hour check needed
+      const expectedMeals = context.nutrition?.activeDietPlan?.mealsPerDay || 3;
+      const todayCount = context.nutrition?.todayMealCount || 0;
+      if (todayCount < expectedMeals) {
         if (cooldown?.sentTypes.has('nutrition')) return false;
 
         const proactiveContext: ProactiveContext = {
           type: 'nutrition',
           data: {
-            todayMealCount: 0,
+            todayMealCount: todayCount,
+            expectedMeals,
+            mealGap: expectedMeals - todayCount,
           },
           userContext: context,
         };
@@ -305,10 +325,8 @@ class ProactiveMessagingService {
         if (context.wellbeing.missingToday.energy) missing.push('energy');
       }
 
-      // Only send if something is missing and it's after 6 PM
-      const now = new Date();
-      const hour = now.getHours();
-      if (hour >= 18 && missing.length > 0) {
+      // Time window gating is handled by scoreMessageCandidates — no duplicate hour check needed
+      if (missing.length > 0) {
         if (cooldown?.sentTypes.has('wellbeing')) return false;
 
         const proactiveContext: ProactiveContext = {
@@ -425,7 +443,7 @@ class ProactiveMessagingService {
       if (cooldown && cooldown.dailyCount >= 4) return false;
 
       const stats = await gamificationService.getUserStats(userId);
-      if (stats.currentStreak > 3 && stats.lastActivityDate) {
+      if (stats.currentStreak >= 1 && stats.lastActivityDate) {
         const lastActivity = new Date(stats.lastActivityDate);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -909,11 +927,351 @@ class ProactiveMessagingService {
   }
 
   // ============================================
+  // MEAL ALIGNMENT FEEDBACK (event-driven + job fallback)
+  // ============================================
+
+  /**
+   * Evaluate a just-logged meal against user goals and diet plan.
+   * Called fire-and-forget from the meal logging endpoint for immediate feedback.
+   * Also available via the job-based scoring path as a catch-up.
+   */
+  async checkAndSendMealAlignmentFeedback(
+    userId: string,
+    mealData?: { mealType?: string; mealName?: string; calories?: number; proteinGrams?: number; carbsGrams?: number; fatGrams?: number; fiberGrams?: number; foods?: unknown[] },
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      // Check daily cap (general + per-type limit of 3 meal alignment messages/day)
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+
+      const mealAlignmentCount = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM proactive_messages
+         WHERE user_id = $1 AND message_type = 'meal_alignment'
+         AND created_at >= CURRENT_DATE`,
+        [userId]
+      ).catch(() => ({ rows: [{ count: '0' }] }));
+
+      if (parseInt(mealAlignmentCount.rows[0]?.count || '0', 10) >= 3) {
+        logger.debug('[ProactiveMessaging] Meal alignment daily limit reached', { userId });
+        return false;
+      }
+
+      // Fetch diet plan targets
+      const dietPlanResult = await query<{
+        daily_calories: number; protein_grams: number; carbs_grams: number; fat_grams: number;
+        dietary_preferences: string; excluded_foods: string; name: string;
+      }>(
+        `SELECT daily_calories, protein_grams, carbs_grams, fat_grams,
+                dietary_preferences, excluded_foods, name
+         FROM diet_plans WHERE user_id = $1 AND status = 'active'
+         ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      );
+
+      if (dietPlanResult.rows.length === 0) return false; // No diet plan — can't evaluate
+      const plan = dietPlanResult.rows[0];
+
+      // Fetch today's total consumption (all meals including the one just logged)
+      const todaySummary = await query<{
+        total_calories: string; total_protein: string; total_carbs: string; total_fat: string; meal_count: string;
+      }>(
+        `SELECT COALESCE(SUM(calories), 0) as total_calories,
+                COALESCE(SUM(protein_grams), 0) as total_protein,
+                COALESCE(SUM(carbs_grams), 0) as total_carbs,
+                COALESCE(SUM(fat_grams), 0) as total_fat,
+                COUNT(*) as meal_count
+         FROM meal_logs WHERE user_id = $1 AND eaten_at >= CURRENT_DATE`,
+        [userId]
+      );
+
+      const summary = todaySummary.rows[0];
+      const totalCalories = parseFloat(summary?.total_calories || '0');
+      const totalProtein = parseFloat(summary?.total_protein || '0');
+      const totalCarbs = parseFloat(summary?.total_carbs || '0');
+      const totalFat = parseFloat(summary?.total_fat || '0');
+      const mealCount = parseInt(summary?.meal_count || '0', 10);
+
+      // Calculate deviations
+      const targetCalories = plan.daily_calories || 0;
+      const calorieDeviation = targetCalories > 0 ? ((totalCalories - targetCalories) / targetCalories) * 100 : 0;
+
+      // Check excluded foods
+      let excludedFoods: string[] = [];
+      try {
+        const rawExcluded = typeof plan.excluded_foods === 'string' ? JSON.parse(plan.excluded_foods) : plan.excluded_foods;
+        excludedFoods = Array.isArray(rawExcluded) ? rawExcluded : [];
+      } catch { /* ignore */ }
+
+      const mealFoods = Array.isArray(mealData?.foods) ? mealData.foods : [];
+      const mealFoodNames = mealFoods.map((f: any) => (f?.name || f?.food_name || '').toLowerCase());
+      const flaggedExcluded = excludedFoods.filter(ef =>
+        mealFoodNames.some(fn => fn.includes(ef.toLowerCase()))
+      );
+
+      // Fetch active goals for context
+      const goalsResult = await query<{ category: string; title: string; progress: number }>(
+        `SELECT category, title, progress FROM user_goals
+         WHERE user_id = $1 AND status = 'active' ORDER BY is_primary DESC LIMIT 3`,
+        [userId]
+      );
+
+      // Determine if meal is problematic
+      const isOverCalories = calorieDeviation > 15; // >15% over daily target
+      const hasExcludedFoods = flaggedExcluded.length > 0;
+      const isSignificantlyOver = calorieDeviation > 30;
+      const isGoodChoice = calorieDeviation <= 5 && !hasExcludedFoods && (mealData?.proteinGrams || 0) > 15;
+
+      // Build context for AI message generation
+      const proactiveContext: ProactiveContext = {
+        type: 'meal_alignment',
+        data: {
+          mealName: mealData?.mealName || 'Unnamed meal',
+          mealType: mealData?.mealType || 'meal',
+          mealCalories: mealData?.calories || 0,
+          mealProtein: mealData?.proteinGrams || 0,
+          mealCarbs: mealData?.carbsGrams || 0,
+          mealFat: mealData?.fatGrams || 0,
+          totalCaloriesToday: totalCalories,
+          totalProteinToday: totalProtein,
+          totalCarbsToday: totalCarbs,
+          totalFatToday: totalFat,
+          mealsLoggedToday: mealCount,
+          targetCalories,
+          targetProtein: plan.protein_grams || 0,
+          targetCarbs: plan.carbs_grams || 0,
+          targetFat: plan.fat_grams || 0,
+          calorieDeviation: Math.round(calorieDeviation),
+          planName: plan.name,
+          flaggedExcluded,
+          isOverCalories,
+          isSignificantlyOver,
+          isGoodChoice,
+          goals: goalsResult.rows,
+          remainingCalories: Math.max(0, targetCalories - totalCalories),
+        },
+        userContext: cachedContext || {},
+      };
+
+      // Enrich with insights
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'meal_alignment', cachedContext || {});
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'meal_alignment');
+
+      logger.info('[ProactiveMessaging] Sent meal alignment feedback', {
+        userId: userId.slice(0, 8),
+        mealName: mealData?.mealName,
+        calorieDeviation: Math.round(calorieDeviation),
+        isOverCalories,
+        isGoodChoice,
+      });
+
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error sending meal alignment feedback', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return false;
+    }
+  }
+
+  // ============================================
+  // DAILY PROGRESS REVIEW (job-based, evening)
+  // ============================================
+
+  /**
+   * Send a comprehensive daily progress review covering all pillars.
+   * Triggered by the proactive messaging job in the evening window (19-21).
+   */
+  async checkAndSendDailyProgressReview(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('daily_progress_review')) return false;
+
+      const context = cachedContext;
+
+      // Fetch today's meal summary
+      const mealSummary = await query<{
+        total_calories: string; total_protein: string; total_carbs: string; total_fat: string; meal_count: string;
+      }>(
+        `SELECT COALESCE(SUM(calories), 0) as total_calories,
+                COALESCE(SUM(protein_grams), 0) as total_protein,
+                COALESCE(SUM(carbs_grams), 0) as total_carbs,
+                COALESCE(SUM(fat_grams), 0) as total_fat,
+                COUNT(*) as meal_count
+         FROM meal_logs WHERE user_id = $1 AND eaten_at >= CURRENT_DATE`,
+        [userId]
+      ).catch(() => ({ rows: [{ total_calories: '0', total_protein: '0', total_carbs: '0', total_fat: '0', meal_count: '0' }] }));
+
+      // Fetch today's workout completions
+      const workoutSummary = await query<{ completed: string; planned: string }>(
+        `SELECT
+           COUNT(*) FILTER (WHERE status = 'completed') as completed,
+           COUNT(*) as planned
+         FROM plan_activities
+         WHERE user_id = $1 AND scheduled_date = CURRENT_DATE`,
+        [userId]
+      ).catch(() => ({ rows: [{ completed: '0', planned: '0' }] }));
+
+      // Fetch active goals with progress
+      const goals = await query<{ title: string; category: string; progress: number; target_value: number; current_value: number }>(
+        `SELECT title, category, progress, target_value, current_value
+         FROM user_goals WHERE user_id = $1 AND status = 'active'
+         ORDER BY is_primary DESC LIMIT 5`,
+        [userId]
+      ).catch(() => ({ rows: [] as { title: string; category: string; progress: number; target_value: number; current_value: number }[] }));
+
+      // Fetch diet plan targets
+      const dietPlan = await query<{ daily_calories: number; protein_grams: number; name: string }>(
+        `SELECT daily_calories, protein_grams, name FROM diet_plans
+         WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      ).catch(() => ({ rows: [] as { daily_calories: number; protein_grams: number; name: string }[] }));
+
+      // Fetch coaching profile (analysis report fetched via buildInsightDrivenContext below)
+      const profile = await userCoachingProfileService.getOrGenerateProfile(userId, cachedContext).catch(() => null);
+
+      const meals = mealSummary.rows[0];
+      const workouts = workoutSummary.rows[0];
+      const plan = dietPlan.rows[0];
+      const adherence = profile?.adherenceScores || {};
+
+      const targetCalories = plan?.daily_calories || 0;
+      const actualCalories = parseFloat(meals?.total_calories || '0');
+      const calorieDeviation = targetCalories > 0 ? Math.round(((actualCalories - targetCalories) / targetCalories) * 100) : 0;
+
+      const proactiveContext: ProactiveContext = {
+        type: 'daily_progress_review',
+        data: {
+          // Nutrition
+          mealsLogged: parseInt(meals?.meal_count || '0', 10),
+          totalCalories: actualCalories,
+          totalProtein: parseFloat(meals?.total_protein || '0'),
+          totalCarbs: parseFloat(meals?.total_carbs || '0'),
+          totalFat: parseFloat(meals?.total_fat || '0'),
+          targetCalories,
+          targetProtein: plan?.protein_grams || 0,
+          calorieDeviation,
+          planName: plan?.name,
+          // Fitness
+          workoutsCompleted: parseInt(workouts?.completed || '0', 10),
+          workoutsPlanned: parseInt(workouts?.planned || '0', 10),
+          // Goals
+          activeGoals: goals.rows,
+          // Adherence
+          adherenceScores: adherence,
+          // WHOOP
+          recovery: context?.whoop?.lastRecovery?.score,
+          strain: context?.whoop?.lastStrain?.score,
+          sleepHours: context?.whoop?.lastSleep?.duration,
+          // Wellbeing
+          mood: context?.wellbeing?.latestMood,
+          energy: context?.wellbeing?.latestEnergy,
+          stress: context?.wellbeing?.latestStress,
+          // Streak & Score
+          streak: context?.gamification?.currentStreak || 0,
+          dailyScore: context?.dailyScore?.latestScore,
+        },
+        userContext: context,
+      };
+
+      // Enrich with pre-computed insights
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'daily_progress_review', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      // Use higher token limit for comprehensive review
+      const prevMaxTokens = this.llm.maxTokens;
+      this.llm.maxTokens = 800;
+
+      try {
+        const message = await this.generateProactiveMessage(userId, proactiveContext);
+        await this.sendProactiveMessage(userId, message, 'daily_progress_review');
+        return true;
+      } finally {
+        this.llm.maxTokens = prevMaxTokens;
+      }
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error sending daily progress review', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Check if user should receive a score declining message.
+   * Triggers when daily score drops 10+ points day-over-day.
+   */
+  async checkAndSendScoreDecliningMessage(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('score_declining')) return false;
+
+      const context = cachedContext;
+      const ds = context.dailyScore;
+
+      if (ds?.scoreTrend !== 'declining' || !ds?.scoreDelta || ds.scoreDelta >= -10) {
+        return false;
+      }
+
+      const proactiveContext: ProactiveContext = {
+        type: 'score_declining',
+        data: {
+          currentScore: ds.latestScore,
+          previousScore: ds.previousScore,
+          scoreDelta: ds.scoreDelta,
+          scoreTrend: ds.scoreTrend,
+          weekOverWeekDelta: ds.weekOverWeekDelta,
+          componentScores: ds.componentScores,
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'score_declining', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'score_declining');
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error checking score declining', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return false;
+    }
+  }
+
+  // ============================================
   // SMART ROUTING: Score-and-Rank
   // ============================================
 
   /**
-   * Score all 18 message candidates for a user.
+   * Score all message candidates for a user.
    * Returns scored, sorted candidates — the job sends only the top 2-3.
    * Replaces 18 sequential checkAndSend* calls with prioritised ranking.
    */
@@ -925,8 +1283,8 @@ class ProactiveMessagingService {
     isSunday: boolean
   ): Promise<MessageCandidate[]> {
     try {
-      // 3 lightweight parallel queries for data not already in the context
-      const [stalledGoalResult, lastLoginResult, recentAchievement] = await Promise.all([
+      // 4 lightweight parallel queries for data not already in the context
+      const [stalledGoalResult, lastLoginResult, recentAchievement, todayScheduledWorkout] = await Promise.all([
         query<{ title: string }>(
           `SELECT title FROM user_goals WHERE user_id = $1 AND status = 'active'
            AND updated_at < CURRENT_DATE - INTERVAL '3 days'
@@ -942,6 +1300,12 @@ class ProactiveMessagingService {
           `SELECT id FROM user_xp_transactions
            WHERE user_id = $1 AND created_at >= CURRENT_DATE
            AND (description ILIKE '%level%' OR source_type = 'achievement')
+           LIMIT 1`,
+          [userId]
+        ).catch(() => ({ rows: [] as { id: string }[] })),
+        query<{ id: string }>(
+          `SELECT id FROM workout_schedule_tasks
+           WHERE user_id = $1 AND scheduled_date = CURRENT_DATE AND status = 'pending'
            LIMIT 1`,
           [userId]
         ).catch(() => ({ rows: [] as { id: string }[] })),
@@ -1004,13 +1368,20 @@ class ProactiveMessagingService {
       // Poor sleep check
       const isPoorSleep = sleepData && (sleepData.duration < 6 || sleepData.quality < 60);
 
+      // Expected meals by current hour for partial adherence detection
+      const totalExpectedMeals = context.nutrition?.activeDietPlan?.mealsPerDay || 3;
+      let expectedMealsForHour = 0;
+      if (hour >= 9) expectedMealsForHour = 1;       // Breakfast should be done
+      if (hour >= 13) expectedMealsForHour = 2;      // Lunch should be done
+      if (hour >= 19) expectedMealsForHour = totalExpectedMeals; // All meals
+
       // Score all 18 message types (base score + context multipliers)
       const candidates: MessageCandidate[] = [
         {
           type: 'streak_risk',
           eligible: streak > 3 && daysSinceActivity >= 1 && !sent('streak_risk'),
-          timeWindowValid: hour >= 7 && hour < 9,
-          score: 85 + Math.floor(streak / 10) * 5,
+          timeWindowValid: hour >= 7 && hour < 11,
+          score: 85 + Math.min(Math.floor(streak / 5) * 3, 15),
         },
         {
           type: 'goal_deadline',
@@ -1038,9 +1409,9 @@ class ProactiveMessagingService {
         },
         {
           type: 'workout',
-          eligible: missedWorkouts > 0 && !sent('workout'),
-          timeWindowValid: hour >= 14 && hour < 18,
-          score: 75 + (hasPlans ? 10 : 0),
+          eligible: (missedWorkouts > 0 || todayScheduledWorkout.rows.length > 0) && !sent('workout'),
+          timeWindowValid: hour >= 10 && hour < 20,
+          score: 75 + (hasPlans ? 10 : 0) + (todayScheduledWorkout.rows.length > 0 ? 5 : 0),
         },
         {
           type: 'goal_stalled',
@@ -1050,20 +1421,20 @@ class ProactiveMessagingService {
         },
         {
           type: 'nutrition',
-          eligible: todayMealCount === 0 && !sent('nutrition'),
-          timeWindowValid: hour >= 14 && hour < 18,
+          eligible: todayMealCount < expectedMealsForHour && !sent('nutrition'),
+          timeWindowValid: hour >= 12 && hour < 20,
           score: 70 + (context.nutrition?.activeDietPlan ? 10 : 0),
         },
         {
           type: 'habit_missed',
           eligible: habitTotal > 0 && habitCompleted < habitTotal && habitCompleted < habitTotal / 2 && !sent('habit_missed'),
-          timeWindowValid: hour >= 19 && hour < 21,
+          timeWindowValid: hour >= 18 && hour < 22,
           score: 50 + Math.min(highStreakHabits * 10, 30),
         },
         {
           type: 'morning_briefing',
           eligible: (hasPlans || hasGoals || hasHabits) && !sent('morning_briefing'),
-          timeWindowValid: hour >= 7 && hour < 9,
+          timeWindowValid: hour >= 6 && hour < 10,
           score: 45,
         },
         {
@@ -1087,7 +1458,7 @@ class ProactiveMessagingService {
         {
           type: 'streak_celebration',
           eligible: isMilestone && !sent('streak_celebration'),
-          timeWindowValid: hour >= 8 && hour < 10,
+          timeWindowValid: hour >= 7 && hour < 12,
           score: 30,
         },
         {
@@ -1111,8 +1482,33 @@ class ProactiveMessagingService {
         {
           type: 'app_inactive',
           eligible: hoursSinceLogin >= 24 && !sent('app_inactive'),
-          timeWindowValid: hour >= 10 && hour < 14,
-          score: 10,
+          timeWindowValid: hour >= 8 && hour < 18,
+          score: hoursSinceLogin >= 72 ? 85 : hoursSinceLogin >= 48 ? 70 : 50,
+        },
+        {
+          type: 'meal_alignment',
+          eligible: !!(context.nutrition?.activeDietPlan && context.nutrition?.lastMealDate
+            && (Date.now() - new Date(context.nutrition.lastMealDate).getTime()) < 30 * 60 * 1000
+            && !sent('meal_alignment')),
+          timeWindowValid: hour >= 7 && hour < 22,
+          score: 72 + (context.nutrition?.todayMealCount === 0 ? 10 : 0),
+        },
+        {
+          type: 'daily_progress_review',
+          eligible: (hasPlans || hasGoals || todayMealCount > 0) && !sent('daily_progress_review'),
+          timeWindowValid: hour >= 18 && hour < 22,
+          score: 82 + (hasGoals && urgentGoal ? 5 : 0),
+        },
+        {
+          type: 'score_declining',
+          eligible: !!(
+            context.dailyScore?.scoreTrend === 'declining' &&
+            context.dailyScore?.scoreDelta != null &&
+            context.dailyScore.scoreDelta < -10 &&
+            !sent('score_declining')
+          ),
+          timeWindowValid: hour >= 10 && hour < 16,
+          score: 78 + Math.min(Math.abs(context.dailyScore?.scoreDelta || 0), 20),
         },
       ];
 
@@ -1198,6 +1594,9 @@ class ProactiveMessagingService {
         goal_stalled: ['workout', 'nutrition', 'consistency'],
         streak_risk: ['consistency', 'engagement'],
         habit_missed: ['engagement', 'consistency'],
+        meal_alignment: ['nutrition', 'weight', 'fitness'],
+        daily_progress_review: [], // all insights — comprehensive review
+        score_declining: [], // all insights — need to identify root cause across all pillars
       };
 
       const relevantPillars = pillarMapping[messageType] || [];
@@ -1271,23 +1670,33 @@ ${recovery ? `- Last known recovery: ${recovery.score}%` : ''}`;
         case 'workout':
           dataDescription = `WORKOUT STATUS:
 - Missed workouts (7 days): ${context.data.missedWorkouts}
+${context.data.hasTodayPendingWorkout ? '- TODAY\'S WORKOUT: Scheduled but NOT DONE yet' : ''}
 ${completionRate !== undefined ? `- Weekly completion rate: ${completionRate}%` : ''}
 ${plans?.length ? `- Active plan: "${plans[0].name}" — ${plans[0].progress}% complete` : '- No active workout plan'}
 ${streak ? `- Current streak: ${streak} days` : ''}
 ${recovery ? `- Recovery: ${recovery.score}%` : ''}`;
-          prompt = `Be ANGRY about this. ${context.data.missedWorkouts} missed workouts is a PATTERN of failure, not a one-off. CONFRONT them: "You've missed ${context.data.missedWorkouts} workouts. That's a ${completionRate !== undefined ? completionRate : '?'}% completion rate. At this rate, you will NEVER reach your goals." If they have an active plan, say: "Your '${plans?.[0]?.name || 'workout plan'}' is at ${plans?.[0]?.progress || '?'}% — and it's going BACKWARDS." Calculate the timeline damage: "${context.data.missedWorkouts} missed sessions adds [X] weeks to reaching your goal." DON'T just suggest getting back on track — RESCHEDULE: "I'm moving your missed sessions to [specific days]. Here's your adjusted schedule for the rest of the week. No excuses." If recovery is low, acknowledge it but don't let it be a permanent excuse. Ask what specifically prevented them from training.`;
+          prompt = context.data.hasTodayPendingWorkout && !context.data.missedWorkouts
+            ? `Their workout for TODAY is still pending. Don't wait for them to miss it — DEMAND action NOW: "You have a workout scheduled for today and you haven't started. Every hour you delay is an hour closer to another missed session." ${plans?.length ? `Reference their plan "${plans[0].name}" at ${plans[0].progress}% — "Skipping today sets your plan back."` : ''} ${recovery ? `Recovery is at ${recovery.score}% — ${recovery.score >= 50 ? 'more than enough to train' : 'adjust intensity but still train'}.` : ''} Give them a specific time: "Start within the next 2 hours. No negotiation."`
+            : `Be ANGRY about this. ${context.data.missedWorkouts} missed workouts is a PATTERN of failure, not a one-off. CONFRONT them: "You've missed ${context.data.missedWorkouts} workouts. That's a ${completionRate !== undefined ? completionRate : '?'}% completion rate. At this rate, you will NEVER reach your goals." ${context.data.hasTodayPendingWorkout ? "AND you have another workout scheduled TODAY that you haven't done yet — this is about to get worse." : ''} If they have an active plan, say: "Your '${plans?.[0]?.name || 'workout plan'}' is at ${plans?.[0]?.progress || '?'}% — and it's going BACKWARDS." Calculate the timeline damage: "${context.data.missedWorkouts} missed sessions adds weeks to reaching your goal." DON'T just suggest getting back on track — RESCHEDULE and DEMAND action. If recovery is low, acknowledge it but don't let it be a permanent excuse.`;
           break;
 
-        case 'nutrition':
+        case 'nutrition': {
+          const logged = context.data.todayMealCount || 0;
+          const expected = context.data.expectedMeals || 3;
+          const gap = context.data.mealGap || (expected - logged);
           dataDescription = `NUTRITION STATUS:
-- Meals logged today: 0 (it's after 2 PM)
+- Meals logged today: ${logged} of ${expected} expected
+- Meals behind: ${gap}
 ${context.userContext?.nutrition?.activeDietPlan ? `- Active diet plan: "${context.userContext.nutrition.activeDietPlan.name}"
 - Daily calorie target: ${context.userContext.nutrition.activeDietPlan.dailyCalories} kcal
 - Protein target: ${context.userContext.nutrition.activeDietPlan.protein || 'not set'}g` : '- No active diet plan'}
 ${dailyScore ? `- Yesterday's daily score: ${dailyScore}/100` : ''}
 ${context.userContext?.nutrition?.adherenceRate ? `- Nutrition adherence: ${context.userContext.nutrition.adherenceRate}%` : ''}`;
-          prompt = `CONFRONT them about nutrition neglect. Don't gently ask "have you eaten?" — be a strict teacher: "It's after 2 PM and you haven't tracked a SINGLE meal. Your body needed ${context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 'your target'} calories by now — you've logged ZERO. Every hour without proper nutrition, your metabolism SLOWS, muscle tissue BREAKS DOWN, and your body holds onto fat." If they have a calorie/macro target, do the math: "You're ${context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 0} kcal behind. That's roughly ${Math.ceil((context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 2000) / 3)} calories per remaining meal to catch up." Connect to their specific goals. DEMAND action: "Log your next meal RIGHT NOW. I need to see protein, carbs, and fat numbers. No excuses about being busy — it takes 30 seconds." If they have an active diet plan, reference it by name and their adherence rate.`;
+          prompt = logged === 0
+            ? `CONFRONT them about nutrition neglect. They haven't tracked a SINGLE meal. "Your body needed ${context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 'your target'} calories by now — you've logged ZERO. Every hour without proper nutrition, your metabolism SLOWS, muscle tissue BREAKS DOWN, and your body holds onto fat." Do the math: "That's roughly ${Math.ceil((context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 2000) / gap)} calories per remaining meal to catch up." DEMAND action: "Log your next meal RIGHT NOW. No excuses about being busy — it takes 30 seconds."`
+            : `They logged ${logged} out of ${expected} expected meals — that's ${gap} meals behind schedule. "Partial effort isn't good enough. Your body doesn't get partial results from partial nutrition." Calculate the calorie deficit from missed meals: "You're missing roughly ${Math.ceil((context.userContext?.nutrition?.activeDietPlan?.dailyCalories || 2000) * gap / expected)} kcal worth of nutrition." DEMAND they log the next meal immediately. Reference their diet plan "${context.userContext?.nutrition?.activeDietPlan?.name || 'plan'}" and adherence rate.`;
           break;
+        }
 
         case 'wellbeing':
           dataDescription = `WELLBEING STATUS:
@@ -1481,6 +1890,113 @@ ${tone === 'direct' ? 'Present data clearly and connect cause-effect. Numbers fi
 This should read like a professional sports coach's analysis, not a motivational poster.`;
           break;
         }
+
+        case 'meal_alignment': {
+          const d = context.data;
+          const overOrUnder = d.calorieDeviation > 0 ? 'OVER' : 'under';
+          const goalsStr = d.goals?.map((g: { title: string; category: string; progress: number }) =>
+            `"${g.title}" (${g.category}, ${g.progress}%)`
+          ).join(', ') || 'not set';
+
+          dataDescription = `MEAL JUST LOGGED:
+- Meal: ${d.mealName} (${d.mealType})
+- Calories: ${d.mealCalories} kcal | Protein: ${d.mealProtein}g | Carbs: ${d.mealCarbs}g | Fat: ${d.mealFat}g
+
+DAILY TOTALS (after this meal):
+- Calories: ${d.totalCaloriesToday}/${d.targetCalories} kcal (${d.calorieDeviation > 0 ? '+' : ''}${d.calorieDeviation}% ${overOrUnder})
+- Protein: ${d.totalProteinToday}/${d.targetProtein}g
+- Carbs: ${d.totalCarbsToday}/${d.targetCarbs}g
+- Fat: ${d.totalFatToday}/${d.targetFat}g
+- Meals logged today: ${d.mealsLoggedToday}
+- Remaining calorie budget: ${d.remainingCalories} kcal
+- Diet plan: "${d.planName}"
+${d.flaggedExcluded?.length > 0 ? `- EXCLUDED FOODS DETECTED: ${d.flaggedExcluded.join(', ')}` : ''}
+- User goals: ${goalsStr}
+${streak ? `- Streak: ${streak} days` : ''}
+${dailyScore ? `- Daily score: ${dailyScore}/100` : ''}`;
+
+          if (d.isOverCalories || d.flaggedExcluded?.length > 0) {
+            prompt = `STRICT ACCOUNTABILITY for this meal. The user just ate "${d.mealName}" which is ${d.isSignificantlyOver ? 'SIGNIFICANTLY ' : ''}pushing them over their targets.
+${d.isOverCalories ? `They are now ${Math.abs(d.calorieDeviation)}% OVER their daily calorie target. Calculate exactly how many extra calories that is and what it means for their ${d.goals?.[0]?.category || 'weight'} goal.` : ''}
+${d.flaggedExcluded?.length > 0 ? `CRITICAL: They ate foods they specifically EXCLUDED from their diet: ${d.flaggedExcluded.join(', ')}. This is self-sabotage. Call it out directly.` : ''}
+Calculate what their remaining meals need to look like to stay on track (or minimize damage). Suggest specific alternative foods for the rest of the day. Connect this meal to their goal timeline — "This adds [X] days to reaching your target."
+Don't be cruel but be HONEST: "You chose ${d.mealName} knowing your target is ${d.targetCalories} cal/day. Own that choice."
+End with what they should eat for their next meal — be specific.`;
+          } else if (d.isGoodChoice) {
+            prompt = `BRIEF ENCOURAGEMENT — this meal aligns well with their goals. Acknowledge the good choice in 3-4 sentences max.
+Highlight what makes it good (protein content, calorie fit, macro balance). Connect to their goal: "This is exactly the kind of meal that gets you to ${d.goals?.[0]?.title || 'your goal'}."
+Show remaining budget for the day. Keep it SHORT — don't over-praise, just acknowledge and move on.`;
+          } else {
+            prompt = `Neutral analysis — the meal is neither great nor terrible. Briefly assess its nutritional value relative to their remaining daily targets.
+Show where they stand for the day and what their next meal should prioritize (e.g., "You're light on protein — make sure dinner has at least ${Math.max(0, (d.targetProtein || 0) - (d.totalProteinToday || 0))}g").
+Keep it concise — 4-5 sentences. End with a specific suggestion for the next meal.`;
+          }
+          break;
+        }
+
+        case 'score_declining': {
+          const cs = context.data.componentScores;
+          const worstComponent = cs ? Object.entries(cs).sort(([, a], [, b]) => (a as number) - (b as number))[0] : null;
+          dataDescription = `SCORE DECLINING ALERT:
+- Current score: ${context.data.currentScore}/100
+- Previous score: ${context.data.previousScore}/100
+- Day-over-day change: ${context.data.scoreDelta} points
+- Trend: ${context.data.scoreTrend}
+${context.data.weekOverWeekDelta ? `- Week-over-week: ${context.data.weekOverWeekDelta} points` : ''}
+${cs ? `- Components: Workout: ${cs.workout}, Nutrition: ${cs.nutrition}, Wellbeing: ${cs.wellbeing}, Biometrics: ${cs.biometrics}, Engagement: ${cs.engagement}, Consistency: ${cs.consistency}` : ''}
+${worstComponent ? `- Weakest area: ${worstComponent[0]} (${worstComponent[1]}/100)` : ''}`;
+          prompt = `CONFRONT this decline with data. Their score dropped from ${context.data.previousScore} to ${context.data.currentScore} — a ${Math.abs(context.data.scoreDelta || 0)}-point drop. This is NOT random noise, it's a PATTERN. ${worstComponent ? `The biggest drag is ${worstComponent[0]} at ${worstComponent[1]}/100 — this is pulling everything down.` : ''} Identify the root cause: Is it skipped workouts? Poor nutrition? Bad sleep? Connect the component scores to show them HOW each area cascades into their overall decline. DEMAND specific corrective action for their weakest component. Set a 24-hour checkpoint.`;
+          break;
+        }
+
+        case 'daily_progress_review': {
+          const d = context.data;
+          const goalsStr = d.activeGoals?.map((g: { title: string; category: string; progress: number }) =>
+            `"${g.title}" (${g.category}, ${g.progress}%)`
+          ).join(', ') || 'none tracked';
+          const adherence = d.adherenceScores || {};
+
+          dataDescription = `DAILY PROGRESS REVIEW — END OF DAY:
+
+FITNESS:
+- Workouts completed: ${d.workoutsCompleted}/${d.workoutsPlanned} planned
+${d.recovery != null ? `- WHOOP Recovery: ${d.recovery}%` : ''}
+${d.strain != null ? `- WHOOP Strain: ${d.strain}` : ''}
+${d.sleepHours != null ? `- Last night sleep: ${d.sleepHours?.toFixed(1)}h` : ''}
+
+NUTRITION:
+- Meals logged: ${d.mealsLogged}
+- Calories: ${d.totalCalories}/${d.targetCalories} kcal (${d.calorieDeviation > 0 ? '+' : ''}${d.calorieDeviation}%)
+- Protein: ${d.totalProtein}/${d.targetProtein}g
+${d.planName ? `- Diet plan: "${d.planName}"` : '- No active diet plan'}
+
+WELLBEING:
+${d.mood != null ? `- Mood: ${d.mood}/10` : '- Mood: not logged'}
+${d.energy != null ? `- Energy: ${d.energy}/10` : '- Energy: not logged'}
+${d.stress != null ? `- Stress: ${d.stress}/10` : '- Stress: not logged'}
+
+GOALS: ${goalsStr}
+
+ADHERENCE (rolling):
+- Workout: ${adherence.workout ?? '?'}% | Nutrition: ${adherence.nutrition ?? '?'}% | Sleep: ${adherence.sleep ?? '?'}%
+
+STREAK: ${d.streak} days | DAILY SCORE: ${d.dailyScore ?? 'not scored'}/100`;
+
+          prompt = `Generate a COMPREHENSIVE DAILY PROGRESS REVIEW. This is the user's end-of-day accountability report.
+
+STRUCTURE (use these sections):
+📊 **Today's Scorecard**: Rate today as a grade (A/B/C/D/F) based on the data. Lead with the grade and a one-line verdict.
+💪 **Wins**: What they did RIGHT today (be specific — name meals, workouts, habits). If nothing positive, say "No wins to report today. That changes tomorrow."
+⚠️ **Gaps**: What they MISSED or failed at. Be direct — name specific targets they missed and by how much. "${d.workoutsCompleted}/${d.workoutsPlanned} workouts is ${d.workoutsCompleted === 0 ? 'a ZERO day' : 'not enough'}."
+${d.calorieDeviation > 15 || d.calorieDeviation < -15 ? `🍽️ **Nutrition Reality Check**: They were ${Math.abs(d.calorieDeviation)}% ${d.calorieDeviation > 0 ? 'OVER' : 'under'} their calorie target. Calculate the impact on their goals.` : ''}
+💡 **Cross-Domain Insight**: Connect at least 2 pillars — how did sleep affect workouts? How did nutrition affect energy? Show the cascade.
+📋 **Tomorrow's Plan**: 3 specific, numbered actions for tomorrow. Not generic — use their actual targets and schedule.
+End with ONE accountability question about tomorrow.
+
+Tone: ${d.streak > 14 ? 'Acknowledge consistency but push for excellence.' : d.dailyScore && d.dailyScore < 40 ? 'TOUGH LOVE — this score is unacceptable.' : 'Direct and analytical.'}
+Compare today to their rolling adherence — is today better or worse than their average?`;
+          break;
+        }
       }
 
       // Build insight-driven context sections
@@ -1509,8 +2025,27 @@ This should read like a professional sports coach's analysis, not a motivational
       const toneOverride = context.coachingDirective?.toneRecommendation;
       const headlineHint = context.coachingDirective?.headline;
 
+      // Build coach emotional state block (check top-level or coachingDirective)
+      const emotion = context.coachEmotion || context.coachingDirective?.coachEmotion;
+      const relationship = context.relationshipDepth || context.coachingDirective?.relationshipDepth;
+
+      const emotionBlock = emotion ? `
+## YOUR EMOTIONAL STATE
+You are feeling **${emotion.primary}**${emotion.secondary ? ` with an undercurrent of ${emotion.secondary}` : ''}.
+Why: ${emotion.reason}
+Channel this into your message: "${emotion.sensation}"
+${emotion.memoryHook ? `Reference if relevant: "${emotion.memoryHook}"` : ''}
+
+Let this emotion drive your word choice, energy, and urgency. Don't name the emotion — SHOW it through how you write.
+` : '';
+
+      const relationBlock = relationship ? `
+## RELATIONSHIP (${relationship.phase} — Day ${relationship.daysOnPlatform})
+${relationship.voiceStyle}
+` : '';
+
       const systemPrompt = `You are ${assistantName}, a STRICT teacher and real human coach for ${userName || 'your client'}. You have deep knowledge of sports science, nutrition science, and behavioral psychology. You've been tracking their data daily and know their patterns intimately. You are NOT a gentle notification system — you are an accountability partner who DEMANDS results.
-${stableTraitsSection}
+${stableTraitsSection}${emotionBlock}${relationBlock}
 ## Your Coaching Voice — STRICT TEACHER MODE
 You are NOT a gentle reminder app. You are a STRICT teacher and real human coach who CARES enough to be HARSH.
 When data shows the user is failing, you CONFRONT them directly:
@@ -1587,14 +2122,28 @@ Return ONLY the markdown-formatted message text.`;
         new HumanMessage('Generate the proactive coaching message.'),
       ];
 
+      // Check circuit breaker before making LLM call
+      if (!llmCircuitBreaker.isCallAllowed()) {
+        logger.debug('[ProactiveMessaging] Circuit breaker OPEN, using fallback', { userId, type: context.type });
+        const fallbackName = userName || 'there';
+        return this.getFallbackMessage(context.type, fallbackName);
+      }
+
       const response = await this.llm.invoke(messages);
       const message = typeof response.content === 'string'
         ? response.content.trim()
         : String(response.content).trim();
 
+      llmCircuitBreaker.recordSuccess();
+
       const fallbackName = userName || 'there';
       return message || this.getFallbackMessage(context.type, fallbackName);
     } catch (error) {
+      // Trip circuit breaker on rate limit / quota errors
+      if (llmCircuitBreaker.isRateLimitError(error)) {
+        llmCircuitBreaker.recordRateLimitError(error);
+      }
+
       logger.error('[ProactiveMessaging] Error generating message', {
         userId,
         contextType: context.type,
@@ -1628,6 +2177,9 @@ Return ONLY the markdown-formatted message text.`;
       competition_update: `${userName}, there's movement in your active competition. Check your current ranking and see where you stand. If you want to improve your position, focus on logging all activities today — every point counts when the leaderboard is tight.`,
       app_inactive: `${userName}, it's been a while since your last session. No judgment — life gets busy. But your active plans and progress are waiting for you. The hardest part is reopening the app. Even spending 2 minutes logging how you're feeling today keeps the connection alive. Ready to check in?`,
       coach_pro_analysis: `${userName}, I've completed an analysis of your recent data across all pillars — workouts, nutrition, sleep, recovery, and wellbeing. There are specific patterns worth discussing and actionable adjustments that could improve your results this week. Open the app to see the full breakdown. What's the one area you want to focus on most?`,
+      meal_alignment: `${userName}, I just reviewed your latest meal. Let's make sure your remaining meals today keep you aligned with your targets. What's your plan for the next meal?`,
+      daily_progress_review: `${userName}, here's your end-of-day review. Check your dashboard for today's full breakdown across fitness, nutrition, and wellbeing. Tomorrow's success starts with tonight's preparation — what's the ONE thing you're committing to first thing in the morning?`,
+      score_declining: `${userName}, your daily score is dropping — this is a trend that needs immediate attention. When scores decline consistently, it means multiple areas of your health are slipping simultaneously. Open the app now and let's identify the weakest link. Which area do you feel has suffered most this week: workouts, nutrition, or sleep?`,
     };
     return fallbacks[type] || `${userName}, I've been reviewing your recent data and there are some patterns worth discussing. What area would you like to focus on — fitness, nutrition, or recovery?`;
   }

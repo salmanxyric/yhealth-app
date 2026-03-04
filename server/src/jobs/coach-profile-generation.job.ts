@@ -7,6 +7,7 @@
 import { query } from '../database/pg.js';
 import { logger } from '../services/logger.service.js';
 import { userCoachingProfileService } from '../services/user-coaching-profile.service.js';
+import { llmCircuitBreaker } from '../services/llm-circuit-breaker.service.js';
 
 // ============================================
 // CONFIGURATION
@@ -14,7 +15,7 @@ import { userCoachingProfileService } from '../services/user-coaching-profile.se
 
 const JOB_INTERVAL_MS = 6 * 60 * 60 * 1000; // Run every 6 hours
 const PROFILE_STALE_HOURS = 6;
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 3; // Keep small to avoid overwhelming OpenAI rate limits
 let isRunning = false;
 let intervalId: NodeJS.Timeout | null = null;
 
@@ -33,6 +34,16 @@ async function processCoachProfileGeneration(): Promise<void> {
   isRunning = true;
 
   try {
+    // Skip entire run if circuit breaker is open (quota exhausted)
+    if (!llmCircuitBreaker.isCallAllowed()) {
+      const status = llmCircuitBreaker.getStatus();
+      logger.info('[CoachProfileJob] Skipping run — LLM circuit breaker OPEN', {
+        cooldownRemaining: `${Math.round(status.cooldownRemaining / 60000)}min`,
+        consecutiveFailures: status.consecutiveFailures,
+      });
+      return;
+    }
+
     // Find active users with stale or missing profiles
     const result = await query<{
       id: string;

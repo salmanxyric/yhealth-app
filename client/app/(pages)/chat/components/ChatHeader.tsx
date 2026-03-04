@@ -61,31 +61,33 @@ export function ChatHeader({
     router.push('/dashboard');
   };
 
+  const iconBtnClass = "h-9 w-9 rounded-xl text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/8 transition-colors";
+
   return (
     <div
       className={cn(
-        'flex items-center justify-between border-b border-emerald-200 dark:border-emerald-600/30 bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-3 flex-shrink-0 shadow-sm',
+        'flex items-center justify-between border-b border-slate-100 dark:border-white/6 bg-white/90 dark:bg-[#111827]/90 backdrop-blur-xl px-4 sm:px-5 py-3 flex-shrink-0',
         className
       )}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        {/* Mobile back button - shown when chat is selected */}
+        {/* Mobile back button */}
         {showBackButton && onBack && (
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden h-9 w-9 shrink-0 text-white/70 hover:text-white hover:bg-white/10"
+            className={cn("lg:hidden shrink-0", iconBtnClass)}
             onClick={onBack}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
-        {/* Mobile menu button - shown when no chat is selected or on desktop */}
+        {/* Mobile menu button */}
         {!showBackButton && onMenuClick && (
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden h-9 w-9 shrink-0 text-white/70 hover:text-white hover:bg-white/10"
+            className={cn("lg:hidden shrink-0", iconBtnClass)}
             onClick={onMenuClick}
           >
             <Menu className="h-5 w-5" />
@@ -99,8 +101,8 @@ export function ChatHeader({
               }
             }}
             className={cn(
-              "h-10 w-10 rounded-full bg-white/20 ring-2 ring-white/30 shrink-0 overflow-hidden",
-              !isGroupChat && onUserClick && otherUserId && "cursor-pointer hover:opacity-80 transition-opacity"
+              "h-10 w-10 rounded-full shrink-0 overflow-hidden ring-2 ring-slate-200/80 dark:ring-white/10",
+              !isGroupChat && onUserClick && otherUserId && "cursor-pointer hover:ring-emerald-400 dark:hover:ring-emerald-500/50 transition-all"
             )}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -108,71 +110,71 @@ export function ChatHeader({
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <h2 className="text-[16px] font-medium text-white truncate">{title}</h2>
-          {subtitle && <p className="text-[13px] text-white/90 truncate">{subtitle}</p>}
+          <h2 className="text-[15px] font-semibold text-slate-900 dark:text-white truncate">{title}</h2>
+          {subtitle && <p className="text-[12px] text-emerald-600 dark:text-emerald-400 truncate font-medium">{subtitle}</p>}
         </div>
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+      <div className="flex items-center gap-0.5 shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={handleDashboardClick}
           title="Go to Dashboard"
-          className="text-white/70 hover:text-white hover:bg-white/10"
+          className={iconBtnClass}
         >
-          <LayoutDashboard className="h-5 w-5" />
+          <LayoutDashboard className="h-[18px] w-[18px]" />
         </Button>
         {onSearch && (
-          <Button variant="ghost" size="icon" onClick={onSearch} className="text-white/70 hover:text-white hover:bg-white/10">
-            <Search className="h-5 w-5" />
+          <Button variant="ghost" size="icon" onClick={onSearch} className={iconBtnClass}>
+            <Search className="h-[18px] w-[18px]" />
           </Button>
         )}
         {onInfo && (
-          <Button variant="ghost" size="icon" onClick={onInfo} className="text-white/70 hover:text-white hover:bg-white/10">
-            <Info className="h-5 w-5" />
+          <Button variant="ghost" size="icon" onClick={onInfo} className={iconBtnClass}>
+            <Info className="h-[18px] w-[18px]" />
           </Button>
         )}
-        {/* Group menu button (3 dots) - shown for group chats */}
+        {/* Group menu */}
         {isGroupChat && onGroupMenuClick && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white/70 hover:text-white hover:bg-white/10">
-                <MoreVertical className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className={iconBtnClass}>
+                <MoreVertical className="h-[18px] w-[18px]" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-[#233138] border-white/10 text-white">
-              <DropdownMenuItem onClick={onGroupMenuClick} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+            <DropdownMenuContent align="end" className="rounded-xl shadow-lg">
+              <DropdownMenuItem onClick={onGroupMenuClick}>
                 <Info className="mr-2 h-4 w-4" />
                 Group Info
               </DropdownMenuItem>
               {onEdit && (
-                <DropdownMenuItem onClick={onEdit} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit Group
                 </DropdownMenuItem>
               )}
               {onSearch && (
-                <DropdownMenuItem onClick={onSearch} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onSearch}>
                   <Search className="mr-2 h-4 w-4" />
                   Search
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator className="bg-emerald-200 dark:bg-emerald-600/30" />
+              <DropdownMenuSeparator />
               {onClose && (
-                <DropdownMenuItem onClick={onClose} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onClose}>
                   <X className="mr-2 h-4 w-4" />
                   Close Chat
                 </DropdownMenuItem>
               )}
               {onLeaveGroup && (
-                <DropdownMenuItem onClick={onLeaveGroup} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onLeaveGroup}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Leave Group
                 </DropdownMenuItem>
               )}
               {onDelete && (
-                <DropdownMenuItem onClick={onDelete} className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                <DropdownMenuItem onClick={onDelete} className="text-red-600 dark:text-red-400 focus:text-red-600">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete Group
                 </DropdownMenuItem>
@@ -180,42 +182,42 @@ export function ChatHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {/* Regular menu (for non-group chats or when group menu not available) */}
+        {/* Regular menu */}
         {(!isGroupChat || !onGroupMenuClick) && (onMore || onInfo || onSearch || onEdit || onClose || onDelete) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white/70 hover:text-white hover:bg-white/10">
-                <MoreVertical className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className={iconBtnClass}>
+                <MoreVertical className="h-[18px] w-[18px]" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-[#233138] border-white/10 text-white">
+            <DropdownMenuContent align="end" className="rounded-xl shadow-lg">
               {onSearch && (
-                <DropdownMenuItem onClick={onSearch} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onSearch}>
                   <Search className="mr-2 h-4 w-4" />
                   Search
                 </DropdownMenuItem>
               )}
               {onInfo && (
-                <DropdownMenuItem onClick={onInfo} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onInfo}>
                   <Info className="mr-2 h-4 w-4" />
                   Info
                 </DropdownMenuItem>
               )}
               {onEdit && (
-                <DropdownMenuItem onClick={onEdit} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit Chat
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator className="bg-emerald-200 dark:bg-emerald-600/30" />
+              <DropdownMenuSeparator />
               {onClose && (
-                <DropdownMenuItem onClick={onClose} className="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+                <DropdownMenuItem onClick={onClose}>
                   <X className="mr-2 h-4 w-4" />
                   Close Chat
                 </DropdownMenuItem>
               )}
               {onDelete && (
-                <DropdownMenuItem onClick={onDelete} className="text-red-500 dark:text-red-400 focus:text-red-500 dark:focus:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                <DropdownMenuItem onClick={onDelete} className="text-red-600 dark:text-red-400 focus:text-red-600">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete Chat
                 </DropdownMenuItem>
@@ -233,4 +235,3 @@ export function ChatHeader({
     </div>
   );
 }
-

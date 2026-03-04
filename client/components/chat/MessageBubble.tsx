@@ -20,7 +20,6 @@ export function MessageBubble({
   className,
   markdown = false,
 }: MessageBubbleProps) {
-  // Don't render if content is empty or only whitespace
   if (!content || !content.trim()) {
     return null;
   }
@@ -30,11 +29,8 @@ export function MessageBubble({
       <div
         className={cn(
           'rounded-2xl px-4 py-2.5 text-sm',
-          'italic text-muted-foreground/60',
-          // WhatsApp style: subtle background for deleted messages
-          isOwn 
-            ? 'bg-muted/40 text-muted-foreground/60' 
-            : 'bg-muted/30 text-muted-foreground/60',
+          'italic text-slate-400 dark:text-slate-500',
+          'bg-slate-100 dark:bg-white/8',
           className
         )}
       >
@@ -48,11 +44,10 @@ export function MessageBubble({
   return (
     <div
       className={cn(
-        'relative break-words rounded-lg px-3 py-2 text-[14.2px] min-w-fit leading-[19px]',
-        'max-w-[65%] sm:max-w-[60%] md:max-w-[55%]',
+        'relative break-words px-3.5 py-2.5 text-[14px] min-w-fit leading-relaxed',
         isOwn
-          ? 'bg-gradient-to-br from-emerald-600 to-emerald-700 text-white rounded-tr-none shadow-sm'
-          : 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-tl-none border border-emerald-100 dark:border-emerald-600/30 shadow-sm',
+          ? 'bg-emerald-600 text-white rounded-2xl rounded-br-md shadow-md shadow-emerald-600/20'
+          : 'bg-slate-100 dark:bg-white/8 text-slate-900 dark:text-slate-100 rounded-2xl rounded-bl-md border border-transparent dark:border-white/5',
         className
       )}
     >
@@ -60,15 +55,15 @@ export function MessageBubble({
         <div className={cn('prose prose-sm max-w-none', isOwn && 'prose-invert')}>
           <ReactMarkdown
             components={{
-              p: ({ children }) => <p className="mb-1.5 last:mb-0 text-[14.2px] leading-[19px]">{children}</p>,
+              p: ({ children }) => <p className="mb-1.5 last:mb-0 text-[14px] leading-relaxed">{children}</p>,
               ul: ({ children }) => <ul className="mb-1.5 ml-4 list-disc">{children}</ul>,
               ol: ({ children }) => <ol className="mb-1.5 ml-4 list-decimal">{children}</ol>,
-              li: ({ children }) => <li className="mb-0.5 text-[14.2px] leading-[19px]">{children}</li>,
+              li: ({ children }) => <li className="mb-0.5 text-[14px] leading-relaxed">{children}</li>,
               strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
               code: ({ children }) => (
                 <code className={cn(
-                  'rounded px-1 py-0.5 text-xs',
-                  isOwn ? 'bg-white/20' : 'bg-black/10'
+                  'rounded-md px-1.5 py-0.5 text-xs font-mono',
+                  isOwn ? 'bg-white/15' : 'bg-slate-200 dark:bg-white/10'
                 )}>
                   {children}
                 </code>
@@ -79,12 +74,11 @@ export function MessageBubble({
           </ReactMarkdown>
         </div>
       ) : (
-        <p className="whitespace-pre-wrap min-w-fit text-[14.2px] leading-[19px]">{content}</p>
+        <p className="whitespace-pre-wrap min-w-fit text-[14px] leading-relaxed">{content}</p>
       )}
       {isEdited && (
-        <span className="text-[11.5px] opacity-70 ml-1.5">(edited)</span>
+        <span className="text-[11px] opacity-60 ml-1">(edited)</span>
       )}
     </div>
   );
 }
-

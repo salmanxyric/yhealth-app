@@ -16,6 +16,7 @@ import type { DailyScore } from './ai-scoring.service.js';
 import { mentalRecoveryScoreService } from './mental-recovery-score.service.js';
 import { gamificationService } from './gamification.service.js';
 import { env } from '../config/env.config.js';
+import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
 
 // ============================================
 // TYPES
@@ -207,6 +208,30 @@ export interface PersonalContext {
   dailyRoutine?: string;
   otherFacts?: string[];
   lastUpdated?: string;
+}
+
+// ============================================
+// COACH EMOTIONAL INTELLIGENCE TYPES
+// ============================================
+
+export type CoachEmotion =
+  | 'proud' | 'worried' | 'frustrated' | 'excited'
+  | 'disappointed' | 'hopeful' | 'protective' | 'neutral';
+
+export interface CoachEmotionalState {
+  primary: CoachEmotion;
+  intensity: number; // 0.0-1.0
+  secondary?: CoachEmotion;
+  reason: string; // Human-readable reason for the LLM
+  sensation: string; // Embodied language hint
+  memoryHook?: string; // Reference to a past moment
+}
+
+export interface RelationshipDepth {
+  phase: 'new' | 'building' | 'established' | 'deep';
+  daysOnPlatform: number;
+  sharedMilestones: number;
+  voiceStyle: string; // Prompt instruction for voice adaptation
 }
 
 // Internal types for data aggregation
@@ -1620,10 +1645,18 @@ Rules:
 - suggestedFocus: based on current state, risks, and goals
 - openingStyle: reference something specific from their recent data`;
 
+      // Check circuit breaker before making LLM call
+      if (!llmCircuitBreaker.isCallAllowed()) {
+        logger.debug('[CoachingProfile] Circuit breaker OPEN, using default insights');
+        return defaults;
+      }
+
       const response = await this.llm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(dataSummary),
       ]);
+
+      llmCircuitBreaker.recordSuccess();
 
       const content =
         typeof response.content === 'string'
@@ -1652,6 +1685,9 @@ Rules:
         predictions: Array.isArray(parsed.predictions) ? parsed.predictions : defaults.predictions,
       };
     } catch (error) {
+      if (llmCircuitBreaker.isRateLimitError(error)) {
+        llmCircuitBreaker.recordRateLimitError(error);
+      }
       logger.error('[CoachingProfile] Error generating AI insights', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -1981,6 +2017,12 @@ Rules:
 - behavioralPatterns: recurring behaviors (e.g., "skips workouts on Mondays", "scores drop after weekends")
 - Be specific and data-grounded, not generic`;
 
+      // Check circuit breaker before making LLM call
+      if (!llmCircuitBreaker.isCallAllowed()) {
+        logger.debug('[CoachingProfile] Circuit breaker OPEN, skipping stable traits update', { userId });
+        return null;
+      }
+
       const llmPro = new ChatOpenAI({
         modelName: 'gpt-4o',
         maxTokens: 1200,
@@ -1990,6 +2032,8 @@ Rules:
         new SystemMessage(systemPrompt),
         new HumanMessage(dataSummary),
       ]);
+
+      llmCircuitBreaker.recordSuccess();
 
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -2028,6 +2072,9 @@ Rules:
       logger.info('[CoachingProfile] Stable traits updated', { userId, personalityType: stableTraits.personalityType });
       return stableTraits;
     } catch (error) {
+      if (llmCircuitBreaker.isRateLimitError(error)) {
+        llmCircuitBreaker.recordRateLimitError(error);
+      }
       logger.error('[CoachingProfile] Error updating stable traits', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown',
@@ -2137,6 +2184,140 @@ Rules:
       nutritionAnalysis: {},
       competitions: {},
       progressTrend: {},
+    };
+  }
+
+  // ============================================
+  // COACH EMOTIONAL INTELLIGENCE
+  // ============================================
+
+  /**
+   * Compute the coach's emotional state based on user data.
+   * Pure deterministic logic — no LLM calls.
+   * This drives embodied language in both chat and proactive messages.
+   */
+  computeCoachEmotionalState(profile: CoachingProfile): CoachEmotionalState {
+    const { adherenceScores, riskFlags, currentState, fitnessJourney, memorableMoments } = profile;
+    const longitudinal = profile.longitudinalAdherence;
+    const recentObs = profile.recentObservations;
+
+    // --- PROUD: User is crushing it ---
+    const avgAdherence = (adherenceScores.workout + adherenceScores.nutrition + adherenceScores.sleep) / 3;
+    if (avgAdherence >= 80 && fitnessJourney.streakDays >= 7) {
+      return {
+        primary: 'proud',
+        intensity: Math.min(0.5 + (fitnessJourney.streakDays / 30) * 0.5, 1.0),
+        reason: `${profile.firstName} has been incredibly consistent — ${fitnessJourney.streakDays}-day streak with ${Math.round(avgAdherence)}% adherence`,
+        sensation: `It genuinely makes me feel good seeing ${profile.firstName} show up day after day`,
+        memoryHook: memorableMoments.length > 0 ? memorableMoments[0].description : undefined,
+      };
+    }
+
+    // --- WORRIED: Health declining, multiple risk flags ---
+    const highRisks = riskFlags.filter(r => r.severity === 'high');
+    if (highRisks.length >= 2 || (currentState.moodLevel <= 3 && currentState.stressLevel >= 7)) {
+      return {
+        primary: 'worried',
+        intensity: Math.min(0.5 + highRisks.length * 0.15, 1.0),
+        secondary: 'protective',
+        reason: `Multiple warning signs — ${highRisks.map(r => r.description).join(', ')}`,
+        sensation: `Something feels off and I can't ignore it. ${profile.firstName}'s numbers are telling me to pay close attention right now`,
+      };
+    }
+
+    // --- FRUSTRATED: Repeated pattern of declining adherence while mood is fine ---
+    if (longitudinal && longitudinal.consecutiveLowDays >= 5 &&
+        longitudinal.trendDirection === 'declining' && currentState.moodLevel >= 5) {
+      return {
+        primary: 'frustrated',
+        intensity: Math.min(0.5 + (longitudinal.consecutiveLowDays / 14) * 0.5, 1.0),
+        secondary: 'disappointed',
+        reason: `${longitudinal.consecutiveLowDays} consecutive low-adherence days while mood is fine — this isn't burnout, it's avoidance`,
+        sensation: `I'm not going to pretend this is okay. Watching someone with real potential coast like this genuinely bothers me`,
+      };
+    }
+
+    // --- EXCITED: Close to goal / approaching milestone ---
+    const primaryGoal = profile.goalsContext?.primaryGoal;
+    if (primaryGoal && primaryGoal.progress >= 75 && primaryGoal.daysRemaining > 0) {
+      return {
+        primary: 'excited',
+        intensity: Math.min(0.5 + (primaryGoal.progress / 100) * 0.5, 1.0),
+        reason: `${primaryGoal.progress}% toward "${primaryGoal.title}" with ${primaryGoal.daysRemaining} days left`,
+        sensation: `I can almost see the finish line. ${profile.firstName} is so close and I don't think they realize how far they've come`,
+      };
+    }
+
+    // --- DISAPPOINTED: Was doing well, now sliding ---
+    if (recentObs?.trendDirection === 'declining' && longitudinal &&
+        longitudinal.adherence30d.workout > 60) {
+      return {
+        primary: 'disappointed',
+        intensity: 0.6,
+        secondary: 'hopeful',
+        reason: `Had strong 30-day numbers but recent trend is declining — the foundation is there but something changed`,
+        sensation: `I know what ${profile.firstName} is capable of because I've seen it. This recent slide doesn't match who they've been`,
+      };
+    }
+
+    // --- HOPEFUL: New user or showing improvement ---
+    if (recentObs?.trendDirection === 'improving' || profile.daysOnPlatform <= 14) {
+      return {
+        primary: 'hopeful',
+        intensity: 0.5,
+        reason: profile.daysOnPlatform <= 14
+          ? `Early days — building the foundation together`
+          : `Trend is improving — momentum is building`,
+        sensation: `There's something building here. I can feel the momentum shifting in the right direction`,
+      };
+    }
+
+    // --- NEUTRAL: Steady state ---
+    return {
+      primary: 'neutral',
+      intensity: 0.3,
+      reason: 'Steady state — maintaining current level',
+      sensation: `Things are stable. Let's look at where we can push the needle`,
+    };
+  }
+
+  /**
+   * Compute the relationship depth based on time on platform and shared milestones.
+   * Affects how familiar/casual the coach's voice becomes.
+   */
+  computeRelationshipDepth(profile: CoachingProfile): RelationshipDepth {
+    const days = profile.daysOnPlatform;
+    const milestones = profile.memorableMoments?.length || 0;
+
+    if (days <= 7) {
+      return {
+        phase: 'new',
+        daysOnPlatform: days,
+        sharedMilestones: milestones,
+        voiceStyle: 'Professional but warm. Getting to know them. Ask more questions. Use their name frequently. Reference their goals to show you paid attention.',
+      };
+    }
+    if (days <= 30) {
+      return {
+        phase: 'building',
+        daysOnPlatform: days,
+        sharedMilestones: milestones,
+        voiceStyle: 'More casual and direct. Starting to reference shared history. Use inside references to past conversations. Show you remember details they shared.',
+      };
+    }
+    if (days <= 90) {
+      return {
+        phase: 'established',
+        daysOnPlatform: days,
+        sharedMilestones: milestones,
+        voiceStyle: 'Speak like a trusted friend-coach. Reference journey together ("we\'ve been at this for X weeks"). Be blunter — they can handle it. Use shorthand. Skip pleasantries and get to the point.',
+      };
+    }
+    return {
+      phase: 'deep',
+      daysOnPlatform: days,
+      sharedMilestones: milestones,
+      voiceStyle: 'This is a veteran relationship. Speak with deep familiarity. Reference specific past moments by name. Challenge hard — they know you care. Use "we" language. Be the coach who knows them better than they know themselves.',
     };
   }
 }

@@ -1,19 +1,22 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  motion,
-  useInView,
-  useScroll,
-  useTransform,
-  useMotionValue,
-  useSpring,
-  AnimatePresence,
-} from "framer-motion";
-import { Sparkles, Zap, Activity } from "lucide-react";
-import { AnimatedGradientMesh } from "./shared";
+  Sparkles,
+  Zap,
+  Activity,
+  Link2,
+  ArrowRight,
+  Check,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useGSAP } from "@/hooks/use-gsap";
+import { gsap } from "@/lib/gsap-init";
+import { AnimatedGradientMesh, GSAPScrollReveal } from "./shared";
 
-// ─── SVG icons for each integration ──────────────────────────────────
+// ─── SVG Icons ───────────────────────────────────────────────────────
+
 function AppleIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -100,692 +103,350 @@ function WhoopIcon({ className = "" }: { className?: string }) {
   );
 }
 
+// ─── Data ────────────────────────────────────────────────────────────
+
 const integrations = [
-  { name: "Apple Health", Icon: AppleIcon, color: "from-gray-100 to-gray-300", accent: "#A2AAAD", desc: "Sync workouts, steps & vitals", dataType: "Health Kit" },
-  { name: "Google Fit", Icon: GoogleFitIcon, color: "from-blue-400 to-green-400", accent: "#4285F4", desc: "Activity & heart rate data", dataType: "Fitness API" },
-  { name: "Fitbit", Icon: FitbitIcon, color: "from-teal-400 to-teal-500", accent: "#00B0B9", desc: "Sleep, activity & SPO2", dataType: "Web API" },
-  { name: "Garmin", Icon: GarminIcon, color: "from-orange-400 to-orange-500", accent: "#F7941D", desc: "GPS & performance metrics", dataType: "Connect IQ" },
-  { name: "Samsung Health", Icon: SamsungIcon, color: "from-blue-500 to-blue-600", accent: "#1428A0", desc: "Full health ecosystem sync", dataType: "Health SDK" },
-  { name: "Strava", Icon: StravaIcon, color: "from-orange-500 to-red-500", accent: "#FC4C02", desc: "Running & cycling data", dataType: "OAuth API" },
-  { name: "Whoop", Icon: WhoopIcon, color: "from-emerald-400 to-teal-500", accent: "#44D62C", desc: "Strain, recovery & sleep", dataType: "Developer API" },
-  { name: "MyFitnessPal", Icon: MyFitnessPalIcon, color: "from-green-400 to-green-500", accent: "#0062FF", desc: "Nutrition & calorie tracking", dataType: "Diary API" },
-  { name: "Peloton", Icon: PelotonIcon, color: "from-red-500 to-red-600", accent: "#D0021B", desc: "Workout classes & metrics", dataType: "Telemetry" },
+  {
+    name: "Apple Health",
+    Icon: AppleIcon,
+    accent: "#A2AAAD",
+    gradient: "from-gray-300 to-gray-500",
+    desc: "Sync workouts, steps & vitals",
+    dataPoints: "142K",
+    dataType: "Health Kit",
+  },
+  {
+    name: "Google Fit",
+    Icon: GoogleFitIcon,
+    accent: "#4285F4",
+    gradient: "from-blue-400 to-green-400",
+    desc: "Activity & heart rate data",
+    dataPoints: "89K",
+    dataType: "Fitness API",
+  },
+  {
+    name: "Fitbit",
+    Icon: FitbitIcon,
+    accent: "#00B0B9",
+    gradient: "from-teal-400 to-teal-600",
+    desc: "Sleep, activity & SPO2",
+    dataPoints: "216K",
+    dataType: "Web API",
+  },
+  {
+    name: "Garmin",
+    Icon: GarminIcon,
+    accent: "#F7941D",
+    gradient: "from-orange-400 to-orange-600",
+    desc: "GPS & performance metrics",
+    dataPoints: "178K",
+    dataType: "Connect IQ",
+  },
+  {
+    name: "Samsung Health",
+    Icon: SamsungIcon,
+    accent: "#1428A0",
+    gradient: "from-blue-500 to-blue-700",
+    desc: "Full health ecosystem sync",
+    dataPoints: "95K",
+    dataType: "Health SDK",
+  },
+  {
+    name: "Strava",
+    Icon: StravaIcon,
+    accent: "#FC4C02",
+    gradient: "from-orange-500 to-red-600",
+    desc: "Running & cycling data",
+    dataPoints: "312K",
+    dataType: "OAuth API",
+  },
+  {
+    name: "Whoop",
+    Icon: WhoopIcon,
+    accent: "#44D62C",
+    gradient: "from-emerald-400 to-green-600",
+    desc: "Strain, recovery & sleep",
+    dataPoints: "264K",
+    dataType: "Developer API",
+  },
+  {
+    name: "MyFitnessPal",
+    Icon: MyFitnessPalIcon,
+    accent: "#0062FF",
+    gradient: "from-blue-400 to-blue-600",
+    desc: "Nutrition & calorie tracking",
+    dataPoints: "198K",
+    dataType: "Diary API",
+  },
+  {
+    name: "Peloton",
+    Icon: PelotonIcon,
+    accent: "#D0021B",
+    gradient: "from-red-500 to-red-700",
+    desc: "Workout classes & metrics",
+    dataPoints: "87K",
+    dataType: "Telemetry",
+  },
 ];
 
-// ─── Central hub with particle burst ─────────────────────────────────
-function CentralHub({ activeIndex }: { activeIndex: number }) {
-  return (
-    <motion.div
-      className="relative flex items-center justify-center"
-      style={{ zIndex: 20 }}
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: "spring" as const, stiffness: 200, damping: 20, delay: 0.3 }}
-    >
-      {/* Outer glow - pulses with active integration accent */}
-      <motion.div
-        className="absolute w-36 h-36 rounded-full"
-        animate={{
-          boxShadow: [
-            `0 0 40px ${integrations[activeIndex].accent}33, 0 0 80px ${integrations[activeIndex].accent}15`,
-            `0 0 60px ${integrations[activeIndex].accent}55, 0 0 120px ${integrations[activeIndex].accent}25`,
-            `0 0 40px ${integrations[activeIndex].accent}33, 0 0 80px ${integrations[activeIndex].accent}15`,
-          ],
-        }}
-        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-      />
+const hubStats = [
+  { display: "9", label: "Connected platforms" },
+  { display: "2.4M+", label: "Data points synced" },
+  { display: "Real-time", label: "Sync frequency" },
+];
 
-      {/* Particle ring - orbiting particles */}
-      {Array.from({ length: 12 }).map((_, i) => (
-        <motion.div
-          key={`particle-${i}`}
-          className="absolute w-1 h-1 rounded-full bg-primary/60"
-          animate={{
-            rotate: 360,
-          }}
-          transition={{
-            duration: 8 + i * 0.5,
-            repeat: Infinity,
-            ease: "linear",
-          }}
-          style={{
-            transformOrigin: "0 0",
-            left: "50%",
-            top: "50%",
-          }}
-        >
-          <motion.div
-            className="absolute rounded-full"
-            style={{
-              width: 2 + (i % 3),
-              height: 2 + (i % 3),
-              left: 52 + i * 2,
-              top: -1,
-              background: `${integrations[i % integrations.length].accent}88`,
-              boxShadow: `0 0 6px ${integrations[i % integrations.length].accent}66`,
-            }}
-            animate={{ opacity: [0.3, 1, 0.3] }}
-            transition={{ duration: 2 + i * 0.3, repeat: Infinity }}
-          />
-        </motion.div>
-      ))}
+// (AnimatedCounter removed — stats use direct display values)
 
-      {/* Inner orbital ring */}
-      <motion.div
-        className="absolute w-28 h-28 rounded-full border border-primary/10"
-        animate={{ rotate: -360 }}
-        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-      />
-
-      {/* Hub circle */}
-      <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-primary via-purple-500 to-pink-500 flex items-center justify-center border-2 border-white/20 shadow-2xl">
-        <Activity className="w-10 h-10 text-white" />
-
-        {/* Pulse rings */}
-        <motion.div
-          className="absolute inset-0 rounded-full border-2 border-primary/40"
-          animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
-        />
-        <motion.div
-          className="absolute inset-0 rounded-full border-2 border-purple-400/30"
-          animate={{ scale: [1, 2.4], opacity: [0.4, 0] }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: "easeOut", delay: 0.6 }}
-        />
-        <motion.div
-          className="absolute inset-0 rounded-full border border-white/10"
-          animate={{ scale: [1, 3], opacity: [0.2, 0] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeOut", delay: 1.2 }}
-        />
-      </div>
-
-      {/* Label with active integration name cycling */}
-      <motion.span
-        className="absolute -bottom-9 text-xs font-bold tracking-wider uppercase whitespace-nowrap"
-        style={{ color: integrations[activeIndex].accent }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.8 }}
-      >
-        <AnimatePresence mode="wait">
-          <motion.span
-            key={activeIndex}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.3 }}
-          >
-            yHealth
-          </motion.span>
-        </AnimatePresence>
-      </motion.span>
-    </motion.div>
-  );
-}
-
-// ─── Orbital node with magnetic hover & 3D tilt ─────────────────────
-function OrbitalNode({
-  integration,
-  index,
-  total,
-  baseAngleOffset,
-  hoveredIndex,
-  activeIndex,
-  onHover,
-  onLeave,
+// ─── Orbiting Dot ────────────────────────────────────────────────────
+function OrbitingDot({
+  radius,
+  duration,
+  delay,
+  color,
+  size = 4,
 }: {
-  integration: (typeof integrations)[0];
-  index: number;
-  total: number;
-  baseAngleOffset: number;
-  hoveredIndex: number | null;
-  activeIndex: number;
-  onHover: (i: number) => void;
-  onLeave: () => void;
+  radius: number;
+  duration: number;
+  delay: number;
+  color: string;
+  size?: number;
 }) {
-  const angle = ((index / total) * 360 - 90 + baseAngleOffset) % 360;
-  const radius = 210;
-  const rad = (angle * Math.PI) / 180;
-  const x = Math.cos(rad) * radius;
-  const y = Math.sin(rad) * radius;
-  const isHovered = hoveredIndex === index;
-  const isActive = activeIndex === index;
-  const Icon = integration.Icon;
-
-  // Magnetic tilt
-  const tiltX = useMotionValue(0);
-  const tiltY = useMotionValue(0);
-  const smoothTiltX = useSpring(tiltX, { stiffness: 300, damping: 30 });
-  const smoothTiltY = useSpring(tiltY, { stiffness: 300, damping: 30 });
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      tiltX.set((e.clientY - cy) / 3);
-      tiltY.set(-(e.clientX - cx) / 3);
-    },
-    [tiltX, tiltY]
-  );
-
-  const handleMouseLeave = useCallback(() => {
-    tiltX.set(0);
-    tiltY.set(0);
-    onLeave();
-  }, [tiltX, tiltY, onLeave]);
-
   return (
     <motion.div
-      className="absolute"
-      style={{
-        left: `calc(50% + ${x}px)`,
-        top: `calc(50% + ${y}px)`,
-        zIndex: isHovered ? 30 : 15,
-        pointerEvents: "auto",
-      }}
-      initial={{ opacity: 0, scale: 0 }}
-      animate={{ opacity: 1, scale: 1 }}
+      className="absolute left-1/2 top-1/2"
+      style={{ width: 0, height: 0 }}
+      animate={{ rotate: 360 }}
       transition={{
-        type: "spring" as const,
-        stiffness: 200,
-        damping: 20,
-        delay: 0.4 + index * 0.08,
+        duration,
+        repeat: Infinity,
+        ease: "linear",
+        delay,
       }}
     >
-      <motion.div
-        className="relative -translate-x-1/2 -translate-y-1/2 cursor-pointer"
-        animate={{
-          scale: isHovered ? 1.2 : isActive ? 1.1 : 1,
-          y: isActive ? -4 : 0,
-        }}
-        transition={{ type: "spring" as const, stiffness: 300, damping: 20 }}
-        onMouseEnter={() => onHover(index)}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+      <div
+        className="rounded-full"
         style={{
-          rotateX: smoothTiltX,
-          rotateY: smoothTiltY,
-          transformPerspective: 600,
+          width: size,
+          height: size,
+          background: color,
+          boxShadow: `0 0 8px ${color}88`,
+          transform: `translate(-50%, -50%) translateX(${radius}px)`,
         }}
-      >
-        {/* Active/hover glow ring */}
-        <motion.div
-          className="absolute -inset-3 rounded-2xl"
-          animate={{
-            boxShadow:
-              isHovered || isActive
-                ? `0 0 24px ${integration.accent}55, 0 0 48px ${integration.accent}22, inset 0 0 12px ${integration.accent}11`
-                : `0 0 8px ${integration.accent}15`,
-            borderColor:
-              isHovered || isActive
-                ? `${integration.accent}44`
-                : "transparent",
-          }}
-          transition={{ duration: 0.3 }}
-          style={{ border: "1px solid transparent", borderRadius: 16 }}
-        />
-
-        {/* Card */}
-        <div
-          className="relative w-[68px] h-[68px] rounded-2xl bg-background/80 backdrop-blur-sm border border-white/10 flex items-center justify-center group hover:border-white/30 transition-colors duration-300 overflow-hidden"
-        >
-          {/* Shimmer on active */}
-          {isActive && (
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent"
-              animate={{ x: [-80, 80] }}
-              transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 2 }}
-            />
-          )}
-          <Icon className="w-8 h-8 text-white/80 group-hover:text-white transition-colors relative z-10" />
-
-          {/* Live dot */}
-          <motion.div
-            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
-            style={{
-              background: isActive ? integration.accent : "#34d399",
-              boxShadow: `0 0 8px ${isActive ? integration.accent : "rgba(52,211,153,0.6)"}`,
-            }}
-            animate={{
-              scale: [1, 1.4, 1],
-              opacity: [0.7, 1, 0.7],
-            }}
-            transition={{ duration: 2, repeat: Infinity, delay: index * 0.3 }}
-          />
-        </div>
-
-        {/* Hover tooltip with data type badge */}
-        <AnimatePresence>
-          {isHovered && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.85 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.85 }}
-              transition={{ duration: 0.2 }}
-              className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-48 p-3 rounded-xl bg-background/95 backdrop-blur-md border border-white/10 shadow-2xl"
-              style={{
-                zIndex: 100,
-                pointerEvents: "auto",
-              }}
-            >
-              <p className="text-sm font-semibold text-white text-center">
-                {integration.name}
-              </p>
-              <p className="text-[10px] text-muted-foreground text-center mt-1">
-                {integration.desc}
-              </p>
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <div className="flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[10px] text-emerald-400 font-medium">
-                    Connected
-                  </span>
-                </div>
-                <span className="text-[10px] text-muted-foreground">|</span>
-                <span
-                  className="text-[10px] font-mono font-medium"
-                  style={{ color: integration.accent }}
-                >
-                  {integration.dataType}
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+      />
     </motion.div>
   );
 }
 
-// ─── Connection lines with bi-directional data streams ───────────────
-function ConnectionLines({
-  hoveredIndex,
-  activeIndex,
-  baseAngleOffset,
-}: {
-  hoveredIndex: number | null;
-  activeIndex: number;
-  baseAngleOffset: number;
-}) {
-  return (
-    <svg
-      className="absolute inset-0 w-full h-full"
-      viewBox="-260 -260 520 520"
-      style={{ zIndex: 1, pointerEvents: "none" }}
-    >
-      <defs>
-        <filter id="dotGlow">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-        <filter id="lineGlow">
-          <feGaussianBlur stdDeviation="2" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-        {/* Gradient defs for each integration line */}
-        {integrations.map((int, i) => (
-          <linearGradient key={`grad-${i}`} id={`lineGrad-${i}`}>
-            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.8" />
-            <stop offset="100%" stopColor={int.accent} stopOpacity="0.8" />
-          </linearGradient>
-        ))}
-      </defs>
-
-      {/* Outer orbital ring with rotation */}
-      <motion.circle
-        cx={0}
-        cy={0}
-        r={210}
-        fill="none"
-        stroke="hsl(var(--primary) / 0.06)"
-        strokeWidth={1}
-        strokeDasharray="4 8"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 1.5, delay: 0.2 }}
-      />
-
-      {/* Inner decorative ring */}
-      <motion.circle
-        cx={0}
-        cy={0}
-        r={150}
-        fill="none"
-        stroke="hsl(var(--primary) / 0.04)"
-        strokeWidth={0.5}
-        strokeDasharray="2 12"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 2, delay: 0.4 }}
-      />
-
-      {/* Connection lines + data flow */}
-      {integrations.map((integration, i) => {
-        const angle =
-          (((i / integrations.length) * 360 - 90 + baseAngleOffset) % 360) *
-          (Math.PI / 180);
-        const outerR = 210;
-        const innerR = 52;
-        const x1 = Math.cos(angle) * innerR;
-        const y1 = Math.sin(angle) * innerR;
-        const x2 = Math.cos(angle) * (outerR - 34);
-        const y2 = Math.sin(angle) * (outerR - 34);
-        const isHighlighted =
-          hoveredIndex === i || activeIndex === i;
-        const isVisible = hoveredIndex === null || hoveredIndex === i;
-
-        return (
-          <g key={i}>
-            {/* Base line */}
-            <motion.line
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={
-                isHighlighted
-                  ? `url(#lineGrad-${i})`
-                  : "hsl(var(--primary) / 0.12)"
-              }
-              strokeWidth={isHighlighted ? 2 : 0.8}
-              strokeDasharray={isHighlighted ? "none" : "3 6"}
-              filter={isHighlighted ? "url(#lineGlow)" : undefined}
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{
-                pathLength: 1,
-                opacity: isVisible ? (isHighlighted ? 0.9 : 0.3) : 0.08,
-              }}
-              transition={{
-                duration: 0.8,
-                delay: 0.5 + i * 0.08,
-              }}
-            />
-
-            {/* Outbound data dot (hub → node) */}
-            <motion.circle
-              r={isHighlighted ? 3 : 1.5}
-              fill={isHighlighted ? integration.accent : "hsl(var(--primary))"}
-              filter={isHighlighted ? "url(#dotGlow)" : undefined}
-              animate={{
-                cx: [x1, x2],
-                cy: [y1, y2],
-                opacity: isVisible
-                  ? isHighlighted
-                    ? [0, 1, 1, 0]
-                    : [0, 0.4, 0.4, 0]
-                  : 0,
-              }}
-              transition={{
-                cx: {
-                  duration: 1.8 + i * 0.15,
-                  repeat: Infinity,
-                  ease: "linear",
-                },
-                cy: {
-                  duration: 1.8 + i * 0.15,
-                  repeat: Infinity,
-                  ease: "linear",
-                },
-                opacity: {
-                  duration: 1.8 + i * 0.15,
-                  repeat: Infinity,
-                  ease: "linear",
-                },
-              }}
-            />
-
-            {/* Inbound data dot (node → hub) — offset timing */}
-            <motion.circle
-              r={isHighlighted ? 2.5 : 1}
-              fill={isHighlighted ? "hsl(var(--primary))" : integration.accent}
-              animate={{
-                cx: [x2, x1],
-                cy: [y2, y1],
-                opacity: isVisible
-                  ? isHighlighted
-                    ? [0, 0.8, 0.8, 0]
-                    : [0, 0.25, 0.25, 0]
-                  : 0,
-              }}
-              transition={{
-                cx: {
-                  duration: 2.2 + i * 0.15,
-                  repeat: Infinity,
-                  ease: "linear",
-                  delay: 0.9,
-                },
-                cy: {
-                  duration: 2.2 + i * 0.15,
-                  repeat: Infinity,
-                  ease: "linear",
-                  delay: 0.9,
-                },
-                opacity: {
-                  duration: 2.2 + i * 0.15,
-                  repeat: Infinity,
-                  ease: "linear",
-                  delay: 0.9,
-                },
-              }}
-            />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-// ─── Active integration info panel (scroll-triggered) ────────────────
-function ActiveInfoPanel({ activeIndex }: { activeIndex: number }) {
+// ─── Central Hub ─────────────────────────────────────────────────────
+function CentralHub({ activeIndex }: { activeIndex: number }) {
   const integration = integrations[activeIndex];
 
   return (
-    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-64" style={{ zIndex: 25 }}>
-      <AnimatePresence mode="wait">
+    <div className="relative flex flex-col items-center justify-center h-[280px] sm:h-[320px]">
+      {/* Dashed orbit rings */}
+      {[100, 130, 160].map((r, i) => (
         <motion.div
-          key={activeIndex}
-          initial={{ opacity: 0, y: 16, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -12, scale: 0.9 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="glass-card rounded-2xl p-4 border border-white/10 text-center"
+          key={r}
+          className="absolute left-1/2 top-1/2 rounded-full border border-dashed"
           style={{
-            borderColor: `${integration.accent}22`,
-            boxShadow: `0 8px 32px ${integration.accent}15`,
+            width: r * 2,
+            height: r * 2,
+            marginLeft: -r,
+            marginTop: -r,
+            borderColor: `hsl(var(--primary) / ${0.12 - i * 0.03})`,
           }}
-        >
-          <div className="flex items-center justify-center gap-2 mb-1.5">
-            <integration.Icon className="w-4 h-4 text-white/80" />
-            <span className="text-sm font-semibold text-white">
-              {integration.name}
-            </span>
-          </div>
-          <p className="text-[11px] text-muted-foreground">{integration.desc}</p>
-          <div className="flex items-center justify-center gap-3 mt-2">
-            <div className="flex items-center gap-1">
-              <motion.div
-                className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-                animate={{ scale: [1, 1.3, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              />
-              <span className="text-[10px] text-emerald-400 font-medium">
-                Live
-              </span>
-            </div>
-            <span
-              className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-white/5"
-              style={{ color: integration.accent }}
-            >
-              {integration.dataType}
-            </span>
-          </div>
-        </motion.div>
-      </AnimatePresence>
-    </div>
-  );
-}
+          animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
+          transition={{
+            duration: 50 + i * 20,
+            repeat: Infinity,
+            ease: "linear",
+          }}
+        />
+      ))}
 
-// ─── Desktop orbital layout (scroll-animated) ───────────────────────
-function OrbitalLayout() {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [baseAngleOffset, setBaseAngleOffset] = useState(0);
-
-  // Auto-cycle active integration every 3s (paused on hover)
-  useEffect(() => {
-    if (hoveredIndex !== null) return;
-    const interval = setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % integrations.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [hoveredIndex]);
-
-  // Override active on hover
-  useEffect(() => {
-    if (hoveredIndex !== null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setActiveIndex(hoveredIndex);
-    }
-  }, [hoveredIndex]);
-
-  // Slow continuous rotation of the orbital ring
-  useEffect(() => {
-    let frame: number;
-    const startTime = performance.now();
-    const speed = 0.003; // degrees per ms
-
-    function tick(now: number) {
-      const elapsed = now - startTime;
-      setBaseAngleOffset(elapsed * speed);
-      frame = requestAnimationFrame(tick);
-    }
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  return (
-    <div
-      className="relative w-[520px] h-[520px] mx-auto"
-      style={{ zIndex: 10, isolation: "isolate" }}
-    >
-      {/* Connection lines SVG */}
-      <ConnectionLines
-        hoveredIndex={hoveredIndex}
-        activeIndex={activeIndex}
-        baseAngleOffset={baseAngleOffset}
-      />
-
-      {/* Central hub */}
-      <div
-        className="absolute inset-0 flex items-center justify-center"
-        style={{ zIndex: 20 }}
-      >
-        <CentralHub activeIndex={activeIndex} />
-      </div>
-
-      {/* Orbital nodes */}
-      <div style={{ zIndex: 15, pointerEvents: "none" }}>
-        {integrations.map((integration, i) => (
-          <OrbitalNode
-            key={integration.name}
-            integration={integration}
-            index={i}
-            total={integrations.length}
-            baseAngleOffset={baseAngleOffset}
-            hoveredIndex={hoveredIndex}
-            activeIndex={activeIndex}
-            onHover={setHoveredIndex}
-            onLeave={() => setHoveredIndex(null)}
+      {/* Orbiting dots — one per integration, spread across rings */}
+      {integrations.map((int, i) => {
+        const ringRadii = [100, 130, 160];
+        const radius = ringRadii[i % 3];
+        return (
+          <OrbitingDot
+            key={`dot-${i}`}
+            radius={radius}
+            duration={15 + i * 3}
+            delay={i * 1.2}
+            color={int.accent}
+            size={4 + (i % 2)}
           />
-        ))}
-      </div>
+        );
+      })}
 
-      {/* Active info panel at bottom */}
-      <ActiveInfoPanel activeIndex={activeIndex} />
+      {/* Core hub */}
+      <div className="relative z-10">
+        <motion.div
+          className="absolute -inset-6 rounded-full blur-[30px] bg-primary/20"
+          animate={{ opacity: [0.3, 0.6, 0.3], scale: [0.9, 1.1, 0.9] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        />
 
-      {/* Slow rotation decorative overlay */}
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        style={{ zIndex: 2 }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 180, repeat: Infinity, ease: "linear" }}
-      >
-        {[0, 72, 144, 216, 288].map((angle) => (
+        <motion.div
+          className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-primary via-purple-500 to-pink-500 flex items-center justify-center border-2 border-white/20 shadow-2xl shadow-primary/30"
+          animate={{ scale: [1, 1.04, 1] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+
+          {/* Pulse rings */}
           <motion.div
-            key={angle}
-            className="absolute w-0.5 h-0.5 rounded-full bg-primary/20"
-            style={{
-              left: `calc(50% + ${Math.cos((angle * Math.PI) / 180) * 180}px)`,
-              top: `calc(50% + ${Math.sin((angle * Math.PI) / 180) * 180}px)`,
+            className="absolute inset-0 rounded-full border-2 border-primary/40"
+            animate={{ scale: [1, 1.8], opacity: [0.5, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+          />
+          <motion.div
+            className="absolute inset-0 rounded-full border border-white/15"
+            animate={{ scale: [1, 2.4], opacity: [0.3, 0] }}
+            transition={{
+              duration: 2.5,
+              repeat: Infinity,
+              ease: "easeOut",
+              delay: 0.5,
             }}
           />
-        ))}
-      </motion.div>
+        </motion.div>
+      </div>
+
+      {/* Active integration label */}
+      <div className="relative z-10 mt-5">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeIndex}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-center gap-2"
+          >
+            <span className="text-xs font-bold uppercase tracking-widest text-primary">
+              YHealth Hub
+            </span>
+            <ArrowRight className="w-3 h-3 text-muted-foreground/40" />
+            <span
+              className="text-xs font-semibold"
+              style={{ color: integration.accent }}
+            >
+              {integration.name}
+            </span>
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
 
-// ─── Mobile grid card with staggered 3D reveal ──────────────────────
-function MobileCard({
+// ─── Integration Card ────────────────────────────────────────────────
+function IntegrationCard({
   integration,
   index,
+  isActive,
+  onClick,
 }: {
   integration: (typeof integrations)[0];
   index: number;
+  isActive: boolean;
+  onClick: () => void;
 }) {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
   const Icon = integration.Icon;
 
   return (
     <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 40, rotateX: 15, scale: 0.85 }}
-      animate={
-        isInView
-          ? { opacity: 1, y: 0, rotateX: 0, scale: 1 }
-          : {}
-      }
-      transition={{
-        duration: 0.5,
-        delay: index * 0.06,
-        ease: [0.22, 1, 0.36, 1],
+      className={cn(
+        "integration-card group relative rounded-2xl border overflow-hidden cursor-pointer transition-all duration-500",
+        isActive
+          ? "border-white/20 bg-white/[0.04]"
+          : "border-white/[0.06] bg-white/[0.015] hover:border-white/15"
+      )}
+      onClick={onClick}
+      whileHover={{
+        y: -4,
+        boxShadow: `0 0 40px -10px ${integration.accent}33, 0 0 0 1px rgba(255,255,255,0.08)`,
       }}
-      whileHover={{ y: -6, scale: 1.04 }}
-      whileTap={{ scale: 0.97 }}
-      className="group relative"
-      style={{ transformPerspective: 800 }}
+      transition={{ duration: 0.25 }}
     >
+      {/* Active gradient top border */}
       <motion.div
-        className="absolute -inset-1 rounded-2xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-        style={{
-          background: `linear-gradient(135deg, ${integration.accent}20, ${integration.accent}08)`,
-        }}
+        className={cn(
+          "absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r",
+          integration.gradient
+        )}
+        animate={{ opacity: isActive ? 1 : 0.3 }}
+        transition={{ duration: 0.3 }}
       />
-      <div className="relative glass-card rounded-2xl p-4 border border-white/10 text-center h-full overflow-hidden group-hover:border-primary/30 transition-all duration-300">
-        {/* Shimmer on hover */}
+
+      {/* Corner glow on active */}
+      {isActive && (
         <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent -skew-x-12"
-          initial={{ x: "-100%" }}
-          whileHover={{ x: "200%" }}
-          transition={{ duration: 0.8 }}
+          className="absolute -top-16 -right-16 w-32 h-32 rounded-full blur-[40px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.5 }}
+          style={{ background: `${integration.accent}20` }}
         />
-        <div className="relative z-10 flex flex-col items-center gap-2">
+      )}
+
+      <div className="relative p-4 sm:p-5">
+        <div className="flex items-start gap-3.5">
+          {/* Icon */}
           <div
-            className="w-12 h-12 rounded-xl bg-background/50 flex items-center justify-center border border-white/10"
+            className={cn(
+              "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center shrink-0 shadow-md transition-shadow duration-300",
+              integration.gradient
+            )}
             style={{
-              boxShadow: `0 0 12px ${integration.accent}15`,
+              boxShadow: isActive
+                ? `0 4px 20px ${integration.accent}33`
+                : undefined,
             }}
           >
-            <Icon className="w-6 h-6 text-white/80 group-hover:text-white transition-colors" />
+            <Icon className="w-6 h-6 text-white" />
           </div>
-          <h4 className="font-semibold text-xs">{integration.name}</h4>
-          <div className="flex items-center gap-1">
-            <div
-              className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
-            />
-            <span className="text-[9px] text-emerald-400">Connected</span>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="font-semibold text-sm text-foreground/90 truncate">
+                {integration.name}
+              </h4>
+              <motion.div
+                className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"
+                animate={{
+                  scale: [1, 1.3, 1],
+                  opacity: [0.7, 1, 0.7],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  delay: index * 0.3,
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground/60 mb-2.5 line-clamp-1">
+              {integration.desc}
+            </p>
+
+            {/* Status row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-[10px] font-medium text-emerald-400">
+                <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                Live
+              </span>
+              <span
+                className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/[0.04]"
+                style={{ color: integration.accent }}
+              >
+                {integration.dataType}
+              </span>
+              <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+                {integration.dataPoints} pts
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -795,163 +456,179 @@ function MobileCard({
 
 // ─── INTEGRATIONS SECTION ────────────────────────────────────────────
 export function IntegrationsSection() {
-  const sectionRef = useRef(null);
-  const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
-  const [isDesktop, setIsDesktop] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  // Scroll-driven parallax
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start end", "end start"],
-  });
-
-  const sectionScale = useTransform(
-    scrollYProgress,
-    [0, 0.25, 0.75, 1],
-    [0.88, 1, 1, 0.92],
-    { clamp: true }
-  );
-  const sectionOpacity = useTransform(
-    scrollYProgress,
-    [0, 0.15, 0.85, 1],
-    [0.2, 1, 1, 0.2],
-    { clamp: true }
-  );
-  const sectionY = useTransform(
-    scrollYProgress,
-    [0, 0.5, 1],
-    [80, 0, -80],
-    { clamp: true }
-  );
-  const bgOrbY1 = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [-60, 100],
-    { clamp: true }
-  );
-  const bgOrbY2 = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [60, -100],
-    { clamp: true }
-  );
-
+  // Auto-cycle active integration
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsDesktop(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
+    const interval = setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % integrations.length);
+    }, 3000);
+    return () => clearInterval(interval);
   }, []);
+
+  // GSAP section entrance
+  useGSAP(
+    () => {
+      if (!sectionRef.current) return;
+      gsap.fromTo(
+        sectionRef.current,
+        { opacity: 0.2, y: 50 },
+        {
+          opacity: 1,
+          y: 0,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top 92%",
+            end: "top 45%",
+            scrub: 1,
+          },
+        }
+      );
+    },
+    sectionRef,
+    []
+  );
+
+  // GSAP staggered card reveal
+  useGSAP(
+    () => {
+      if (!gridRef.current) return;
+      const cards = gridRef.current.querySelectorAll(".integration-card");
+      if (!cards.length) return;
+      gsap.fromTo(
+        cards,
+        { opacity: 0, y: 40, scale: 0.95 },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          stagger: 0.06,
+          duration: 0.6,
+          ease: "power3.out",
+          scrollTrigger: {
+            trigger: gridRef.current,
+            start: "top 82%",
+            toggleActions: "play none none none",
+            once: true,
+          },
+        }
+      );
+    },
+    gridRef,
+    []
+  );
 
   return (
     <section
       ref={sectionRef}
-      className="py-16 sm:py-20 md:py-24 relative overflow-hidden"
+      className="relative py-24 md:py-32 lg:py-40 overflow-hidden"
     >
-      {/* Background layers */}
-      <div
-        className="absolute inset-0 cyber-grid opacity-20"
-        style={{ zIndex: 0 }}
-      />
-      <div style={{ zIndex: 0 }}>
-        <AnimatedGradientMesh intensity={0.2} speed={0.85} blur={110} />
+      {/* Background */}
+      <div className="absolute inset-0 -z-10">
+        <AnimatedGradientMesh intensity={0.15} blur={120} />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.03] to-transparent" />
+        <div className="absolute top-1/4 left-[10%] w-80 h-80 bg-primary/[0.05] rounded-full blur-[120px]" />
+        <div className="absolute bottom-1/3 right-[15%] w-96 h-96 bg-purple-500/[0.04] rounded-full blur-[100px]" />
       </div>
-      <motion.div
-        className="absolute left-0 w-48 sm:w-72 md:w-96 h-48 sm:h-72 md:h-96 bg-primary/5 rounded-full blur-3xl"
-        style={{ zIndex: 0, y: bgOrbY1, top: "20%" }}
-      />
-      <motion.div
-        className="absolute right-0 w-40 sm:w-64 md:w-80 h-40 sm:h-64 md:h-80 bg-purple-500/5 rounded-full blur-3xl"
-        style={{ zIndex: 0, y: bgOrbY2, bottom: "20%" }}
-      />
 
-      {/* Main content with scroll parallax */}
-      <motion.div
-        className="container mx-auto px-4 relative"
-        style={{
-          zIndex: 10,
-          scale: sectionScale,
-          opacity: sectionOpacity,
-          y: sectionY,
-        }}
-      >
+      <div className="container mx-auto px-4 sm:px-6">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 md:mb-16">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 glass-card px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium mb-4 sm:mb-6"
-          >
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-            <span>Integrations</span>
-          </motion.div>
+        <GSAPScrollReveal
+          direction="up"
+          distance={30}
+          duration={0.7}
+          className="text-center max-w-4xl mx-auto mb-10 md:mb-14"
+        >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-xs sm:text-sm font-medium text-primary mb-6">
+            <Link2 className="w-3.5 h-3.5" />
+            Integrations
+          </div>
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.1]">
+            Your health data,{" "}
+            <span className="bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              unified
+            </span>
+          </h2>
+          <p className="text-base sm:text-lg text-muted-foreground/80 max-w-2xl mx-auto leading-relaxed">
+            Seamlessly sync health data from all your devices and apps. One hub,
+            every metric, zero manual entry.
+          </p>
+        </GSAPScrollReveal>
 
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6"
-          >
-            Connects with Your{" "}
-            <span className="gradient-text-animated">Favorite Apps</span>
-          </motion.h2>
+        {/* Stats row */}
+        <GSAPScrollReveal
+          direction="up"
+          distance={20}
+          stagger={0.08}
+          staggerSelector=".hub-stat"
+          className="flex flex-wrap justify-center gap-4 sm:gap-8 mb-10 md:mb-14"
+        >
+          {hubStats.map((stat) => (
+            <div
+              key={stat.label}
+              className="hub-stat flex items-center gap-2 px-4 py-2 rounded-xl border border-white/[0.06] bg-white/[0.02]"
+            >
+              <span className="text-base sm:text-lg font-black text-primary tabular-nums">
+                {stat.display}
+              </span>
+              <span className="text-xs text-muted-foreground/50 font-medium">
+                {stat.label}
+              </span>
+            </div>
+          ))}
+        </GSAPScrollReveal>
 
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-sm sm:text-base md:text-lg text-muted-foreground px-2 sm:px-4"
-          >
-            Seamlessly sync your health data from all your devices and apps for
-            a complete picture of your wellness.
-          </motion.p>
+        {/* Central hub */}
+        <GSAPScrollReveal
+          direction="scale"
+          duration={0.6}
+          className="mb-10 md:mb-14"
+        >
+          <CentralHub activeIndex={activeIndex} />
+        </GSAPScrollReveal>
+
+        {/* Integration grid */}
+        <div
+          ref={gridRef}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto"
+        >
+          {integrations.map((integration, i) => (
+            <IntegrationCard
+              key={integration.name}
+              integration={integration}
+              index={i}
+              isActive={activeIndex === i}
+              onClick={() => setActiveIndex(i)}
+            />
+          ))}
         </div>
 
-        {/* Orbital on desktop, Grid on mobile */}
-        {isDesktop ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={isInView ? { opacity: 1, scale: 1 } : {}}
-            transition={{ duration: 0.8, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <OrbitalLayout />
-          </motion.div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
-            {integrations.map((integration, index) => (
-              <MobileCard
-                key={integration.name}
-                integration={integration}
-                index={index}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Coming Soon */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.5, delay: 0.6 }}
-          className="text-center mt-10 sm:mt-12 md:mt-14"
+        {/* Bottom CTA */}
+        <GSAPScrollReveal
+          direction="up"
+          distance={20}
+          duration={0.5}
+          delay={0.2}
+          className="text-center mt-12 md:mt-16"
         >
           <motion.div
-            className="inline-flex items-center gap-2 glass-card px-4 py-2 rounded-full"
-            whileHover={{ scale: 1.05, y: -2 }}
-            transition={{ type: "spring" as const, stiffness: 400, damping: 25 }}
+            className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-primary/10 border border-primary/20"
+            whileHover={{ scale: 1.03, y: -2 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
           >
             <Zap className="w-4 h-4 text-primary" />
-            <p className="text-sm text-muted-foreground">
+            <span className="text-sm font-medium text-foreground/80">
               And{" "}
-              <span className="text-primary font-medium">50+ more</span>{" "}
+              <span className="text-primary font-bold">50+ more</span>{" "}
               integrations coming soon
-            </p>
+            </span>
+            <Sparkles className="w-4 h-4 text-primary/60" />
           </motion.div>
-        </motion.div>
-      </motion.div>
+        </GSAPScrollReveal>
+      </div>
     </section>
   );
 }

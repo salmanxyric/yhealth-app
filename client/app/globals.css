@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "lenis/dist/lenis.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -1427,6 +1428,12 @@ html {
   transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
+/* object-fit: cover with center — use instead of object-cover for “min cover” behavior */
+.object-min-cover {
+  object-fit: cover;
+  object-position: center;
+}
+
 /* ======================= */
 /* 3D Avatar Speaking Pulse */
 /* ======================= */
@@ -1446,4 +1453,419 @@ html {
 
 .animate-avatar-pulse {
   animation: avatar-pulse 1.5s ease-in-out infinite;
+}
+
+/* ======================= */
+/* Sci-Fi / Holographic Effects */
+/* ======================= */
+
+/* Holographic text effect */
+.holographic-text {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--primary)) 0%,
+    hsl(190 90% 50%) 25%,
+    hsl(280 80% 60%) 50%,
+    hsl(330 80% 60%) 75%,
+    hsl(var(--primary)) 100%
+  );
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: holographic-shift 4s ease infinite;
+  position: relative;
+}
+
+@keyframes holographic-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Glitch text effect */
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: inherit;
+}
+
+.glitch-text::before {
+  left: 2px;
+  text-shadow: -2px 0 hsl(0 100% 50%);
+  clip: rect(24px, 550px, 90px, 0);
+  animation: glitch-anim-1 2s infinite linear alternate-reverse;
+}
+
+.glitch-text::after {
+  left: -2px;
+  text-shadow: -2px 0 hsl(190 100% 50%);
+  clip: rect(85px, 550px, 140px, 0);
+  animation: glitch-anim-2 2s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-anim-1 {
+  0% { clip: rect(20px, 9999px, 50px, 0); }
+  20% { clip: rect(80px, 9999px, 120px, 0); }
+  40% { clip: rect(10px, 9999px, 80px, 0); }
+  60% { clip: rect(60px, 9999px, 100px, 0); }
+  80% { clip: rect(30px, 9999px, 70px, 0); }
+  100% { clip: rect(90px, 9999px, 130px, 0); }
+}
+
+@keyframes glitch-anim-2 {
+  0% { clip: rect(60px, 9999px, 100px, 0); }
+  20% { clip: rect(10px, 9999px, 50px, 0); }
+  40% { clip: rect(90px, 9999px, 130px, 0); }
+  60% { clip: rect(30px, 9999px, 70px, 0); }
+  80% { clip: rect(70px, 9999px, 110px, 0); }
+  100% { clip: rect(20px, 9999px, 60px, 0); }
+}
+
+/* Glitch text wrapper for animation */
+.glitch-text-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.glitch-text-wrapper::before,
+.glitch-text-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: inherit;
+  pointer-events: none;
+}
+
+/* Sci-fi grid animation */
+@keyframes grid-move {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(80px); }
+}
+
+.animate-grid-move {
+  animation: grid-move 4s linear infinite;
+}
+
+/* Data stream effect */
+@keyframes data-stream {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+.data-stream-particle {
+  animation: data-stream linear infinite;
+}
+
+/* Scan line effect */
+@keyframes scan-line {
+  0% {
+    top: -10%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    top: 110%;
+    opacity: 0;
+  }
+}
+
+.scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.8), transparent);
+  box-shadow: 0 0 20px hsl(var(--primary) / 0.5);
+  animation: scan-line 4s ease-in-out infinite;
+}
+
+/* Cyberpunk button glow */
+@keyframes cyber-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 5px hsl(var(--primary) / 0.5),
+      0 0 20px hsl(var(--primary) / 0.3),
+      inset 0 0 5px hsl(var(--primary) / 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 10px hsl(var(--primary) / 0.8),
+      0 0 40px hsl(var(--primary) / 0.5),
+      inset 0 0 10px hsl(var(--primary) / 0.4);
+  }
+}
+
+.cyber-glow {
+  animation: cyber-glow 2s ease-in-out infinite;
+}
+
+/* Holographic card shine */
+@keyframes holographic-shine {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.holographic-shine {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 25%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0.2) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: holographic-shine 3s ease-in-out infinite;
+}
+
+/* Tech border animation */
+@keyframes tech-border-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.tech-border {
+  position: relative;
+}
+
+.tech-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary)),
+    hsl(190 90% 50%),
+    hsl(280 80% 60%),
+    hsl(330 80% 60%),
+    hsl(var(--primary))
+  );
+  background-size: 200% 100%;
+  animation: tech-border-flow 3s linear infinite;
+  z-index: -1;
+}
+
+.tech-border::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  z-index: 0;
+}
+
+/* Floating particles with trails */
+@keyframes float-particle {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.4;
+  }
+  25% {
+    transform: translate(20px, -30px) scale(1.2);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-10px, -50px) scale(0.9);
+    opacity: 0.6;
+  }
+  75% {
+    transform: translate(-20px, -20px) scale(1.1);
+    opacity: 0.7;
+  }
+}
+
+.float-particle {
+  animation: float-particle ease-in-out infinite;
+}
+
+/* Neon flicker effect */
+@keyframes neon-flicker {
+  0%, 100% {
+    opacity: 1;
+    text-shadow:
+      0 0 10px currentColor,
+      0 0 20px currentColor,
+      0 0 40px currentColor;
+  }
+  50% {
+    opacity: 0.9;
+    text-shadow:
+      0 0 5px currentColor,
+      0 0 10px currentColor,
+      0 0 20px currentColor;
+  }
+  75% {
+    opacity: 1;
+    text-shadow:
+      0 0 15px currentColor,
+      0 0 30px currentColor,
+      0 0 60px currentColor;
+  }
+}
+
+.neon-flicker {
+  animation: neon-flicker 2s ease-in-out infinite;
+}
+
+/* Matrix rain effect */
+@keyframes matrix-rain {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* Hexagon grid */
+.hexagon-grid {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%2300bcd4' fill-opacity='0.05'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49.28L27.99 41h.01v2.3h-.01L17 48.81V56h-2v-6.85zM0 35.09l12.98 7.5V56h-2V49.7L0 42.69v-2.3z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Circuit board pattern */
+.circuit-board {
+  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 10h10v10H10zM30 10h10v10H30zM50 10h10v10H50zM70 10h10v10H70zM90 10h10v10H90zM10 30h10v10H10zM30 30h10v10H30zM50 30h10v10H50zM70 30h10v10H70zM90 30h10v10H90zM10 50h10v10H10zM30 50h10v10H30zM50 50h10v10H50zM70 50h10v10H70zM90 50h10v10H90zM10 70h10v10H10zM30 70h10v10H30zM50 70h10v10H50zM70 70h10v10H70zM90 70h10v10H90zM10 90h10v10H10zM30 90h10v10H30zM50 90h10v10H50zM70 90h10v10H70zM90 90h10v10H90z' fill='%2300bcd4' fill-opacity='0.03'/%3E%3C/svg%3E");
+}
+
+/* Energy field pulse */
+@keyframes energy-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+    filter: blur(40px);
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+    filter: blur(60px);
+  }
+}
+
+.energy-field {
+  animation: energy-pulse 4s ease-in-out infinite;
+}
+
+/* Binary code rain */
+.binary-rain {
+  font-family: 'Courier New', monospace;
+  color: hsl(var(--primary) / 0.3);
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Sci-fi corner brackets */
+.corner-brackets {
+  position: relative;
+}
+
+.corner-brackets::before,
+.corner-brackets::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: hsl(var(--primary) / 0.5);
+  border-style: solid;
+}
+
+.corner-brackets::before {
+  top: -2px;
+  left: -2px;
+  border-width: 2px 0 0 2px;
+}
+
+.corner-brackets::after {
+  bottom: -2px;
+  right: -2px;
+  border-width: 0 2px 2px 0;
+}
+
+/* Loading spinner - sci-fi */
+@keyframes sci-fi-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.sci-fi-spinner {
+  border: 2px solid transparent;
+  border-top-color: hsl(var(--primary));
+  border-right-color: hsl(190 90% 50%);
+  border-radius: 50%;
+  animation: sci-fi-spin 1s linear infinite;
+}
+
+/* Terminal text effect */
+.terminal-text {
+  font-family: 'Courier New', monospace;
+  color: hsl(var(--primary));
+  text-shadow: 0 0 10px hsl(var(--primary) / 0.5);
+}
+
+/* Typewriter cursor with glow */
+.typewriter-cursor {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  background: hsl(var(--primary));
+  box-shadow: 0 0 10px hsl(var(--primary)), 0 0 20px hsl(var(--primary));
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }

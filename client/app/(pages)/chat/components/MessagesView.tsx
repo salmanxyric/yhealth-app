@@ -30,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/app/context/AuthContext';
 import { subscribeToChatEvents, subscribeToUserEvents } from '@/lib/socket-client';
+import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
 
 interface MessagesViewProps {
   chatId: string | null;
@@ -42,6 +43,7 @@ interface MessagesViewProps {
 export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onChatRead }: MessagesViewProps) {
   const router = useRouter();
   const { user } = useAuth();
+  const { assistantName } = useVoiceAssistant();
   const { toast } = useToast();
   const toastRef = useRef(toast);
   const [chat, setChat] = useState<Chat | null>(null);
@@ -307,7 +309,8 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
       }
     }
 
-    return 'Chat';
+    // For 1-on-1 chats with no other participant (AI coach), use assistant name
+    return assistantName || 'AI Coach';
   };
 
   const getChatSubtitle = (chat: Chat | null): string | undefined => {
@@ -317,10 +320,13 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
       const otherParticipant = chat.participants.find(
         (p) => p.user && p.user.id !== user.id
       );
-      return otherParticipant?.user?.email;
+      if (otherParticipant?.user?.email) {
+        return otherParticipant.user.email;
+      }
     }
 
-    return undefined;
+    // AI coach chat — show descriptive subtitle
+    return 'AI Health Coach';
   };
 
   // Check if user is admin or creator
@@ -727,47 +733,47 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
         <div className="flex-1 overflow-hidden px-4 py-6 space-y-5">
           {/* Incoming message skeleton */}
           <div className="flex items-end gap-2 max-w-[75%]">
-            <Skeleton className="h-8 w-8 shrink-0 rounded-full bg-emerald-200/50 dark:bg-slate-700" />
+            <Skeleton className="h-8 w-8 shrink-0 rounded-full bg-emerald-200/50 dark:bg-white/10" />
             <div className="space-y-1.5">
-              <Skeleton className="h-3 w-16 bg-emerald-200/30 dark:bg-slate-700/50" />
-              <Skeleton className="h-16 w-52 rounded-2xl rounded-bl-sm bg-emerald-200/40 dark:bg-slate-700" />
-              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-slate-700/30" />
+              <Skeleton className="h-3 w-16 bg-emerald-200/30 dark:bg-white/10/50" />
+              <Skeleton className="h-16 w-52 rounded-2xl rounded-bl-sm bg-emerald-200/40 dark:bg-white/10" />
+              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-white/10/30" />
             </div>
           </div>
           {/* Outgoing message skeleton */}
           <div className="flex items-end gap-2 justify-end max-w-[75%] ml-auto">
             <div className="space-y-1.5 items-end flex flex-col">
               <Skeleton className="h-10 w-44 rounded-2xl rounded-br-sm bg-emerald-300/40 dark:bg-emerald-800/40" />
-              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-slate-700/30" />
+              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-white/10/30" />
             </div>
           </div>
           {/* Incoming message skeleton */}
           <div className="flex items-end gap-2 max-w-[75%]">
-            <Skeleton className="h-8 w-8 shrink-0 rounded-full bg-emerald-200/50 dark:bg-slate-700" />
+            <Skeleton className="h-8 w-8 shrink-0 rounded-full bg-emerald-200/50 dark:bg-white/10" />
             <div className="space-y-1.5">
-              <Skeleton className="h-20 w-64 rounded-2xl rounded-bl-sm bg-emerald-200/40 dark:bg-slate-700" />
-              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-slate-700/30" />
+              <Skeleton className="h-20 w-64 rounded-2xl rounded-bl-sm bg-emerald-200/40 dark:bg-white/10" />
+              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-white/10/30" />
             </div>
           </div>
           {/* Outgoing message skeleton */}
           <div className="flex items-end gap-2 justify-end max-w-[75%] ml-auto">
             <div className="space-y-1.5 items-end flex flex-col">
               <Skeleton className="h-14 w-56 rounded-2xl rounded-br-sm bg-emerald-300/40 dark:bg-emerald-800/40" />
-              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-slate-700/30" />
+              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-white/10/30" />
             </div>
           </div>
           {/* Incoming message skeleton */}
           <div className="flex items-end gap-2 max-w-[75%]">
-            <Skeleton className="h-8 w-8 shrink-0 rounded-full bg-emerald-200/50 dark:bg-slate-700" />
+            <Skeleton className="h-8 w-8 shrink-0 rounded-full bg-emerald-200/50 dark:bg-white/10" />
             <div className="space-y-1.5">
-              <Skeleton className="h-10 w-36 rounded-2xl rounded-bl-sm bg-emerald-200/40 dark:bg-slate-700" />
-              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-slate-700/30" />
+              <Skeleton className="h-10 w-36 rounded-2xl rounded-bl-sm bg-emerald-200/40 dark:bg-white/10" />
+              <Skeleton className="h-2.5 w-10 bg-emerald-200/20 dark:bg-white/10/30" />
             </div>
           </div>
         </div>
         {/* Input area skeleton */}
-        <div className="flex-shrink-0 px-4 py-3 border-t border-emerald-200/50 dark:border-emerald-600/20">
-          <Skeleton className="h-12 w-full rounded-xl bg-emerald-200/30 dark:bg-slate-700/50" />
+        <div className="flex-shrink-0 px-4 py-3 border-t border-slate-100 dark:border-white/6">
+          <Skeleton className="h-12 w-full rounded-xl bg-emerald-200/30 dark:bg-white/10/50" />
         </div>
       </div>
     );

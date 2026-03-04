@@ -640,7 +640,7 @@ export function AIAppFlowSection() {
   };
 
   return (
-    <section ref={sectionRef} className="py-12 relative overflow-hidden">
+    <section ref={sectionRef} className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 cyber-grid opacity-20" />
       <AnimatedGradientMesh intensity={0.18} speed={0.9} blur={100} />

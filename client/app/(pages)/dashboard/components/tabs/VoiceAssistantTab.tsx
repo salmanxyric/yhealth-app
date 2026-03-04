@@ -2430,7 +2430,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
 
   if (!isSpeechSupported) {
     return (
-      <div className="fixed inset-0 bg-slate-950 flex items-center justify-center z-50">
+      <div className="relative w-full h-full bg-slate-950 flex items-center justify-center z-50">
         <div className="text-center px-4">
           <MicOff className="w-16 h-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Voice Not Supported</h2>
@@ -2449,7 +2449,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
 
   if (!isSpeechSupported) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: "#0B0F14" }}>
+      <div className="relative w-full h-full flex items-center justify-center z-50" style={{ backgroundColor: "#0B0F14" }}>
         <div className="text-center px-4">
           <MicOff className="w-16 h-16 mx-auto mb-4" style={{ color: "#F87171" }} />
           <h2 className="text-2xl font-bold mb-2" style={{ color: "#E0E0E0" }}>Voice Not Supported</h2>
@@ -2476,9 +2476,9 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden" style={{ backgroundColor: "#0B0F14" }}>
+    <div className="relative w-full h-full z-50 flex flex-col overflow-hidden" style={{ backgroundColor: "#0B0F14" }}>
       {/* Subtle animated background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <motion.div
           className="absolute top-0 left-0 w-[800px] h-[800px] rounded-full blur-3xl opacity-10"
           style={{ background: `radial-gradient(circle, #00E5FF20 0%, transparent 70%)` }}
@@ -2521,7 +2521,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setShowEmergencyResources(true)}
-          className="fixed top-20 right-4 z-40 p-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-full shadow-2xl border-2 border-red-400/50 hover:border-red-400 transition-all"
+          className="absolute top-20 right-4 z-40 p-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-full shadow-2xl border-2 border-red-400/50 hover:border-red-400 transition-all"
         >
           <AlertCircle className="w-6 h-6 text-white" />
         </motion.button>
@@ -2533,7 +2533,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="fixed top-20 right-4 z-40 bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl p-4 min-w-[160px]"
+          className="absolute top-20 right-4 z-40 bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl p-4 min-w-[160px]"
         >
           <div className="flex items-center gap-3">
             <motion.div
@@ -2568,7 +2568,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="fixed top-24 left-1/2 transform -translate-x-1/2 z-30 px-4 py-2 bg-white/10 backdrop-blur-xl rounded-full border border-white/20"
+          className="absolute top-24 left-1/2 transform -translate-x-1/2 z-30 px-4 py-2 bg-white/10 backdrop-blur-xl rounded-full border border-white/20"
         >
           <span className="text-xs text-white/90 font-medium capitalize">
             {sessionType.replace(/_/g, ' ')}
@@ -2613,13 +2613,22 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         voiceState={voiceState}
       />
 
-      {/* Main Content Area - Centered Layout */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 pb-20 sm:pb-24 overflow-hidden relative z-10">
-        {/* Central Interaction Zone */}
-        <div className="flex flex-col items-center justify-center w-full max-w-4xl py-6 sm:py-8 relative z-10">
+      {/* Full-Screen Avatar Canvas — fills entire viewport behind UI */}
+      <div className="absolute inset-0 z-[5] cursor-pointer" onClick={toggleConversation}>
+        <AvatarLayer
+          ref={avatarRef}
+          vrmUrl="/models/coach-avatar.vrm"
+          autoMapVoiceState
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Overlay UI — status, loader, errors on top of avatar */}
+      <div className="flex-1 flex flex-col items-center justify-end px-3 sm:px-6 pb-16 sm:pb-20 overflow-hidden relative z-10 pointer-events-none">
+        <div className="flex flex-col items-center justify-center w-full max-w-4xl py-4 sm:py-6 relative">
           {/* JARVIS Loader - Show when processing */}
           {voiceState === "processing" && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center">
               <JarvisLoader
                 text="processing"
                 progress={undefined}
@@ -2629,15 +2638,8 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
             </div>
           )}
 
-          {/* 3D Avatar / Voice Core - Main interaction element */}
-          <div className="cursor-pointer" onClick={toggleConversation}>
-            <AvatarLayer
-              ref={avatarRef}
-              vrmUrl="/models/coach-avatar.vrm"
-              autoMapVoiceState
-              className="w-full max-w-[480px] h-[65vh] max-h-[700px]"
-            />
-          </div>
+          {/* Spacer to push status text below avatar center */}
+          <div className="h-[45vh] sm:h-[50vh] md:h-[48vh]" />
 
           {/* Status Text - Minimal */}
           {getStatusText() && voiceState !== "processing" && (
@@ -2656,7 +2658,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-4 backdrop-blur-xl rounded-lg border p-4"
+              className="mt-4 backdrop-blur-xl rounded-lg border p-4 pointer-events-auto"
               style={{
                 background: "rgba(220, 38, 38, 0.1)",
                 borderColor: "rgba(220, 38, 38, 0.3)",

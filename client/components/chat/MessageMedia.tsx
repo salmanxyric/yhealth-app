@@ -5,7 +5,8 @@ import Image from 'next/image';
 import { FileText, Download, Maximize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { motion } from 'framer-motion';
 
 interface MessageMediaProps {
@@ -93,10 +94,13 @@ export function MessageMedia({
 
         {/* Fullscreen Image Dialog */}
         <Dialog open={isImageOpen} onOpenChange={setIsImageOpen}>
-          <DialogContent 
-            className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-0" 
+          <DialogContent
+            className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-0"
             showCloseButton={false}
           >
+            <VisuallyHidden>
+              <DialogTitle>{fileName || 'Image preview'}</DialogTitle>
+            </VisuallyHidden>
             <div className="relative w-full h-[95vh] flex items-center justify-center">
               <Button
                 variant="ghost"

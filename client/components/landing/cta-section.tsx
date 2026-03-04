@@ -2,10 +2,13 @@
 
 import { useRef, useCallback, useState, useEffect } from "react";
 import Link from "next/link";
+import confetti from "canvas-confetti";
 import { motion, useMotionValue, useSpring, useInView } from "framer-motion";
 import { ArrowRight, Sparkles, Heart, Footprints, Trophy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FadeUp } from "@/components/common/motion";
+import { useGSAP } from "@/hooks/use-gsap";
+import { gsap } from "@/lib/gsap-init";
 import { AnimatedGradientMesh, MagneticButton } from "./shared";
 
 // ─── Floating metric card ────────────────────────────────────────────
@@ -79,7 +82,7 @@ function UrgencyCounter() {
         >
           {count}
         </motion.span>{" "}
-        people signed up today
+        people started their journey today
       </span>
     </motion.div>
   );
@@ -93,6 +96,31 @@ export function CTASection() {
   const springX = useSpring(mouseX, { stiffness: 50, damping: 30 });
   const springY = useSpring(mouseY, { stiffness: 50, damping: 30 });
   const [glowVisible, setGlowVisible] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // GSAP scroll-driven container entrance
+  useGSAP(
+    () => {
+      if (!containerRef.current) return;
+      gsap.fromTo(
+        containerRef.current,
+        { opacity: 0, scale: 0.95 },
+        {
+          opacity: 1,
+          scale: 1,
+          duration: 0.6,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: containerRef.current,
+            start: "top 85%",
+            toggleActions: "play none none reverse",
+          },
+        }
+      );
+    },
+    sectionRef,
+    []
+  );
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const el = containerRef.current;
@@ -107,20 +135,29 @@ export function CTASection() {
     setGlowVisible(false);
   }, []);
 
+  const fireConfetti = useCallback(() => {
+    const count = 80;
+    const defaults = { origin: { y: 0.7 }, zIndex: 1000 };
+    function fire(particleRatio: number, opts: confetti.Options) {
+      confetti({ ...defaults, ...opts, particleCount: Math.floor(count * particleRatio) });
+    }
+    fire(0.25, { spread: 26, startVelocity: 55 });
+    fire(0.2, { spread: 60 });
+    fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
+    fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
+    fire(0.1, { spread: 120, startVelocity: 45 });
+  }, []);
+
   return (
-    <section className="py-16 sm:py-20 md:py-24 relative overflow-hidden">
+    <section ref={sectionRef} className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       {/* Background */}
       <AnimatedGradientMesh intensity={0.25} speed={1} blur={120} />
       <div className="absolute inset-0 animated-gradient opacity-10" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background" />
 
       <div className="container mx-auto px-4 relative z-10">
-        <motion.div
+        <div
           ref={containerRef}
-          initial={{ opacity: 0, scale: 0.95 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ duration: 0.6 }}
           className="relative rounded-3xl p-8 sm:p-10 md:p-16 border border-white/10 shadow-2xl overflow-hidden"
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
@@ -170,24 +207,24 @@ export function CTASection() {
           {/* Floating metric cards */}
           <FloatingMetricCard
             icon={Heart}
-            label="Heart Rate"
-            value="72 bpm"
+            label="Resting Heart Rate"
+            value="58 bpm"
             color="from-red-500 to-pink-500"
             className="top-6 right-12"
             animDelay={0}
           />
           <FloatingMetricCard
             icon={Footprints}
-            label="Today's Steps"
-            value="8,432"
+            label="Weekly Activity"
+            value="12,847 steps"
             color="from-cyan-500 to-blue-500"
             className="bottom-8 left-12"
             animDelay={1.5}
           />
           <FloatingMetricCard
             icon={Trophy}
-            label="Health Score"
-            value="94/100"
+            label="Wellness Score"
+            value="97/100"
             color="from-amber-500 to-orange-500"
             className="top-1/2 -translate-y-1/2 right-8"
             animDelay={0.8}
@@ -198,21 +235,22 @@ export function CTASection() {
             <FadeUp>
               <div className="inline-flex items-center gap-2 glass-card px-4 py-2 rounded-full text-sm font-medium mb-6 border border-primary/20">
                 <Sparkles className="w-4 h-4 text-primary" />
-                <span>Start Your Free 14-Day Trial</span>
+                <span>Limited Time -- Start Free for 14 Days</span>
               </div>
             </FadeUp>
 
             <FadeUp delay={0.1}>
               <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
-                Ready to Transform Your{" "}
-                <span className="gradient-text-animated">Health?</span>
+                Your Healthiest Year{" "}
+                <span className="gradient-text-animated">Starts Today</span>
               </h2>
             </FadeUp>
 
             <FadeUp delay={0.2}>
               <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto">
-                Join 50,000+ users who are already on their path to a healthier,
-                happier life. Start your free trial today — no credit card required.
+                Join 50,000+ members who have improved their fitness, nutrition, and
+                wellbeing with an AI coach that adapts to their life. Average users
+                see measurable results within the first 30 days.
               </p>
             </FadeUp>
 
@@ -224,7 +262,7 @@ export function CTASection() {
                     className="h-14 px-8 text-lg bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 glow-cyan transition-all duration-300"
                     asChild
                   >
-                    <Link href="/auth/signup">
+                    <Link href="/auth/signup" onClick={fireConfetti}>
                       Get Started Free
                       <ArrowRight className="ml-2 h-5 w-5" />
                     </Link>
@@ -241,7 +279,7 @@ export function CTASection() {
             {/* Trust Indicators */}
             <FadeUp delay={0.4}>
               <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mt-8 sm:mt-10 text-sm text-muted-foreground">
-                {["No credit card required", "Cancel anytime", "Full access for 14 days"].map((text) => (
+                {["No credit card required", "Cancel anytime, no questions asked", "Full premium access for 14 days"].map((text) => (
                   <div key={text} className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-500" />
                     <span>{text}</span>
@@ -253,7 +291,7 @@ export function CTASection() {
             {/* Urgency counter */}
             <UrgencyCounter />
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );
