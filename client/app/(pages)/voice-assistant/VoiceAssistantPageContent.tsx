@@ -1,12 +1,7 @@
-"use client";
+'use client';
 
-import { useState, useCallback, useEffect, Suspense } from "react";
+import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  DashboardSidebar,
-  MobileBottomNav,
-
-} from "../dashboard/components";
 import { VoiceAssistantTab } from "../dashboard/components/tabs/VoiceAssistantTab";
 import { useAuth } from "@/app/context/AuthContext";
 import { Loader2 } from "lucide-react";
@@ -16,27 +11,6 @@ function VoiceAssistantPageInner() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  const [activeTab, setActiveTab] = useState<string>("voice-assistant");
-
-  // Handle tab change
-  const handleTabChange = useCallback(
-    (tab: string) => {
-      setActiveTab(tab);
-      if (tab === "ai-coach") {
-        router.push("/ai-coach");
-      } else if (tab === "voice-assistant") {
-        router.push("/voice-assistant");
-      } else if (tab === "activity-status") {
-        router.push("/activity-status");
-      } else {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("tab", tab);
-        router.push(`/dashboard?${params.toString()}`, { scroll: false });
-      }
-    },
-    [router, searchParams]
-  );
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -75,24 +49,9 @@ function VoiceAssistantPageInner() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Sidebar - Desktop */}
-      <div className="hidden md:block">
-        <DashboardSidebar activeTab={activeTab} onTabChange={handleTabChange} />
-      </div>
-
-      {/* Mobile Bottom Navigation */}
-      <MobileBottomNav activeTab={activeTab} onTabChange={handleTabChange} />
-
-      {/* Main Content */}
-      <div className="md:ml-64 min-h-screen pb-20 md:pb-0 overflow-x-hidden">
-        {/* Animated Background */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl" />
-        </div>
-
-        <div className="relative">
+      {/* Full-width voice assistant — no sidebar */}
+      <div className="min-h-screen overflow-x-hidden">
+        <div className="relative h-screen">
           <VoiceAssistantTab
             callId={searchParams.get("callId") || null}
             callPurpose={searchParams.get("purpose") || null}

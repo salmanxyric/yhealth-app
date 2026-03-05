@@ -611,11 +611,47 @@ function HolographicButton({
     }
   };
   
-  const Component = targetHref ? Link : "button";
-  
+  if (targetHref) {
+    return (
+      <Link
+        href={targetHref}
+        onClick={handleClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className={`relative group inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-xl overflow-hidden transition-all duration-300 ${
+          variant === "primary"
+            ? "text-white"
+            : "text-white border border-white/20 hover:border-white/40"
+        }`}
+      >
+        {/* Gradient Background */}
+        {variant === "primary" && (
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500"
+            animate={{
+              backgroundPosition: isHovered ? "100% 0" : "0% 0",
+            }}
+            transition={{ duration: 0.3 }}
+          />
+        )}
+
+        {/* Glass overlay on hover */}
+        <motion.div
+          className="absolute inset-0 bg-white/0"
+          animate={{ backgroundColor: isHovered ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0)" }}
+          transition={{ duration: 0.2 }}
+        />
+
+        {/* Content */}
+        <span className="relative z-10 flex items-center gap-2">
+          {children}
+        </span>
+      </Link>
+    );
+  }
+
   return (
-    <Component
-      href={targetHref || ""}
+    <button
       onClick={handleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -659,7 +695,7 @@ function HolographicButton({
       <span className="relative z-10 flex items-center gap-2">
         {children}
       </span>
-    </Component>
+    </button>
   );
 }
 

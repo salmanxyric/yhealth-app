@@ -25,17 +25,17 @@ const EXPECTED_TABLES = [
   'ai_coach_sessions',
   'diet_plans',
   'meal_logs',
-  'body_images',
+  'user_body_images',
   'exercises',
   'workout_plans',
   'workout_logs',
   'progress_records',
-  'water_intake',
-  'xp_transactions',
-  'shopping_list',
+  'water_intake_logs',
+  'user_xp_transactions',
+  'shopping_list_items',
   'workout_alarms',
-  'recipes',
-  'user_videos',
+  'user_recipes',
+  'user_private_videos',
   'scheduled_reminders',
   'user_tasks',
   'rag_conversations',
@@ -80,15 +80,7 @@ const EXPECTED_TABLES = [
   'testimonials',
   // AI Coaching Profiles
   'user_coaching_profiles',
-  // User Classification & Intensity
-  'user_classifications',
-  'intensity_prescriptions',
-  'personality_mode_events',
-  // User Interventions
-  'user_interventions',
-  // Cross-Pillar Contradictions
-  'cross_pillar_contradictions',
-  // Gamification Upgrade
+  // Gamification
   'variable_rewards',
   'daily_pledges',
   'teams',
@@ -102,6 +94,61 @@ const EXPECTED_TABLES = [
   'user_subscriptions',
   // Visitor analytics
   'visitor_visits',
+  // Role-based access control
+  'roles',
+  'permissions',
+  'role_permissions',
+  'user_roles',
+  // Additional tables from migrations
+  'competition_chat_messages',
+  'competition_chat_reactions',
+  'habits',
+  'habit_logs',
+  'energy_logs',
+  'user_engagement_sessions',
+  'daily_analysis_reports',
+  'user_video_interactions',
+  'motivational_videos',
+  'personality_mode_events',
+  'emotional_checkin_sessions',
+  'emotional_checkin_responses',
+  'schedule_templates',
+  'schedule_items',
+  'call_summaries',
+  'action_items',
+  'task_reminder_logs',
+  'reminder_logs',
+  'vector_embeddings',
+  'rag_messages',
+  'health_knowledge_base',
+  'user_health_embeddings',
+  'daily_health_metrics',
+  'stress_logs',
+  'mood_logs',
+  'journal_entries',
+  'mindfulness_practices',
+  'wellbeing_routines',
+  'routine_completions',
+  'daily_schedules',
+  'schedule_links',
+  'workout_schedule_tasks',
+  'user_workout_constraints',
+  'plan_reschedule_history',
+  'nutrition_daily_analysis',
+  'nutrition_calorie_adjustments',
+  'nutrition_adherence_patterns',
+  'nutrition_user_preferences',
+  'cross_pillar_contradictions',
+  'blogs',
+  'activity_events',
+  'schema_migrations',
+  'user_coaching_profile_history',
+  'user_classifications',
+  'intensity_prescriptions',
+  'user_interventions',
+  'goal_daily_tracking',
+  'user_commitments',
+  'proactive_messages',
 ];
 
 // List of expected enum types
@@ -136,6 +183,10 @@ const EXPECTED_TYPES = [
   'emotion_category',
   'contact_status',
   'contact_priority',
+  'competition_type',
+  'competition_status',
+  'competition_entry_status',
+  'leaderboard_type',
 ];
 
 /**
@@ -450,7 +501,14 @@ async function runFullSchema(): Promise<void> {
         
         // Skip DROP TABLE statements to preserve existing data
         if (upperStmt.includes('DROP TABLE')) {
-          logger.debug(`Skipping DROP statement in ${file}`);
+          logger.debug(`Skipping DROP TABLE statement in ${file}`);
+          continue;
+        }
+
+        // Skip DROP TYPE ... CASCADE — this destroys ALL columns using the enum type!
+        // Types are safe to keep as-is; new enum values can be added via ALTER TYPE.
+        if (upperStmt.includes('DROP TYPE')) {
+          logger.debug(`Skipping DROP TYPE statement in ${file} (prevents CASCADE column loss)`);
           continue;
         }
         
@@ -468,6 +526,23 @@ async function runFullSchema(): Promise<void> {
           continue;
         }
         
+        // Skip CREATE TYPE if the type already exists (no IF NOT EXISTS support in PostgreSQL)
+        if (upperStmt.startsWith('CREATE TYPE')) {
+          const typeMatch = stmt.match(/CREATE TYPE\s+(\w+)/i);
+          if (typeMatch) {
+            const typeName = typeMatch[1];
+            try {
+              const typeExists = await pool.query('SELECT 1 FROM pg_type WHERE typname = $1', [typeName]);
+              if (typeExists.rows.length > 0) {
+                logger.debug(`Type ${typeName} already exists, skipping CREATE TYPE`);
+                continue;
+              }
+            } catch {
+              // If check fails, try creating anyway
+            }
+          }
+        }
+
         // Convert CREATE TABLE to CREATE TABLE IF NOT EXISTS
         let safeStmt = stmt;
         if (upperStmt.startsWith('CREATE TABLE') && !upperStmt.includes('IF NOT EXISTS')) {
@@ -495,9 +570,9 @@ async function runFullSchema(): Promise<void> {
             logger.debug(`Object already exists (safe to ignore): ${safeStmt.substring(0, 50)}...`);
             continue;
           }
-          // Ignore column does not exist errors for indexes (columns might be added later)
-          if (err?.message?.includes('does not exist') && upperStmt.includes('CREATE INDEX')) {
-            logger.debug(`Index references non-existent column (safe to ignore): ${safeStmt.substring(0, 50)}...`);
+          // Ignore column/relation does not exist errors for indexes and comments (columns added by sync later)
+          if (err?.message?.includes('does not exist') && (upperStmt.includes('CREATE INDEX') || upperStmt.includes('COMMENT ON'))) {
+            logger.debug(`References non-existent column (safe to ignore, sync will fix): ${safeStmt.substring(0, 60)}...`);
             continue;
           }
           // Log other errors but continue with other statements
@@ -533,37 +608,94 @@ async function runMigration(migrationFile: string): Promise<void> {
   const migration = readFileSync(migrationPath, 'utf-8');
 
   // Check if migration contains DO blocks (PostgreSQL anonymous code blocks)
-  // These need to be executed as a single statement
+  // Execute each DO block independently so one failure doesn't abort the rest
   if (migration.includes('DO $$')) {
-    logger.info(`Running migration: ${migrationFile} (DO block detected, executing as single statement)`);
-    try {
-      await pool.query(migration);
-    } catch (error: any) {
-      // Ignore "already exists" errors
-      if (error?.code === '42P07' || error?.message?.includes('already exists') || error?.message?.includes('duplicate')) {
-        logger.debug(`Migration ${migrationFile} already applied or object exists`);
-        return;
+    logger.info(`Running migration: ${migrationFile} (DO blocks detected, executing independently)`);
+
+    // Split into individual DO blocks and regular SQL statements
+    const blocks: string[] = [];
+    const doBlockRegex = /DO\s*\$\$[\s\S]*?END\s*\$\$\s*;/g;
+    let lastIndex = 0;
+    let match;
+
+    // Helper: strip leading comment lines from a SQL chunk
+    const stripLeadingComments = (s: string): string => {
+      const lines = s.split('\n');
+      const firstNonComment = lines.findIndex(l => l.trim().length > 0 && !l.trim().startsWith('--'));
+      return firstNonComment >= 0 ? lines.slice(firstNonComment).join('\n').trim() : '';
+    };
+
+    while ((match = doBlockRegex.exec(migration)) !== null) {
+      const between = migration.substring(lastIndex, match.index).trim();
+      if (between) {
+        between.split(';').forEach(s => {
+          const cleaned = stripLeadingComments(s);
+          if (cleaned) {
+            blocks.push(cleaned + ';');
+          }
+        });
       }
-      throw error;
+      blocks.push(match[0]);
+      lastIndex = match.index + match[0].length;
     }
+
+    const afterLastBlock = migration.substring(lastIndex).trim();
+    if (afterLastBlock) {
+      afterLastBlock.split(';').forEach(s => {
+        const cleaned = stripLeadingComments(s);
+        if (cleaned) {
+          blocks.push(cleaned + ';');
+        }
+      });
+    }
+
+    let successCount = 0;
+    let skipCount = 0;
+    for (const block of blocks) {
+      try {
+        await pool.query(block);
+        successCount++;
+      } catch (error: any) {
+        if (error?.code === '42P07' || error?.code === '42710' || error?.code === '42701' ||
+            error?.message?.includes('already exists') || error?.message?.includes('duplicate')) {
+          skipCount++;
+          continue;
+        }
+        // Log but continue with remaining blocks
+        logger.warn(`Migration block had issues in ${migrationFile}`, {
+          error: error?.message,
+          block: block.substring(0, 80) + '...',
+        });
+      }
+    }
+
+    logger.info(`Migration completed: ${migrationFile} (${successCount} applied, ${skipCount} skipped)`);
     return;
   }
 
   // Split by semicolons and execute each statement separately to avoid syntax errors
+  // Strip leading comment lines from each chunk before filtering — a chunk like
+  // "-- comment\nCREATE TABLE ..." should NOT be discarded.
   const statements = migration
     .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0 && !s.startsWith('--'));
+    .map(s => {
+      // Remove leading comment lines (lines starting with --)
+      const lines = s.split('\n');
+      const firstNonComment = lines.findIndex(l => l.trim().length > 0 && !l.trim().startsWith('--'));
+      return firstNonComment >= 0 ? lines.slice(firstNonComment).join('\n').trim() : '';
+    })
+    .filter(s => s.length > 0);
 
   logger.info(`Running migration: ${migrationFile} (${statements.length} statements)`);
-  
+
   for (const statement of statements) {
     if (statement.trim().length > 0) {
       try {
         await pool.query(statement);
       } catch (error: any) {
         // Ignore "already exists" errors for IF NOT EXISTS statements
-        if (error?.code === '42701' || error?.message?.includes('already exists') || error?.message?.includes('duplicate')) {
+        if (error?.code === '42701' || error?.code === '42P07' || error?.code === '42710' ||
+            error?.message?.includes('already exists') || error?.message?.includes('duplicate')) {
           logger.debug(`Statement already applied: ${statement.substring(0, 50)}...`);
           continue;
         }
@@ -610,6 +742,13 @@ export async function autoMigrate(): Promise<{
       logger.info('Database schema is up to date', {
         tableCount: existingTables.length,
       });
+      // Run column-sync migration to fix missing columns on existing tables
+      try {
+        await runMigration('sync-missing-columns.sql');
+        logger.info('Column sync migration completed');
+      } catch (err: any) {
+        logger.warn('Column sync migration had issues', { error: err?.message });
+      }
       return {
         success: true,
         tablesCreated: [],
@@ -626,6 +765,14 @@ export async function autoMigrate(): Promise<{
     if (missingTables.length > EXPECTED_TABLES.length / 2) {
       logger.info('Running full schema migration...');
       await runFullSchema();
+
+      // Run column-sync migration to fix missing columns after tables created
+      try {
+        await runMigration('sync-missing-columns.sql');
+        logger.info('Column sync migration completed');
+      } catch (err: any) {
+        logger.warn('Column sync migration had issues', { error: err?.message });
+      }
 
       const newTables = await getExistingTables();
       return {
@@ -722,6 +869,9 @@ export async function autoMigrate(): Promise<{
             'consent_records': '03-consent-records.sql',
             'users': '02-users.sql',
             'user_coaching_profiles': '83-user-coaching-profiles.sql',
+            'newsletter_subscriptions': '76-newsletter-subscriptions.sql',
+            'user_roles': '77-user-roles.sql',
+            'leaderboard_snapshots': '69-leaderboard-snapshots.sql',
           };
           
           const tableFile = tableToFileMap[table] || tableFiles.find(f => {
@@ -813,6 +963,14 @@ export async function autoMigrate(): Promise<{
       tablesCreated.push(...stillMissingTables);
     }
 
+    // Run column-sync migration to fix missing columns after all tables created
+    try {
+      await runMigration('sync-missing-columns.sql');
+      logger.info('Column sync migration completed');
+    } catch (err: any) {
+      logger.warn('Column sync migration had issues', { error: err?.message });
+    }
+
     const finalTables = await getExistingTables();
 
     logger.info('Auto-migration completed', {
@@ -865,9 +1023,26 @@ export async function verifySchema(): Promise<{
   };
 }
 
+/**
+ * Lightweight startup sync — runs ONLY sync-missing-columns.sql.
+ * Safe to call on every startup (idempotent, fast, non-blocking).
+ * Ensures all columns/constraints exist even when full auto-migrate is disabled.
+ */
+export async function runColumnSync(): Promise<void> {
+  try {
+    await runMigration('sync-missing-columns.sql');
+    logger.info('[AutoMigrate] Column sync completed');
+  } catch (err: any) {
+    logger.warn('[AutoMigrate] Column sync had issues (non-fatal)', {
+      error: err?.message,
+    });
+  }
+}
+
 export default {
   autoMigrate,
   verifySchema,
+  runColumnSync,
   EXPECTED_TABLES,
   EXPECTED_TYPES,
 };

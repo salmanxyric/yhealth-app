@@ -59,6 +59,12 @@ export interface LifestyleContext {
     preferredWorkoutTime?: string;
     preferredCheckInTime?: string;
     coachingStyle?: string;
+    coachingIntensity?: string;
+    useEmojis?: boolean;
+    formalityLevel?: string;
+    encouragementLevel?: string;
+    focusAreas?: string[];
+    messageStyle?: string;
   };
 }
 
@@ -644,12 +650,20 @@ class ComprehensiveUserContextService {
       );
       context.activeHabits = parseInt(habitsResult.rows[0]?.count || '0', 10);
 
-      // Get user preferences
+      // Get user preferences (including AI personality settings)
       const prefsResult = await query<{
         preferred_check_in_time: string | null;
         coaching_style: string | null;
+        coaching_intensity: string | null;
+        ai_use_emojis: boolean | null;
+        ai_formality_level: string | null;
+        ai_encouragement_level: string | null;
+        focus_areas: string[] | null;
+        ai_message_style: string | null;
       }>(
-        `SELECT preferred_check_in_time, coaching_style
+        `SELECT preferred_check_in_time, coaching_style, coaching_intensity,
+                ai_use_emojis, ai_formality_level, ai_encouragement_level,
+                focus_areas, ai_message_style
          FROM user_preferences
          WHERE user_id = $1
          LIMIT 1`,
@@ -658,12 +672,16 @@ class ComprehensiveUserContextService {
 
       if (prefsResult.rows.length > 0) {
         const prefs = prefsResult.rows[0];
-        if (prefs.preferred_check_in_time || prefs.coaching_style) {
-          context.preferences = {
-            preferredCheckInTime: prefs.preferred_check_in_time || undefined,
-            coachingStyle: prefs.coaching_style || undefined,
-          };
-        }
+        context.preferences = {
+          preferredCheckInTime: prefs.preferred_check_in_time || undefined,
+          coachingStyle: prefs.coaching_style || undefined,
+          coachingIntensity: prefs.coaching_intensity || undefined,
+          useEmojis: prefs.ai_use_emojis ?? undefined,
+          formalityLevel: prefs.ai_formality_level || undefined,
+          encouragementLevel: prefs.ai_encouragement_level || undefined,
+          focusAreas: prefs.focus_areas || undefined,
+          messageStyle: prefs.ai_message_style || undefined,
+        };
       }
 
       return context;

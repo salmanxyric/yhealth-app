@@ -119,6 +119,18 @@ async function startServer(): Promise<void> {
     // Connect to database
     await database.connect();
 
+    // NOTE: Full auto-migration is disabled on startup to prevent slow deploys.
+    // Run full migrations manually: npm run db:migrate
+    // Lightweight column sync runs automatically below (idempotent, ~2-5s).
+    try {
+      const { runColumnSync } = await import('./database/auto-migrate.js');
+      await runColumnSync();
+    } catch (err) {
+      logger.warn('Column sync failed (non-fatal)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // Auto-seed subscription plans if table is empty
     try {
       await ensureDefaultPlans();

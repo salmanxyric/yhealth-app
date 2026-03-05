@@ -70,23 +70,11 @@ class WaterIntakeService {
    * Get or create a water log for a specific date
    */
   async getOrCreateLog(userId: string, date: string): Promise<WaterIntakeLog> {
-    // Try to get existing log
-    const existing = await pool.query(
-      'SELECT * FROM water_intake_logs WHERE user_id = $1 AND log_date = $2',
-      [userId, date]
-    );
-
-    if (existing.rows.length > 0) {
-      return this.mapLogRow(existing.rows[0]);
-    }
-
-    // Get user's target from preferences (future enhancement)
-    // For now, use defaults
-
-    // Create new log
+    // Use upsert to avoid race condition with unique_water_log constraint
     const result = await pool.query(
       `INSERT INTO water_intake_logs (user_id, log_date, target_glasses, target_ml)
        VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, log_date) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [userId, date, DEFAULT_TARGET_GLASSES, DEFAULT_TARGET_ML]
     );

@@ -102,7 +102,9 @@ async function processProactiveMessages(): Promise<void> {
       achievement_unlock: 0, weekly_digest: 0, competition_update: 0,
       app_inactive: 0, coach_pro_analysis: 0,
       meal_alignment: 0, daily_progress_review: 0,
-      score_declining: 0,
+      score_declining: 0, plan_non_adherence: 0,
+      overtraining_risk: 0, commitment_followup: 0,
+      recovery_trend_alert: 0, positive_momentum: 0,
     };
     let errors = 0;
     let skippedCapped = 0;
@@ -179,6 +181,11 @@ async function processProactiveMessages(): Promise<void> {
                 case 'meal_alignment': sent = await proactiveMessagingService.checkAndSendMealAlignmentFeedback(user.id, undefined, context, cooldown); break;
                 case 'daily_progress_review': sent = await proactiveMessagingService.checkAndSendDailyProgressReview(user.id, context, cooldown); break;
                 case 'score_declining': sent = await proactiveMessagingService.checkAndSendScoreDecliningMessage(user.id, context, cooldown); break;
+                case 'plan_non_adherence': sent = await proactiveMessagingService.checkAndSendPlanNonAdherenceMessage(user.id, context, cooldown); break;
+                case 'overtraining_risk': sent = await proactiveMessagingService.checkAndSendOvertrainingRiskMessage(user.id, context, cooldown); break;
+                case 'commitment_followup': sent = await proactiveMessagingService.checkAndSendCommitmentFollowup(user.id, context, cooldown); break;
+                case 'recovery_trend_alert': sent = await proactiveMessagingService.checkAndSendRecoveryTrendAlert(user.id, context, cooldown); break;
+                case 'positive_momentum': sent = await proactiveMessagingService.checkAndSendPositiveMomentum(user.id, context, cooldown); break;
               }
               if (sent) counters[candidate.type]++;
             }

@@ -764,27 +764,71 @@ export function WorkoutsTab() {
       const logsResponse = await workoutsService.getLogsForDate(todayStr);
       const logs = logsResponse.data?.logs;
       if (logs && logs.length > 0) {
-        const todayLog = logs[0];
+        // Build a lookup: planId → log, and a global fallback from all logs
+        const logByPlanId = new Map<string, WorkoutLog>();
+        const allCompletedById = new Map<string, { weight?: number }>();
+        const allCompletedByName = new Map<string, { weight?: number }>();
 
-        // Restore completed exercises from today's log
-        if (todayLog.exercisesCompleted && Array.isArray(todayLog.exercisesCompleted)) {
-          const completedIds = new Set(todayLog.exercisesCompleted.map((ec) => ec.exerciseId));
-          // Also create a map of exercise names to check as fallback
-          const completedNames = new Set(todayLog.exercisesCompleted.map((ec) => ec.notes || ''));
-          
-          setWorkouts(workoutPlans.map(workout => ({
-            ...workout,
-            exercises: workout.exercises.map(ex => ({
-              ...ex,
-              // Check by ID first, then by name as fallback
-              completed: completedIds.has(ex.id) || completedNames.has(ex.name),
-            })),
-          })));
+        for (const log of logs) {
+          if (log.workoutPlanId) {
+            logByPlanId.set(log.workoutPlanId, log);
+          }
+          // Build global completion maps from all logs (for ID and name matching)
+          if (log.exercisesCompleted && Array.isArray(log.exercisesCompleted)) {
+            for (const ec of log.exercisesCompleted) {
+              // Get the weight from the first completed set (if any)
+              const savedWeight = ec.sets?.find(s => s.completed)?.weight;
+              allCompletedById.set(ec.exerciseId, { weight: savedWeight });
+              if (ec.notes) {
+                allCompletedByName.set(ec.notes, { weight: savedWeight });
+              }
+            }
+          }
+        }
+
+        if (allCompletedById.size > 0 || allCompletedByName.size > 0) {
+          setWorkouts(workoutPlans.map(workout => {
+            // Try to find the log specific to this plan first
+            const planLog = logByPlanId.get(workout.id);
+            // Build plan-specific completion maps if we have a matching log
+            let completedById = allCompletedById;
+            let completedByName = allCompletedByName;
+            if (planLog?.exercisesCompleted && Array.isArray(planLog.exercisesCompleted)) {
+              completedById = new Map<string, { weight?: number }>();
+              completedByName = new Map<string, { weight?: number }>();
+              for (const ec of planLog.exercisesCompleted) {
+                const savedWeight = ec.sets?.find(s => s.completed)?.weight;
+                completedById.set(ec.exerciseId, { weight: savedWeight });
+                if (ec.notes) {
+                  completedByName.set(ec.notes, { weight: savedWeight });
+                }
+              }
+            }
+
+            return {
+              ...workout,
+              exercises: workout.exercises.map(ex => {
+                // Match by exercise ID first, then by name as fallback
+                const matchById = completedById.get(ex.id);
+                const matchByName = completedByName.get(ex.name);
+                const match = matchById || matchByName;
+                if (match) {
+                  return {
+                    ...ex,
+                    completed: true,
+                    // Restore saved weight if available (e.g. user changed from 25kg to 35kg)
+                    weight: match.weight ? `${match.weight}kg` : ex.weight,
+                  };
+                }
+                return { ...ex, completed: false };
+              }),
+            };
+          }));
           return; // Early return - state already set with completion status
         }
       }
-    } catch {
-      workoutLogger.debug('No workout log for today yet');
+    } catch (err) {
+      workoutLogger.error('Failed to restore workout completion state', err, { component: 'WorkoutsTab' });
     }
     // No logs found - set workouts without completion state
     setWorkouts(workoutPlans);
@@ -829,6 +873,7 @@ export function WorkoutsTab() {
                 name: ex.name,
                 sets: ex.sets,
                 reps: String(ex.reps),
+                weight: ex.weight ? String(ex.weight) : undefined,
                 restSeconds: ex.restSeconds || 60,
                 muscleGroup: ex.muscleGroup || 'Full Body',
                 completed: false,

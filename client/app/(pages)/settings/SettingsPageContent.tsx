@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import {
   Settings,
   User,
@@ -18,7 +18,6 @@ import {
   Target,
   BarChart2,
   Flame,
-  ChevronRight,
   Check,
   Loader2,
   AlertCircle,
@@ -31,20 +30,24 @@ import {
   Trash2,
   Download,
   LogOut,
-  ArrowLeft,
   Key,
   Eye,
   EyeOff,
   X,
   Power,
   PowerOff,
+  Brain,
+  Sparkles,
+  MessageCircle,
+  Zap,
+  Focus,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useVoiceAssistant } from "@/app/context/VoiceAssistantContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LanguageSelector } from "@/components/common/language-selector";
 import { api, ApiError } from "@/lib/api-client";
-import { MainLayout } from "@/components/layout";
+import { DashboardSidebar, MobileBottomNav } from "../dashboard/components";
 import { toast } from "sonner";
 import { confirm } from "@/components/common/ConfirmDialog";
 
@@ -57,6 +60,11 @@ interface UserPreferences {
     checkInFrequency: string;
     preferredCheckInTime: string;
     timezone: string;
+    useEmojis: boolean;
+    formalityLevel: string;
+    encouragementLevel: string;
+    messageStyle: string;
+    focusAreas: string[];
   };
   notifications: {
     enabled: boolean;
@@ -110,6 +118,7 @@ interface ApiPreferencesResponse {
       encouragementLevel: string;
     };
     focusAreas: string[];
+    messageStyle?: string;
   };
   display: {
     units: {
@@ -152,6 +161,11 @@ function apiToLocalPreferences(apiPrefs: ApiPreferencesResponse): UserPreference
       checkInFrequency: apiPrefs.coaching?.checkInFrequency || "daily",
       preferredCheckInTime: apiPrefs.coaching?.preferredCheckInTime || "09:00",
       timezone: apiPrefs.coaching?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      useEmojis: apiPrefs.coaching?.aiPersonality?.useEmojis ?? true,
+      formalityLevel: apiPrefs.coaching?.aiPersonality?.formalityLevel || "balanced",
+      encouragementLevel: apiPrefs.coaching?.aiPersonality?.encouragementLevel || "medium",
+      messageStyle: apiPrefs.coaching?.messageStyle || "friendly",
+      focusAreas: apiPrefs.coaching?.focusAreas || [],
     },
     notifications: {
       enabled: Object.values(channels).some(Boolean),
@@ -186,6 +200,13 @@ function localToApiPreferences(localPrefs: UserPreferences, assistantName?: stri
       checkInFrequency: localPrefs.coaching.checkInFrequency,
       preferredCheckInTime: localPrefs.coaching.preferredCheckInTime,
       timezone: localPrefs.coaching.timezone,
+      aiPersonality: {
+        useEmojis: localPrefs.coaching.useEmojis,
+        formalityLevel: localPrefs.coaching.formalityLevel,
+        encouragementLevel: localPrefs.coaching.encouragementLevel,
+      },
+      focusAreas: localPrefs.coaching.focusAreas,
+      messageStyle: localPrefs.coaching.messageStyle,
     },
     notifications: {
       channels: {
@@ -227,19 +248,204 @@ interface ConnectedIntegration {
 }
 
 const coachingStyles = [
-  { id: "supportive", label: "Supportive", icon: <Heart className="w-4 h-4" /> },
-  { id: "direct", label: "Direct", icon: <Target className="w-4 h-4" /> },
-  { id: "analytical", label: "Analytical", icon: <BarChart2 className="w-4 h-4" /> },
-  { id: "motivational", label: "Motivational", icon: <Flame className="w-4 h-4" /> },
+  {
+    id: "supportive",
+    label: "Supportive",
+    description: "Warm, encouraging approach with gentle guidance",
+    icon: <Heart className="w-5 h-5" />,
+    gradient: "from-pink-500 to-rose-500",
+  },
+  {
+    id: "direct",
+    label: "Direct",
+    description: "Straightforward feedback, no sugar-coating",
+    icon: <Target className="w-5 h-5" />,
+    gradient: "from-orange-500 to-amber-500",
+  },
+  {
+    id: "analytical",
+    label: "Analytical",
+    description: "Data-driven insights and detailed analysis",
+    icon: <BarChart2 className="w-5 h-5" />,
+    gradient: "from-blue-500 to-cyan-500",
+  },
+  {
+    id: "motivational",
+    label: "Motivational",
+    description: "Energetic, inspiring push to reach your goals",
+    icon: <Flame className="w-5 h-5" />,
+    gradient: "from-yellow-500 to-orange-500",
+  },
 ];
 
 const intensityLevels = [
-  { id: "light", label: "Light Touch", desc: "2-3 check-ins/week" },
-  { id: "moderate", label: "Balanced", desc: "5-7 check-ins/week" },
-  { id: "intensive", label: "High Engagement", desc: "10-14 check-ins/week" },
+  { id: "light", label: "Light" },
+  { id: "moderate", label: "Balanced" },
+  { id: "intensive", label: "Intensive" },
 ];
 
-export default function SettingsPageContent() {
+const formalityOptions = [
+  { id: "casual", label: "Casual", preview: "Hey! Great job today" },
+  { id: "balanced", label: "Balanced", preview: "Good progress on your workout today." },
+  { id: "formal", label: "Formal", preview: "Your training session results have been recorded." },
+];
+
+const encouragementOptions = [
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+];
+
+const messageStyleOptions = [
+  {
+    id: "friendly",
+    label: "Friendly",
+    icon: <MessageCircle className="w-5 h-5" />,
+    gradient: "from-green-500 to-emerald-500",
+    description: "Warm and approachable tone",
+  },
+  {
+    id: "professional",
+    label: "Professional",
+    icon: <Brain className="w-5 h-5" />,
+    gradient: "from-blue-500 to-indigo-500",
+    description: "Clear, concise communication",
+  },
+  {
+    id: "motivational",
+    label: "Motivational",
+    icon: <Zap className="w-5 h-5" />,
+    gradient: "from-purple-500 to-pink-500",
+    description: "High-energy and inspiring",
+  },
+];
+
+const availableFocusAreas = [
+  "Weight Loss",
+  "Muscle Building",
+  "Endurance",
+  "Flexibility",
+  "Nutrition",
+  "Sleep Quality",
+  "Stress Management",
+  "Mental Health",
+  "Recovery",
+  "General Wellness",
+];
+
+// Reusable segmented control component
+function SegmentedControl({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: string; label: string; preview?: string }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const activeIndex = options.findIndex((o) => o.id === value);
+  return (
+    <div className="relative flex rounded-xl bg-white/[0.03] border border-white/[0.06] p-1">
+      {/* Animated active indicator */}
+      <motion.div
+        className="absolute top-1 bottom-1 rounded-lg bg-gradient-to-r from-purple-500/30 to-pink-500/30 border border-purple-500/20"
+        initial={false}
+        animate={{
+          left: `calc(${(activeIndex / options.length) * 100}% + 4px)`,
+          width: `calc(${100 / options.length}% - 8px)`,
+        }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      />
+      {options.map((option) => (
+        <button
+          key={option.id}
+          onClick={() => onChange(option.id)}
+          className={`relative z-10 flex-1 py-2.5 px-3 text-sm font-medium rounded-lg transition-colors ${
+            value === option.id
+              ? "text-white"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Reusable toggle switch component
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+  color = "purple",
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  color?: "purple" | "indigo";
+}) {
+  const bgColor = color === "indigo" ? "bg-indigo-500" : "bg-purple-500";
+  return (
+    <button
+      onClick={onChange}
+      disabled={disabled}
+      className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${
+        checked ? bgColor : "bg-slate-700"
+      }`}
+    >
+      <motion.div
+        className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-lg"
+        animate={{
+          left: checked ? "calc(100% - 20px)" : "4px",
+        }}
+      />
+    </button>
+  );
+}
+
+// Glass card wrapper
+function GlassCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-6 ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Section header with gradient icon badge
+function SectionHeader({
+  icon,
+  title,
+  gradient = "from-purple-500 to-pink-500",
+}: {
+  icon: React.ReactNode;
+  title: string;
+  gradient?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 mb-6">
+      <div
+        className={`p-2.5 rounded-xl bg-gradient-to-br ${gradient} shadow-lg`}
+      >
+        <span className="text-white">{icon}</span>
+      </div>
+      <h2 className="text-lg font-semibold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+        {title}
+      </h2>
+    </div>
+  );
+}
+
+function SettingsPageInner() {
   const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
   const {
     assistantName,
@@ -248,12 +454,13 @@ export default function SettingsPageContent() {
     setSelectedLanguage,
   } = useVoiceAssistant();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState("coaching");
+  const [activeSection, setActiveSection] = useState("aiCoach");
   const [integrations, setIntegrations] = useState<ConnectedIntegration[]>([]);
   const [whoopStatus, setWhoopStatus] = useState<{
     isConnected: boolean;
@@ -268,7 +475,7 @@ export default function SettingsPageContent() {
     firstName?: string;
     lastName?: string;
   } | null>(null);
-  
+
   // Token management state
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [tokenData, setTokenData] = useState({
@@ -284,7 +491,7 @@ export default function SettingsPageContent() {
     tokenExpiry?: string;
     status?: string;
   } | null>(null);
-  
+
   // Credentials management state
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
   const [credentialsData, setCredentialsData] = useState({
@@ -294,6 +501,9 @@ export default function SettingsPageContent() {
   const [showCredentials, setShowCredentials] = useState({ clientId: false, clientSecret: false });
   const [isSavingCredentials, setIsSavingCredentials] = useState(false);
 
+  // Dashboard sidebar state
+  const [sidebarActiveTab, setSidebarActiveTab] = useState("settings");
+
   const [preferences, setPreferences] = useState<UserPreferences>({
     coaching: {
       style: "supportive",
@@ -302,6 +512,11 @@ export default function SettingsPageContent() {
       checkInFrequency: "daily",
       preferredCheckInTime: "09:00",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      useEmojis: true,
+      formalityLevel: "balanced",
+      encouragementLevel: "medium",
+      messageStyle: "friendly",
+      focusAreas: [],
     },
     notifications: {
       enabled: true,
@@ -325,6 +540,28 @@ export default function SettingsPageContent() {
     },
   });
 
+  // Handle sidebar tab change (navigate to other pages)
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      if (tab === "ai-coach") {
+        router.push("/ai-coach");
+      } else if (tab === "voice-assistant") {
+        router.push("/voice-assistant");
+      } else if (tab === "activity-status") {
+        router.push("/activity-status");
+      } else if (tab === "settings") {
+        // Already on settings
+        return;
+      } else {
+        setSidebarActiveTab(tab);
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("tab", tab);
+        router.push(`/dashboard?${params.toString()}`, { scroll: false });
+      }
+    },
+    [router, searchParams]
+  );
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -347,7 +584,7 @@ export default function SettingsPageContent() {
         // Transform API response to local UI state
         const localPrefs = apiToLocalPreferences(response.data.preferences);
         setPreferences(localPrefs);
-        
+
         // Load assistant name from preferences if available
         if (response.data.preferences.voiceAssistant?.assistantName) {
           setAssistantName(response.data.preferences.voiceAssistant.assistantName);
@@ -473,30 +710,58 @@ export default function SettingsPageContent() {
     }));
   };
 
+  // Toggle focus area
+  const toggleFocusArea = (area: string) => {
+    setPreferences((prev) => {
+      const current = prev.coaching.focusAreas;
+      if (current.includes(area)) {
+        return {
+          ...prev,
+          coaching: {
+            ...prev.coaching,
+            focusAreas: current.filter((a) => a !== area),
+          },
+        };
+      }
+      if (current.length >= 5) return prev;
+      return {
+        ...prev,
+        coaching: {
+          ...prev.coaching,
+          focusAreas: [...current, area],
+        },
+      };
+    });
+  };
+
   const sections = [
-    { id: "coaching", label: "Coaching", icon: <Heart className="w-5 h-5" /> },
+    { id: "aiCoach", label: "AI Coach", icon: <Brain className="w-5 h-5" />, gradient: "from-purple-500 to-pink-500" },
     {
       id: "notifications",
       label: "Notifications",
       icon: <Bell className="w-5 h-5" />,
+      gradient: "from-blue-500 to-cyan-500",
     },
     {
       id: "integrations",
       label: "Integrations",
       icon: <LinkIcon className="w-5 h-5" />,
+      gradient: "from-green-500 to-emerald-500",
     },
     {
       id: "appearance",
       label: "Appearance",
       icon: <Palette className="w-5 h-5" />,
+      gradient: "from-orange-500 to-amber-500",
     },
     {
       id: "voiceAssistant",
       label: "Voice Assistant",
       icon: <MessageSquare className="w-5 h-5" />,
+      gradient: "from-indigo-500 to-violet-500",
     },
-    { id: "privacy", label: "Privacy", icon: <Shield className="w-5 h-5" /> },
-    { id: "account", label: "Account", icon: <User className="w-5 h-5" /> },
+    { id: "privacy", label: "Privacy", icon: <Shield className="w-5 h-5" />, gradient: "from-rose-500 to-pink-500" },
+    { id: "account", label: "Account", icon: <User className="w-5 h-5" />, gradient: "from-slate-400 to-slate-500" },
   ];
 
   if (authLoading || isLoading) {
@@ -507,7 +772,16 @@ export default function SettingsPageContent() {
           animate={{ opacity: 1, scale: 1 }}
           className="flex flex-col items-center gap-4"
         >
-          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-white animate-spin" />
+            </div>
+            <motion.div
+              className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-purple-500/20 to-pink-600/20 blur-xl"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
+          </div>
           <p className="text-slate-400">Loading settings...</p>
         </motion.div>
       </div>
@@ -515,30 +789,25 @@ export default function SettingsPageContent() {
   }
 
   return (
-    <MainLayout>
-      <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-950">
+      {/* Sidebar - Desktop */}
+      <div className="hidden md:block">
+        <DashboardSidebar activeTab={sidebarActiveTab} onTabChange={handleTabChange} />
+      </div>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav activeTab={sidebarActiveTab} onTabChange={handleTabChange} />
+
+      {/* Main Content */}
+      <div className="md:ml-64 min-h-screen pb-20 md:pb-0 overflow-x-hidden">
         {/* Animated Background */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
           <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-pink-500/8 rounded-full blur-3xl" />
         </div>
 
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Back Button */}
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="mb-4"
-          >
-            <button
-              onClick={() => router.back()}
-              className="group flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-              <span className="text-sm">Back</span>
-            </button>
-          </motion.div>
-
           {/* Header */}
           <motion.header
             initial={{ opacity: 0, y: -20 }}
@@ -557,1112 +826,1218 @@ export default function SettingsPageContent() {
                 </p>
               </div>
 
-            <button
-              onClick={savePreferences}
-              disabled={isSaving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {isSaving ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Save className="w-5 h-5" />
-              )}
-              Save Changes
-            </button>
-          </div>
-
-          {/* Success/Error Messages */}
-          {(success || error) && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`mt-4 p-4 rounded-xl ${
-                success
-                  ? "bg-green-500/20 border border-green-500/30"
-                  : "bg-red-500/20 border border-red-500/30"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {success ? (
-                  <Check className="w-5 h-5 text-green-400" />
+              <button
+                onClick={savePreferences}
+                disabled={isSaving}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg shadow-purple-500/20"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-red-400" />
+                  <Save className="w-5 h-5" />
                 )}
-                <p className={success ? "text-green-400" : "text-red-400"}>
-                  {success || error}
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </motion.header>
-
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar Navigation */}
-          <motion.nav
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="lg:w-64 shrink-0"
-          >
-            <div className="sticky top-8 space-y-1">
-              {sections.map((section) => (
-                <button
-                  key={section.id}
-                  onClick={() => setActiveSection(section.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
-                    activeSection === section.id
-                      ? "bg-white/10 text-white"
-                      : "text-slate-400 hover:text-white hover:bg-white/5"
-                  }`}
-                >
-                  {section.icon}
-                  <span className="font-medium">{section.label}</span>
-                  {activeSection === section.id && (
-                    <ChevronRight className="w-4 h-4 ml-auto" />
-                  )}
-                </button>
-              ))}
+                Save Changes
+              </button>
             </div>
-          </motion.nav>
 
-          {/* Main Content */}
-          <motion.main
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="flex-1 min-w-0"
-          >
-            {/* Coaching Settings */}
-            {activeSection === "coaching" && (
-              <div className="space-y-6">
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Coaching Style
-                  </h2>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {coachingStyles.map((style) => (
-                      <button
-                        key={style.id}
-                        onClick={() =>
-                          updatePreference("coaching", "style", style.id)
+            {/* Success/Error Messages */}
+            {(success || error) && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`mt-4 p-4 rounded-xl backdrop-blur-xl ${
+                  success
+                    ? "bg-green-500/20 border border-green-500/30"
+                    : "bg-red-500/20 border border-red-500/30"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {success ? (
+                    <Check className="w-5 h-5 text-green-400" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-red-400" />
+                  )}
+                  <p className={success ? "text-green-400" : "text-red-400"}>
+                    {success || error}
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </motion.header>
+
+          <div className="flex flex-col lg:flex-row gap-8">
+            {/* Internal Section Sidebar */}
+            <motion.nav
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="lg:w-64 shrink-0"
+            >
+              <div className="sticky top-8 space-y-1">
+                {sections.map((section) => {
+                  const isActive = activeSection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => setActiveSection(section.id)}
+                      className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
+                        isActive
+                          ? "bg-white/[0.05] text-white"
+                          : "text-slate-400 hover:text-white hover:bg-white/[0.03]"
+                      }`}
+                    >
+                      {/* Active gradient left bar */}
+                      {isActive && (
+                        <motion.div
+                          layoutId="settings-section-indicator"
+                          className="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-gradient-to-b from-purple-500 to-pink-500"
+                          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        />
+                      )}
+                      <span
+                        className={
+                          isActive
+                            ? `bg-gradient-to-r ${section.gradient} bg-clip-text text-transparent`
+                            : ""
                         }
-                        className={`p-4 rounded-xl border text-left transition-all ${
-                          preferences.coaching.style === style.id
-                            ? "bg-purple-500/20 border-purple-500/40"
-                            : "bg-white/5 border-white/10 hover:border-white/20"
-                        }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`p-2 rounded-lg ${
-                              preferences.coaching.style === style.id
-                                ? "bg-purple-500/30 text-purple-400"
-                                : "bg-white/10 text-slate-400"
+                        {section.icon}
+                      </span>
+                      <span className="font-medium">{section.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.nav>
+
+            {/* Main Content Area */}
+            <motion.main
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="flex-1 min-w-0"
+            >
+              {/* AI Coach Settings */}
+              {activeSection === "aiCoach" && (
+                <div className="space-y-6">
+                  {/* Card 1: Coaching Style & Intensity */}
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Sparkles className="w-5 h-5" />}
+                      title="Coaching Style & Intensity"
+                      gradient="from-purple-500 to-pink-500"
+                    />
+
+                    {/* Coaching Style Cards */}
+                    <div className="grid sm:grid-cols-2 gap-3 mb-8">
+                      {coachingStyles.map((style) => {
+                        const isSelected = preferences.coaching.style === style.id;
+                        return (
+                          <button
+                            key={style.id}
+                            onClick={() =>
+                              updatePreference("coaching", "style", style.id)
+                            }
+                            className={`relative p-4 rounded-xl border text-left transition-all ${
+                              isSelected
+                                ? "bg-white/[0.06] border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                : "bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.04]"
                             }`}
                           >
-                            {style.icon}
-                          </div>
-                          <span
-                            className={
-                              preferences.coaching.style === style.id
-                                ? "text-white font-medium"
-                                : "text-slate-300"
-                            }
-                          >
-                            {style.label}
-                          </span>
-                          {preferences.coaching.style === style.id && (
-                            <Check className="w-4 h-4 text-purple-400 ml-auto" />
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={`p-2.5 rounded-xl bg-gradient-to-br ${style.gradient} shadow-lg ${
+                                  isSelected ? "shadow-purple-500/30" : "opacity-70"
+                                }`}
+                              >
+                                <span className="text-white">{style.icon}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span
+                                  className={`block font-medium ${
+                                    isSelected ? "text-white" : "text-slate-300"
+                                  }`}
+                                >
+                                  {style.label}
+                                </span>
+                                <span className="block text-xs text-slate-500 mt-0.5">
+                                  {style.description}
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <motion.div
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="shrink-0"
+                                >
+                                  <Check className="w-4 h-4 text-purple-400" />
+                                </motion.div>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Engagement Level
-                  </h2>
-                  <div className="space-y-3">
-                    {intensityLevels.map((level) => (
-                      <button
-                        key={level.id}
-                        onClick={() =>
-                          updatePreference("coaching", "intensity", level.id)
-                        }
-                        className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between ${
-                          preferences.coaching.intensity === level.id
-                            ? "bg-purple-500/20 border-purple-500/40"
-                            : "bg-white/5 border-white/10 hover:border-white/20"
-                        }`}
-                      >
-                        <div>
-                          <p
-                            className={
-                              preferences.coaching.intensity === level.id
-                                ? "text-white font-medium"
-                                : "text-slate-300"
-                            }
-                          >
-                            {level.label}
-                          </p>
-                          <p className="text-sm text-slate-500">{level.desc}</p>
-                        </div>
-                        {preferences.coaching.intensity === level.id && (
-                          <Check className="w-5 h-5 text-purple-400" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Check-in Time
-                  </h2>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <label className="text-sm text-slate-400 mb-2 block">
-                        Preferred Time
+                    {/* Intensity Level - Segmented Pill */}
+                    <div>
+                      <label className="text-sm text-slate-400 mb-3 block font-medium">
+                        Engagement Level
                       </label>
-                      <input
-                        type="time"
-                        value={preferences.coaching.preferredCheckInTime}
-                        onChange={(e) =>
-                          updatePreference(
-                            "coaching",
-                            "preferredCheckInTime",
-                            e.target.value
-                          )
-                        }
-                        className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white outline-none focus:border-purple-500"
+                      <SegmentedControl
+                        options={intensityLevels}
+                        value={preferences.coaching.intensity}
+                        onChange={(id) => updatePreference("coaching", "intensity", id)}
                       />
                     </div>
-                    <div className="flex-1">
-                      <label className="text-sm text-slate-400 mb-2 block">
-                        Timezone
-                      </label>
-                      <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-slate-300 flex items-center gap-2">
-                        <Globe className="w-4 h-4 text-slate-500" />
-                        {preferences.coaching.timezone}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Notifications Settings */}
-            {activeSection === "notifications" && (
-              <div className="space-y-6">
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-lg font-semibold text-white">
-                      Notification Channels
-                    </h2>
-                    <button
-                      onClick={() =>
-                        updatePreference(
-                          "notifications",
-                          "enabled",
-                          !preferences.notifications.enabled
-                        )
-                      }
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        preferences.notifications.enabled
-                          ? "bg-purple-500"
-                          : "bg-slate-700"
-                      }`}
-                    >
-                      <motion.div
-                        className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-lg"
-                        animate={{
-                          left: preferences.notifications.enabled
-                            ? "calc(100% - 20px)"
-                            : "4px",
-                        }}
-                      />
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {[
-                      {
-                        id: "push",
-                        label: "Push Notifications",
-                        icon: <Smartphone className="w-5 h-5" />,
-                        key: "push",
-                      },
-                      {
-                        id: "email",
-                        label: "Email",
-                        icon: <Mail className="w-5 h-5" />,
-                        key: "email",
-                      },
-                      {
-                        id: "sms",
-                        label: "SMS",
-                        icon: <MessageSquare className="w-5 h-5" />,
-                        key: "sms",
-                      },
-                      {
-                        id: "whatsapp",
-                        label: "WhatsApp",
-                        icon: <MessageSquare className="w-5 h-5" />,
-                        key: "whatsapp",
-                      },
-                    ].map((channel) => (
-                      <div
-                        key={channel.id}
-                        className="flex items-center justify-between p-4 rounded-xl bg-white/5"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-white/10 text-slate-400">
-                            {channel.icon}
-                          </div>
-                          <span className="text-slate-300">{channel.label}</span>
-                        </div>
-                        <button
-                          onClick={() =>
+                    {/* Check-in Time */}
+                    <div className="mt-6 flex items-center gap-4">
+                      <div className="flex-1">
+                        <label className="text-sm text-slate-400 mb-2 block">
+                          Preferred Check-in Time
+                        </label>
+                        <input
+                          type="time"
+                          value={preferences.coaching.preferredCheckInTime}
+                          onChange={(e) =>
                             updatePreference(
-                              "notifications",
-                              channel.key,
-                              !preferences.notifications[
-                                channel.key as keyof typeof preferences.notifications
-                              ]
+                              "coaching",
+                              "preferredCheckInTime",
+                              e.target.value
                             )
                           }
-                          disabled={!preferences.notifications.enabled}
-                          className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${
-                            preferences.notifications[
-                              channel.key as keyof typeof preferences.notifications
-                            ]
-                              ? "bg-purple-500"
-                              : "bg-slate-700"
-                          }`}
+                          className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-purple-500 transition-colors"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-sm text-slate-400 mb-2 block">
+                          Timezone
+                        </label>
+                        <div className="px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-slate-300 flex items-center gap-2">
+                          <Globe className="w-4 h-4 text-slate-500" />
+                          <span className="truncate text-sm">{preferences.coaching.timezone}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  {/* Card 2: Communication Preferences */}
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<MessageCircle className="w-5 h-5" />}
+                      title="Communication Preferences"
+                      gradient="from-blue-500 to-cyan-500"
+                    />
+
+                    {/* Formality Level */}
+                    <div className="mb-6">
+                      <label className="text-sm text-slate-400 mb-3 block font-medium">
+                        Formality Level
+                      </label>
+                      <SegmentedControl
+                        options={formalityOptions}
+                        value={preferences.coaching.formalityLevel}
+                        onChange={(id) =>
+                          updatePreference("coaching", "formalityLevel", id)
+                        }
+                      />
+                      {/* Preview text */}
+                      <motion.div
+                        key={preferences.coaching.formalityLevel}
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-3 px-4 py-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]"
+                      >
+                        <p className="text-sm text-slate-400 italic">
+                          &quot;{formalityOptions.find((o) => o.id === preferences.coaching.formalityLevel)?.preview}&quot;
+                        </p>
+                      </motion.div>
+                    </div>
+
+                    {/* Encouragement Level */}
+                    <div className="mb-6">
+                      <label className="text-sm text-slate-400 mb-3 block font-medium">
+                        Encouragement Level
+                      </label>
+                      <SegmentedControl
+                        options={encouragementOptions}
+                        value={preferences.coaching.encouragementLevel}
+                        onChange={(id) =>
+                          updatePreference("coaching", "encouragementLevel", id)
+                        }
+                      />
+                    </div>
+
+                    {/* Use Emojis Toggle */}
+                    <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                      <div>
+                        <p className="text-white font-medium">Use Emojis</p>
+                        <p className="text-sm text-slate-400 mt-0.5">
+                          Allow emojis in coach messages
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        checked={preferences.coaching.useEmojis}
+                        onChange={() =>
+                          updatePreference(
+                            "coaching",
+                            "useEmojis",
+                            !preferences.coaching.useEmojis
+                          )
+                        }
+                      />
+                    </div>
+
+                    {/* Message Style */}
+                    <div>
+                      <label className="text-sm text-slate-400 mb-3 block font-medium">
+                        Message Style
+                      </label>
+                      <div className="grid sm:grid-cols-3 gap-3">
+                        {messageStyleOptions.map((style) => {
+                          const isSelected = preferences.coaching.messageStyle === style.id;
+                          return (
+                            <button
+                              key={style.id}
+                              onClick={() =>
+                                updatePreference("coaching", "messageStyle", style.id)
+                              }
+                              className={`relative p-4 rounded-xl border text-center transition-all ${
+                                isSelected
+                                  ? "bg-white/[0.06] border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                  : "bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.04]"
+                              }`}
+                            >
+                              <div className="flex flex-col items-center gap-2">
+                                <div
+                                  className={`p-2.5 rounded-xl bg-gradient-to-br ${style.gradient} shadow-lg ${
+                                    isSelected ? "" : "opacity-60"
+                                  }`}
+                                >
+                                  <span className="text-white">{style.icon}</span>
+                                </div>
+                                <span
+                                  className={`font-medium text-sm ${
+                                    isSelected ? "text-white" : "text-slate-300"
+                                  }`}
+                                >
+                                  {style.label}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {style.description}
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <motion.div
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="absolute top-2 right-2"
+                                >
+                                  <Check className="w-4 h-4 text-purple-400" />
+                                </motion.div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  {/* Card 3: Focus Areas */}
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Focus className="w-5 h-5" />}
+                      title="Focus Areas"
+                      gradient="from-emerald-500 to-teal-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-4">
+                      Select up to 5 areas your coach should prioritize.{" "}
+                      <span className="text-slate-500">(max 5)</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {availableFocusAreas.map((area) => {
+                        const isSelected = preferences.coaching.focusAreas.includes(area);
+                        const isDisabled =
+                          !isSelected && preferences.coaching.focusAreas.length >= 5;
+                        return (
+                          <button
+                            key={area}
+                            onClick={() => toggleFocusArea(area)}
+                            disabled={isDisabled}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                              isSelected
+                                ? "bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-white border border-purple-500/40 ring-1 ring-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.1)]"
+                                : isDisabled
+                                ? "bg-white/[0.02] border border-white/[0.04] text-slate-600 cursor-not-allowed"
+                                : "bg-white/[0.02] border border-white/[0.08] text-slate-300 hover:border-white/[0.15] hover:bg-white/[0.04]"
+                            }`}
+                          >
+                            {isSelected && (
+                              <Check className="w-3 h-3 inline mr-1.5 -mt-0.5" />
+                            )}
+                            {area}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {preferences.coaching.focusAreas.length > 0 && (
+                      <p className="text-xs text-slate-500 mt-3">
+                        {preferences.coaching.focusAreas.length}/5 selected
+                      </p>
+                    )}
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Notifications Settings */}
+              {activeSection === "notifications" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <div className="flex items-center justify-between mb-6">
+                      <SectionHeader
+                        icon={<Bell className="w-5 h-5" />}
+                        title="Notification Channels"
+                        gradient="from-blue-500 to-cyan-500"
+                      />
+                      <ToggleSwitch
+                        checked={preferences.notifications.enabled}
+                        onChange={() =>
+                          updatePreference(
+                            "notifications",
+                            "enabled",
+                            !preferences.notifications.enabled
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      {[
+                        {
+                          id: "push",
+                          label: "Push Notifications",
+                          icon: <Smartphone className="w-5 h-5" />,
+                          key: "push",
+                        },
+                        {
+                          id: "email",
+                          label: "Email",
+                          icon: <Mail className="w-5 h-5" />,
+                          key: "email",
+                        },
+                        {
+                          id: "sms",
+                          label: "SMS",
+                          icon: <MessageSquare className="w-5 h-5" />,
+                          key: "sms",
+                        },
+                        {
+                          id: "whatsapp",
+                          label: "WhatsApp",
+                          icon: <MessageSquare className="w-5 h-5" />,
+                          key: "whatsapp",
+                        },
+                      ].map((channel) => (
+                        <div
+                          key={channel.id}
+                          className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]"
                         >
-                          <motion.div
-                            className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-lg"
-                            animate={{
-                              left: preferences.notifications[
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-white/[0.06] text-slate-400">
+                              {channel.icon}
+                            </div>
+                            <span className="text-slate-300">{channel.label}</span>
+                          </div>
+                          <ToggleSwitch
+                            checked={
+                              !!preferences.notifications[
                                 channel.key as keyof typeof preferences.notifications
                               ]
-                                ? "calc(100% - 20px)"
-                                : "4px",
-                            }}
+                            }
+                            onChange={() =>
+                              updatePreference(
+                                "notifications",
+                                channel.key,
+                                !preferences.notifications[
+                                  channel.key as keyof typeof preferences.notifications
+                                ]
+                              )
+                            }
+                            disabled={!preferences.notifications.enabled}
                           />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <Moon className="w-5 h-5 text-indigo-400" />
-                      <h2 className="text-lg font-semibold text-white">
-                        Quiet Hours
-                      </h2>
+                        </div>
+                      ))}
                     </div>
-                    <button
-                      onClick={() =>
-                        setPreferences((prev) => ({
-                          ...prev,
-                          notifications: {
-                            ...prev.notifications,
-                            quietHours: {
-                              ...prev.notifications.quietHours,
-                              enabled: !prev.notifications.quietHours.enabled,
+                  </GlassCard>
+
+                  <GlassCard>
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <Moon className="w-5 h-5 text-indigo-400" />
+                        <h2 className="text-lg font-semibold text-white">
+                          Quiet Hours
+                        </h2>
+                      </div>
+                      <ToggleSwitch
+                        checked={preferences.notifications.quietHours.enabled}
+                        onChange={() =>
+                          setPreferences((prev) => ({
+                            ...prev,
+                            notifications: {
+                              ...prev.notifications,
+                              quietHours: {
+                                ...prev.notifications.quietHours,
+                                enabled: !prev.notifications.quietHours.enabled,
+                              },
                             },
-                          },
-                        }))
-                      }
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        preferences.notifications.quietHours.enabled
-                          ? "bg-indigo-500"
-                          : "bg-slate-700"
-                      }`}
-                    >
-                      <motion.div
-                        className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-lg"
-                        animate={{
-                          left: preferences.notifications.quietHours.enabled
-                            ? "calc(100% - 20px)"
-                            : "4px",
-                        }}
+                          }))
+                        }
+                        color="indigo"
                       />
-                    </button>
-                  </div>
-
-                  {preferences.notifications.quietHours.enabled && (
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <label className="text-sm text-slate-400 mb-2 block">
-                          From
-                        </label>
-                        <input
-                          type="time"
-                          value={preferences.notifications.quietHours.start}
-                          onChange={(e) =>
-                            setPreferences((prev) => ({
-                              ...prev,
-                              notifications: {
-                                ...prev.notifications,
-                                quietHours: {
-                                  ...prev.notifications.quietHours,
-                                  start: e.target.value,
-                                },
-                              },
-                            }))
-                          }
-                          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white outline-none"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-sm text-slate-400 mb-2 block">
-                          To
-                        </label>
-                        <input
-                          type="time"
-                          value={preferences.notifications.quietHours.end}
-                          onChange={(e) =>
-                            setPreferences((prev) => ({
-                              ...prev,
-                              notifications: {
-                                ...prev.notifications,
-                                quietHours: {
-                                  ...prev.notifications.quietHours,
-                                  end: e.target.value,
-                                },
-                              },
-                            }))
-                          }
-                          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white outline-none"
-                        />
-                      </div>
                     </div>
-                  )}
+
+                    {preferences.notifications.quietHours.enabled && (
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <label className="text-sm text-slate-400 mb-2 block">
+                            From
+                          </label>
+                          <input
+                            type="time"
+                            value={preferences.notifications.quietHours.start}
+                            onChange={(e) =>
+                              setPreferences((prev) => ({
+                                ...prev,
+                                notifications: {
+                                  ...prev.notifications,
+                                  quietHours: {
+                                    ...prev.notifications.quietHours,
+                                    start: e.target.value,
+                                  },
+                                },
+                              }))
+                            }
+                            className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-purple-500 transition-colors"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-sm text-slate-400 mb-2 block">
+                            To
+                          </label>
+                          <input
+                            type="time"
+                            value={preferences.notifications.quietHours.end}
+                            onChange={(e) =>
+                              setPreferences((prev) => ({
+                                ...prev,
+                                notifications: {
+                                  ...prev.notifications,
+                                  quietHours: {
+                                    ...prev.notifications.quietHours,
+                                    end: e.target.value,
+                                  },
+                                },
+                              }))
+                            }
+                            className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-purple-500 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </GlassCard>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Integrations */}
-            {activeSection === "integrations" && (
-              <div className="space-y-6">
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Connected Apps
-                  </h2>
+              {/* Integrations */}
+              {activeSection === "integrations" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<LinkIcon className="w-5 h-5" />}
+                      title="Connected Apps"
+                      gradient="from-green-500 to-emerald-500"
+                    />
 
-                  {/* WHOOP Integration */}
-                  <div className={`mb-6 p-4 rounded-xl border transition-all ${
-                    whoopStatus?.isConnected 
-                      ? 'bg-green-500/5 border-green-500/30' 
-                      : 'bg-white/5 border-white/10'
-                  }`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3 flex-1">
-                        {/* Animated Connection Icon */}
-                        <div className="relative">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                            whoopStatus?.isConnected
-                              ? 'bg-green-500/20 border-2 border-green-500/50'
-                              : whoopStatus?.hasCredentials
-                              ? 'bg-yellow-500/20 border-2 border-yellow-500/50'
-                              : 'bg-white/10 border border-white/10'
-                          }`}>
-                            {whoopStatus?.isConnected ? (
+                    {/* WHOOP Integration */}
+                    <div className={`mb-6 p-4 rounded-xl border transition-all ${
+                      whoopStatus?.isConnected
+                        ? 'bg-green-500/5 border-green-500/30'
+                        : 'bg-white/[0.02] border-white/[0.06]'
+                    }`}>
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3 flex-1">
+                          {/* Animated Connection Icon */}
+                          <div className="relative">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
+                              whoopStatus?.isConnected
+                                ? 'bg-green-500/20 border-2 border-green-500/50'
+                                : whoopStatus?.hasCredentials
+                                ? 'bg-yellow-500/20 border-2 border-yellow-500/50'
+                                : 'bg-white/[0.06] border border-white/[0.06]'
+                            }`}>
+                              {whoopStatus?.isConnected ? (
+                                <motion.div
+                                  animate={{
+                                    scale: [1, 1.1, 1],
+                                    rotate: [0, 5, -5, 0],
+                                  }}
+                                  transition={{
+                                    duration: 2,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                  }}
+                                >
+                                  <CheckCircle className="w-6 h-6 text-green-400" />
+                                </motion.div>
+                              ) : (
+                                <LinkIcon className={`w-6 h-6 ${
+                                  whoopStatus?.hasCredentials ? 'text-yellow-400' : 'text-slate-400'
+                                }`} />
+                              )}
+                            </div>
+
+                            {/* Pulsing ring animation when connected */}
+                            {whoopStatus?.isConnected && (
+                              <>
+                                <motion.div
+                                  className="absolute inset-0 rounded-xl border-2 border-green-400/50"
+                                  animate={{
+                                    scale: [1, 1.3, 1.3],
+                                    opacity: [0.6, 0, 0],
+                                  }}
+                                  transition={{
+                                    duration: 2,
+                                    repeat: Infinity,
+                                    ease: "easeOut",
+                                  }}
+                                />
+                                <motion.div
+                                  className="absolute inset-0 rounded-xl border-2 border-green-400/30"
+                                  animate={{
+                                    scale: [1, 1.5, 1.5],
+                                    opacity: [0.4, 0, 0],
+                                  }}
+                                  transition={{
+                                    duration: 2,
+                                    repeat: Infinity,
+                                    delay: 0.5,
+                                    ease: "easeOut",
+                                  }}
+                                />
+                              </>
+                            )}
+
+                            {/* Socket connection indicator */}
+                            {whoopStatus?.isConnected && (
+                              <motion.div
+                                className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full"
+                                animate={{
+                                  scale: [1, 1.2, 1],
+                                  opacity: [1, 0.7, 1],
+                                }}
+                                transition={{
+                                  duration: 1.5,
+                                  repeat: Infinity,
+                                  ease: "easeInOut",
+                                }}
+                              >
+                                <motion.div
+                                  className="absolute inset-0 bg-green-400 rounded-full"
+                                  animate={{
+                                    scale: [1, 2, 2],
+                                    opacity: [0.8, 0, 0],
+                                  }}
+                                  transition={{
+                                    duration: 1.5,
+                                    repeat: Infinity,
+                                    ease: "easeOut",
+                                  }}
+                                />
+                              </motion.div>
+                            )}
+                          </div>
+
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-white font-medium">WHOOP</p>
+                              {whoopStatus?.isConnected && (
+                                <motion.span
+                                  initial={{ opacity: 0, scale: 0.8 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1"
+                                >
+                                  <Radio className="w-2.5 h-2.5 fill-green-400 text-green-400" />
+                                  Connected
+                                </motion.span>
+                              )}
+                              {whoopStatus?.hasCredentials && !whoopStatus?.isConnected && (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                  Credentials Set
+                                </span>
+                              )}
+                              {whoopStatus?.webhookRegistered && (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center gap-1">
+                                  <Wifi className="w-2.5 h-2.5" />
+                                  Webhook Active
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              Advanced recovery and strain data
+                            </p>
+                            {whoopStatus?.isConnected && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mt-2 space-y-1"
+                              >
+                                {whoopStatus?.email && (
+                                  <p className="text-xs text-slate-400">
+                                    Email: <span className="text-white">{whoopStatus.email}</span>
+                                  </p>
+                                )}
+                                {whoopStatus?.lastSyncAt && (
+                                  <p className="text-xs text-green-400 flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Last synced: {new Date(whoopStatus.lastSyncAt).toLocaleString()}
+                                  </p>
+                                )}
+                                {whoopStatus?.status && (
+                                  <p className="text-xs text-slate-400">
+                                    Status: <span className="capitalize text-green-400">{whoopStatus.status}</span>
+                                  </p>
+                                )}
+                              </motion.div>
+                            )}
+                            {!whoopStatus?.isConnected && whoopStatus?.lastSyncAt && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                Last synced: {new Date(whoopStatus.lastSyncAt).toLocaleString()}
+                              </p>
+                            )}
+                            {!whoopStatus?.isConnected && whoopStatus?.status && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                Status: <span className="capitalize">{whoopStatus.status}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Token Management Button - Always visible */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                // Fetch unmasked tokens for form prefilling
+                                const unmaskedResponse = await api.get<{
+                                  hasTokens: boolean;
+                                  accessToken?: string;
+                                  refreshToken?: string;
+                                  tokenExpiry?: string;
+                                  tokenExpiryISO?: string;
+                                  status?: string;
+                                }>("/integrations/whoop/tokens?unmasked=true");
+
+                                // Also fetch masked tokens for display
+                                const maskedResponse = await api.get<{
+                                  hasTokens: boolean;
+                                  accessTokenMasked?: string;
+                                  refreshTokenMasked?: string;
+                                  tokenExpiry?: string;
+                                  status?: string;
+                                }>("/integrations/whoop/tokens");
+
+                                if (unmaskedResponse.success && unmaskedResponse.data?.hasTokens) {
+                                  // Prefill form with actual tokens
+                                  setTokenData({
+                                    accessToken: unmaskedResponse.data.accessToken || '',
+                                    refreshToken: unmaskedResponse.data.refreshToken || '',
+                                    tokenExpiry: unmaskedResponse.data.tokenExpiry || '',
+                                  });
+                                  // Set masked info for display
+                                  if (maskedResponse.success && maskedResponse.data) {
+                                    setTokenInfo(maskedResponse.data);
+                                  } else {
+                                    setTokenInfo({
+                                      hasTokens: true,
+                                      accessTokenMasked: '***',
+                                      refreshTokenMasked: '***',
+                                      tokenExpiry: unmaskedResponse.data.tokenExpiryISO,
+                                      status: unmaskedResponse.data.status,
+                                    });
+                                  }
+                                } else {
+                                  // No tokens exist
+                                  setTokenData({ accessToken: '', refreshToken: '', tokenExpiry: '' });
+                                  if (maskedResponse.success && maskedResponse.data) {
+                                    setTokenInfo(maskedResponse.data);
+                                  } else {
+                                    setTokenInfo({ hasTokens: false });
+                                  }
+                                }
+                              } catch (err) {
+                                // If no tokens exist, that's okay - show modal for adding
+                                console.log("No tokens found or error fetching:", err);
+                                setTokenData({ accessToken: '', refreshToken: '', tokenExpiry: '' });
+                                setTokenInfo({ hasTokens: false });
+                              }
+                              // Always show modal
+                              setShowTokenModal(true);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 transition-colors text-sm font-medium flex items-center gap-2"
+                            title="Manage Tokens (Add/Update/Delete/View)"
+                          >
+                            <Key className="w-4 h-4" />
+                            <span>Manage Tokens</span>
+                          </button>
+
+                          {!whoopStatus?.isConnected ? (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const response = await api.post<{
+                                    authUrl: string;
+                                    state: string;
+                                  }>("/integrations/oauth/initiate", {
+                                    provider: "whoop",
+                                  });
+                                  if (response.success && response.data?.authUrl) {
+                                    window.location.href = response.data.authUrl;
+                                  } else {
+                                    toast.error("Failed to initiate WHOOP connection. Please ensure WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET are configured.");
+                                  }
+                                } catch (err: unknown) {
+                                  const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+                                  console.error("Failed to initiate OAuth:", err);
+                                  toast.error(errorMessage || "Failed to connect WHOOP. Please check server configuration.");
+                                }
+                              }}
+                              disabled={!whoopStatus?.hasCredentials}
+                              className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {whoopStatus?.hasCredentials ? "Connect WHOOP" : "WHOOP Not Configured"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await api.delete("/integrations/whoop");
+                                  await fetchPreferences();
+                                  toast.success("WHOOP disconnected successfully");
+                                } catch (err) {
+                                  console.error("Failed to disconnect:", err);
+                                  toast.error("Failed to disconnect WHOOP");
+                                }
+                              }}
+                              className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                              title="Disconnect WHOOP"
+                            >
+                              <Unlink className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Connection Status Card - Only show when connected */}
+                      {whoopStatus?.isConnected && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mb-3 p-4 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
                               <motion.div
                                 animate={{
                                   scale: [1, 1.1, 1],
-                                  rotate: [0, 5, -5, 0],
                                 }}
                                 transition={{
                                   duration: 2,
                                   repeat: Infinity,
                                   ease: "easeInOut",
                                 }}
+                                className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center"
                               >
-                                <CheckCircle className="w-6 h-6 text-green-400" />
+                                <Wifi className="w-4 h-4 text-green-400" />
                               </motion.div>
-                            ) : (
-                              <LinkIcon className={`w-6 h-6 ${
-                                whoopStatus?.hasCredentials ? 'text-yellow-400' : 'text-slate-400'
-                              }`} />
-                            )}
-                          </div>
-                          
-                          {/* Pulsing ring animation when connected */}
-                          {whoopStatus?.isConnected && (
-                            <>
+                              {/* Data flow animation */}
                               <motion.div
-                                className="absolute inset-0 rounded-xl border-2 border-green-400/50"
+                                className="absolute -left-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-green-400 rounded-full"
                                 animate={{
-                                  scale: [1, 1.3, 1.3],
-                                  opacity: [0.6, 0, 0],
-                                }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Infinity,
-                                  ease: "easeOut",
-                                }}
-                              />
-                              <motion.div
-                                className="absolute inset-0 rounded-xl border-2 border-green-400/30"
-                                animate={{
-                                  scale: [1, 1.5, 1.5],
-                                  opacity: [0.4, 0, 0],
-                                }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Infinity,
-                                  delay: 0.5,
-                                  ease: "easeOut",
-                                }}
-                              />
-                            </>
-                          )}
-                          
-                          {/* Socket connection indicator */}
-                          {whoopStatus?.isConnected && (
-                            <motion.div
-                              className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full"
-                              animate={{
-                                scale: [1, 1.2, 1],
-                                opacity: [1, 0.7, 1],
-                              }}
-                              transition={{
-                                duration: 1.5,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                              }}
-                            >
-                              <motion.div
-                                className="absolute inset-0 bg-green-400 rounded-full"
-                                animate={{
-                                  scale: [1, 2, 2],
-                                  opacity: [0.8, 0, 0],
+                                  x: [0, 8, 0],
+                                  opacity: [0, 1, 0],
                                 }}
                                 transition={{
                                   duration: 1.5,
                                   repeat: Infinity,
-                                  ease: "easeOut",
+                                  ease: "easeInOut",
                                 }}
                               />
-                            </motion.div>
-                          )}
-                        </div>
-                        
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-white font-medium">WHOOP</p>
-                            {whoopStatus?.isConnected && (
-                              <motion.span
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1"
-                              >
-                                <Radio className="w-2.5 h-2.5 fill-green-400 text-green-400" />
-                                Connected
-                              </motion.span>
-                            )}
-                            {whoopStatus?.hasCredentials && !whoopStatus?.isConnected && (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                Credentials Set
-                              </span>
-                            )}
-                            {whoopStatus?.webhookRegistered && (
-                              <span className="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center gap-1">
-                                <Wifi className="w-2.5 h-2.5" />
-                                Webhook Active
-                              </span>
-                            )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm text-white font-medium">Live Connection Active</p>
+                              <p className="text-xs text-green-400/80 mt-0.5">
+                                Data is syncing in real-time from your WHOOP device
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-500">
-                            Advanced recovery and strain data
-                          </p>
-                          {whoopStatus?.isConnected && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -5 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="mt-2 space-y-1"
-                            >
-                              {whoopStatus?.email && (
-                                <p className="text-xs text-slate-400">
-                                  Email: <span className="text-white">{whoopStatus.email}</span>
-                                </p>
-                              )}
-                              {whoopStatus?.lastSyncAt && (
-                                <p className="text-xs text-green-400 flex items-center gap-1">
-                                  <CheckCircle className="w-3 h-3" />
-                                  Last synced: {new Date(whoopStatus.lastSyncAt).toLocaleString()}
-                                </p>
-                              )}
-                              {whoopStatus?.status && (
-                                <p className="text-xs text-slate-400">
-                                  Status: <span className="capitalize text-green-400">{whoopStatus.status}</span>
-                                </p>
-                              )}
-                            </motion.div>
-                          )}
-                          {!whoopStatus?.isConnected && whoopStatus?.lastSyncAt && (
-                            <p className="text-xs text-slate-400 mt-1">
-                              Last synced: {new Date(whoopStatus.lastSyncAt).toLocaleString()}
-                            </p>
-                          )}
-                          {!whoopStatus?.isConnected && whoopStatus?.status && (
-                            <p className="text-xs text-slate-400 mt-1">
-                              Status: <span className="capitalize">{whoopStatus.status}</span>
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {/* Token Management Button - Always visible */}
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              // Fetch unmasked tokens for form prefilling
-                              const unmaskedResponse = await api.get<{
-                                hasTokens: boolean;
-                                accessToken?: string;
-                                refreshToken?: string;
-                                tokenExpiry?: string;
-                                tokenExpiryISO?: string;
-                                status?: string;
-                              }>("/integrations/whoop/tokens?unmasked=true");
-                              
-                              // Also fetch masked tokens for display
-                              const maskedResponse = await api.get<{
-                                hasTokens: boolean;
-                                accessTokenMasked?: string;
-                                refreshTokenMasked?: string;
-                                tokenExpiry?: string;
-                                status?: string;
-                              }>("/integrations/whoop/tokens");
-                              
-                              if (unmaskedResponse.success && unmaskedResponse.data?.hasTokens) {
-                                // Prefill form with actual tokens
-                                setTokenData({
-                                  accessToken: unmaskedResponse.data.accessToken || '',
-                                  refreshToken: unmaskedResponse.data.refreshToken || '',
-                                  tokenExpiry: unmaskedResponse.data.tokenExpiry || '',
-                                });
-                                // Set masked info for display
-                                if (maskedResponse.success && maskedResponse.data) {
-                                  setTokenInfo(maskedResponse.data);
-                                } else {
-                                  setTokenInfo({
-                                    hasTokens: true,
-                                    accessTokenMasked: '***',
-                                    refreshTokenMasked: '***',
-                                    tokenExpiry: unmaskedResponse.data.tokenExpiryISO,
-                                    status: unmaskedResponse.data.status,
-                                  });
-                                }
-                              } else {
-                                // No tokens exist
-                                setTokenData({ accessToken: '', refreshToken: '', tokenExpiry: '' });
-                                if (maskedResponse.success && maskedResponse.data) {
-                                  setTokenInfo(maskedResponse.data);
-                                } else {
-                                  setTokenInfo({ hasTokens: false });
-                                }
-                              }
-                            } catch (err) {
-                              // If no tokens exist, that's okay - show modal for adding
-                              console.log("No tokens found or error fetching:", err);
-                              setTokenData({ accessToken: '', refreshToken: '', tokenExpiry: '' });
-                              setTokenInfo({ hasTokens: false });
-                            }
-                            // Always show modal
-                            setShowTokenModal(true);
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 transition-colors text-sm font-medium flex items-center gap-2"
-                          title="Manage Tokens (Add/Update/Delete/View)"
-                        >
-                          <Key className="w-4 h-4" />
-                          <span>Manage Tokens</span>
-                        </button>
+                        </motion.div>
+                      )}
 
-                        {!whoopStatus?.isConnected ? (
+                      {!whoopStatus?.isConnected && !whoopStatus?.hasCredentials && (
+                        <div className="mt-4 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                          <p className="text-xs text-yellow-400 mb-3">
+                            WHOOP OAuth credentials are not configured. Please add your WHOOP Client ID and Client Secret below to connect.
+                          </p>
                           <button
                             type="button"
-                            onClick={async () => {
-                              try {
-                                const response = await api.post<{
-                                  authUrl: string;
-                                  state: string;
-                                }>("/integrations/oauth/initiate", {
-                                  provider: "whoop",
-                                });
-                                if (response.success && response.data?.authUrl) {
-                                  window.location.href = response.data.authUrl;
-                                } else {
-                                  toast.error("Failed to initiate WHOOP connection. Please ensure WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET are configured.");
-                                }
-                              } catch (err: unknown) {
-                                const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-                                console.error("Failed to initiate OAuth:", err);
-                                toast.error(errorMessage || "Failed to connect WHOOP. Please check server configuration.");
-                              }
+                            onClick={() => {
+                              setShowCredentialsModal(true);
+                              setCredentialsData({ clientId: '', clientSecret: '' });
                             }}
-                            disabled={!whoopStatus?.hasCredentials}
-                            className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30 transition-colors text-sm font-medium flex items-center gap-2"
                           >
-                            {whoopStatus?.hasCredentials ? "Connect WHOOP" : "WHOOP Not Configured"}
+                            <Key className="w-4 h-4" />
+                            Add Credentials
                           </button>
-                        ) : (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await api.delete("/integrations/whoop");
-                                await fetchPreferences();
-                                toast.success("WHOOP disconnected successfully");
-                              } catch (err) {
-                                console.error("Failed to disconnect:", err);
-                                toast.error("Failed to disconnect WHOOP");
-                              }
-                            }}
-                            className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-                            title="Disconnect WHOOP"
-                          >
-                            <Unlink className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                        </div>
+                      )}
+                      {whoopStatus?.isConnected && !whoopStatus?.hasCredentials && (
+                        <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                          <p className="text-xs text-blue-400">
+                            Connected using app-level credentials. You can add your own credentials to manage your connection independently.
+                          </p>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Connection Status Card - Only show when connected */}
-                    {whoopStatus?.isConnected && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="mb-3 p-4 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <motion.div
-                              animate={{
-                                scale: [1, 1.1, 1],
-                              }}
-                              transition={{
-                                duration: 2,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                              }}
-                              className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center"
-                            >
-                              <Wifi className="w-4 h-4 text-green-400" />
-                            </motion.div>
-                            {/* Data flow animation */}
-                            <motion.div
-                              className="absolute -left-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-green-400 rounded-full"
-                              animate={{
-                                x: [0, 8, 0],
-                                opacity: [0, 1, 0],
-                              }}
-                              transition={{
-                                duration: 1.5,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                              }}
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm text-white font-medium">Live Connection Active</p>
-                            <p className="text-xs text-green-400/80 mt-0.5">
-                              Data is syncing in real-time from your WHOOP device
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {!whoopStatus?.isConnected && !whoopStatus?.hasCredentials && (
-                      <div className="mt-4 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                        <p className="text-xs text-yellow-400 mb-3">
-                          WHOOP OAuth credentials are not configured. Please add your WHOOP Client ID and Client Secret below to connect.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowCredentialsModal(true);
-                            setCredentialsData({ clientId: '', clientSecret: '' });
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30 transition-colors text-sm font-medium flex items-center gap-2"
-                        >
-                          <Key className="w-4 h-4" />
-                          Add Credentials
-                        </button>
-                      </div>
-                    )}
-                    {whoopStatus?.isConnected && !whoopStatus?.hasCredentials && (
-                      <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                        <p className="text-xs text-blue-400">
-                          Connected using app-level credentials. You can add your own credentials to manage your connection independently.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Other Integrations */}
-                  <div className="space-y-4">
-                    {integrations
-                      .filter((i) => i.provider !== "whoop")
-                      .map((integration) => (
-                        <div
-                          key={integration.provider}
-                          className="flex items-center justify-between p-4 rounded-xl bg-white/5"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                              <LinkIcon className="w-5 h-5 text-slate-400" />
-                            </div>
-                            <div>
-                              <p className="text-white font-medium">
-                                {integration.displayName}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {integration.description}
-                              </p>
-                              {integration.lastSync && (
-                                <p className="text-xs text-slate-400 mt-1">
-                                  Last synced:{" "}
-                                  {new Date(integration.lastSync).toLocaleString()}
+                    {/* Other Integrations */}
+                    <div className="space-y-3">
+                      {integrations
+                        .filter((i) => i.provider !== "whoop")
+                        .map((integration) => (
+                          <div
+                            key={integration.provider}
+                            className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center">
+                                <LinkIcon className="w-5 h-5 text-slate-400" />
+                              </div>
+                              <div>
+                                <p className="text-white font-medium">
+                                  {integration.displayName}
                                 </p>
-                              )}
+                                <p className="text-xs text-slate-500">
+                                  {integration.description}
+                                </p>
+                                {integration.lastSync && (
+                                  <p className="text-xs text-slate-400 mt-1">
+                                    Last synced:{" "}
+                                    {new Date(integration.lastSync).toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
                             </div>
+                            {integration.isConnected ? (
+                              <button className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+                                <Unlink className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm font-medium">
+                                Connect
+                              </button>
+                            )}
                           </div>
-                          {integration.isConnected ? (
-                            <button className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
-                              <Unlink className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <button className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm font-medium">
-                              Connect
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Appearance */}
-            {activeSection === "appearance" && (
-              <div className="space-y-6">
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Theme
-                  </h2>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { id: "light", label: "Light", icon: <Sun className="w-5 h-5" /> },
-                      { id: "dark", label: "Dark", icon: <Moon className="w-5 h-5" /> },
-                      {
-                        id: "system",
-                        label: "System",
-                        icon: <Settings className="w-5 h-5" />,
-                      },
-                    ].map((theme) => (
-                      <button
-                        key={theme.id}
-                        onClick={() =>
-                          updatePreference("appearance", "theme", theme.id)
-                        }
-                        className={`p-4 rounded-xl border text-center transition-all ${
-                          preferences.appearance.theme === theme.id
-                            ? "bg-purple-500/20 border-purple-500/40"
-                            : "bg-white/5 border-white/10 hover:border-white/20"
-                        }`}
-                      >
-                        <div className="flex flex-col items-center gap-2">
-                          <span
-                            className={
-                              preferences.appearance.theme === theme.id
-                                ? "text-purple-400"
-                                : "text-slate-400"
-                            }
-                          >
-                            {theme.icon}
-                          </span>
-                          <span
-                            className={
-                              preferences.appearance.theme === theme.id
-                                ? "text-white"
-                                : "text-slate-300"
-                            }
-                          >
-                            {theme.label}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-white">
-                        Compact Mode
-                      </h2>
-                      <p className="text-sm text-slate-400 mt-1">
-                        Use a more condensed layout
-                      </p>
+                        ))}
                     </div>
-                    <button
-                      onClick={() =>
-                        updatePreference(
-                          "appearance",
-                          "compactMode",
-                          !preferences.appearance.compactMode
-                        )
-                      }
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        preferences.appearance.compactMode
-                          ? "bg-purple-500"
-                          : "bg-slate-700"
-                      }`}
-                    >
-                      <motion.div
-                        className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-lg"
-                        animate={{
-                          left: preferences.appearance.compactMode
-                            ? "calc(100% - 20px)"
-                            : "4px",
-                        }}
-                      />
-                    </button>
-                  </div>
+                  </GlassCard>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Voice Assistant */}
-            {activeSection === "voiceAssistant" && (
-              <div className="space-y-6">
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Voice Assistant
-                  </h2>
-                  <p className="text-slate-400 text-sm mb-6">
-                    Customize your AI coach name and language for the voice assistant.
-                  </p>
-                  <div className="space-y-6">
-                    <div>
-                      <label
-                        htmlFor="assistant-name"
-                        className="block text-sm font-medium text-white mb-2"
-                      >
-                        Assistant name
-                      </label>
-                      <input
-                        id="assistant-name"
-                        type="text"
-                        value={assistantName}
-                        onChange={(e) => setAssistantName(e.target.value)}
-                        onBlur={async () => {
-                          // Save to database when user leaves the input field
-                          try {
-                            await api.patch("/preferences", {
-                              voiceAssistant: {
-                                assistantName: assistantName.trim() || 'Aurea',
-                              },
-                            });
-                            toast.success("Assistant name saved");
-                          } catch (err) {
-                            console.error("Failed to save assistant name:", err);
-                            toast.error("Failed to save assistant name");
+              {/* Appearance */}
+              {activeSection === "appearance" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Palette className="w-5 h-5" />}
+                      title="Theme"
+                      gradient="from-orange-500 to-amber-500"
+                    />
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { id: "light", label: "Light", icon: <Sun className="w-5 h-5" /> },
+                        { id: "dark", label: "Dark", icon: <Moon className="w-5 h-5" /> },
+                        {
+                          id: "system",
+                          label: "System",
+                          icon: <Settings className="w-5 h-5" />,
+                        },
+                      ].map((theme) => {
+                        const isSelected = preferences.appearance.theme === theme.id;
+                        return (
+                          <button
+                            key={theme.id}
+                            onClick={() =>
+                              updatePreference("appearance", "theme", theme.id)
+                            }
+                            className={`p-4 rounded-xl border text-center transition-all ${
+                              isSelected
+                                ? "bg-white/[0.06] border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                : "bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12]"
+                            }`}
+                          >
+                            <div className="flex flex-col items-center gap-2">
+                              <span
+                                className={
+                                  isSelected
+                                    ? "text-purple-400"
+                                    : "text-slate-400"
+                                }
+                              >
+                                {theme.icon}
+                              </span>
+                              <span
+                                className={
+                                  isSelected
+                                    ? "text-white"
+                                    : "text-slate-300"
+                                }
+                              >
+                                {theme.label}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-lg font-semibold text-white">
+                          Compact Mode
+                        </h2>
+                        <p className="text-sm text-slate-400 mt-1">
+                          Use a more condensed layout
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        checked={preferences.appearance.compactMode}
+                        onChange={() =>
+                          updatePreference(
+                            "appearance",
+                            "compactMode",
+                            !preferences.appearance.compactMode
+                          )
+                        }
+                      />
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Voice Assistant */}
+              {activeSection === "voiceAssistant" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<MessageSquare className="w-5 h-5" />}
+                      title="Voice Assistant"
+                      gradient="from-indigo-500 to-violet-500"
+                    />
+                    <p className="text-slate-400 text-sm mb-6">
+                      Customize your AI coach name and language for the voice assistant.
+                    </p>
+                    <div className="space-y-6">
+                      <div>
+                        <label
+                          htmlFor="assistant-name"
+                          className="block text-sm font-medium text-white mb-2"
+                        >
+                          Assistant name
+                        </label>
+                        <input
+                          id="assistant-name"
+                          type="text"
+                          value={assistantName}
+                          onChange={(e) => setAssistantName(e.target.value)}
+                          onBlur={async () => {
+                            // Save to database when user leaves the input field
+                            try {
+                              await api.patch("/preferences", {
+                                voiceAssistant: {
+                                  assistantName: assistantName.trim() || 'Aurea',
+                                },
+                              });
+                              toast.success("Assistant name saved");
+                            } catch (err) {
+                              console.error("Failed to save assistant name:", err);
+                              toast.error("Failed to save assistant name");
+                            }
+                          }}
+                          placeholder="e.g. YHealth Coach"
+                          className="w-full max-w-md px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-colors"
+                        />
+                        <p className="text-slate-500 text-xs mt-1">
+                          This name is shown in the voice assistant and the coach will call itself by this name (e.g. &quot;{assistantName} is ready. Tap to start&quot;).
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">
+                          Language
+                        </label>
+                        <LanguageSelector
+                          selectedLanguage={selectedLanguage}
+                          onLanguageChange={setSelectedLanguage}
+                          compact={false}
+                          showPreview={true}
+                        />
+                        <p className="text-slate-500 text-xs mt-2">
+                          The assistant will speak and listen in the selected language.
+                        </p>
+                      </div>
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Privacy */}
+              {activeSection === "privacy" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Shield className="w-5 h-5" />}
+                      title="Data & Privacy"
+                      gradient="from-rose-500 to-pink-500"
+                    />
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div>
+                          <p className="text-white font-medium">
+                            Share Progress with Coach
+                          </p>
+                          <p className="text-sm text-slate-400">
+                            Allow your AI coach to see detailed progress
+                          </p>
+                        </div>
+                        <ToggleSwitch
+                          checked={preferences.privacy.shareProgress}
+                          onChange={() =>
+                            updatePreference(
+                              "privacy",
+                              "shareProgress",
+                              !preferences.privacy.shareProgress
+                            )
                           }
-                        }}
-                        placeholder="e.g. YHealth Coach"
-                        className="w-full max-w-md px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50"
-                      />
-                      <p className="text-slate-500 text-xs mt-1">
-                        This name is shown in the voice assistant and the coach will call itself by this name (e.g. &quot;{assistantName} is ready. Tap to start&quot;).
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white mb-2">
-                        Language
-                      </label>
-                      <LanguageSelector
-                        selectedLanguage={selectedLanguage}
-                        onLanguageChange={setSelectedLanguage}
-                        compact={false}
-                        showPreview={true}
-                      />
-                      <p className="text-slate-500 text-xs mt-2">
-                        The assistant will speak and listen in the selected language.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Privacy */}
-            {activeSection === "privacy" && (
-              <div className="space-y-6">
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Data & Privacy
-                  </h2>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
-                      <div>
-                        <p className="text-white font-medium">
-                          Share Progress with Coach
-                        </p>
-                        <p className="text-sm text-slate-400">
-                          Allow your AI coach to see detailed progress
-                        </p>
-                      </div>
-                      <button
-                        onClick={() =>
-                          updatePreference(
-                            "privacy",
-                            "shareProgress",
-                            !preferences.privacy.shareProgress
-                          )
-                        }
-                        className={`relative w-12 h-6 rounded-full transition-colors ${
-                          preferences.privacy.shareProgress
-                            ? "bg-purple-500"
-                            : "bg-slate-700"
-                        }`}
-                      >
-                        <motion.div
-                          className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-lg"
-                          animate={{
-                            left: preferences.privacy.shareProgress
-                              ? "calc(100% - 20px)"
-                              : "4px",
-                          }}
                         />
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div>
+                          <p className="text-white font-medium">
+                            Anonymous Analytics
+                          </p>
+                          <p className="text-sm text-slate-400">
+                            Help improve yHealth with anonymous usage data
+                          </p>
+                        </div>
+                        <ToggleSwitch
+                          checked={preferences.privacy.anonymousAnalytics}
+                          onChange={() =>
+                            updatePreference(
+                              "privacy",
+                              "anonymousAnalytics",
+                              !preferences.privacy.anonymousAnalytics
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h2 className="text-lg font-semibold text-white mb-4">
+                      Your Data
+                    </h2>
+                    <div className="flex flex-wrap gap-3">
+                      <button className="flex items-center gap-2 px-4 py-2.5 bg-white/[0.03] border border-white/[0.06] text-slate-300 rounded-xl hover:bg-white/[0.06] transition-colors">
+                        <Download className="w-4 h-4" />
+                        Export Data
+                      </button>
+                      <button className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                        Delete All Data
                       </button>
                     </div>
+                  </GlassCard>
+                </div>
+              )}
 
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
-                      <div>
-                        <p className="text-white font-medium">
-                          Anonymous Analytics
-                        </p>
-                        <p className="text-sm text-slate-400">
-                          Help improve yHealth with anonymous usage data
+              {/* Account */}
+              {activeSection === "account" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<User className="w-5 h-5" />}
+                      title="Account Information"
+                      gradient="from-slate-400 to-slate-500"
+                    />
+
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <label className="text-sm text-slate-400 mb-1 block">
+                          Name
+                        </label>
+                        <p className="text-white">
+                          {user?.firstName
+                            ? `${user.firstName} ${user.lastName || ""}`.trim()
+                            : "Not set"}
                         </p>
                       </div>
-                      <button
-                        onClick={() =>
-                          updatePreference(
-                            "privacy",
-                            "anonymousAnalytics",
-                            !preferences.privacy.anonymousAnalytics
-                          )
-                        }
-                        className={`relative w-12 h-6 rounded-full transition-colors ${
-                          preferences.privacy.anonymousAnalytics
-                            ? "bg-purple-500"
-                            : "bg-slate-700"
-                        }`}
-                      >
-                        <motion.div
-                          className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-lg"
-                          animate={{
-                            left: preferences.privacy.anonymousAnalytics
-                              ? "calc(100% - 20px)"
-                              : "4px",
-                          }}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-4">
-                    Your Data
-                  </h2>
-                  <div className="flex flex-wrap gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-slate-300 rounded-xl hover:bg-white/10 transition-colors">
-                      <Download className="w-4 h-4" />
-                      Export Data
+                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <label className="text-sm text-slate-400 mb-1 block">
+                          Email
+                        </label>
+                        <p className="text-white">{user?.email || "Not set"}</p>
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h2 className="text-lg font-semibold text-white mb-4">
+                      Session
+                    </h2>
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors">
+                  </GlassCard>
+
+                  <div className="rounded-2xl bg-red-500/10 border border-red-500/20 p-6">
+                    <h2 className="text-lg font-semibold text-red-400 mb-2">
+                      Danger Zone
+                    </h2>
+                    <p className="text-sm text-slate-400 mb-4">
+                      Permanently delete your account and all associated data.
+                      This action cannot be undone.
+                    </p>
+                    <button className="flex items-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors">
                       <Trash2 className="w-4 h-4" />
-                      Delete All Data
+                      Delete Account
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Account */}
-            {activeSection === "account" && (
-              <div className="space-y-6">
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-6">
-                    Account Information
-                  </h2>
-
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-xl bg-white/5">
-                      <label className="text-sm text-slate-400 mb-1 block">
-                        Name
-                      </label>
-                      <p className="text-white">
-                        {user?.firstName
-                          ? `${user.firstName} ${user.lastName || ""}`.trim()
-                          : "Not set"}
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-white/5">
-                      <label className="text-sm text-slate-400 mb-1 block">
-                        Email
-                      </label>
-                      <p className="text-white">{user?.email || "Not set"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-                  <h2 className="text-lg font-semibold text-white mb-4">
-                    Session
-                  </h2>
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Sign Out
-                  </button>
-                </div>
-
-                <div className="rounded-2xl bg-red-500/10 border border-red-500/20 p-6">
-                  <h2 className="text-lg font-semibold text-red-400 mb-2">
-                    Danger Zone
-                  </h2>
-                  <p className="text-sm text-slate-400 mb-4">
-                    Permanently delete your account and all associated data.
-                    This action cannot be undone.
-                  </p>
-                  <button className="flex items-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                    Delete Account
-                  </button>
-                </div>
-              </div>
-            )}
-          </motion.main>
-        </div>
+              )}
+            </motion.main>
+          </div>
         </div>
       </div>
 
@@ -1761,7 +2136,7 @@ export default function SettingsPageContent() {
                 e.preventDefault();
                 try {
                   setIsSaving(true);
-                  
+
                   // Convert datetime-local format to ISO string if provided
                   let tokenExpiryISO: string | undefined = undefined;
                   if (tokenData.tokenExpiry) {
@@ -1771,13 +2146,13 @@ export default function SettingsPageContent() {
                       tokenExpiryISO = date.toISOString();
                     }
                   }
-                  
+
                   const response = await api.post("/integrations/whoop/tokens", {
                     accessToken: tokenData.accessToken,
                     refreshToken: tokenData.refreshToken || undefined,
                     tokenExpiry: tokenExpiryISO,
                   });
-                  
+
                   if (response.success) {
                     toast.success("Tokens saved successfully");
                     // Keep modal open and form prefilled (user might want to edit again)
@@ -1800,11 +2175,11 @@ export default function SettingsPageContent() {
                         status?: string;
                       }>("/integrations/whoop/tokens?unmasked=true"),
                     ]);
-                    
+
                     if (maskedResponse.success && maskedResponse.data) {
                       setTokenInfo(maskedResponse.data);
                     }
-                    
+
                     if (unmaskedResponse.success && unmaskedResponse.data?.hasTokens) {
                       // Update form with latest saved values
                       setTokenData({
@@ -1903,7 +2278,7 @@ export default function SettingsPageContent() {
                     </>
                   )}
                 </button>
-                
+
                 {tokenInfo?.hasTokens && (
                   <>
                     <button
@@ -1914,7 +2289,7 @@ export default function SettingsPageContent() {
                           const response = await api.patch("/integrations/whoop/tokens/disable", {
                             disabled: !newStatus,
                           });
-                          
+
                           if (response.success) {
                             toast.success(`Tokens ${newStatus ? 'enabled' : 'disabled'} successfully`);
                             const tokenResponse = await api.get<{
@@ -1951,7 +2326,7 @@ export default function SettingsPageContent() {
                         </>
                       )}
                     </button>
-                    
+
                     <button
                       type="button"
                       onClick={async () => {
@@ -2034,7 +2409,7 @@ export default function SettingsPageContent() {
                     clientId: credentialsData.clientId,
                     clientSecret: credentialsData.clientSecret,
                   });
-                  
+
                   if (response.success) {
                     toast.success("Credentials saved successfully");
                     setShowCredentialsModal(false);
@@ -2131,6 +2506,27 @@ export default function SettingsPageContent() {
           </motion.div>
         </div>
       )}
-    </MainLayout>
+    </div>
+  );
+}
+
+export default function SettingsPageContent() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-950">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+            <p className="text-slate-400">Loading settings...</p>
+          </motion.div>
+        </div>
+      }
+    >
+      <SettingsPageInner />
+    </Suspense>
   );
 }

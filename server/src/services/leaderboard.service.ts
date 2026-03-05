@@ -122,6 +122,19 @@ class LeaderboardService {
       },
     }));
 
+    // Ensure unique constraint exists before upsert (self-healing)
+    await query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'leaderboard_snapshots_date_board_type_segment_key_key'
+        ) THEN
+          ALTER TABLE leaderboard_snapshots ADD CONSTRAINT leaderboard_snapshots_date_board_type_segment_key_key
+            UNIQUE (date, board_type, segment_key);
+        END IF;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+    `).catch(() => { /* constraint may already exist */ });
+
     // Store in database snapshot
     await query(
       `INSERT INTO leaderboard_snapshots (date, board_type, segment_key, ranks, metadata)

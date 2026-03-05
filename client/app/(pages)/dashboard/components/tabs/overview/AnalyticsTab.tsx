@@ -69,15 +69,15 @@ interface AnalyticsData {
   };
 }
 
-// Brand colors - Emerald 600 as primary accent
+// Premium Brand colors
 const BRAND_COLORS = {
-  primary: '#059669', // emerald-600
-  secondary: '#00BCD4', // cyan/teal (yHealth primary)
-  success: '#10b981', // emerald-500
-  fitness: '#f97316', // orange-500
-  nutrition: '#22c55e', // green-500
-  wellbeing: '#3b82f6', // blue-500
-  accent: '#8b5cf6', // violet-500
+  primary: '#10b981',
+  secondary: '#00BCD4',
+  success: '#10b981',
+  fitness: '#f97316',
+  nutrition: '#22c55e',
+  wellbeing: '#3b82f6',
+  accent: '#8b5cf6',
   pink: '#ec4899',
 };
 
@@ -90,19 +90,23 @@ const CHART_COLORS = [
   BRAND_COLORS.pink,
 ];
 
-// Animated number component
+// Premium Animated number component
 function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string }) {
   const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
-    const duration = 1000;
-    const steps = 30;
+    const duration = 1200;
+    const steps = 40;
     const increment = value / steps;
     let current = 0;
+    let step = 0;
 
     const timer = setInterval(() => {
-      current += increment;
-      if (current >= value) {
+      step++;
+      const easeOut = 1 - Math.pow(1 - step / steps, 3);
+      current = value * easeOut;
+      
+      if (step >= steps) {
         setDisplayValue(value);
         clearInterval(timer);
       } else {
@@ -116,22 +120,18 @@ function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string
   return <span>{displayValue}{suffix}</span>;
 }
 
-// Skeleton loader for charts - deterministic heights for stable rendering
-const SKELETON_HEIGHTS = [45, 70, 55, 80, 40, 65, 50];
-
+// Premium Skeleton loader
 function ChartSkeleton() {
   return (
     <div className="animate-pulse">
-      <div className="h-[300px] bg-slate-800/50 rounded-lg flex items-end justify-around p-4 gap-2">
-        {SKELETON_HEIGHTS.map((height, i) => (
-          <div
+      <div className="h-[300px] bg-slate-800/50 rounded-2xl flex items-end justify-around p-4 gap-2">
+        {[45, 70, 55, 80, 40, 65, 50, 75, 60, 45, 70, 55].map((height, i) => (
+          <motion.div
             key={i}
-            className="bg-emerald-600/20 rounded-t"
-            style={{
-              height: `${height}%`,
-              width: '10%',
-              animationDelay: `${i * 100}ms`
-            }}
+            className="bg-gradient-to-t from-emerald-600/20 to-emerald-400/20 rounded-t-xl flex-1"
+            initial={{ height: 0 }}
+            animate={{ height: `${height}%` }}
+            transition={{ delay: i * 0.05, duration: 0.5 }}
           />
         ))}
       </div>
@@ -139,8 +139,8 @@ function ChartSkeleton() {
   );
 }
 
-// Metric card with animation
-function MetricCard({
+// Premium Metric card
+function PremiumMetricCard({
   icon: Icon,
   iconColor,
   value,
@@ -166,70 +166,119 @@ function MetricCard({
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay, type: 'spring', stiffness: 200, damping: 20 }}
-      whileHover={{ scale: 1.02, y: -2 }}
-      className={`relative overflow-hidden bg-gradient-to-br ${gradient} rounded-2xl p-6 border ${borderColor} backdrop-blur-sm group`}
+      whileHover={{ 
+        scale: 1.02, 
+        y: -4,
+        transition: { type: 'spring', stiffness: 400 }
+      }}
+      className={`
+        relative overflow-hidden rounded-2xl p-6
+        bg-gradient-to-br ${gradient}
+        border ${borderColor}
+        backdrop-blur-xl
+        transition-shadow duration-300
+        hover:shadow-2xl hover:${borderColor.replace('border-', 'shadow-').replace('/30', '/20')}
+      `}
     >
-      {/* Animated background shimmer */}
+      {/* Shimmer effect */}
       <motion.div
-        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity"
         style={{
-          background: 'linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%)',
-          backgroundSize: '200% 200%',
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
+          backgroundSize: '200% 100%',
         }}
-        animate={{
-          backgroundPosition: ['0% 0%', '100% 100%'],
-        }}
-        transition={{
-          duration: 1.5,
-          repeat: Infinity,
-          repeatType: 'reverse',
-        }}
+        animate={{ backgroundPosition: ['0% 0%', '200% 0%'] }}
+        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
       />
 
       <div className="relative z-10">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-4">
           <motion.div
-            whileHover={{ rotate: 360 }}
+            whileHover={{ rotate: 360, scale: 1.1 }}
             transition={{ duration: 0.5 }}
+            className={`p-2.5 rounded-xl bg-white/10 ${iconColor}`}
           >
-            <Icon className={`w-6 h-6 ${iconColor}`} />
+            <Icon className="w-5 h-5" />
           </motion.div>
           {trend && (
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: delay + 0.2, type: 'spring' }}
+              className={`
+                flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
+                ${trend === 'up' ? 'bg-emerald-500/20 text-emerald-400' : ''}
+                ${trend === 'down' ? 'bg-red-500/20 text-red-400' : ''}
+                ${trend === 'neutral' ? 'bg-slate-500/20 text-slate-400' : ''}
+              `}
             >
-              {trend === 'up' ? (
-                <TrendingUp className="w-5 h-5 text-emerald-400" />
-              ) : trend === 'down' ? (
-                <TrendingDown className="w-5 h-5 text-red-400" />
-              ) : (
-                <Activity className="w-5 h-5 text-slate-400" />
-              )}
+              {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : 
+               trend === 'down' ? <TrendingDown className="w-3 h-3" /> : 
+               <Activity className="w-3 h-3" />}
+              {trendValue !== undefined && `${trendValue >= 0 ? '+' : ''}${trendValue}%`}
             </motion.div>
           )}
         </div>
+
         <motion.p
           className="text-3xl font-bold text-white mb-1"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: delay + 0.1 }}
         >
-          {typeof value === 'number' ? <AnimatedNumber value={value} suffix={typeof value === 'number' && label.includes('Rate') ? '%' : ''} /> : value}
+          {typeof value === 'number' ? 
+            <AnimatedNumber value={value} suffix={typeof value === 'number' && label.includes('Rate') ? '%' : ''} /> : 
+            value
+          }
         </motion.p>
         <p className="text-sm text-slate-400">{label}</p>
-        {trendValue !== undefined && (
-          <motion.p
-            className={`text-xs mt-1 ${trendValue >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: delay + 0.3 }}
-          >
-            {trendValue >= 0 ? '+' : ''}{trendValue}% from last period
-          </motion.p>
-        )}
       </div>
+    </motion.div>
+  );
+}
+
+// Premium Chart Card
+function PremiumChartCard({
+  children,
+  title,
+  icon: Icon,
+  iconColor,
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  title: string;
+  icon: React.ElementType;
+  iconColor: string;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.5 }}
+      whileHover={{ 
+        y: -4,
+        transition: { type: 'spring', stiffness: 400 }
+      }}
+      className="
+        relative overflow-hidden rounded-2xl p-6
+        bg-slate-900/50 backdrop-blur-xl
+        border border-white/10
+        transition-all duration-300
+        hover:border-emerald-500/30
+        hover:shadow-xl hover:shadow-emerald-500/10
+      "
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <motion.div 
+          className={`p-2 rounded-lg ${iconColor}`}
+          whileHover={{ scale: 1.1, rotate: 5 }}
+        >
+          <Icon className="w-5 h-5" />
+        </motion.div>
+        <h3 className="text-lg font-semibold text-white">{title}</h3>
+      </div>
+      {children}
     </motion.div>
   );
 }
@@ -335,7 +384,7 @@ export function AnalyticsTab() {
             onClick={() => fetchAnalytics()}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-white font-medium transition-colors flex items-center gap-2 mx-auto"
+            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-white font-medium transition-colors flex items-center gap-2 mx-auto shadow-lg shadow-emerald-500/30"
           >
             <RefreshCw className="w-4 h-4" />
             Retry
@@ -347,7 +396,7 @@ export function AnalyticsTab() {
 
   return (
     <div className="space-y-6">
-      {/* Header with Time Range Selector */}
+      {/* Premium Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -374,7 +423,7 @@ export function AnalyticsTab() {
                 whileTap={{ scale: 0.95 }}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   timeRange === range
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                    ? 'bg-gradient-to-r from-emerald-600 to-cyan-600 text-white shadow-lg shadow-emerald-500/30'
                     : 'text-slate-300 hover:bg-white/10 hover:text-white'
                 }`}
               >
@@ -385,8 +434,8 @@ export function AnalyticsTab() {
           <motion.button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.1, rotate: 180 }}
+            whileTap={{ scale: 0.9 }}
             className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -396,45 +445,45 @@ export function AnalyticsTab() {
 
       {/* Performance Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
+        <PremiumMetricCard
           icon={Activity}
           iconColor="text-emerald-400"
           value={data.performanceMetrics.averageCompletionRate}
           label="Avg Completion Rate"
           trend={data.performanceMetrics.improvementRate >= 0 ? 'up' : 'down'}
-          gradient="from-emerald-500/20 to-emerald-600/20"
+          gradient="from-emerald-500/20 via-emerald-600/10 to-transparent"
           borderColor="border-emerald-500/30"
           delay={0}
         />
 
-        <MetricCard
+        <PremiumMetricCard
           icon={Target}
           iconColor="text-cyan-400"
           value={data.performanceMetrics.totalActivities}
           label="Total Activities"
           trend="neutral"
-          gradient="from-cyan-500/20 to-cyan-600/20"
+          gradient="from-cyan-500/20 via-cyan-600/10 to-transparent"
           borderColor="border-cyan-500/30"
           delay={0.1}
         />
 
-        <MetricCard
+        <PremiumMetricCard
           icon={Calendar}
           iconColor="text-green-400"
           value={data.performanceMetrics.bestDay}
           label="Best Day"
-          gradient="from-green-500/20 to-green-600/20"
+          gradient="from-green-500/20 via-green-600/10 to-transparent"
           borderColor="border-green-500/30"
           delay={0.2}
         />
 
-        <MetricCard
+        <PremiumMetricCard
           icon={TrendingUp}
           iconColor="text-orange-400"
           value={`${data.performanceMetrics.improvementRate >= 0 ? '+' : ''}${data.performanceMetrics.improvementRate}%`}
           label="Improvement Rate"
           trend={data.performanceMetrics.improvementRate >= 0 ? 'up' : 'down'}
-          gradient="from-orange-500/20 to-orange-600/20"
+          gradient="from-orange-500/20 via-orange-600/10 to-transparent"
           borderColor="border-orange-500/30"
           delay={0.3}
         />
@@ -442,375 +491,247 @@ export function AnalyticsTab() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Activity Trends Line Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          whileHover={{ y: -2 }}
-          className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-emerald-500/30 transition-colors"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 rounded-lg bg-emerald-500/10">
-              <TrendingUp className="w-5 h-5 text-emerald-400" />
+        {/* Activity Trends */}
+        <PremiumChartCard title="Activity Trends" icon={TrendingUp} iconColor="bg-emerald-500/20 text-emerald-400" delay={0.4}>
+          {data.activityTrends.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={data.activityTrends}>
+                <defs>
+                  <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={BRAND_COLORS.primary} stopOpacity={0.8} />
+                    <stop offset="95%" stopColor={BRAND_COLORS.primary} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                <XAxis
+                  dataKey="date"
+                  stroke="#9ca3af"
+                  tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  tickFormatter={(value) => {
+                    const date = new Date(value);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  }}
+                />
+                <YAxis stroke="#9ca3af" domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
+                    border: '1px solid #374151',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  }}
+                  labelStyle={{ color: '#fff', fontWeight: 600 }}
+                  formatter={(value: unknown) => [`${value}%`, 'Completion Rate']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="completionRate"
+                  stroke={BRAND_COLORS.primary}
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorCompleted)"
+                  name="Completion Rate %"
+                  animationDuration={1500}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-[300px] text-slate-400">
+              <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
+              <p>No activity trends data available</p>
             </div>
-            <h3 className="text-lg font-semibold text-white">Activity Trends</h3>
-          </div>
-          <AnimatePresence mode="wait">
-            {data.activityTrends.length > 0 ? (
-              <motion.div
-                key="chart"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={data.activityTrends}>
-                    <defs>
-                      <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={BRAND_COLORS.primary} stopOpacity={0.8} />
-                        <stop offset="95%" stopColor={BRAND_COLORS.primary} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      tickFormatter={(value) => {
-                        const date = new Date(value);
-                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                      }}
-                    />
-                    <YAxis stroke="#9ca3af" domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1f2937',
-                        border: '1px solid #374151',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-                      }}
-                      labelStyle={{ color: '#fff', fontWeight: 600 }}
-                      formatter={(value: unknown) => [`${value}%`, 'Completion Rate']}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="completionRate"
-                      stroke={BRAND_COLORS.primary}
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorCompleted)"
-                      name="Completion Rate %"
-                      animationDuration={1500}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center h-[300px] text-slate-400"
-              >
-                <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
-                <p>No activity trends data available</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+          )}
+        </PremiumChartCard>
 
-        {/* Weekly Breakdown Bar Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          whileHover={{ y: -2 }}
-          className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-cyan-500/30 transition-colors"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 rounded-lg bg-cyan-500/10">
-              <BarChart3 className="w-5 h-5 text-cyan-400" />
+        {/* Weekly Breakdown */}
+        <PremiumChartCard title="Weekly Breakdown" icon={BarChart3} iconColor="bg-cyan-500/20 text-cyan-400" delay={0.5}>
+          {data.weeklyBreakdown.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data.weeklyBreakdown}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                <XAxis dataKey="day" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
+                    border: '1px solid #374151',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  }}
+                  labelStyle={{ color: '#fff', fontWeight: 600 }}
+                />
+                <Legend />
+                <Bar dataKey="activities" fill={BRAND_COLORS.primary} name="Activities" radius={[4, 4, 0, 0]} animationDuration={1500} />
+                <Bar dataKey="workouts" fill={BRAND_COLORS.fitness} name="Workouts" radius={[4, 4, 0, 0]} animationDuration={1500} />
+                <Bar dataKey="meals" fill={BRAND_COLORS.nutrition} name="Meals" radius={[4, 4, 0, 0]} animationDuration={1500} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-[300px] text-slate-400">
+              <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
+              <p>No weekly breakdown data available</p>
             </div>
-            <h3 className="text-lg font-semibold text-white">Weekly Breakdown</h3>
-          </div>
-          <AnimatePresence mode="wait">
-            {data.weeklyBreakdown.length > 0 ? (
-              <motion.div
-                key="chart"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={data.weeklyBreakdown}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                    <XAxis dataKey="day" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                    <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1f2937',
-                        border: '1px solid #374151',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-                      }}
-                      labelStyle={{ color: '#fff', fontWeight: 600 }}
-                    />
-                    <Legend />
-                    <Bar dataKey="activities" fill={BRAND_COLORS.primary} name="Activities" radius={[4, 4, 0, 0]} animationDuration={1500} />
-                    <Bar dataKey="workouts" fill={BRAND_COLORS.fitness} name="Workouts" radius={[4, 4, 0, 0]} animationDuration={1500} />
-                    <Bar dataKey="meals" fill={BRAND_COLORS.nutrition} name="Meals" radius={[4, 4, 0, 0]} animationDuration={1500} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center h-[300px] text-slate-400"
-              >
-                <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
-                <p>No weekly breakdown data available</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+          )}
+        </PremiumChartCard>
 
-        {/* Category Distribution Pie Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          whileHover={{ y: -2 }}
-          className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-green-500/30 transition-colors"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <Target className="w-5 h-5 text-green-400" />
+        {/* Category Distribution */}
+        <PremiumChartCard title="Category Distribution" icon={Target} iconColor="bg-green-500/20 text-green-400" delay={0.6}>
+          {data.categoryDistribution.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={data.categoryDistribution}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={(props: { percent?: number; category?: string }) => {
+                    const percent = ((props.percent || 0) * 100).toFixed(1);
+                    return `${props.category || ''}: ${percent}%`;
+                  }}
+                  outerRadius={100}
+                  innerRadius={40}
+                  fill="#8884d8"
+                  dataKey="count"
+                  nameKey="category"
+                  animationDuration={1500}
+                >
+                  {data.categoryDistribution.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
+                    border: '1px solid #374151',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  }}
+                  labelStyle={{ color: '#fff' }}
+                  formatter={(value: unknown, name: string | undefined, props: { payload?: { percentage?: number; category?: string } }) => [
+                    `${value} (${(props?.payload?.percentage || 0).toFixed(1)}%)`,
+                    props?.payload?.category || name,
+                  ]}
+                />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-[300px] text-slate-400">
+              <Target className="w-12 h-12 mb-2 opacity-50" />
+              <p>No category data available</p>
             </div>
-            <h3 className="text-lg font-semibold text-white">Category Distribution</h3>
-          </div>
-          <AnimatePresence mode="wait">
-            {data.categoryDistribution.length > 0 ? (
-              <motion.div
-                key="chart"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={data.categoryDistribution}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(props: { percent?: number; name?: string; category?: string }) => {
-                        const percent = ((props.percent || 0) * 100).toFixed(1);
-                        return `${props.name || props.category || ''}: ${percent}%`;
-                      }}
-                      outerRadius={100}
-                      innerRadius={40}
-                      fill="#8884d8"
-                      dataKey="count"
-                      nameKey="category"
-                      animationDuration={1500}
-                    >
-                      {data.categoryDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1f2937',
-                        border: '1px solid #374151',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-                      }}
-                      labelStyle={{ color: '#fff' }}
-                      formatter={(value: unknown, name?: string, props?: { payload?: { percentage?: number; category?: string } }) => [
-                        `${value} (${((props?.payload?.percentage || 0)).toFixed(1)}%)`,
-                        props?.payload?.category || name || '',
-                      ]}
-                    />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center h-[300px] text-slate-400"
-              >
-                <Target className="w-12 h-12 mb-2 opacity-50" />
-                <p>No category data available</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+          )}
+        </PremiumChartCard>
 
         {/* Time Distribution */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          whileHover={{ y: -2 }}
-          className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-pink-500/30 transition-colors"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-2 rounded-lg bg-pink-500/10">
-              <Clock className="w-5 h-5 text-pink-400" />
+        <PremiumChartCard title="Activity by Time of Day" icon={Clock} iconColor="bg-pink-500/20 text-pink-400" delay={0.7}>
+          {data.timeDistribution.some(t => t.activities > 0) ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data.timeDistribution}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                <XAxis
+                  dataKey="hour"
+                  stroke="#9ca3af"
+                  tick={{ fill: '#9ca3af', fontSize: 12 }}
+                  tickFormatter={(value) => {
+                    const hour = parseInt(value);
+                    return hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
+                  }}
+                />
+                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
+                    border: '1px solid #374151',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  }}
+                  labelStyle={{ color: '#fff', fontWeight: 600 }}
+                  formatter={(value: number | string | undefined) => [`${value ?? ''}`, 'Activities']}
+                />
+                <Bar dataKey="activities" fill={BRAND_COLORS.pink} name="Activities" radius={[4, 4, 0, 0]} animationDuration={1500} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-[300px] text-slate-400">
+              <Clock className="w-12 h-12 mb-2 opacity-50" />
+              <p>No time distribution data available</p>
             </div>
-            <h3 className="text-lg font-semibold text-white">Activity by Time of Day</h3>
-          </div>
-          <AnimatePresence mode="wait">
-            {data.timeDistribution.some(t => t.activities > 0) ? (
-              <motion.div
-                key="chart"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={data.timeDistribution}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                    <XAxis
-                      dataKey="hour"
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      tickFormatter={(value) => {
-                        const hour = parseInt(value);
-                        return hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
-                      }}
-                    />
-                    <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1f2937',
-                        border: '1px solid #374151',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-                      }}
-                      labelStyle={{ color: '#fff', fontWeight: 600 }}
-                      formatter={((value: number | string) => [`${value}`, 'Activities']) as never}
-                    />
-                    <Bar dataKey="activities" fill={BRAND_COLORS.pink} name="Activities" radius={[4, 4, 0, 0]} animationDuration={1500} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center h-[300px] text-slate-400"
-              >
-                <Clock className="w-12 h-12 mb-2 opacity-50" />
-                <p>No time distribution data available</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+          )}
+        </PremiumChartCard>
       </div>
 
       {/* Monthly Progress */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.8 }}
-        whileHover={{ y: -2 }}
-        className="bg-slate-900/50 backdrop-blur-xl rounded-2xl p-6 border border-white/10 hover:border-emerald-500/30 transition-colors"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 rounded-lg bg-emerald-500/10">
-            <Calendar className="w-5 h-5 text-emerald-400" />
+      <PremiumChartCard title="Monthly Progress" icon={Calendar} iconColor="bg-emerald-500/20 text-emerald-400" delay={0.8}>
+        {data.monthlyProgress.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data.monthlyProgress}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+              <XAxis
+                dataKey="month"
+                stroke="#9ca3af"
+                tick={{ fill: '#9ca3af', fontSize: 12 }}
+                tickFormatter={(value) => {
+                  const [year, month] = value.split('-');
+                  const date = new Date(parseInt(year), parseInt(month) - 1);
+                  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                }}
+              />
+              <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#1f2937',
+                  border: '1px solid #374151',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                }}
+                labelStyle={{ color: '#fff', fontWeight: 600 }}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="completed"
+                stroke={BRAND_COLORS.primary}
+                strokeWidth={3}
+                name="Completed"
+                dot={{ r: 5, fill: BRAND_COLORS.primary }}
+                activeDot={{ r: 7, stroke: '#fff', strokeWidth: 2 }}
+                animationDuration={1500}
+              />
+              <Line
+                type="monotone"
+                dataKey="target"
+                stroke={BRAND_COLORS.secondary}
+                strokeWidth={2}
+                strokeDasharray="5 5"
+                name="Target"
+                dot={{ r: 4, fill: BRAND_COLORS.secondary }}
+                animationDuration={1500}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-[300px] text-slate-400">
+            <Calendar className="w-12 h-12 mb-2 opacity-50" />
+            <p>No monthly progress data available</p>
           </div>
-          <h3 className="text-lg font-semibold text-white">Monthly Progress</h3>
-        </div>
-        <AnimatePresence mode="wait">
-          {data.monthlyProgress.length > 0 ? (
-            <motion.div
-              key="chart"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={data.monthlyProgress}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                  <XAxis
-                    dataKey="month"
-                    stroke="#9ca3af"
-                    tick={{ fill: '#9ca3af', fontSize: 12 }}
-                    tickFormatter={(value) => {
-                      const [year, month] = value.split('-');
-                      const date = new Date(parseInt(year), parseInt(month) - 1);
-                      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                    }}
-                  />
-                  <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1f2937',
-                      border: '1px solid #374151',
-                      borderRadius: '12px',
-                      boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-                    }}
-                    labelStyle={{ color: '#fff', fontWeight: 600 }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="completed"
-                    stroke={BRAND_COLORS.primary}
-                    strokeWidth={3}
-                    name="Completed"
-                    dot={{ r: 5, fill: BRAND_COLORS.primary }}
-                    activeDot={{ r: 7, stroke: '#fff', strokeWidth: 2 }}
-                    animationDuration={1500}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="target"
-                    stroke={BRAND_COLORS.secondary}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    name="Target"
-                    dot={{ r: 4, fill: BRAND_COLORS.secondary }}
-                    animationDuration={1500}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex flex-col items-center justify-center h-[300px] text-slate-400"
-            >
-              <Calendar className="w-12 h-12 mb-2 opacity-50" />
-              <p>No monthly progress data available</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+        )}
+      </PremiumChartCard>
 
-      {/* Data Freshness Indicator */}
+      {/* Live indicator */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.9 }}
         className="flex items-center justify-center gap-2 text-xs text-slate-500"
       >
-        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        <motion.div
+          className="w-2 h-2 rounded-full bg-emerald-500"
+          animate={{ scale: [1, 1.2, 1], opacity: [1, 0.5, 1] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
         <span>Live data • Auto-refreshes every 2 minutes</span>
       </motion.div>
     </div>
   );
 }
-

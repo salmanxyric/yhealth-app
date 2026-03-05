@@ -22,6 +22,8 @@
     "test:ci": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --ci --coverage --runInBand",
     "db:setup": "tsx src/database/setup.ts",
     "db:migrate": "tsx src/database/run-migrations.ts",
+    "db:migrate:auto": "tsx src/scripts/migrate.ts migrate",
+    "db:migrate:verify": "tsx src/scripts/migrate.ts verify",
     "db:migrate:health-metrics": "tsx src/database/run-daily-health-metrics-migration.ts",
     "db:migrate:chat": "tsx src/database/migrate-chat-tables.ts",
     "db:migrate:schedule": "tsx src/database/migrate-schedule-tables.ts",

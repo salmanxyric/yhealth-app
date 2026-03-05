@@ -34,7 +34,10 @@ export type ProactiveMessageType =
   | 'achievement_unlock' | 'recovery_advice' | 'competition_update'
   | 'app_inactive' | 'coach_pro_analysis'
   | 'meal_alignment' | 'daily_progress_review'
-  | 'score_declining';
+  | 'score_declining'
+  | 'plan_non_adherence'
+  | 'overtraining_risk' | 'commitment_followup'
+  | 'recovery_trend_alert' | 'positive_momentum';
 
 export interface ProactiveContext {
   type: ProactiveMessageType;
@@ -592,22 +595,64 @@ class ProactiveMessagingService {
       const hasHabits = (context.habits.totalActiveHabits || 0) > 0;
       if (!hasPlans && !hasGoals && !hasHabits) return false;
 
-      // Get today's scheduled workout
-      const todayWorkoutResult = await query<{ workout_name: string }>(
-        `SELECT workout_name FROM workout_logs
-         WHERE user_id = $1 AND scheduled_date = CURRENT_DATE AND status = 'pending'
-         LIMIT 1`,
-        [userId]
-      );
+      // Get today's scheduled workout + yesterday's results in parallel
+      const [todayWorkoutResult, yesterdayWorkoutResult, yesterdayMealResult, yesterdayScoreResult, unfulfilledCommitmentsResult] = await Promise.all([
+        query<{ workout_name: string }>(
+          `SELECT workout_name FROM workout_logs
+           WHERE user_id = $1 AND scheduled_date = CURRENT_DATE AND status = 'pending'
+           LIMIT 1`,
+          [userId]
+        ).catch(() => ({ rows: [] as { workout_name: string }[] })),
+        query<{ status: string; workout_name: string }>(
+          `SELECT status, workout_name FROM workout_logs
+           WHERE user_id = $1 AND scheduled_date = CURRENT_DATE - INTERVAL '1 day'
+           LIMIT 1`,
+          [userId]
+        ).catch(() => ({ rows: [] as { status: string; workout_name: string }[] })),
+        query<{ total_calories: string; meal_count: string }>(
+          `SELECT COALESCE(SUM(calories), 0)::text as total_calories, COUNT(*)::text as meal_count
+           FROM meal_logs WHERE user_id = $1 AND logged_at::date = CURRENT_DATE - INTERVAL '1 day'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { total_calories: string; meal_count: string }[] })),
+        query<{ total_score: string }>(
+          `SELECT total_score::text FROM daily_user_scores
+           WHERE user_id = $1 AND date = CURRENT_DATE - INTERVAL '1 day'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { total_score: string }[] })),
+        query<{ commitment_text: string }>(
+          `SELECT commitment_text FROM user_commitments
+           WHERE user_id = $1 AND follow_up_date <= CURRENT_DATE AND fulfilled IS NULL
+           LIMIT 2`,
+          [userId]
+        ).catch(() => ({ rows: [] as { commitment_text: string }[] })),
+      ]);
+
+      const yesterdayWorkout = yesterdayWorkoutResult.rows[0];
+      const yesterdayCalories = yesterdayMealResult.rows[0] ? parseInt(yesterdayMealResult.rows[0].total_calories) : 0;
+      const yesterdayMealCount = yesterdayMealResult.rows[0] ? parseInt(yesterdayMealResult.rows[0].meal_count) : 0;
+      const yesterdayScore = yesterdayScoreResult.rows[0] ? Math.round(parseFloat(yesterdayScoreResult.rows[0].total_score)) : null;
+      const unfulfilledCommitments = unfulfilledCommitmentsResult.rows.map(r => r.commitment_text);
 
       const proactiveContext: ProactiveContext = {
         type: 'morning_briefing',
         data: {
           todayWorkout: todayWorkoutResult.rows[0]?.workout_name || null,
           recoveryScore: context.whoop.lastRecovery?.score,
-          yesterdayScore: context.dailyScore.latestScore,
+          yesterdayScore: yesterdayScore ?? context.dailyScore.latestScore,
           currentStreak: context.gamification.currentStreak,
           activeHabits: context.habits.totalActiveHabits,
+          activeGoals: context.goals.activeGoals?.length || 0,
+          calorieTarget: context.nutrition?.activeDietPlan?.dailyCalories || null,
+          // Yesterday's results
+          yesterdayWorkoutCompleted: yesterdayWorkout?.status === 'completed',
+          yesterdayWorkoutName: yesterdayWorkout?.workout_name || null,
+          yesterdayCalories,
+          yesterdayMealCount,
+          yesterdaySleepHours: context.whoop?.lastSleep?.duration || null,
+          unfulfilledCommitments,
+          // Today's plan
+          waterTarget: context.waterIntake?.todayTargetMl || null,
+          todayHabitsTotal: context.habits?.todayTotalHabits || 0,
         },
         userContext: context,
       };
@@ -639,38 +684,101 @@ class ProactiveMessagingService {
 
       const context = cachedContext;
 
-      // Aggregate week data
-      const scoreResult = await query<{ avg_score: string }>(
-        `SELECT AVG(total_score)::text as avg_score FROM daily_user_scores
-         WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '7 days'`,
-        [userId]
-      );
+      // Aggregate this week + last week data for comparison
+      const [scoreResult, prevScoreResult, workoutResult, prevWorkoutResult, bestWorstResult, avgSleepResult, prevAvgSleepResult, avgRecoveryResult, prevAvgRecoveryResult] = await Promise.all([
+        query<{ avg_score: string }>(
+          `SELECT AVG(total_score)::text as avg_score FROM daily_user_scores
+           WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { avg_score: string }[] })),
+        query<{ avg_score: string }>(
+          `SELECT AVG(total_score)::text as avg_score FROM daily_user_scores
+           WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '14 days' AND date < CURRENT_DATE - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { avg_score: string }[] })),
+        query<{ completed: string; total: string }>(
+          `SELECT
+            COUNT(*) FILTER (WHERE status = 'completed')::text as completed,
+            COUNT(*)::text as total
+           FROM workout_logs
+           WHERE user_id = $1 AND scheduled_date >= CURRENT_DATE - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { completed: string; total: string }[] })),
+        query<{ completed: string; total: string }>(
+          `SELECT
+            COUNT(*) FILTER (WHERE status = 'completed')::text as completed,
+            COUNT(*)::text as total
+           FROM workout_logs
+           WHERE user_id = $1 AND scheduled_date >= CURRENT_DATE - INTERVAL '14 days' AND scheduled_date < CURRENT_DATE - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { completed: string; total: string }[] })),
+        query<{ date: string; total_score: string }>(
+          `SELECT date::text, total_score::text FROM daily_user_scores
+           WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '7 days'
+           ORDER BY total_score DESC LIMIT 1`,
+          [userId]
+        ).catch(() => ({ rows: [] as { date: string; total_score: string }[] })),
+        query<{ avg_sleep: string }>(
+          `SELECT AVG((data->>'duration')::numeric)::numeric(4,1)::text as avg_sleep
+           FROM health_data_records WHERE user_id = $1 AND data_type = 'sleep'
+           AND recorded_at >= NOW() - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { avg_sleep: string }[] })),
+        query<{ avg_sleep: string }>(
+          `SELECT AVG((data->>'duration')::numeric)::numeric(4,1)::text as avg_sleep
+           FROM health_data_records WHERE user_id = $1 AND data_type = 'sleep'
+           AND recorded_at >= NOW() - INTERVAL '14 days' AND recorded_at < NOW() - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { avg_sleep: string }[] })),
+        query<{ avg_recovery: string }>(
+          `SELECT AVG(score)::numeric(5,1)::text as avg_recovery
+           FROM health_data_records WHERE user_id = $1 AND data_type = 'recovery'
+           AND recorded_at >= NOW() - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { avg_recovery: string }[] })),
+        query<{ avg_recovery: string }>(
+          `SELECT AVG(score)::numeric(5,1)::text as avg_recovery
+           FROM health_data_records WHERE user_id = $1 AND data_type = 'recovery'
+           AND recorded_at >= NOW() - INTERVAL '14 days' AND recorded_at < NOW() - INTERVAL '7 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { avg_recovery: string }[] })),
+      ]);
+
       const avgScore = scoreResult.rows[0]?.avg_score ? Math.round(parseFloat(scoreResult.rows[0].avg_score)) : null;
+      const prevAvgScore = prevScoreResult.rows[0]?.avg_score ? Math.round(parseFloat(prevScoreResult.rows[0].avg_score)) : null;
+      const prevWorkoutsCompleted = parseInt(prevWorkoutResult.rows[0]?.completed || '0', 10);
+      const avgSleep = avgSleepResult.rows[0]?.avg_sleep ? parseFloat(avgSleepResult.rows[0].avg_sleep) : null;
+      const prevAvgSleep = prevAvgSleepResult.rows[0]?.avg_sleep ? parseFloat(prevAvgSleepResult.rows[0].avg_sleep) : null;
+      const avgRecovery = avgRecoveryResult.rows[0]?.avg_recovery ? parseFloat(avgRecoveryResult.rows[0].avg_recovery) : null;
+      const prevAvgRecovery = prevAvgRecoveryResult.rows[0]?.avg_recovery ? parseFloat(prevAvgRecoveryResult.rows[0].avg_recovery) : null;
+      const bestDay = bestWorstResult.rows[0] ? { date: bestWorstResult.rows[0].date, score: Math.round(parseFloat(bestWorstResult.rows[0].total_score)) } : null;
 
-      const workoutResult = await query<{ completed: string; total: string }>(
-        `SELECT
-          COUNT(*) FILTER (WHERE status = 'completed')::text as completed,
-          COUNT(*)::text as total
-         FROM workout_logs
-         WHERE user_id = $1 AND scheduled_date >= CURRENT_DATE - INTERVAL '7 days'`,
-        [userId]
-      );
-
-      const weightChange = context.progressTrend.weightChangeKg
+      const weightChange = context.progressTrend?.weightChangeKg
         ? `${context.progressTrend.weightChangeKg > 0 ? '+' : ''}${context.progressTrend.weightChangeKg} ${context.progressTrend.latestWeightUnit || 'kg'}`
         : null;
+
+      const workoutsCompleted = parseInt(workoutResult.rows[0]?.completed || '0', 10);
+      const workoutsPlanned = parseInt(workoutResult.rows[0]?.total || '0', 10);
 
       const proactiveContext: ProactiveContext = {
         type: 'weekly_digest',
         data: {
           avgScore,
-          workoutsCompleted: parseInt(workoutResult.rows[0]?.completed || '0', 10),
-          workoutsPlanned: parseInt(workoutResult.rows[0]?.total || '0', 10),
-          nutritionOnTarget: context.nutritionAnalysis.weeklyAdherenceRate
+          prevAvgScore,
+          scoreDelta: avgScore != null && prevAvgScore != null ? avgScore - prevAvgScore : null,
+          workoutsCompleted,
+          workoutsPlanned,
+          prevWorkoutsCompleted,
+          nutritionOnTarget: context.nutritionAnalysis?.weeklyAdherenceRate
             ? Math.round((context.nutritionAnalysis.weeklyAdherenceRate / 100) * 7)
             : null,
           currentStreak: context.gamification.currentStreak,
           weightChange,
+          bestDay: bestDay ? `${bestDay.date} (${bestDay.score}/100)` : null,
+          avgSleep,
+          prevAvgSleep,
+          avgRecovery,
+          prevAvgRecovery,
         },
         userContext: context,
       };
@@ -1139,8 +1247,18 @@ class ProactiveMessagingService {
         [userId]
       ).catch(() => ({ rows: [] as { daily_calories: number; protein_grams: number; name: string }[] }));
 
-      // Fetch coaching profile (analysis report fetched via buildInsightDrivenContext below)
-      const profile = await userCoachingProfileService.getOrGenerateProfile(userId, cachedContext).catch(() => null);
+      // Fetch coaching profile + schedule adherence
+      const [profile, scheduleResult] = await Promise.all([
+        userCoachingProfileService.getOrGenerateProfile(userId, cachedContext).catch(() => null),
+        query<{ completed: string; total: string }>(
+          `SELECT COUNT(CASE WHEN si.completed THEN 1 END)::text as completed,
+                  COUNT(*)::text as total
+           FROM schedule_items si
+           JOIN daily_schedules ds ON si.schedule_id = ds.id
+           WHERE ds.user_id = $1 AND ds.date = CURRENT_DATE`,
+          [userId]
+        ).catch(() => ({ rows: [] as { completed: string; total: string }[] })),
+      ]);
 
       const meals = mealSummary.rows[0];
       const workouts = workoutSummary.rows[0];
@@ -1182,6 +1300,9 @@ class ProactiveMessagingService {
           // Streak & Score
           streak: context?.gamification?.currentStreak || 0,
           dailyScore: context?.dailyScore?.latestScore,
+          // Schedule adherence (Phase 3)
+          scheduleCompleted: parseInt(scheduleResult.rows[0]?.completed || '0', 10),
+          scheduleTotal: parseInt(scheduleResult.rows[0]?.total || '0', 10),
         },
         userContext: context,
       };
@@ -1267,6 +1388,342 @@ class ProactiveMessagingService {
   }
 
   // ============================================
+  // PLAN NON-ADHERENCE (multi-day inactivity)
+  // ============================================
+
+  /**
+   * Send strict accountability message when user hasn't followed their plan for 3+ days.
+   * Detects: no activity, low completion rate, missed workouts/meals over multiple days.
+   */
+  async checkAndSendPlanNonAdherenceMessage(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('plan_non_adherence')) return false;
+
+      const context = cachedContext;
+
+      // Fetch coaching profile for adherence data
+      const profile = await userCoachingProfileService.getOrGenerateProfile(userId, context).catch(() => null);
+      const adherence7d = profile?.longitudinalAdherence?.adherence7d;
+      const consecutiveLowDays = profile?.longitudinalAdherence?.consecutiveLowDays || 0;
+      const accountabilityLevel = profile?.accountabilityLevel || 'supportive';
+
+      // Calculate days since last workout and meal
+      let daysSinceLastWorkout = 0;
+      if (context.workouts?.lastWorkoutDate) {
+        daysSinceLastWorkout = Math.floor(
+          (Date.now() - new Date(context.workouts.lastWorkoutDate).getTime()) / (1000 * 60 * 60 * 24)
+        );
+      }
+      let daysSinceLastMeal = 0;
+      if (context.nutrition?.lastMealDate) {
+        daysSinceLastMeal = Math.floor(
+          (Date.now() - new Date(context.nutrition.lastMealDate).getTime()) / (1000 * 60 * 60 * 24)
+        );
+      }
+
+      const proactiveContext: ProactiveContext = {
+        type: 'plan_non_adherence',
+        data: {
+          daysSinceLastWorkout,
+          daysSinceLastMeal,
+          missedWorkouts: context.workouts?.missedWorkouts || 0,
+          completionRate: context.workouts?.completionRate,
+          consecutiveLowDays,
+          accountabilityLevel,
+          adherence7d,
+          activePlanName: context.workouts?.activePlans?.[0]?.name,
+          activePlanProgress: context.workouts?.activePlans?.[0]?.progress,
+          dietPlanName: context.nutrition?.activeDietPlan?.name,
+          nutritionAdherence: context.nutrition?.activeDietPlan?.adherence,
+        },
+        userContext: context,
+      };
+
+      // Enrich with pre-computed insights
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'plan_non_adherence', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      // Use higher token limit for detailed accountability messages
+      const prevMaxTokens = this.llm.maxTokens;
+      this.llm.maxTokens = 800;
+
+      try {
+        const message = await this.generateProactiveMessage(userId, proactiveContext);
+        await this.sendProactiveMessage(userId, message, 'plan_non_adherence');
+        return true;
+      } finally {
+        this.llm.maxTokens = prevMaxTokens;
+      }
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error sending plan non-adherence message', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return false;
+    }
+  }
+
+  // ============================================
+  // PHASE 1: NEW MESSAGE TYPE HANDLERS
+  // ============================================
+
+  /**
+   * Overtraining risk: high strain + low recovery + workout planned = injury risk
+   */
+  async checkAndSendOvertrainingRiskMessage(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('overtraining_risk')) return false;
+
+      const context = cachedContext;
+      const recovery = context.whoop?.lastRecovery?.score;
+      const strain = context.whoop?.todayStrain?.score;
+
+      if (!context.whoop?.isConnected || recovery == null) return false;
+      if (!((recovery < 40 && strain != null && strain > 15) || recovery < 30)) return false;
+
+      // Get today's scheduled workout name if available
+      const todayWorkoutResult = await query<{ workout_name: string }>(
+        `SELECT workout_name FROM workout_logs
+         WHERE user_id = $1 AND scheduled_date = CURRENT_DATE AND status = 'pending'
+         LIMIT 1`,
+        [userId]
+      ).catch(() => ({ rows: [] as { workout_name: string }[] }));
+
+      const proactiveContext: ProactiveContext = {
+        type: 'overtraining_risk',
+        data: {
+          recoveryScore: recovery,
+          strain: strain ?? null,
+          sleepHours: context.whoop.lastSleep?.duration,
+          hrvStatus: context.whoop.lastRecovery?.hrvStatus || null,
+          todayWorkout: todayWorkoutResult.rows[0]?.workout_name || context.workouts?.activePlans?.[0]?.name || null,
+          activePlanName: context.workouts?.activePlans?.[0]?.name || null,
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'overtraining_risk', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'overtraining_risk');
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error checking overtraining risk', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  /**
+   * Commitment follow-up: user said "I'll do X" in chat → check if they followed through
+   */
+  async checkAndSendCommitmentFollowup(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('commitment_followup')) return false;
+
+      // Fetch unfulfilled commitments
+      const commitmentResult = await query<{
+        id: string; commitment_text: string; follow_up_date: string; category: string;
+      }>(
+        `SELECT id, commitment_text, follow_up_date, category
+         FROM user_commitments
+         WHERE user_id = $1 AND follow_up_date <= CURRENT_DATE
+         AND fulfilled IS NULL
+         ORDER BY follow_up_date ASC LIMIT 3`,
+        [userId]
+      ).catch(() => ({ rows: [] as { id: string; commitment_text: string; follow_up_date: string; category: string }[] }));
+
+      if (commitmentResult.rows.length === 0) return false;
+
+      const context = cachedContext;
+      const commitments = commitmentResult.rows;
+      const daysOverdue = Math.floor(
+        (Date.now() - new Date(commitments[0].follow_up_date).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      const proactiveContext: ProactiveContext = {
+        type: 'commitment_followup',
+        data: {
+          commitments: commitments.map(c => ({
+            text: c.commitment_text,
+            category: c.category,
+            followUpDate: c.follow_up_date,
+          })),
+          primaryCommitment: commitments[0].commitment_text,
+          category: commitments[0].category,
+          daysOverdue,
+          totalUnfulfilled: commitments.length,
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'commitment_followup', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'commitment_followup');
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error checking commitment followup', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  /**
+   * Recovery trend alert: recovery declining over 3+ days indicates lifestyle issue
+   */
+  async checkAndSendRecoveryTrendAlert(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('recovery_trend_alert')) return false;
+
+      const context = cachedContext;
+      if (!context.whoop?.isConnected) return false;
+
+      // Fetch last 5 days of recovery data for trend display
+      const trendResult = await query<{ score: string; recorded_at: string }>(
+        `SELECT score::text, recorded_at::date::text as recorded_at
+         FROM health_data_records
+         WHERE user_id = $1 AND data_type = 'recovery'
+         AND recorded_at >= NOW() - INTERVAL '5 days'
+         ORDER BY recorded_at DESC`,
+        [userId]
+      ).catch(() => ({ rows: [] as { score: string; recorded_at: string }[] }));
+
+      if (trendResult.rows.length < 3) return false;
+
+      const recoveryValues = trendResult.rows.map(r => parseFloat(r.score));
+      const avg = recoveryValues.reduce((s, v) => s + v, 0) / recoveryValues.length;
+      const currentRecovery = recoveryValues[0];
+
+      // Must be trending down: current below average
+      if (avg >= 50 || currentRecovery >= avg) return false;
+
+      const proactiveContext: ProactiveContext = {
+        type: 'recovery_trend_alert',
+        data: {
+          currentRecovery,
+          avgRecovery3d: Math.round(avg),
+          trendDays: trendResult.rows.length,
+          dailyRecoveries: trendResult.rows.map(r => ({
+            date: r.recorded_at,
+            score: parseFloat(r.score),
+          })),
+          sleepHours: context.whoop.lastSleep?.duration,
+          strain: context.whoop.todayStrain?.score,
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'recovery_trend_alert', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'recovery_trend_alert');
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error checking recovery trend', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  /**
+   * Positive momentum: micro-reinforcement for 3+ consecutive good days (below milestone threshold)
+   */
+  async checkAndSendPositiveMomentum(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('positive_momentum')) return false;
+
+      const context = cachedContext;
+      const triggers: string[] = [];
+
+      const consecutiveWorkoutDays = context.workouts?.consecutiveCompletionDays || 0;
+      const consecutiveNutritionDays = context.nutrition?.consecutiveOnTargetDays || 0;
+      const waterConsecutive = context.waterIntake?.consecutiveDaysOnTarget || 0;
+      const habitConsecutive = context.habits?.consecutiveFullCompletionDays || 0;
+      const scoreDelta3d = context.dailyScore?.scoreDelta3d || 0;
+
+      if (consecutiveWorkoutDays >= 3 && consecutiveWorkoutDays < 7) triggers.push(`${consecutiveWorkoutDays} days straight of completing workouts`);
+      if (consecutiveNutritionDays >= 3 && (context.nutrition?.adherenceRate || 0) > 80) triggers.push(`${consecutiveNutritionDays} days of hitting calorie targets`);
+      if (scoreDelta3d > 10) triggers.push(`daily score improved by ${scoreDelta3d} points over 3 days`);
+      if (waterConsecutive >= 3) triggers.push(`${waterConsecutive} days hitting water intake goal`);
+      if (habitConsecutive >= 2) triggers.push(`${habitConsecutive} days completing all habits`);
+
+      if (triggers.length === 0) return false;
+
+      const proactiveContext: ProactiveContext = {
+        type: 'positive_momentum',
+        data: {
+          triggers,
+          primaryTrigger: triggers[0],
+          consecutiveWorkoutDays,
+          consecutiveNutritionDays,
+          waterConsecutive,
+          habitConsecutive,
+          scoreDelta3d,
+          currentScore: context.dailyScore?.latestScore,
+          streak: context.gamification?.currentStreak || 0,
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'positive_momentum', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'positive_momentum');
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error checking positive momentum', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  // ============================================
   // SMART ROUTING: Score-and-Rank
   // ============================================
 
@@ -1283,8 +1740,8 @@ class ProactiveMessagingService {
     isSunday: boolean
   ): Promise<MessageCandidate[]> {
     try {
-      // 4 lightweight parallel queries for data not already in the context
-      const [stalledGoalResult, lastLoginResult, recentAchievement, todayScheduledWorkout] = await Promise.all([
+      // Lightweight parallel queries for data not already in the context
+      const [stalledGoalResult, lastLoginResult, recentAchievement, todayScheduledWorkout, coachingProfile, recoveryTrendResult, unfulfilledCommitments] = await Promise.all([
         query<{ title: string }>(
           `SELECT title FROM user_goals WHERE user_id = $1 AND status = 'active'
            AND updated_at < CURRENT_DATE - INTERVAL '3 days'
@@ -1309,7 +1766,39 @@ class ProactiveMessagingService {
            LIMIT 1`,
           [userId]
         ).catch(() => ({ rows: [] as { id: string }[] })),
+        userCoachingProfileService.getProfile(userId).catch(() => null),
+        // Recovery trend: 3-day average for recovery_trend_alert
+        query<{ avg_recovery: string; day_count: string }>(
+          `SELECT AVG(score)::numeric(5,1) as avg_recovery, COUNT(*)::text as day_count
+           FROM health_data_records
+           WHERE user_id = $1 AND data_type = 'recovery'
+           AND recorded_at >= NOW() - INTERVAL '3 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { avg_recovery: string; day_count: string }[] })),
+        // Unfulfilled commitments for commitment_followup
+        query<{ id: string; commitment_text: string; follow_up_date: string; category: string }>(
+          `SELECT id, commitment_text, follow_up_date, category
+           FROM user_commitments
+           WHERE user_id = $1 AND follow_up_date <= CURRENT_DATE
+           AND fulfilled IS NULL
+           ORDER BY follow_up_date ASC LIMIT 3`,
+          [userId]
+        ).catch(() => ({ rows: [] as { id: string; commitment_text: string; follow_up_date: string; category: string }[] })),
       ]);
+
+      // Phase 3: Journal sentiment check (lightweight — only count negative entries)
+      let journalNegativeCount = 0;
+      try {
+        const journalResult = await query<{ neg_count: string }>(
+          `SELECT COUNT(*) FILTER (WHERE sentiment_label IN ('negative', 'very_negative'))::text as neg_count
+           FROM journal_entries
+           WHERE user_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '3 days'`,
+          [userId]
+        );
+        journalNegativeCount = parseInt(journalResult.rows[0]?.neg_count || '0', 10);
+      } catch {
+        // journal_entries table may not exist — ignore
+      }
 
       const sent = (type: string) => cooldown.sentTypes.has(type);
 
@@ -1375,7 +1864,69 @@ class ProactiveMessagingService {
       if (hour >= 13) expectedMealsForHour = 2;      // Lunch should be done
       if (hour >= 19) expectedMealsForHour = totalExpectedMeals; // All meals
 
-      // Score all 18 message types (base score + context multipliers)
+      // Plan non-adherence detection (multi-day inactivity)
+      const completionRate = context.workouts?.completionRate ?? 100;
+      let daysSinceLastWorkout = 0;
+      if (context.workouts?.lastWorkoutDate) {
+        const lwDate = new Date(context.workouts.lastWorkoutDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        lwDate.setHours(0, 0, 0, 0);
+        daysSinceLastWorkout = Math.floor((today.getTime() - lwDate.getTime()) / (1000 * 60 * 60 * 24));
+      }
+      let daysSinceLastMeal = 0;
+      if (context.nutrition?.lastMealDate) {
+        const lmDate = new Date(context.nutrition.lastMealDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        lmDate.setHours(0, 0, 0, 0);
+        daysSinceLastMeal = Math.floor((today.getTime() - lmDate.getTime()) / (1000 * 60 * 60 * 24));
+      }
+      const hasDietPlan = !!context.nutrition?.activeDietPlan;
+      const accountabilityLevel = coachingProfile?.accountabilityLevel || 'supportive';
+      const planNonAdherenceEligible = !sent('plan_non_adherence') && (
+        daysSinceActivity >= 3 ||
+        (completionRate < 30 && missedWorkouts >= 3) ||
+        (daysSinceLastWorkout >= 3 && hasPlans) ||
+        (daysSinceLastMeal >= 2 && hasDietPlan)
+      );
+
+      // Overtraining risk: high strain + low recovery + workout scheduled
+      const strain = context.whoop?.todayStrain?.score as number | undefined;
+      const overtrainingEligible = !sent('overtraining_risk') && context.whoop?.isConnected && (
+        (recovery != null && recovery < 40 && strain != null && strain > 15) ||
+        (recovery != null && recovery < 30) // Critically low regardless of strain
+      ) && (todayScheduledWorkout.rows.length > 0 || hasPlans);
+
+      // Recovery trend: 3-day declining average
+      const avgRecovery3d = recoveryTrendResult.rows[0]?.avg_recovery ? parseFloat(recoveryTrendResult.rows[0].avg_recovery) : null;
+      const recoveryDayCount = recoveryTrendResult.rows[0]?.day_count ? parseInt(recoveryTrendResult.rows[0].day_count) : 0;
+      const recoveryTrendEligible = !sent('recovery_trend_alert') && context.whoop?.isConnected &&
+        recoveryDayCount >= 3 && avgRecovery3d != null && avgRecovery3d < 50 &&
+        recovery != null && recovery < avgRecovery3d; // Current below 3-day avg = trending down
+
+      // Positive momentum: consecutive good days (not yet a milestone)
+      const consecutiveWorkoutDays = context.workouts?.consecutiveCompletionDays || 0;
+      const nutritionAdherence = context.nutrition?.adherenceRate || 0;
+      const consecutiveNutritionDays = context.nutrition?.consecutiveOnTargetDays || 0;
+      const waterConsecutive = context.waterIntake?.consecutiveDaysOnTarget || 0;
+      const habitConsecutive = context.habits?.consecutiveFullCompletionDays || 0;
+      const scoreDelta3d = context.dailyScore?.scoreDelta3d || 0;
+      const positiveMomentumEligible = !sent('positive_momentum') && !isMilestone && (
+        (consecutiveWorkoutDays >= 3 && consecutiveWorkoutDays < 7) ||
+        (consecutiveNutritionDays >= 3 && nutritionAdherence > 80) ||
+        (scoreDelta3d > 10) ||
+        (waterConsecutive >= 3) ||
+        (habitConsecutive >= 2)
+      );
+
+      // Commitment follow-up
+      const hasUnfulfilledCommitments = unfulfilledCommitments.rows.length > 0;
+      const oldestCommitmentAge = hasUnfulfilledCommitments
+        ? Math.floor((Date.now() - new Date(unfulfilledCommitments.rows[0].follow_up_date).getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      // Score all message types (base score + context multipliers)
       const candidates: MessageCandidate[] = [
         {
           type: 'streak_risk',
@@ -1445,9 +1996,9 @@ class ProactiveMessagingService {
         },
         {
           type: 'wellbeing',
-          eligible: missingWellbeing.length > 0 && !sent('wellbeing'),
+          eligible: (missingWellbeing.length > 0 || journalNegativeCount >= 3) && !sent('wellbeing'),
           timeWindowValid: hour >= 18 && hour < 22,
-          score: 40 + (mentalRecovery != null && mentalRecovery < 40 ? 20 : 0),
+          score: 40 + (mentalRecovery != null && mentalRecovery < 40 ? 20 : 0) + (journalNegativeCount >= 3 ? 15 : 0),
         },
         {
           type: 'weekly_digest',
@@ -1510,7 +2061,74 @@ class ProactiveMessagingService {
           timeWindowValid: hour >= 10 && hour < 16,
           score: 78 + Math.min(Math.abs(context.dailyScore?.scoreDelta || 0), 20),
         },
+        {
+          type: 'plan_non_adherence',
+          eligible: planNonAdherenceEligible,
+          timeWindowValid: hour >= 8 && hour < 20,
+          score: 92 + Math.min(Math.max(daysSinceActivity - 3, 0) * 2, 6), // 92-98 based on inactivity
+        },
+        // --- New Phase 1 message types ---
+        {
+          type: 'overtraining_risk',
+          eligible: !!overtrainingEligible,
+          timeWindowValid: hour >= 6 && hour < 10,
+          score: recovery != null && recovery < 20 ? 95 : recovery != null && recovery < 30 ? 92 : 90,
+        },
+        {
+          type: 'commitment_followup',
+          eligible: hasUnfulfilledCommitments && !sent('commitment_followup'),
+          timeWindowValid: hour >= 14 && hour < 20,
+          score: 82 + Math.min(oldestCommitmentAge * 3, 6), // 82-88 based on overdue days
+        },
+        {
+          type: 'recovery_trend_alert',
+          eligible: !!recoveryTrendEligible,
+          timeWindowValid: hour >= 8 && hour < 12,
+          score: avgRecovery3d != null && avgRecovery3d < 35 ? 85 : 78,
+        },
+        {
+          type: 'positive_momentum',
+          eligible: !!positiveMomentumEligible,
+          timeWindowValid: hour >= 8 && hour < 12,
+          score: 55 + (consecutiveWorkoutDays >= 3 ? 10 : 0) + (scoreDelta3d > 10 ? 5 : 0),
+        },
       ];
+
+      // Accountability-level boost: users with declining adherence get firmer messages ranked higher
+      if (accountabilityLevel === 'direct' || accountabilityLevel === 'accountability') {
+        const boost = accountabilityLevel === 'accountability' ? 10 : 5;
+        const boostTypes = new Set<string>(['workout', 'nutrition', 'habit_missed', 'plan_non_adherence', 'score_declining', 'overtraining_risk']);
+        for (const c of candidates) {
+          if (boostTypes.has(c.type)) {
+            c.score += boost;
+          }
+        }
+      }
+
+      // Freshness boost: message types not sent in 3+ days get +15 to prevent starvation
+      // (e.g., morning_briefing at 45 would never win vs workout at 75 without this)
+      try {
+        const freshResult = await query<{ message_type: string; last_sent: string }>(
+          `SELECT message_type, MAX(created_at)::text as last_sent
+           FROM proactive_messages
+           WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
+           GROUP BY message_type`,
+          [userId]
+        ).catch(() => ({ rows: [] as { message_type: string; last_sent: string }[] }));
+
+        const lastSentMap = new Map(freshResult.rows.map(r => [r.message_type, new Date(r.last_sent)]));
+        const now = Date.now();
+        for (const c of candidates) {
+          if (c.eligible && c.timeWindowValid) {
+            const lastSent = lastSentMap.get(c.type);
+            if (!lastSent || (now - lastSent.getTime()) >= 3 * 24 * 60 * 60 * 1000) {
+              c.score += 15; // Freshness boost for stale message types
+            }
+          }
+        }
+      } catch {
+        // Non-critical — skip freshness boost if query fails
+      }
 
       // Sort by score descending — highest-impact messages first
       candidates.sort((a, b) => b.score - a.score);
@@ -1597,6 +2215,11 @@ class ProactiveMessagingService {
         meal_alignment: ['nutrition', 'weight', 'fitness'],
         daily_progress_review: [], // all insights — comprehensive review
         score_declining: [], // all insights — need to identify root cause across all pillars
+        plan_non_adherence: ['workout', 'nutrition', 'consistency', 'engagement'],
+        overtraining_risk: ['recovery', 'strain', 'sleep', 'workout'],
+        commitment_followup: [], // varies by commitment category
+        recovery_trend_alert: ['recovery', 'sleep', 'strain'],
+        positive_momentum: [], // varies by trigger
       };
 
       const relevantPillars = pillarMapping[messageType] || [];
@@ -1760,40 +2383,67 @@ ${context.data.waterStreak ? `- Water streak: ${context.data.waterStreak} days` 
           prompt = `They need ${(context.data.targetMl || 0) - (context.data.mlConsumed || 0)}ml more today. Convert that to practical terms (e.g., "that's about ${Math.ceil(((context.data.targetMl || 0) - (context.data.mlConsumed || 0)) / 250)} more glasses"). Explain how dehydration affects their workout performance and recovery. Quick actionable tip.`;
           break;
 
-        case 'morning_briefing':
+        case 'morning_briefing': {
+          const mb = context.data;
           dataDescription = `DAILY BRIEFING for ${userName}:
-- Today's workout: ${context.data.todayWorkout || 'Rest day / none scheduled'}
-- Recovery score: ${context.data.recoveryScore ? `${context.data.recoveryScore}%` : 'not available'}
-${context.data.yesterdayScore ? `- Yesterday's daily score: ${context.data.yesterdayScore}/100` : ''}
-- Current streak: ${context.data.currentStreak || 0} days
-- Active habits to complete: ${context.data.activeHabits || 0}
-${context.data.activeGoals ? `- Active goals: ${context.data.activeGoals}` : ''}
-${context.data.calorieTarget ? `- Today's calorie target: ${context.data.calorieTarget} kcal` : ''}`;
-          prompt = `Structure as a professional daily briefing:
-1. READINESS: Assess readiness based on recovery score. If <50%, recommend reducing intensity. If >70%, it's go time.
-2. TODAY'S PLAN: What's scheduled and what to focus on.
-3. KEY FOCUS: One specific thing to nail today based on their weakest area.
-4. DAILY TARGET: Set a concrete numerical target (e.g., "Hit ${context.data.calorieTarget || 'your calorie'} target and complete all ${context.data.activeHabits || ''} habits").
-Keep it structured but conversational. This is the most important message of the day.`;
-          break;
 
-        case 'weekly_digest':
-          dataDescription = `WEEKLY PERFORMANCE REPORT:
-- Average daily score: ${context.data.avgScore || 'N/A'}/100
-- Workouts completed: ${context.data.workoutsCompleted || 0}/${context.data.workoutsPlanned || 0} (${context.data.workoutsPlanned ? Math.round(((context.data.workoutsCompleted || 0) / context.data.workoutsPlanned) * 100) : 0}%)
-- Nutrition on-target days: ${context.data.nutritionOnTarget || 0}/7
-- Current streak: ${context.data.currentStreak || 0} days
-${context.data.weightChange ? `- Weight change: ${context.data.weightChange}` : ''}
-${context.data.bestDay ? `- Best day: ${context.data.bestDay}` : ''}
-${context.data.worstDay ? `- Weakest day: ${context.data.worstDay}` : ''}`;
-          prompt = `Structure as a weekly performance review:
-1. HEADLINE: One-line verdict on the week (e.g., "Strong workout consistency, nutrition needs work")
-2. WINS: What went well with specific numbers
-3. GAPS: Where they fell short — be honest with data
-4. TREND: Are they improving, plateauing, or declining vs last week?
-5. NEXT WEEK FOCUS: One specific, measurable goal for the coming week
-This is their weekly report card — make it feel insightful, not generic.`;
+YESTERDAY'S RESULTS:
+- Workout: ${mb.yesterdayWorkoutCompleted ? `completed ("${mb.yesterdayWorkoutName}")` : mb.yesterdayWorkoutName ? `missed ("${mb.yesterdayWorkoutName}")` : 'none scheduled'}
+- Calories: ${mb.yesterdayCalories > 0 ? `${mb.yesterdayCalories}${mb.calorieTarget ? `/${mb.calorieTarget}` : ''} kcal (${mb.yesterdayMealCount} meals)` : 'not tracked'}
+- Sleep: ${mb.yesterdaySleepHours ? `${mb.yesterdaySleepHours.toFixed(1)}h` : 'not available'} ${mb.recoveryScore ? `(recovery: ${mb.recoveryScore}%)` : ''}
+- Daily score: ${mb.yesterdayScore ? `${mb.yesterdayScore}/100` : 'not scored'}
+${mb.unfulfilledCommitments?.length > 0 ? `- Unfulfilled commitments: ${mb.unfulfilledCommitments.join('; ')}` : ''}
+
+TODAY'S PLAN:
+- Scheduled workout: ${mb.todayWorkout || 'Rest day / none scheduled'}
+- Recovery: ${mb.recoveryScore ? `${mb.recoveryScore}%` : 'not available'}
+- Calorie target: ${mb.calorieTarget ? `${mb.calorieTarget} kcal` : 'not set'}
+- Habits to complete: ${mb.todayHabitsTotal || 0}
+${mb.waterTarget ? `- Water target: ${mb.waterTarget}ml` : ''}
+- Active goals: ${mb.activeGoals || 0}
+- Current streak: ${mb.currentStreak || 0} days`;
+          prompt = `Structure as a professional daily briefing that OPENS with yesterday's recap:
+1. YESTERDAY'S RECAP (2-3 lines): What happened yesterday — workout result, calorie adherence, score. Be specific with numbers. ${mb.yesterdayWorkoutCompleted === false && mb.yesterdayWorkoutName ? `They missed "${mb.yesterdayWorkoutName}" — call it out.` : ''} ${mb.yesterdayScore && mb.yesterdayScore < 50 ? `Score of ${mb.yesterdayScore} was below par — name why.` : ''}
+2. READINESS: Assess readiness based on recovery score. If <50%, recommend reducing intensity. If >70%, it's go time.
+3. TODAY'S PLAN: What's scheduled, calorie targets, habit count. Be specific.
+${mb.unfulfilledCommitments?.length > 0 ? `4. CARRY-OVER: They have unfulfilled commitments from previous days: ${mb.unfulfilledCommitments.join('; ')}. Remind them.` : ''}
+5. KEY FOCUS: One specific thing to nail today based on yesterday's weakest area.
+6. DAILY TARGET: Set a concrete numerical target (e.g., "Hit ${mb.calorieTarget || 'your calorie'} target and complete all ${mb.todayHabitsTotal || ''} habits").
+This is the most important message of the day — make yesterday's data drive today's strategy.`;
           break;
+        }
+
+        case 'weekly_digest': {
+          const wd = context.data;
+          const workoutPct = wd.workoutsPlanned ? Math.round((wd.workoutsCompleted / wd.workoutsPlanned) * 100) : 0;
+          const scoreDirection = wd.scoreDelta != null ? (wd.scoreDelta > 0 ? 'UP' : wd.scoreDelta < 0 ? 'DOWN' : 'FLAT') : 'N/A';
+          dataDescription = `WEEKLY PERFORMANCE REPORT:
+
+THIS WEEK:
+- Average daily score: ${wd.avgScore || 'N/A'}/100
+- Workouts completed: ${wd.workoutsCompleted || 0}/${wd.workoutsPlanned || 0} (${workoutPct}%)
+- Nutrition on-target days: ${wd.nutritionOnTarget || 0}/7
+${wd.avgSleep != null ? `- Avg sleep: ${wd.avgSleep}h` : ''}
+${wd.avgRecovery != null ? `- Avg recovery: ${Math.round(wd.avgRecovery)}%` : ''}
+- Current streak: ${wd.currentStreak || 0} days
+${wd.weightChange ? `- Weight change: ${wd.weightChange}` : ''}
+${wd.bestDay ? `- Best day: ${wd.bestDay}` : ''}
+
+WEEK-OVER-WEEK COMPARISON:
+- Score: ${wd.avgScore || '?'} vs ${wd.prevAvgScore || '?'} (${scoreDirection}${wd.scoreDelta != null ? `, ${wd.scoreDelta > 0 ? '+' : ''}${wd.scoreDelta} pts` : ''})
+- Workouts: ${wd.workoutsCompleted || 0} vs ${wd.prevWorkoutsCompleted || 0} (${(wd.workoutsCompleted || 0) >= (wd.prevWorkoutsCompleted || 0) ? 'better or same' : 'worse'})
+${wd.avgSleep != null && wd.prevAvgSleep != null ? `- Avg sleep: ${wd.avgSleep}h vs ${wd.prevAvgSleep}h (${wd.avgSleep >= wd.prevAvgSleep ? 'improved' : 'declined'})` : ''}
+${wd.avgRecovery != null && wd.prevAvgRecovery != null ? `- Avg recovery: ${Math.round(wd.avgRecovery)}% vs ${Math.round(wd.prevAvgRecovery)}% (${wd.avgRecovery >= wd.prevAvgRecovery ? 'improved' : 'declined'})` : ''}`;
+          prompt = `Structure as a COMPREHENSIVE weekly performance review with week-over-week comparison:
+1. HEADLINE: One-line verdict on the week (e.g., "Workouts ${scoreDirection === 'UP' ? 'improving' : 'slipping'}, nutrition at ${wd.nutritionOnTarget || 0}/7 days")
+2. WINS: What went well — be specific with numbers. ${(wd.workoutsCompleted || 0) > (wd.prevWorkoutsCompleted || 0) ? `Workouts improved from ${wd.prevWorkoutsCompleted} to ${wd.workoutsCompleted}.` : ''}
+3. GAPS: Where they fell short. Be honest with the comparison data.
+4. TREND ANALYSIS: Use the week-over-week comparison. ${scoreDirection === 'UP' ? `Score trending UP by ${wd.scoreDelta} points — momentum is building.` : scoreDirection === 'DOWN' ? `Score DROPPED by ${Math.abs(wd.scoreDelta || 0)} points — this needs immediate correction.` : 'Score is flat — need a breakthrough.'}
+${wd.bestDay ? `5. BEST DAY: ${wd.bestDay} — what made it work?` : ''}
+6. NEXT WEEK FOCUS: One specific, measurable goal based on the WEAKEST area this week.
+This is their weekly report card — make the comparison data drive the narrative. 10-14 sentences.`;
+          break;
+        }
 
         case 'achievement_unlock':
           dataDescription = `ACHIEVEMENT UNLOCKED:
@@ -1979,6 +2629,9 @@ GOALS: ${goalsStr}
 
 ADHERENCE (rolling):
 - Workout: ${adherence.workout ?? '?'}% | Nutrition: ${adherence.nutrition ?? '?'}% | Sleep: ${adherence.sleep ?? '?'}%
+${d.scheduleTotal > 0 ? `
+SCHEDULE ADHERENCE:
+- Completed: ${d.scheduleCompleted}/${d.scheduleTotal} scheduled activities (${Math.round((d.scheduleCompleted / d.scheduleTotal) * 100)}%)` : ''}
 
 STREAK: ${d.streak} days | DAILY SCORE: ${d.dailyScore ?? 'not scored'}/100`;
 
@@ -1989,12 +2642,118 @@ STRUCTURE (use these sections):
 💪 **Wins**: What they did RIGHT today (be specific — name meals, workouts, habits). If nothing positive, say "No wins to report today. That changes tomorrow."
 ⚠️ **Gaps**: What they MISSED or failed at. Be direct — name specific targets they missed and by how much. "${d.workoutsCompleted}/${d.workoutsPlanned} workouts is ${d.workoutsCompleted === 0 ? 'a ZERO day' : 'not enough'}."
 ${d.calorieDeviation > 15 || d.calorieDeviation < -15 ? `🍽️ **Nutrition Reality Check**: They were ${Math.abs(d.calorieDeviation)}% ${d.calorieDeviation > 0 ? 'OVER' : 'under'} their calorie target. Calculate the impact on their goals.` : ''}
+${d.scheduleTotal > 0 && d.scheduleCompleted < d.scheduleTotal * 0.5 ? `📅 **Schedule Gap**: They planned ${d.scheduleTotal} activities and only completed ${d.scheduleCompleted}. The schedule they set isn't matching their behavior — address this disconnect.` : ''}
 💡 **Cross-Domain Insight**: Connect at least 2 pillars — how did sleep affect workouts? How did nutrition affect energy? Show the cascade.
 📋 **Tomorrow's Plan**: 3 specific, numbered actions for tomorrow. Not generic — use their actual targets and schedule.
 End with ONE accountability question about tomorrow.
 
 Tone: ${d.streak > 14 ? 'Acknowledge consistency but push for excellence.' : d.dailyScore && d.dailyScore < 40 ? 'TOUGH LOVE — this score is unacceptable.' : 'Direct and analytical.'}
 Compare today to their rolling adherence — is today better or worse than their average?`;
+          break;
+        }
+
+        case 'plan_non_adherence': {
+          const d = context.data;
+          const workoutAdh = d.adherence7d?.workout ?? '?';
+          const nutritionAdh = d.adherence7d?.nutrition ?? '?';
+          dataDescription = `PLAN NON-ADHERENCE ALERT:
+- Days since last workout: ${d.daysSinceLastWorkout}
+- Days since last meal logged: ${d.daysSinceLastMeal}
+- Missed workouts (7 days): ${d.missedWorkouts}
+- Workout completion rate: ${d.completionRate ?? '?'}%
+- Consecutive low-adherence days: ${d.consecutiveLowDays}
+- 7-day adherence: Workout ${workoutAdh}% | Nutrition ${nutritionAdh}%
+${d.activePlanName ? `- Active workout plan: "${d.activePlanName}" — ${d.activePlanProgress ?? '?'}% complete` : '- No active workout plan'}
+${d.dietPlanName ? `- Active diet plan: "${d.dietPlanName}" (adherence: ${d.nutritionAdherence ?? '?'}%)` : '- No active diet plan'}
+- Accountability level: ${d.accountabilityLevel}
+${streak ? `- Streak: ${streak} days (AT RISK)` : ''}
+${recovery ? `- Recovery: ${recovery.score}%` : ''}`;
+
+          const daysGone = Math.max(d.daysSinceLastWorkout, d.daysSinceLastMeal, d.consecutiveLowDays);
+          prompt = d.accountabilityLevel === 'accountability'
+            ? `MAXIMUM ACCOUNTABILITY MODE. This user has been ABSENT for ${daysGone} days. This is not a slip — this is plan ABANDONMENT. CONFRONT them directly: "It's been ${d.daysSinceLastWorkout} days since your last workout and ${d.daysSinceLastMeal} days since you logged a meal. Your ${d.activePlanName ? `"${d.activePlanName}" plan` : 'fitness plan'} is dying — ${d.completionRate ?? 0}% completion rate." Calculate the damage: "Every day you skip sets you back 2-3 days of progress. That's ${daysGone * 2}-${daysGone * 3} days of lost progress already." Do NOT be gentle. Do NOT ask "are you okay?" — DEMAND action: "Here's what you're doing TODAY: 1) Log your next meal within 1 hour 2) Complete at least a 20-minute workout 3) Check in with me tonight. Non-negotiable." If they have goals, tell them exactly how many days this inactivity has pushed back their goal deadline.`
+            : d.accountabilityLevel === 'direct'
+            ? `Be DIRECT and no-nonsense. The user has been slipping for ${daysGone} days. "Let's be real — ${d.daysSinceLastWorkout} days without a workout and ${d.daysSinceLastMeal} days without logging meals means you're off track. Your completion rate is ${d.completionRate ?? 0}%." Don't lecture — give them a clear recovery plan: "Today, do ONE workout (even 15 minutes counts) and log ALL your meals. That's the minimum to get back on track." Reference their specific plan "${d.activePlanName || 'workout plan'}" and how much progress they're losing. Ask what's been getting in the way — but make clear that whatever it is, the plan still needs to happen.`
+            : `This user has been inactive for ${daysGone} days. Acknowledge the gap without judgment, but be clear about consequences: "${d.daysSinceLastWorkout} days since your last workout — I noticed and I'm concerned. Your ${d.activePlanName ? `"${d.activePlanName}" plan at ${d.activePlanProgress}%` : 'fitness goals'} won't wait." Offer a gentle on-ramp: "Let's start small today — even a 10-minute walk or logging one meal gets the momentum back." Ask what happened and if they need the plan adjusted. But be firm that doing SOMETHING today is non-negotiable.`;
+          break;
+        }
+
+        case 'overtraining_risk': {
+          const d = context.data;
+          dataDescription = `OVERTRAINING RISK ALERT:
+- WHOOP recovery: ${d.recoveryScore}% ${d.recoveryScore < 30 ? '(CRITICALLY LOW)' : '(below safe threshold)'}
+${d.strain != null ? `- Yesterday's strain: ${d.strain}/21 ${d.strain > 15 ? '(HIGH)' : ''}` : ''}
+${d.sleepHours != null ? `- Last night's sleep: ${d.sleepHours}h` : ''}
+${d.hrvStatus ? `- HRV status: ${d.hrvStatus}` : ''}
+${d.todayWorkout ? `- Scheduled workout today: "${d.todayWorkout}"` : '- No specific workout scheduled'}
+${d.activePlanName ? `- Active plan: "${d.activePlanName}"` : ''}
+${streak ? `- Current streak: ${streak} days` : ''}`;
+          prompt = `PROTECTIVE MODE — this is an INJURY PREVENTION intervention, the highest-priority message type.
+Their recovery is at ${d.recoveryScore}% ${d.strain != null ? `with yesterday's strain at ${d.strain}/21` : ''} — this combination is DANGEROUS for training.
+${d.recoveryScore < 20 ? 'At sub-20% recovery, ANY intense exercise risks injury, immune suppression, and weeks of regression.' : d.recoveryScore < 30 ? 'Sub-30% recovery means their nervous system hasn\'t recovered. Intense training will make things WORSE, not better.' : `Recovery below 40% with high strain means their body hasn't processed yesterday's load.`}
+${d.todayWorkout ? `CANCEL "${d.todayWorkout}" and replace with: 20-min light walk + 15-min mobility/stretching. No negotiation.` : 'Today is MANDATORY active recovery — light walk, mobility, stretching only.'}
+Prescribe a recovery protocol: "1) Hydrate — 2L water by 3 PM. 2) No caffeine after 2 PM. 3) Lights off by 10 PM. 4) ${d.strain != null && d.strain > 15 ? 'Keep today\'s strain under 8/21' : 'Keep activity gentle'}."
+Explain the CONSEQUENCE: "Pushing through ${d.recoveryScore}% recovery is how people turn a 1-day recovery into a 1-week setback. I'm protecting your long-term progress."
+Tell them when they CAN train again: "When recovery hits 60%+, we'll push hard. Until then, trust the process."`;
+          break;
+        }
+
+        case 'commitment_followup': {
+          const d = context.data;
+          const commitmentsList = d.commitments?.map((c: { text: string; category: string }) =>
+            `"${c.text}" (${c.category})`
+          ).join(', ') || d.primaryCommitment;
+          dataDescription = `COMMITMENT FOLLOW-UP:
+- Primary commitment: "${d.primaryCommitment}"
+- Category: ${d.category}
+- Days overdue: ${d.daysOverdue}
+- Total unfulfilled commitments: ${d.totalUnfulfilled}
+${d.totalUnfulfilled > 1 ? `- All pending: ${commitmentsList}` : ''}
+${streak ? `- Current streak: ${streak} days` : ''}
+${dailyScore ? `- Daily score: ${dailyScore}/100` : ''}`;
+          prompt = d.daysOverdue === 0
+            ? `The user made a commitment: "${d.primaryCommitment}". Today is the follow-up day. Check in: "You said you'd ${d.primaryCommitment}. Did you follow through?" If we have data to verify (workout logs, meal logs, etc.), reference it. If they fulfilled it, acknowledge briefly. If not, ask what got in the way and help them recommit with a specific timeframe.`
+            : `The user committed to "${d.primaryCommitment}" and it's now ${d.daysOverdue} day(s) overdue with no confirmation. Be direct: "You told me you'd ${d.primaryCommitment}. That was ${d.daysOverdue} day(s) ago. I haven't seen evidence of follow-through." ${d.totalUnfulfilled > 1 ? `They have ${d.totalUnfulfilled} unfulfilled commitments total — this is becoming a pattern of saying yes and not delivering.` : ''} Don't shame — but hold them accountable: "Words without action are just wishes. Can you complete this TODAY, or do we need to adjust the commitment to something more realistic?" End with a specific deadline.`;
+          break;
+        }
+
+        case 'recovery_trend_alert': {
+          const d = context.data;
+          const trendStr = d.dailyRecoveries?.map((r: { date: string; score: number }) =>
+            `${r.date}: ${r.score}%`
+          ).join(' → ') || 'declining';
+          dataDescription = `RECOVERY TREND ALERT:
+- Current recovery: ${d.currentRecovery}%
+- 3-day average: ${d.avgRecovery3d}%
+- Trend (${d.trendDays} days): ${trendStr}
+${d.sleepHours != null ? `- Last sleep: ${d.sleepHours}h` : ''}
+${d.strain != null ? `- Recent strain: ${d.strain}/21` : ''}
+${streak ? `- Streak: ${streak} days` : ''}`;
+          prompt = `This is NOT a single bad day — this is a PATTERN. Recovery has been declining for ${d.trendDays} days: ${trendStr}. The 3-day average is ${d.avgRecovery3d}%, which means their body has been consistently under-recovered.
+Identify root causes to investigate: ${d.sleepHours != null && d.sleepHours < 7 ? `Sleep debt is a likely factor (${d.sleepHours}h last night).` : ''} ${d.strain != null && d.strain > 14 ? `Training load may be too high (strain ${d.strain}/21).` : ''} Mention stress, nutrition quality, and hydration as other factors.
+Prescribe a recovery protocol: "For the next 2-3 days, reduce training intensity by 30-40%. Prioritize sleep — aim for 8+ hours. Increase water intake by 500ml. If recovery doesn't improve by [day], we need to look deeper."
+This is the difference between a coach who reacts and one who PREDICTS — we caught this trend before it became a full breakdown.`;
+          break;
+        }
+
+        case 'positive_momentum': {
+          const d = context.data;
+          dataDescription = `POSITIVE MOMENTUM:
+- Triggers: ${d.triggers?.join('; ')}
+- Consecutive workout days: ${d.consecutiveWorkoutDays}
+- Consecutive nutrition on-target days: ${d.consecutiveNutritionDays}
+- Water streak: ${d.waterConsecutive} days
+- Habit completion streak: ${d.habitConsecutive} days
+- 3-day score improvement: ${d.scoreDelta3d > 0 ? '+' : ''}${d.scoreDelta3d} points
+- Current daily score: ${d.currentScore ?? 'N/A'}/100
+- Overall streak: ${d.streak} days`;
+          prompt = `WARM and SPECIFIC micro-reinforcement. This is NOT a milestone celebration — it's acknowledging building momentum BEFORE they reach a milestone.
+Lead with what you SEE: "I see you. ${d.primaryTrigger}." Be specific about the DATA driving this — don't just say "great job."
+${d.consecutiveWorkoutDays >= 3 ? `${d.consecutiveWorkoutDays} consecutive workout days is building real physiological adaptation — their body is starting to expect and prepare for training.` : ''}
+${d.consecutiveNutritionDays >= 3 ? `${d.consecutiveNutritionDays} days of hitting targets means their metabolism is stabilizing and energy should be improving.` : ''}
+${d.scoreDelta3d > 10 ? `Daily score jumped ${d.scoreDelta3d} points in 3 days — that's measurable improvement across multiple pillars.` : ''}
+Connect the consistency to projected outcomes: "If you keep this up through the week, you'll [specific benefit based on their goals]."
+Keep it SHORT (5-6 sentences). Don't over-praise. Just acknowledge, connect to outcomes, and encourage continuation. End with a forward-looking statement, not a question.`;
           break;
         }
       }
@@ -2180,6 +2939,10 @@ Return ONLY the markdown-formatted message text.`;
       meal_alignment: `${userName}, I just reviewed your latest meal. Let's make sure your remaining meals today keep you aligned with your targets. What's your plan for the next meal?`,
       daily_progress_review: `${userName}, here's your end-of-day review. Check your dashboard for today's full breakdown across fitness, nutrition, and wellbeing. Tomorrow's success starts with tonight's preparation — what's the ONE thing you're committing to first thing in the morning?`,
       score_declining: `${userName}, your daily score is dropping — this is a trend that needs immediate attention. When scores decline consistently, it means multiple areas of your health are slipping simultaneously. Open the app now and let's identify the weakest link. Which area do you feel has suffered most this week: workouts, nutrition, or sleep?`,
+      overtraining_risk: `${userName}, your recovery score is critically low and I'm seeing high strain from yesterday. Training today would be counterproductive — your body needs active recovery instead. Swap any intense workout for a light walk and mobility work. Hydrate aggressively and prioritize sleep tonight. When recovery bounces back above 60%, we'll push hard again.`,
+      commitment_followup: `${userName}, you made a commitment recently and I haven't seen follow-through yet. Accountability matters — it's what separates goals from wishes. Can you check in on what you committed to and let me know where things stand?`,
+      recovery_trend_alert: `${userName}, your recovery has been declining over the past several days — this isn't a one-off, it's a pattern. Your body is signaling that something in your routine needs to change: sleep, training load, stress management, or nutrition. Let's identify the root cause before this becomes a bigger setback.`,
+      positive_momentum: `${userName}, I'm noticing real consistency in your recent activity — multiple days in a row of showing up and putting in the work. This kind of momentum is what builds lasting change. Keep this energy going through the rest of the week.`,
     };
     return fallbacks[type] || `${userName}, I've been reviewing your recent data and there are some patterns worth discussing. What area would you like to focus on — fitness, nutrition, or recovery?`;
   }

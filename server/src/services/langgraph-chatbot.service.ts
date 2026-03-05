@@ -1825,6 +1825,51 @@ class LangGraphChatbotService {
       systemPrompt += `\n\n---\n${conciseContext}`;
     }
 
+    // Add user communication preferences (formality, emojis, encouragement, focus areas)
+    const userPrefs = comprehensiveContext?.lifestyle?.preferences;
+    if (userPrefs) {
+      const prefParts: string[] = [];
+
+      if (userPrefs.formalityLevel) {
+        const formalityMap: Record<string, string> = {
+          casual: 'Use casual, conversational language. Short sentences. Contractions OK. Be like a friend.',
+          balanced: 'Use a balanced tone — friendly but clear. Mix casual and proper language.',
+          formal: 'Use professional, precise language. Avoid slang and contractions.',
+        };
+        if (formalityMap[userPrefs.formalityLevel]) prefParts.push(formalityMap[userPrefs.formalityLevel]);
+      }
+
+      if (userPrefs.useEmojis === false) {
+        prefParts.push('Do NOT use emojis in responses. The user has disabled emojis.');
+      }
+
+      if (userPrefs.encouragementLevel) {
+        const encouragementMap: Record<string, string> = {
+          low: 'Keep encouragement minimal — focus on data and facts. Skip cheerleading.',
+          medium: 'Include moderate encouragement — acknowledge effort but stay grounded.',
+          high: 'Be highly encouraging — celebrate small wins, motivate enthusiastically, use exclamation marks.',
+        };
+        if (encouragementMap[userPrefs.encouragementLevel]) prefParts.push(encouragementMap[userPrefs.encouragementLevel]);
+      }
+
+      if (userPrefs.messageStyle) {
+        const styleMap: Record<string, string> = {
+          friendly: 'Use a warm, friendly communication style.',
+          professional: 'Use a professional, structured communication style.',
+          motivational: 'Use an energetic, motivational communication style. Inspire action.',
+        };
+        if (styleMap[userPrefs.messageStyle]) prefParts.push(styleMap[userPrefs.messageStyle]);
+      }
+
+      if (userPrefs.focusAreas?.length) {
+        prefParts.push(`User's priority focus areas: ${userPrefs.focusAreas.join(', ')}. Prioritize advice and check-ins around these topics.`);
+      }
+
+      if (prefParts.length > 0) {
+        systemPrompt += `\n\nUSER COMMUNICATION PREFERENCES (respect these strictly):\n${prefParts.join('\n')}`;
+      }
+    }
+
     // Add comprehensive coaching profile context
     if (coachingProfile) {
       systemPrompt += this.buildCoachingMemorySection(coachingProfile);

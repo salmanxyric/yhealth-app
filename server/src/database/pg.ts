@@ -58,7 +58,10 @@ pool.on("connect", async (client) => {
       statementTimeout,
     });
   } catch (error) {
-    logger.error("Error setting connection parameters", {
+    // Downgraded from ERROR to DEBUG — Railway often terminates idle connections,
+    // causing SET timezone/statement_timeout to fail on dead connections.
+    // The pool automatically creates new connections, so this is non-fatal.
+    logger.debug("Connection setup failed (pool will retry with new connection)", {
       error: error instanceof Error ? error.message : "Unknown error",
     });
     // Don't throw - allow connection to proceed even if these settings fail

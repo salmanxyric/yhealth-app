@@ -368,23 +368,98 @@ export function ScoringTab() {
     }
   };
 
+  // Premium Skeleton Loading UI
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-        >
-          <Loader2 className="w-12 h-12 text-emerald-500" />
-        </motion.div>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ repeat: Infinity, duration: 1.5, repeatType: 'reverse' }}
-          className="text-slate-400"
-        >
-          Calculating your recovery score...
-        </motion.p>
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="h-8 w-64 bg-slate-800/50 rounded-lg animate-pulse" />
+            <div className="h-4 w-48 bg-slate-800/30 rounded animate-pulse" />
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-48 bg-slate-800/50 rounded-xl animate-pulse" />
+            <div className="h-10 w-10 bg-slate-800/50 rounded-xl animate-pulse" />
+          </div>
+        </div>
+
+        {/* Main Score Card Skeleton */}
+        <div className="relative overflow-hidden rounded-3xl p-8 bg-slate-900/50 border border-white/10">
+          {/* Shimmer overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
+          
+          <div className="relative z-10">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-8">
+              <div className="space-y-2">
+                <div className="h-4 w-32 bg-slate-800/50 rounded animate-pulse" />
+                <div className="flex items-baseline gap-3">
+                  <div className="h-16 w-24 bg-slate-800/50 rounded-lg animate-pulse" />
+                  <div className="h-8 w-12 bg-slate-800/30 rounded animate-pulse" />
+                </div>
+                <div className="h-4 w-20 bg-slate-800/30 rounded animate-pulse" />
+              </div>
+              <div className="text-center lg:text-right">
+                <div className="w-16 h-16 mx-auto lg:mx-0 lg:ml-auto bg-slate-800/50 rounded-full animate-pulse" />
+                <div className="h-3 w-24 mt-2 mx-auto lg:mx-0 lg:ml-auto bg-slate-800/30 rounded animate-pulse" />
+              </div>
+            </div>
+
+            {/* Comparison Cards Skeleton */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-16 bg-slate-800/30 rounded-xl animate-pulse" />
+              ))}
+            </div>
+
+            {/* Stats Row Skeleton */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-white/10">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3 w-16 bg-slate-800/30 rounded animate-pulse" />
+                  <div className="h-6 w-12 bg-slate-800/50 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Component Scores Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-24 bg-slate-900/50 rounded-2xl border border-white/10 animate-pulse" />
+          ))}
+        </div>
+
+        {/* Charts Grid Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-80 bg-slate-900/50 rounded-2xl border border-white/10 p-6 animate-pulse">
+            <div className="h-6 w-32 bg-slate-800/50 rounded mb-4" />
+            <div className="h-64 bg-slate-800/30 rounded-xl" />
+          </div>
+          <div className="h-80 bg-slate-900/50 rounded-2xl border border-white/10 p-6 animate-pulse">
+            <div className="h-6 w-32 bg-slate-800/50 rounded mb-4" />
+            <div className="h-64 bg-slate-800/30 rounded-xl" />
+          </div>
+        </div>
+
+        {/* Loading Indicator */}
+        <div className="flex flex-col items-center justify-center gap-4 py-8">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          >
+            <Loader2 className="w-10 h-10 text-emerald-500" />
+          </motion.div>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ repeat: Infinity, duration: 1.5, repeatType: 'reverse' }}
+            className="text-slate-400 text-sm"
+          >
+            Calculating your recovery score...
+          </motion.p>
+        </div>
       </div>
     );
   }

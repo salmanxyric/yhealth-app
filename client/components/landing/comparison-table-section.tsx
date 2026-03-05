@@ -72,6 +72,7 @@ const categories: Category[] = [
     color: "from-blue-500 to-cyan-500",
     rows: [
       { feature: "Wearable sync (Apple, Huawei, Whoop)", yhealth: true, generic: "Some", whoop: true, calorie: "Some", bevel: "Limited" },
+      { feature: "WHOOP integration & analytics", yhealth: true, generic: false, whoop: true, calorie: false, bevel: false },
       { feature: "Recovery & sleep insights", yhealth: true, generic: "Limited", whoop: true, calorie: false, bevel: "Some" },
     ],
   },

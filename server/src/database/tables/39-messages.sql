@@ -38,7 +38,11 @@ CREATE TABLE IF NOT EXISTS messages (
     -- Forward tracking
     forwarded_from_id UUID REFERENCES messages(id) ON DELETE SET NULL,
     forwarded_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    
+
+    -- View-once (disappearing media)
+    is_view_once BOOLEAN DEFAULT false,
+    view_once_opened_at TIMESTAMP,
+
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -45,9 +45,16 @@ import {
 // CAMERA CONSTANTS
 // ============================================
 
-const CAMERA_POSITION = new THREE.Vector3(0, 0.8, 3.0);
 const CAMERA_LOOK_AT = new THREE.Vector3(0, 0.75, 0);
 const CAMERA_FOV = 32;
+
+/** Camera Z distance — further back on large screens (20% smaller model). */
+function getCameraZ(): number {
+  if (typeof window === "undefined") return 3.8;
+  return window.innerWidth >= 768 ? 3.8 : 3.0;
+}
+
+const CAMERA_POSITION = new THREE.Vector3(0, 0.8, getCameraZ());
 
 // ============================================
 // TYPES
@@ -286,6 +293,8 @@ export function useThreeVrm({
         if (width === 0 || height === 0) continue;
         renderer.setSize(width, height);
         camera.aspect = width / height;
+        // Responsive camera distance — further on desktop (smaller model)
+        camera.position.z = getCameraZ();
         camera.updateProjectionMatrix();
       }
     });
