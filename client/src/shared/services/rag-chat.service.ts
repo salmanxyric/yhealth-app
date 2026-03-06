@@ -41,6 +41,7 @@ export interface ChatResponse {
   conversationId: string;
   messageId: string;
   actions?: ActionCommand[]; // Array of actions to execute on frontend
+  toolCalls?: Array<{ tool: string; result: string }>; // Tools called by the AI during response
   context?: {
     retrievedDocs: number;
     historyUsed: number;

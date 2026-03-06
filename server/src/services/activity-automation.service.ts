@@ -4,10 +4,11 @@
  * Handles activity logs from user_plans (different from schedule_items from daily_schedules)
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { query, transaction } from '../database/pg.js';
 import { logger } from './logger.service.js';
+import { env } from '../config/env.config.js';
 import { messageService } from './message.service.js';
 import { socketService } from './socket.service.js';
 import { cache } from './cache.service.js';
@@ -66,11 +67,12 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 // ============================================
 
 class ActivityAutomationService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      modelName: 'gpt-4o',
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       maxTokens: 500,
     });
   }
@@ -368,7 +370,7 @@ class ActivityAutomationService {
   }
 
   /**
-   * Generate message using AI via LangChain ChatOpenAI
+   * Generate message using AI via LangChain ChatAnthropic
    */
   private async generateMessageWithAI(
     prompt: string,

@@ -3,7 +3,7 @@
  * @description Handles emotional check-in screening conversations with LLM-powered question generation
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { query } from '../database/pg.js';
@@ -181,16 +181,13 @@ When generating a question, respond with JSON:
 // ============================================
 
 class EmotionalCheckInService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
 
   constructor() {
-    const model = env.openai.model || 'gpt-4o-mini';
-    const modelLower = model.toLowerCase();
-    const supportsCustomTemp = !modelLower.startsWith('o1') && !modelLower.startsWith('o3') && modelLower !== 'gpt-5';
-    this.llm = new ChatOpenAI({
-      openAIApiKey: env.openai.apiKey,
-      modelName: model,
-      ...(supportsCustomTemp ? { temperature: 0.7 } : {}),
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
+      temperature: 0.7,
     });
   }
 

@@ -95,7 +95,7 @@ CREATE TYPE stress_trigger AS ENUM ('Work', 'Relationships', 'Finances', 'Health
 CREATE TYPE check_in_type AS ENUM ('daily', 'on_demand');
 CREATE TYPE mood_emoji AS ENUM ('😊', '😐', '😟', '😡', '😰', '😴');
 CREATE TYPE emotion_tag AS ENUM ('grateful', 'frustrated', 'excited', 'anxious', 'content', 'overwhelmed', 'peaceful', 'irritated', 'hopeful', 'lonely', 'confident', 'sad', 'energized', 'calm');
-CREATE TYPE journal_prompt_category AS ENUM ('gratitude', 'reflection', 'emotional_processing', 'goal_setting', 'stress_management', 'self_compassion', 'future_focus');
+CREATE TYPE journal_prompt_category AS ENUM ('gratitude', 'reflection', 'emotional_processing', 'goal_setting', 'stress_management', 'self_compassion', 'future_focus', 'identity', 'productivity', 'relationships', 'spirituality', 'anxiety', 'creativity', 'cbt_reflection', 'cross_pillar');
 CREATE TYPE habit_tracking_type AS ENUM ('checkbox', 'counter', 'duration', 'rating');
 CREATE TYPE mindfulness_practice_category AS ENUM ('breathing', 'meditation', 'movement', 'quick_reset', 'evening');
 CREATE TYPE plan_policy AS ENUM ('SLIDE_FORWARD', 'FILL_GAPS', 'DROP_OR_COMPRESS');

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Poppins } from "next/font/google";
+import { Inter, Poppins, Cinzel, Nunito } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { VoiceAssistantModal } from "@/components/common/voice-assistant-modal";
@@ -17,6 +17,18 @@ const poppins = Poppins({
   variable: "--font-poppins",
   weight: ["300", "400", "500", "600", "700", "800"],
   subsets: ["latin"],
+});
+
+const cinzel = Cinzel({
+  variable: "--font-cinzel",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+});
+
+const nunito = Nunito({
+  variable: "--font-nunito",
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yhealth.app";
@@ -102,7 +114,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${poppins.variable} font-sans antialiased`}
+        className={`${inter.variable} ${poppins.variable} ${cinzel.variable} ${nunito.variable} font-sans antialiased`}
       >
         <Providers>
           <AlarmProvider>

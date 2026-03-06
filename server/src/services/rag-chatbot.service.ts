@@ -1,4 +1,4 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import {
   HumanMessage,
   AIMessage,
@@ -98,12 +98,12 @@ Format responses clearly with:
  * - Personalized responses based on user profile
  */
 class RAGChatbotService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      openAIApiKey: env.openai.apiKey,
-      modelName: 'gpt-4o-mini',
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       temperature: 0.7,
       maxTokens: 1024,
     });

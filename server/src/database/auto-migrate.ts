@@ -149,6 +149,13 @@ const EXPECTED_TABLES = [
   'goal_daily_tracking',
   'user_commitments',
   'proactive_messages',
+  // Journaling system tables
+  'daily_checkins',
+  'life_goals',
+  'daily_intentions',
+  'journal_goal_links',
+  'journal_insights',
+  'journal_patterns',
 ];
 
 // List of expected enum types

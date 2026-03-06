@@ -22,6 +22,15 @@ import type {
   WellbeingMode,
   JournalPromptCategory,
   HabitTrackingType,
+  DailyCheckin,
+  CreateDailyCheckinInput,
+  CheckinTag,
+  LifeGoal,
+  CreateLifeGoalInput,
+  LifeGoalCategory,
+  DailyIntention,
+  JournalGoalLink,
+  JournalingMode,
 } from '@shared/types/domain/wellbeing';
 
 // ============================================
@@ -203,6 +212,10 @@ export interface CreateJournalEntryRequest {
   voice_entry?: boolean;
   duration_seconds?: number;
   logged_at?: string;
+  // Enhanced journaling fields
+  checkin_id?: string;
+  journaling_mode?: JournalingMode;
+  ai_generated_prompt?: boolean;
 }
 
 export interface JournalEntriesResponse {
@@ -255,6 +268,117 @@ export const journalService = {
 
   async getStreak(): Promise<ApiResponse<JournalStreakResponse>> {
     return api.get('/v1/wellbeing/journal/streak');
+  },
+};
+
+// ============================================
+// DAILY CHECK-IN SERVICE
+// ============================================
+
+export const dailyCheckinService = {
+  async createOrUpdate(data: {
+    mood_score?: number;
+    energy_score?: number;
+    sleep_quality?: number;
+    stress_score?: number;
+    tags?: CheckinTag[];
+    day_summary?: string;
+  }): Promise<ApiResponse<{ checkin: DailyCheckin }>> {
+    return api.post('/v1/journal/checkin', data);
+  },
+
+  async getToday(): Promise<ApiResponse<{ checkin: DailyCheckin | null; hasCheckedIn: boolean }>> {
+    return api.get('/v1/journal/checkin/today');
+  },
+
+  async getHistory(params?: {
+    page?: number;
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<{ checkins: DailyCheckin[]; total: number; page: number; limit: number }>> {
+    return api.get('/v1/journal/checkin/history', { params });
+  },
+
+  async getStreak(): Promise<ApiResponse<{ streak: { currentStreak: number; longestStreak: number } }>> {
+    return api.get('/v1/journal/checkin/streak');
+  },
+};
+
+// ============================================
+// LIFE GOALS SERVICE
+// ============================================
+
+export const lifeGoalsService = {
+  async createGoal(data: {
+    category: LifeGoalCategory;
+    title: string;
+    description?: string;
+    motivation?: string;
+    tracking_method?: string;
+    target_value?: number;
+    target_unit?: string;
+    detection_keywords?: string[];
+    is_primary?: boolean;
+  }): Promise<ApiResponse<{ goal: LifeGoal }>> {
+    return api.post('/v1/journal/goals', data);
+  },
+
+  async getGoals(params?: {
+    status?: string;
+    category?: LifeGoalCategory;
+  }): Promise<ApiResponse<{ goals: LifeGoal[] }>> {
+    return api.get('/v1/journal/goals', { params });
+  },
+
+  async getGoal(id: string): Promise<ApiResponse<{ goal: LifeGoal }>> {
+    return api.get(`/v1/journal/goals/${id}`);
+  },
+
+  async updateGoal(id: string, data: Partial<{
+    category: LifeGoalCategory;
+    title: string;
+    description: string;
+    motivation: string;
+    tracking_method: string;
+    target_value: number;
+    target_unit: string;
+    detection_keywords: string[];
+    is_primary: boolean;
+    status: string;
+    current_value: number;
+    progress: number;
+  }>): Promise<ApiResponse<{ goal: LifeGoal }>> {
+    return api.put(`/v1/journal/goals/${id}`, data);
+  },
+
+  async deleteGoal(id: string): Promise<ApiResponse<void>> {
+    return api.delete(`/v1/journal/goals/${id}`);
+  },
+
+  async getGoalEntries(id: string, params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse<{ entries: JournalGoalLink[]; total: number }>> {
+    return api.get(`/v1/journal/goals/${id}/entries`, { params });
+  },
+
+  async setIntention(data: {
+    intention_text: string;
+    checkin_id?: string;
+  }): Promise<ApiResponse<{ intention: DailyIntention }>> {
+    return api.post('/v1/journal/intentions', data);
+  },
+
+  async getTodayIntention(): Promise<ApiResponse<{ intention: DailyIntention | null }>> {
+    return api.get('/v1/journal/intentions/today');
+  },
+
+  async updateIntention(id: string, data: {
+    fulfilled?: boolean;
+    reflection?: string;
+  }): Promise<ApiResponse<{ intention: DailyIntention }>> {
+    return api.put(`/v1/journal/intentions/${id}`, data);
   },
 };
 

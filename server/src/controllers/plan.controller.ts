@@ -20,7 +20,7 @@ import type {
   UpdatePlanInput,
   LogActivityInput,
 } from '../validators/plan.validator.js';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { env } from '../config/env.config.js';
 
 // Type definitions
@@ -1471,10 +1471,10 @@ export const generateAITasks = asyncHandler(async (req: AuthenticatedRequest, re
     throw ApiError.badRequest('Goal description is required');
   }
 
-  // Use OpenAI to generate tasks
-  const llm = new ChatOpenAI({
-    openAIApiKey: env.openai.apiKey,
-    modelName: env.openai.model || 'gpt-4o-mini',
+  // Use AI to generate tasks
+  const llm = new ChatAnthropic({
+    anthropicApiKey: env.anthropic.apiKey,
+    model: env.anthropic.model,
     temperature: 0.7,
   });
 

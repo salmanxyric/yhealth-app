@@ -40,6 +40,7 @@ import messageRoutes from './message.routes.js';
 import whoopWebhookRoutes from './webhooks/whoop.routes.js';
 import whoopAnalyticsRoutes from './whoop-analytics.routes.js';
 import wellbeingRoutes from './wellbeing.routes.js';
+import journalRoutes from './journal.routes.js';
 import stressRoutes from './stress.routes.js';
 import scheduleRoutes from './schedule.routes.js';
 import nutritionAdaptiveRoutes from './nutrition-adaptive.routes.js';
@@ -245,6 +246,9 @@ router.use('/messages', messageRoutes);
 
 // Wellbeing routes (Epic 07 - Wellbeing Pillar)
 router.use('/v1/wellbeing', wellbeingRoutes);
+
+// Journal routes (AI Wellness Journaling System - check-ins, life goals, insights)
+router.use('/v1/journal', journalRoutes);
 
 // Stress routes (Epic 07 - F7.5: Stress Pattern Detection)
 router.use('/v1/wellbeing/stress', stressRoutes);

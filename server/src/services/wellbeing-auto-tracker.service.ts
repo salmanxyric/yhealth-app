@@ -3,7 +3,7 @@
  * @description Automatically detects and extracts wellbeing information from user messages
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { moodService } from './wellbeing/mood.service.js';
@@ -208,18 +208,13 @@ function mapTriggersToValidValues(triggers: string[]): { triggers: StressTrigger
 // ============================================
 
 class WellbeingAutoTrackerService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
 
   constructor() {
-    const model = env.openai.model || 'gpt-4o-mini';
-    const modelLower = model.toLowerCase();
-    // gpt-5 models only support default temperature (1)
-    const supportsCustomTemp = !modelLower.startsWith('gpt-5');
-    
-    this.llm = new ChatOpenAI({
-      openAIApiKey: env.openai.apiKey,
-      modelName: model,
-      ...(supportsCustomTemp ? { temperature: 0.3 } : {}),
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
+      temperature: 0.3,
     });
   }
 

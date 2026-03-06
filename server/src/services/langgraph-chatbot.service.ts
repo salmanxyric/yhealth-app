@@ -3,7 +3,7 @@
  * @description Implements LangGraph state graph for RAG chatbot with tool calling
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import {
   HumanMessage,
   AIMessage,
@@ -710,18 +710,18 @@ Always recommend consulting healthcare professionals for medical concerns. Be en
 // ============================================
 
 class LangGraphChatbotService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
   private userNameCache: Map<string, { name: string | null; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      openAIApiKey: env.openai.apiKey,
-      modelName: 'gpt-4o',
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       temperature: 0.9, // Higher temperature for more natural, varied, human-like responses
       maxTokens: 800, // Richer responses for data-driven accountability coaching
       streaming: true,
-      timeout: 30000, // 30 seconds timeout
+      clientOptions: { timeout: 30000 }, // 30 seconds timeout
     });
   }
 
@@ -945,6 +945,8 @@ class LangGraphChatbotService {
       { pattern: /\b(open|go to|navigate to|show|view|switch to)\s+(?:the\s+)?(?:mood|moods)\s*(?:page|tab|section)?\b/i, target: 'wellbeing/mood' },
       { pattern: /\b(open|go to|navigate to|show|view|switch to)\s+(?:the\s+)?(?:stress)\s*(?:page|tab|section)?\b/i, target: 'wellbeing/stress' },
       { pattern: /\b(open|go to|navigate to|show|view|switch to)\s+(?:the\s+)?(?:journal|journaling)\s*(?:page|tab|section)?\b/i, target: 'wellbeing/journal' },
+      { pattern: /\b(show|view|open|see)\s+(?:my\s+)?(?:constellation|stars|star\s*map|observatory)\b/i, target: 'wellbeing/journal' },
+      { pattern: /\b(show|view|open|see)\s+(?:my\s+)?(?:reflections|entries|journal\s*entries)\b/i, target: 'wellbeing/journal' },
       { pattern: /\b(open|go to|navigate to|show|view|switch to)\s+(?:the\s+)?(?:energy)\s*(?:page|tab|section)?\b/i, target: 'wellbeing/energy' },
       { pattern: /\b(open|go to|navigate to|show|view|switch to)\s+(?:the\s+)?(?:habit|habits)\s*(?:page|tab|section)?\b/i, target: 'wellbeing/habits' },
       { pattern: /\b(open|go to|navigate to|show|view|switch to)\s+(?:the\s+)?(?:schedule|scheduling)\s*(?:page|tab|section)?\b/i, target: 'wellbeing/schedule' },

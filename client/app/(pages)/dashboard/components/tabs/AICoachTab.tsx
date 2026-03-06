@@ -180,6 +180,18 @@ export function AICoachTab() {
 
       setMessages((prev) => [...prev, assistantMessage]);
 
+      // Dispatch refresh events based on tool calls from AI
+      if (response.toolCalls?.length) {
+        const journalTools = ['createJournalEntry', 'updateJournalEntry', 'deleteJournalEntry'];
+        const checkinTools = ['createDailyCheckin'];
+        if (response.toolCalls.some(tc => journalTools.includes(tc.tool))) {
+          window.dispatchEvent(new Event('journal-logged'));
+        }
+        if (response.toolCalls.some(tc => checkinTools.includes(tc.tool))) {
+          window.dispatchEvent(new Event('checkin-completed'));
+        }
+      }
+
       // Parse and execute actions from response
       const actions = response.actions || parseActionsFromResponse(response.message);
       if (actions && actions.length > 0) {
@@ -230,6 +242,8 @@ export function AICoachTab() {
       router.push('/ai-coach');
     } else if (tabId === 'activity-status') {
       router.push('/activity-status');
+    } else if (tabId.startsWith('wellbeing/') || tabId === 'wellbeing') {
+      router.push(`/${tabId}`);
     } else {
       router.push(`/dashboard?tab=${tabId}`);
     }
@@ -303,6 +317,18 @@ export function AICoachTab() {
           toast.success('Goal updated successfully');
           return true;
         }
+      } else if (target === 'journal_entry' || target === 'journal') {
+        const entryId = (params?.entryId || params?.id) as string;
+        if (!entryId) { toast.error('Entry ID required'); return false; }
+        const updateParams = { ...params };
+        delete updateParams.entryId;
+        delete updateParams.id;
+        const response = await api.put(`/v1/wellbeing/journal/${entryId}`, updateParams);
+        if (response.success) {
+          window.dispatchEvent(new Event('journal-logged'));
+          toast.success('Journal entry updated');
+          return true;
+        }
       }
       return false;
     } catch (error) {
@@ -330,6 +356,20 @@ export function AICoachTab() {
         const response = await api.post('/goals', params || {});
         if (response.success) {
           toast.success('Goal created successfully');
+          return true;
+        }
+      } else if (target === 'journal_entry' || target === 'journal') {
+        const response = await api.post('/v1/wellbeing/journal', params || {});
+        if (response.success) {
+          window.dispatchEvent(new Event('journal-logged'));
+          toast.success('Journal entry created');
+          return true;
+        }
+      } else if (target === 'daily_checkin' || target === 'checkin') {
+        const response = await api.post('/v1/journal/checkin', params || {});
+        if (response.success) {
+          window.dispatchEvent(new Event('checkin-completed'));
+          toast.success('Daily check-in saved');
           return true;
         }
       }
@@ -378,6 +418,13 @@ export function AICoachTab() {
         const response = await api.delete(`/goals/${id}`);
         if (response.success) {
           toast.success('Goal deleted successfully');
+          return true;
+        }
+      } else if (target === 'journal_entry' || target === 'journal') {
+        const response = await api.delete(`/v1/wellbeing/journal/${id}`);
+        if (response.success) {
+          window.dispatchEvent(new Event('journal-logged'));
+          toast.success('Journal entry deleted');
           return true;
         }
       }

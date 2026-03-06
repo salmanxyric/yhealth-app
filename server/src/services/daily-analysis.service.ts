@@ -7,7 +7,7 @@
  */
 
 import crypto from 'crypto';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
@@ -106,12 +106,13 @@ interface HistoricalScoreRow {
 // ============================================
 
 class DailyAnalysisService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
   private tableEnsured = false;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      modelName: env.openai.model || 'gpt-4o-mini',
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       maxTokens: 1500,
     });
   }

@@ -157,7 +157,14 @@ export const env = {
     url: process.env['CLIENT_URL'] || process.env['CORS_ORIGIN']?.split(',')[0] || 'http://localhost:3000',
   },
 
-  // OpenAI
+  // Anthropic (primary LLM provider)
+  anthropic: {
+    apiKey: process.env['ANTHROPIC_API_KEY'],
+    model: process.env['ANTHROPIC_MODEL'] || 'claude-sonnet-4-6',
+    maxTokens: parseInt(process.env['ANTHROPIC_MAX_TOKENS'] || '1000', 10),
+  },
+
+  // OpenAI (legacy — kept for embeddings / fallback)
   openai: {
     apiKey: process.env['OPENAI_API_KEY'],
     model: process.env['OPENAI_MODEL'] || 'gpt-5-mini',

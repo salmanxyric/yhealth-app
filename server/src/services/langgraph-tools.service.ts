@@ -15,6 +15,7 @@ import { JobPriorities } from '../config/queue.config.js';
 import { moodService } from './wellbeing/mood.service.js';
 import { stressService } from './stress.service.js';
 import { journalService } from './wellbeing/journal.service.js';
+import { dailyCheckinService } from './wellbeing/daily-checkin.service.js';
 import { energyService } from './wellbeing/energy.service.js';
 import { habitService } from './wellbeing/habit.service.js';
 import { scheduleService, type DailySchedule } from './schedule.service.js';
@@ -195,6 +196,30 @@ const DeleteJournalEntrySchema = z.object({
 });
 
 const GetJournalStreakSchema = z.object({});
+
+// Daily Check-in Schemas
+const CreateDailyCheckinSchema = z.object({
+  moodScore: z.number().min(1).max(10).optional().describe('Mood score 1-10 (1=terrible, 10=amazing)'),
+  energyScore: z.number().min(1).max(10).optional().describe('Energy score 1-10'),
+  sleepQuality: z.number().min(1).max(5).optional().describe('Sleep quality 1-5 (1=terrible, 5=excellent)'),
+  stressScore: z.number().min(1).max(10).optional().describe('Stress score 1-10 (1=none, 10=extreme)'),
+  tags: z.array(z.string()).optional().describe('Tags: productive, social, spiritual, creative, challenging, restful, anxious, grateful, lonely, motivated, exhausted, peaceful'),
+  daySummary: z.string().optional().describe('Brief summary of how the day is going'),
+});
+
+const GetTodayCheckinSchema = z.object({});
+
+const GetCheckinHistorySchema = z.object({
+  startDate: z.string().optional().describe('Start date in ISO format (YYYY-MM-DD)'),
+  endDate: z.string().optional().describe('End date in ISO format (YYYY-MM-DD)'),
+  limit: z.number().optional().describe('Max results (default: 30)'),
+});
+
+const GetCheckinStreakSchema = z.object({});
+
+const GetJournalInsightsSchema = z.object({
+  days: z.number().optional().describe('Number of days to analyze (default: 30)'),
+});
 
 // Energy Schemas
 const GetUserEnergyLogsSchema = z.object({
@@ -8572,6 +8597,159 @@ async function getJournalStreak(userId: string, _params?: z.infer<typeof GetJour
 }
 
 /**
+ * Create or update today's daily check-in
+ */
+async function createDailyCheckin(userId: string, params: z.infer<typeof CreateDailyCheckinSchema>): Promise<string> {
+  try {
+    const result = await dailyCheckinService.createOrUpdateCheckin(userId, {
+      moodScore: params.moodScore,
+      energyScore: params.energyScore,
+      sleepQuality: params.sleepQuality,
+      stressScore: params.stressScore,
+      tags: params.tags as any,
+      daySummary: params.daySummary,
+    });
+    return JSON.stringify({ success: true, data: { checkin: result } }, null, 2);
+  } catch (error) {
+    logger.error('[LangGraphTools] Error creating daily check-in', { userId, error });
+    return JSON.stringify({ success: false, error: 'Failed to save daily check-in' });
+  }
+}
+
+/**
+ * Get today's daily check-in
+ */
+async function getTodayCheckin(userId: string, _params?: z.infer<typeof GetTodayCheckinSchema>): Promise<string> {
+  try {
+    const result = await dailyCheckinService.getTodayCheckin(userId);
+    if (!result) {
+      return JSON.stringify({ success: true, data: { checkin: null, message: 'No check-in yet today' } }, null, 2);
+    }
+    return JSON.stringify({ success: true, data: { checkin: result } }, null, 2);
+  } catch (error) {
+    logger.error('[LangGraphTools] Error getting today check-in', { userId, error });
+    return JSON.stringify({ success: false, error: 'Failed to get today check-in' });
+  }
+}
+
+/**
+ * Get check-in history
+ */
+async function getCheckinHistory(userId: string, params?: z.infer<typeof GetCheckinHistorySchema>): Promise<string> {
+  try {
+    const result = await dailyCheckinService.getCheckinHistory(userId, {
+      startDate: params?.startDate,
+      endDate: params?.endDate,
+      limit: params?.limit,
+    });
+    return JSON.stringify({ success: true, data: result }, null, 2);
+  } catch (error) {
+    logger.error('[LangGraphTools] Error getting check-in history', { userId, error });
+    return JSON.stringify({ success: false, error: 'Failed to get check-in history' });
+  }
+}
+
+/**
+ * Get check-in streak
+ */
+async function getCheckinStreak(userId: string, _params?: z.infer<typeof GetCheckinStreakSchema>): Promise<string> {
+  try {
+    const result = await dailyCheckinService.getCheckinStreak(userId);
+    return JSON.stringify({ success: true, data: { streak: result } }, null, 2);
+  } catch (error) {
+    logger.error('[LangGraphTools] Error getting check-in streak', { userId, error });
+    return JSON.stringify({ success: false, error: 'Failed to get check-in streak' });
+  }
+}
+
+/**
+ * Get journal insights — aggregated mood trends, entry frequency, top categories
+ */
+async function getJournalInsights(userId: string, params?: z.infer<typeof GetJournalInsightsSchema>): Promise<string> {
+  try {
+    const days = params?.days || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    // Get entries for the period
+    const entries = await journalService.getJournalEntries(userId, {
+      startDate: startDateStr,
+      limit: 200,
+    });
+
+    const entryList = entries.entries || [];
+    const totalEntries = entryList.length;
+
+    if (totalEntries === 0) {
+      return JSON.stringify({
+        success: true,
+        data: {
+          period: `Last ${days} days`,
+          totalEntries: 0,
+          message: 'No journal entries found for this period.',
+        },
+      }, null, 2);
+    }
+
+    // Sentiment distribution
+    const sentiments = entryList
+      .filter((e: any) => e.sentimentScore != null)
+      .map((e: any) => e.sentimentScore as number);
+    const avgSentiment = sentiments.length > 0
+      ? Math.round((sentiments.reduce((a: number, b: number) => a + b, 0) / sentiments.length) * 100) / 100
+      : null;
+
+    // Word count stats
+    const wordCounts = entryList.map((e: any) => e.wordCount || 0);
+    const avgWordCount = Math.round(wordCounts.reduce((a: number, b: number) => a + b, 0) / totalEntries);
+
+    // Top prompt categories
+    const categoryCounts: Record<string, number> = {};
+    for (const e of entryList) {
+      const cat = (e as any).promptCategory || 'uncategorized';
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+    }
+    const topCategories = Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([category, count]) => ({ category, count }));
+
+    // Entries per week
+    const weekMap: Record<string, number> = {};
+    for (const e of entryList) {
+      const d = new Date((e as any).createdAt || (e as any).loggedAt);
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay());
+      const key = weekStart.toISOString().split('T')[0];
+      weekMap[key] = (weekMap[key] || 0) + 1;
+    }
+    const entriesPerWeek = Object.entries(weekMap)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([week, count]) => ({ weekOf: week, count }));
+
+    // Get streak info
+    const streak = await journalService.getJournalStreak(userId);
+
+    return JSON.stringify({
+      success: true,
+      data: {
+        period: `Last ${days} days`,
+        totalEntries,
+        averageSentiment: avgSentiment,
+        averageWordCount: avgWordCount,
+        topCategories,
+        entriesPerWeek,
+        streak,
+      },
+    }, null, 2);
+  } catch (error) {
+    logger.error('[LangGraphTools] Error getting journal insights', { userId, error });
+    return JSON.stringify({ success: false, error: 'Failed to get journal insights' });
+  }
+}
+
+/**
  * Get user energy logs
  */
 async function getUserEnergyLogs(userId: string, params?: z.infer<typeof GetUserEnergyLogsSchema>): Promise<string> {
@@ -9862,6 +10040,47 @@ export function createTools(userId: string): DynamicStructuredTool[] {
       schema: GetJournalStreakSchema,
       func: async (params: z.infer<typeof GetJournalStreakSchema>) => {
         return getJournalStreak(userId, params);
+      },
+    }),
+    new DynamicStructuredTool({
+      name: 'getJournalInsights',
+      description: 'Get journal insights and analytics including mood trends, entry frequency, top categories, and averages. Use when user asks about their journaling patterns, mood over time, or wants a summary of their reflections.',
+      schema: GetJournalInsightsSchema,
+      func: async (params: z.infer<typeof GetJournalInsightsSchema>) => {
+        return getJournalInsights(userId, params);
+      },
+    }),
+    // Daily Check-in Tools
+    new DynamicStructuredTool({
+      name: 'createDailyCheckin',
+      description: 'Create or update today\'s daily check-in. Use when user wants to do their daily check-in, log how they\'re feeling today, or report their mood/energy/sleep/stress. Guides a conversational check-in experience.',
+      schema: CreateDailyCheckinSchema,
+      func: async (params: z.infer<typeof CreateDailyCheckinSchema>) => {
+        return createDailyCheckin(userId, params);
+      },
+    }),
+    new DynamicStructuredTool({
+      name: 'getTodayCheckin',
+      description: 'Get today\'s daily check-in status. Use to check if user has already done their check-in today.',
+      schema: GetTodayCheckinSchema,
+      func: async (params: z.infer<typeof GetTodayCheckinSchema>) => {
+        return getTodayCheckin(userId, params);
+      },
+    }),
+    new DynamicStructuredTool({
+      name: 'getCheckinHistory',
+      description: 'Get check-in history over time. Use when user asks about their past check-ins, daily trends, or how they\'ve been feeling recently.',
+      schema: GetCheckinHistorySchema,
+      func: async (params: z.infer<typeof GetCheckinHistorySchema>) => {
+        return getCheckinHistory(userId, params);
+      },
+    }),
+    new DynamicStructuredTool({
+      name: 'getCheckinStreak',
+      description: 'Get daily check-in streak information. Use when user asks about their check-in consistency or streak.',
+      schema: GetCheckinStreakSchema,
+      func: async (params: z.infer<typeof GetCheckinStreakSchema>) => {
+        return getCheckinStreak(userId, params);
       },
     }),
     // Energy Tools

@@ -5,8 +5,9 @@
  */
 
 import { query, transaction } from '../database/pg.js';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { messageService } from './message.service.js';
 import { socketService } from './socket.service.js';
@@ -60,8 +61,8 @@ const AI_COACH_USER_ID = process.env.AI_COACH_USER_ID || '00000000-0000-0000-000
 // ============================================
 
 class ScheduleAutomationService {
-  // AI message generation (gpt-4o for SaaS-grade coaching quality)
-  private llm = new ChatOpenAI({ modelName: 'gpt-4o', maxTokens: 500, temperature: 0.7 });
+  // AI message generation (Claude for SaaS-grade coaching quality)
+  private llm = new ChatAnthropic({ anthropicApiKey: env.anthropic.apiKey, model: env.anthropic.model, maxTokens: 500, temperature: 0.7 });
   private rateLimitMap = new Map<string, { count: number; resetAt: number }>();
   private static RATE_LIMIT = parseInt(process.env.SCHEDULE_AI_RATE_LIMIT || '5', 10);
   private static AI_MESSAGE_CACHE_TTL = 3600; // 1 hour

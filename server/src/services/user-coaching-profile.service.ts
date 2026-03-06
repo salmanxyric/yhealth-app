@@ -5,7 +5,7 @@
  * buildCoachingMemorySection() and buildConciseUserContext() methods consume.
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
@@ -269,12 +269,13 @@ interface AIInsightsResult {
 // ============================================
 
 class UserCoachingProfileService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
   private tableEnsured = false;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      modelName: env.openai.model || 'gpt-4o-mini',
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       maxTokens: 1500,
     });
   }
@@ -2023,8 +2024,9 @@ Rules:
         return null;
       }
 
-      const llmPro = new ChatOpenAI({
-        modelName: 'gpt-4o',
+      const llmPro = new ChatAnthropic({
+        anthropicApiKey: env.anthropic.apiKey,
+        model: env.anthropic.model,
         maxTokens: 1200,
       });
 

@@ -3,7 +3,7 @@
  * LangGraph workflow for rescheduling missed workout tasks
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { query, transaction } from '../database/pg.js';
 import type { PoolClient } from 'pg';
 import { logger } from './logger.service.js';
@@ -40,12 +40,12 @@ export interface RescheduleResult {
 // ============================================
 
 class WorkoutRescheduleWorkflowService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      openAIApiKey: env.openai.apiKey,
-      modelName: 'gpt-4o-mini',
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       temperature: 0.7,
       maxTokens: 1000,
     });

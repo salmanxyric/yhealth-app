@@ -81,6 +81,11 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'habitManager',
     'getUserMoodTrends',
     'getUserActivityLogsWithMood',
+    'createDailyCheckin',
+    'getTodayCheckin',
+    'getCheckinHistory',
+    'getCheckinStreak',
+    'getJournalInsights',
   ],
 
   progress: [
@@ -182,6 +187,8 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
     'mood', 'feeling', 'feel', 'emotion', 'stress', 'stressed', 'anxious',
     'anxiety', 'journal', 'diary', 'energy', 'tired', 'exhausted', 'habit',
     'mental', 'wellbeing', 'wellness', 'happy', 'sad', 'angry', 'calm',
+    'check-in', 'checkin', 'check in', 'daily checkin', 'daily check-in',
+    'reflection', 'reflections', 'insights', 'constellation', 'stars',
   ],
 
   progress: [

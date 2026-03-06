@@ -3,10 +3,11 @@
  * @description Generates and sends proactive messages based on user data
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { query, transaction } from '../database/pg.js';
 import { logger } from './logger.service.js';
+import { env } from '../config/env.config.js';
 import { messageService } from './message.service.js';
 import { socketService } from './socket.service.js';
 import { gamificationService } from './gamification.service.js';
@@ -66,7 +67,7 @@ export interface MessageCandidate {
 // ============================================
 
 class ProactiveMessagingService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
 
   // Per-user insight cache to avoid redundant DB calls within the same job cycle.
   // buildInsightDrivenContext() is called up to 8× per user per hour — this ensures
@@ -79,9 +80,10 @@ class ProactiveMessagingService {
   private static readonly INSIGHT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
-    // Use gpt-4o for ALL proactive messages — best model for strict, contextual coaching
-    this.llm = new ChatOpenAI({
-      modelName: 'gpt-4o',
+    // Use Claude for ALL proactive messages — best model for strict, contextual coaching
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       maxTokens: 800,
     });
   }

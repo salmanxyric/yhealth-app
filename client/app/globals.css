@@ -449,6 +449,64 @@
   animation: shimmer 2s linear infinite;
 }
 
+/* ======================================== */
+/* Mind Observatory — Constellation CSS     */
+/* ======================================== */
+
+@keyframes constellation-twinkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.82); }
+}
+
+@keyframes constellation-ripple-out {
+  0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
+}
+
+@keyframes constellation-spin-ring {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes constellation-spin-ring-rev {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(-360deg); }
+}
+
+@keyframes constellation-particle-orbit {
+  from { transform: rotate(var(--orbit-start, 0deg)) translateX(var(--orbit-r, 52px)) rotate(calc(-1 * var(--orbit-start, 0deg))); }
+  to   { transform: rotate(calc(var(--orbit-start, 0deg) + 360deg)) translateX(var(--orbit-r, 52px)) rotate(calc(-1 * (var(--orbit-start, 0deg) + 360deg))); }
+}
+
+@keyframes constellation-float-label {
+  0%, 100% { transform: translateY(0px); opacity: 0.85; }
+  50%      { transform: translateY(-3px); opacity: 1; }
+}
+
+@keyframes constellation-core-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); filter: brightness(1); }
+  50%      { transform: translate(-50%, -50%) scale(1.06); filter: brightness(1.12); }
+}
+
+@keyframes constellation-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes constellation-modal-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.25) rotate(-4deg); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+}
+
+/* Observatory font utility classes */
+.observatory-font-display { font-family: var(--font-cinzel), 'Cinzel', serif; }
+.observatory-font-body    { font-family: var(--font-nunito), 'Nunito', sans-serif; }
+
+/* Observatory scrollbar (ultra-thin, purple accent) */
+.observatory-scroll::-webkit-scrollbar { width: 4px; }
+.observatory-scroll::-webkit-scrollbar-track { background: transparent; }
+.observatory-scroll::-webkit-scrollbar-thumb { background: rgba(167, 139, 250, 0.3); border-radius: 4px; }
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   .glass-premium,
@@ -456,9 +514,15 @@
   .text-holographic,
   .glow-pulse,
   .hover-lift,
-  .shimmer {
-    animation: none;
-    transition: none;
+  .shimmer,
+  .star-twinkle,
+  .core-ripple,
+  .core-orbit-ring,
+  .core-particle,
+  .star-label-float,
+  .core-pulse {
+    animation: none !important;
+    transition: none !important;
   }
   
   .card-3d:hover {

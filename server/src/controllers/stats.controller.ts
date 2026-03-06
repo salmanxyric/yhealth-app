@@ -55,12 +55,33 @@ export const getDashboardStats = asyncHandler(async (req: AuthenticatedRequest, 
   // Calculate current streak
   const streakData = await calculateStreak(userId);
 
-  // Get this week's completion rate (Monday-based week)
+  // Get this week's completion rate (Monday-based week) using PLANNED activities as denominator
   const startOfWeek = new Date(today);
   const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   startOfWeek.setDate(today.getDate() + mondayOffset);
-  // Get all logs for the week
+
+  // Get the active plan to count planned activities per day
+  const activePlanResult = await query<UserPlanRow>(
+    `SELECT * FROM user_plans WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  const planActivities: IActivity[] = activePlanResult.rows.length > 0
+    ? (activePlanResult.rows[0].activities as IActivity[]) || []
+    : [];
+
+  const dayNames: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+  // Count planned activities for each day from Monday through today
+  let thisWeekPlannedTotal = 0;
+  for (let d = new Date(startOfWeek); d <= today; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay(); // 0=Sun..6=Sat
+    const dayName = dayNames[dow === 0 ? 6 : dow - 1]; // Convert JS day to our DayOfWeek
+    const scheduled = planActivities.filter(a => a.daysOfWeek.includes(dayName));
+    thisWeekPlannedTotal += scheduled.length;
+  }
+
+  // Get completed logs for the week
   const thisWeekLogs = await query<ActivityLogRow>(
     `SELECT * FROM activity_logs
      WHERE user_id = $1
@@ -70,15 +91,22 @@ export const getDashboardStats = asyncHandler(async (req: AuthenticatedRequest, 
   );
 
   const thisWeekCompleted = thisWeekLogs.rows.filter(l => l.status === 'completed').length;
-  const thisWeekTotal = thisWeekLogs.rows.length || 1;
+  const thisWeekTotal = thisWeekPlannedTotal || 1; // Use planned activities as denominator
   const thisWeekRate = Math.round((thisWeekCompleted / thisWeekTotal) * 100);
 
-  // Get last week's completion rate for comparison
+  // Get last week's completion rate for comparison (also plan-aware)
   const startOfLastWeek = new Date(startOfWeek);
-  
   startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
   const endOfLastWeek = new Date(startOfWeek);
   endOfLastWeek.setDate(endOfLastWeek.getDate() - 1);
+
+  let lastWeekPlannedTotal = 0;
+  for (let d = new Date(startOfLastWeek); d <= endOfLastWeek; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay();
+    const dayName = dayNames[dow === 0 ? 6 : dow - 1];
+    const scheduled = planActivities.filter(a => a.daysOfWeek.includes(dayName));
+    lastWeekPlannedTotal += scheduled.length;
+  }
 
   const lastWeekLogs = await query<ActivityLogRow>(
     `SELECT * FROM activity_logs
@@ -89,7 +117,7 @@ export const getDashboardStats = asyncHandler(async (req: AuthenticatedRequest, 
   );
 
   const lastWeekCompleted = lastWeekLogs.rows.filter(l => l.status === 'completed').length;
-  const lastWeekTotal = lastWeekLogs.rows.length || 1;
+  const lastWeekTotal = lastWeekPlannedTotal || 1;
   const lastWeekRate = Math.round((lastWeekCompleted / lastWeekTotal) * 100);
 
   const weekChange = thisWeekRate - lastWeekRate;
@@ -1124,6 +1152,16 @@ async function calculateStreak(userId: string): Promise<{ currentStreak: number;
       checkDate.setDate(checkDate.getDate() - 1);
     } else {
       break;
+    }
+  }
+
+  // If the last completed activity was more than 1 day ago, the streak is broken
+  if (lastActivityDate) {
+    const lastDate = new Date(lastActivityDate);
+    lastDate.setHours(0, 0, 0, 0);
+    const diffFromToday = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffFromToday > 1) {
+      streak = 0;
     }
   }
 

@@ -255,7 +255,7 @@ export function UnifiedHealthDashboard({
     return whoopTime > manualRefreshTime ? whoopTime : manualRefreshTime;
   }, [whoopData.lastSync, manualRefreshTime]);
 
-  // Calculate overall health score
+  // Calculate overall health score — include ALL metrics (zeros count against the score)
   const overallScore = useMemo(() => {
     const metrics = [
       data.steps.value ? (data.steps.value / data.steps.target) * 100 : 0,
@@ -263,10 +263,10 @@ export function UnifiedHealthDashboard({
       data.calories.consumed ? Math.min((data.calories.consumed / data.calories.target) * 100, 100) : 0,
       data.analytics.consistencyScore,
       data.sleep?.hours ? (data.sleep.hours / 8) * 100 : 0,
-    ].filter(score => score > 0);
+    ];
 
-    if (metrics.length === 0) return 0;
-    return Math.round(metrics.reduce((sum, score) => sum + score, 0) / metrics.length);
+    const total = metrics.reduce((sum, score) => sum + score, 0);
+    return Math.round(total / metrics.length);
   }, [data]);
 
   // Use insights from API if available

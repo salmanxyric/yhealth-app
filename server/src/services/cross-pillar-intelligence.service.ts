@@ -6,10 +6,11 @@
  * AI correction generation is batched for high/critical severity only.
  */
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
+import { env } from '../config/env.config.js';
 import type { ComprehensiveUserContext } from './comprehensive-user-context.service.js';
 import type { DailySnapshot } from './daily-analysis.service.js';
 
@@ -637,12 +638,13 @@ const contradictionRules: ContradictionRule[] = [
 // ============================================
 
 class CrossPillarIntelligenceService {
-  private llm: ChatOpenAI;
+  private llm: ChatAnthropic;
   private tableEnsured = false;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      modelName: 'gpt-4o',
+    this.llm = new ChatAnthropic({
+      anthropicApiKey: env.anthropic.apiKey,
+      model: env.anthropic.model,
       maxTokens: 400,
       temperature: 0.3,
     });

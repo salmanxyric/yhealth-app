@@ -1,8 +1,8 @@
 import { SEO } from '@/lib/seo';
-import JournalPageContent from './JournalPageContent';
+import { JournalHubPage } from '@/components/journal';
 
 export const metadata = SEO.wellbeingJournal;
 
 export default function JournalPage() {
-  return <JournalPageContent />;
+  return <JournalHubPage />;
 }
