@@ -65,7 +65,8 @@ COPY --from=builder --chown=nodejs:nodejs /app/server/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/server/package.json ./package.json
 
 # Copy email templates (EJS files needed at runtime)
-COPY --from=builder --chown=nodejs:nodejs /app/server/src/mails ./src/mails
+# Templates must be at dist/server/src/mails/ because compiled JS uses __dirname relative paths
+COPY --from=builder --chown=nodejs:nodejs /app/server/src/mails ./dist/server/src/mails
 
 # Switch to non-root user
 USER nodejs

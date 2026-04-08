@@ -306,10 +306,11 @@ async function seedBlogs() {
   try {
     // Get an admin user or first user to use as author
     const adminUser = await query<UserRow>(
-      `SELECT id, email, first_name, last_name 
-       FROM users 
-       WHERE role = 'admin' 
-       ORDER BY created_at ASC 
+      `SELECT u.id, u.email, u.first_name, u.last_name
+       FROM users u
+       JOIN roles r ON r.id = u.role_id
+       WHERE r.slug = 'admin'
+       ORDER BY u.created_at ASC
        LIMIT 1`
     );
 

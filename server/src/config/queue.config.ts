@@ -5,13 +5,29 @@ import { env } from './env.config.js';
 // Redis Connection Configuration for BullMQ
 // ============================================================================
 
-export const redisConnection: ConnectionOptions = {
-  host: env.redis.host,
-  port: env.redis.port,
-  password: env.redis.password,
-  maxRetriesPerRequest: null, // Required for BullMQ
-  enableReadyCheck: false, // Required for BullMQ
-};
+function buildRedisConnection(): ConnectionOptions {
+  // Prefer REDIS_URL (parses host/port/password from URL)
+  if (env.redis.url) {
+    const parsed = new URL(env.redis.url);
+    return {
+      host: parsed.hostname,
+      port: parseInt(parsed.port || '6379', 10),
+      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+      username: parsed.username && parsed.username !== 'default' ? parsed.username : undefined,
+      maxRetriesPerRequest: null, // Required for BullMQ
+      enableReadyCheck: false, // Required for BullMQ
+    };
+  }
+  return {
+    host: env.redis.host,
+    port: env.redis.port,
+    password: env.redis.password,
+    maxRetriesPerRequest: null, // Required for BullMQ
+    enableReadyCheck: false, // Required for BullMQ
+  };
+}
+
+export const redisConnection: ConnectionOptions = buildRedisConnection();
 
 // ============================================================================
 // Queue Configuration
@@ -44,6 +60,8 @@ export const QueueNames = {
   EMBEDDING_MIGRATION: 'embedding-migration',
   ACTIVITY_EVENT_PROCESSING: 'activity-event-processing',
   EXERCISE_INGESTION: 'exercise-ingestion',
+  EMAIL: 'email-delivery',
+  STREAK_EVENTS: 'streak-events',
 } as const;
 
 // ============================================================================
@@ -63,6 +81,13 @@ export const JobTypes = {
   EMBED_BATCH_MIGRATION: 'embed-batch-migration',
   INGEST_EXERCISE_BATCH: 'ingest-exercise-batch',
   SYNC_EXERCISES: 'sync-exercises',
+  // Email engine
+  SEND_EMAIL: 'send-email',
+  SEND_DIGEST: 'send-digest',
+  SEND_AI_EMAIL: 'send-ai-email',
+  // Streak engine
+  STREAK_ACTIVITY: 'streak-activity',
+  STREAK_MILESTONE: 'streak-milestone',
 } as const;
 
 // ============================================================================
