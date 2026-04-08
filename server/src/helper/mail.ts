@@ -3,14 +3,32 @@ import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import { env } from '../config/env.config.js';
 import { logger } from '../services/logger.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Path to EJS templates
-const TEMPLATES_PATH = join(__dirname, '../mails');
+// Path to EJS templates - check multiple locations for Docker compatibility
+// In Docker: compiled JS is at /app/dist/server/src/helper/ but templates are at /app/src/mails/
+function resolveTemplatesPath(): string {
+  // Explicit env var takes precedence (set in Docker/Railway)
+  if (process.env['EMAIL_TEMPLATES_PATH']) {
+    return process.env['EMAIL_TEMPLATES_PATH'];
+  }
+  const candidates = [
+    join(__dirname, '../mails'),       // relative to compiled JS (works in dev and if templates copied to dist/)
+    join(process.cwd(), 'src/mails'),  // relative to working dir (Docker: /app/src/mails)
+    join(process.cwd(), 'server/src/mails'), // from project root (dev mode)
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return candidates[0]; // fallback
+}
+const TEMPLATES_PATH = resolveTemplatesPath();
+logger.info(`[Mail] Templates path resolved to: ${TEMPLATES_PATH}`);
 
 /**
  * Email subject lines for each template type
@@ -38,6 +56,9 @@ export const EMAIL_SUBJECTS = {
   'contact-admin-note': 'Update on Your Inquiry - yHealth',
   'subscription-confirmation': 'You\'re In! Your yHealth Subscription is Active',
   'subscription-invoice': 'Your yHealth Invoice is Ready',
+  // Email engine templates
+  'coachingInsight': 'A Message from Your AI Coach - yHealth',
+  'digestSummary': 'Your Weekly Summary - yHealth',
 } as const;
 
 export type EmailTemplateType = keyof typeof EMAIL_SUBJECTS;
@@ -312,7 +333,7 @@ class MailHelper {
       if (providedHtml) {
         html = providedHtml;
       } else if (template) {
-        html = await this.renderTemplate(template, data || {});
+        html = await this.renderTemplate(template, { subject, ...data });
       } else {
         throw new Error('Either template or html must be provided');
       }
