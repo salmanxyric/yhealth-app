@@ -20,8 +20,7 @@ import type {
   UpdatePlanInput,
   LogActivityInput,
 } from '../validators/plan.validator.js';
-import { ChatAnthropic } from '@langchain/anthropic';
-import { env } from '../config/env.config.js';
+import { modelFactory } from '../services/model-factory.service.js';
 
 // Type definitions
 type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'custom';
@@ -1472,10 +1471,8 @@ export const generateAITasks = asyncHandler(async (req: AuthenticatedRequest, re
   }
 
   // Use AI to generate tasks
-  const llm = new ChatAnthropic({
-    anthropicApiKey: env.anthropic.apiKey,
-    model: env.anthropic.model,
-    temperature: 0.7,
+  const llm = modelFactory.getModel({
+    tier: 'default',
   });
 
   const prompt = `You are an expert health and fitness coach. Based on the user's goal, generate a structured plan with specific, actionable tasks.

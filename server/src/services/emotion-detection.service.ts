@@ -1,12 +1,13 @@
 /**
  * @file Emotion Detection Service
- * @description Detects emotions from voice/text using DeepSeek for classification and OpenAI for reasoning
+ * @description Detects emotions from voice/text using Gemini (primary) with DeepSeek/OpenAI fallbacks
  */
 
 import OpenAI from 'openai';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { query } from '../database/pg.js';
+import { parseLlmJson } from '../helper/llm-json-parser.js';
 
 // ============================================
 // TYPES
@@ -100,13 +101,22 @@ interface EmotionLogRow {
 class EmotionDetectionService {
   private deepseekClient: OpenAI | null = null;
   private openaiClient: OpenAI | null = null;
+  private geminiApiKey: string | null = null;
   private apiLimitLogged = false; // Track if we've already logged API limit warnings
+  /** Cache user logging permission to avoid repeated DB lookups (5-min TTL) */
+  private userLoggingCache: Map<string, { enabled: boolean; expiresAt: number }> = new Map();
 
   constructor() {
     this.initializeClients();
   }
 
   private initializeClients(): void {
+    // Initialize Gemini as primary fallback
+    if (env.gemini.apiKey) {
+      this.geminiApiKey = env.gemini.apiKey;
+      logger.info('[EmotionDetection] Gemini available (primary fallback)');
+    }
+
     // Initialize DeepSeek for emotion classification
     if (env.deepseek.apiKey) {
       try {
@@ -122,7 +132,7 @@ class EmotionDetectionService {
       }
     }
 
-    // Initialize OpenAI for emotional reasoning
+    // Initialize OpenAI as last fallback
     if (env.openai.apiKey) {
       try {
         this.openaiClient = new OpenAI({
@@ -130,11 +140,56 @@ class EmotionDetectionService {
           timeout: 30000,
           maxRetries: 1,
         });
-        logger.info('[EmotionDetection] OpenAI client initialized');
+        logger.info('[EmotionDetection] OpenAI client initialized (fallback)');
       } catch (error) {
         logger.warn('[EmotionDetection] Failed to initialize OpenAI client', { error });
       }
     }
+  }
+
+  /**
+   * Call Gemini for text completion
+   */
+  private async callGemini(
+    systemPrompt: string,
+    userPrompt: string,
+    maxTokens: number,
+    temperature = 0.3,
+    jsonMode = false,
+  ): Promise<string> {
+    if (!this.geminiApiKey) throw new Error('Gemini not available');
+    const model = env.gemini.lightModel || 'gemini-2.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+
+    // Gemini 2.5+ thinking models consume tokens for internal reasoning,
+    // so we need a higher budget to avoid truncated output
+    const isThinkingModel = model.includes('2.5') || model.includes('thinking');
+    const effectiveMaxTokens = isThinkingModel ? Math.max(maxTokens, 500) : maxTokens;
+
+    const generationConfig: Record<string, unknown> = {
+      maxOutputTokens: effectiveMaxTokens,
+      temperature,
+    };
+    // JSON mode prevents markdown wrapping and ensures valid JSON output
+    if (jsonMode) {
+      generationConfig.responseMimeType = 'application/json';
+    }
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Gemini error (${resp.status}): ${errText}`);
+    }
+    const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 
   /**
@@ -150,8 +205,8 @@ class EmotionDetectionService {
     }
 
     try {
-      if (!this.deepseekClient) {
-        logger.warn('[EmotionDetection] DeepSeek not available, using fallback');
+      if (!this.geminiApiKey && !this.deepseekClient) {
+        logger.warn('[EmotionDetection] No AI providers available, using fallback');
         return this.fallbackEmotionDetection(text);
       }
 
@@ -183,42 +238,55 @@ Respond with ONLY a JSON object in this exact format:
   "reasoning": "brief explanation of why this emotion was detected"
 }`;
 
-      const model = env.deepseek.model || 'deepseek-chat';
-      const classificationResponse = await this.deepseekClient.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an emotion detection expert. Analyze text and classify emotions accurately.',
-          },
-          {
-            role: 'user',
-            content: classificationPrompt,
-          },
-        ],
-        temperature: 0.3, // Lower temperature for more consistent classification
-        ...getTokenParameter(model, 200),
-        response_format: { type: 'json_object' },
-      });
+      let content = '';
+      const classSystemPrompt = 'You are an emotion detection expert. Analyze text and classify emotions accurately.';
 
-      const content = classificationResponse.choices[0]?.message?.content;
+      // Try Gemini first (primary provider, JSON mode to prevent markdown wrapping)
+      if (this.geminiApiKey) {
+        try {
+          content = await this.callGemini(classSystemPrompt, classificationPrompt, 200, 0.3, true);
+        } catch (geminiError: any) {
+          logger.warn('[EmotionDetection] Gemini classification failed', { error: geminiError?.message });
+        }
+      }
+
+      // Fallback to DeepSeek
+      if (!content && this.deepseekClient) {
+        try {
+          const model = env.deepseek.model || 'deepseek-chat';
+          const classificationResponse = await this.deepseekClient.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: classSystemPrompt },
+              { role: 'user', content: classificationPrompt },
+            ],
+            temperature: 0.3,
+            ...getTokenParameter(model, 200),
+            response_format: { type: 'json_object' },
+          });
+          content = classificationResponse.choices[0]?.message?.content || '';
+        } catch (deepseekError: any) {
+          logger.warn('[EmotionDetection] DeepSeek classification also failed', { error: deepseekError?.message });
+          if (deepseekError?.status === 402 || deepseekError?.message?.includes('402') || deepseekError?.message?.includes('Insufficient Balance')) {
+            logger.warn('[EmotionDetection] DeepSeek billing exhausted, disabling for this session');
+            this.deepseekClient = null;
+          }
+        }
+      }
+
       if (!content) {
-        throw new Error('Empty response from DeepSeek');
+        throw new Error('All classification providers failed');
       }
 
       let classificationResult: {
         category: string;
         confidence: number;
         reasoning?: string;
-      };
+      } | null;
 
-      try {
-        classificationResult = JSON.parse(content);
-      } catch (parseError) {
-        logger.warn('[EmotionDetection] Failed to parse DeepSeek response, using fallback', {
-          content,
-          error: parseError,
-        });
+      classificationResult = parseLlmJson(content);
+      if (!classificationResult) {
+        logger.warn('[EmotionDetection] Failed to parse response, using fallback', { contentPreview: content.substring(0, 200) });
         return this.fallbackEmotionDetection(text);
       }
 
@@ -244,9 +312,9 @@ Respond with ONLY a JSON object in this exact format:
         classificationResult.category = 'neutral';
       }
 
-      // Enhance with OpenAI emotional reasoning if available
+      // Enhance with emotional reasoning (Gemini primary, OpenAI fallback)
       let reasoning = classificationResult.reasoning || '';
-      if (this.openaiClient && context) {
+      if (context) {
         try {
           const reasoningPrompt = `Provide emotional reasoning for this emotion detection:
 Text: "${text}"
@@ -254,26 +322,33 @@ Detected Emotion: ${classificationResult.category}
 Confidence: ${classificationResult.confidence}%
 
 Provide a brief, empathetic explanation of why this emotion might be present.`;
-          
-          const model = env.openai.model || 'gpt-5-mini';
-          const supportsTemp = !isReasoningModel(model);
-          const reasoningResponse = await this.openaiClient.chat.completions.create({
-            model,
-            messages: [
-              {
-                role: 'system',
-                content: 'You are an empathetic emotional reasoning expert. Provide thoughtful, brief explanations.',
-              },
-              {
-                role: 'user',
-                content: reasoningPrompt,
-              },
-            ],
-            ...(supportsTemp ? { temperature: 0.7 } : {}),
-            ...getTokenParameter(model, 150),
-          });
+          const reasoningSystem = 'You are an empathetic emotional reasoning expert. Provide thoughtful, brief explanations.';
 
-          const reasoningContent = reasoningResponse.choices[0]?.message?.content;
+          let reasoningContent = '';
+
+          // Try Gemini first
+          if (this.geminiApiKey) {
+            try {
+              reasoningContent = await this.callGemini(reasoningSystem, reasoningPrompt, 150, 0.7);
+            } catch { /* fall through */ }
+          }
+
+          // Fallback to OpenAI
+          if (!reasoningContent && this.openaiClient) {
+            const model = env.openai.model || 'gpt-4o-mini';
+            const supportsTemp = !isReasoningModel(model);
+            const reasoningResponse = await this.openaiClient.chat.completions.create({
+              model,
+              messages: [
+                { role: 'system', content: reasoningSystem },
+                { role: 'user', content: reasoningPrompt },
+              ],
+              ...(supportsTemp ? { temperature: 0.7 } : {}),
+              ...getTokenParameter(model, 150),
+            });
+            reasoningContent = reasoningResponse.choices[0]?.message?.content || '';
+          }
+
           if (reasoningContent) {
             reasoning = reasoningContent;
           }
@@ -285,7 +360,7 @@ Provide a brief, empathetic explanation of why this emotion might be present.`;
 
       const detection: EmotionDetection = {
         category: classificationResult.category as EmotionCategory,
-        confidence: Math.max(0, Math.min(100, Math.round(classificationResult.confidence))),
+        confidence: Math.max(0, Math.min(100, Math.round(Number(classificationResult.confidence) || 50))),
         reasoning: reasoning || undefined,
         rawData: {
           deepseekModel: env.deepseek.model,
@@ -357,9 +432,10 @@ Provide a brief, empathetic explanation of why this emotion might be present.`;
   }
 
   /**
-   * Fallback emotion detection using simple keyword matching
+   * Fast local emotion detection using keyword matching.
+   * Used as the primary detection in the chat hot path to avoid LLM latency.
    */
-  private fallbackEmotionDetection(text: string): EmotionDetection {
+  fallbackEmotionDetection(text: string): EmotionDetection {
     const lowerText = text.toLowerCase();
 
     // Simple keyword-based detection
@@ -439,34 +515,33 @@ Provide a brief, empathetic explanation of why this emotion might be present.`;
     }
   ): Promise<string> {
     try {
-      // First verify user exists to avoid foreign key constraint errors
-      const userCheck = await query<{ id: string }>(
-        `SELECT id FROM users WHERE id = $1`,
-        [userId]
-      );
+      // Check cached permission first (avoids 2 DB queries per call)
+      const cached = this.userLoggingCache.get(userId);
+      if (cached && cached.expiresAt > Date.now()) {
+        if (!cached.enabled) return '';
+      } else {
+        // Single query: verify user exists + check logging preference
+        const check = await query<{ id: string; logging_enabled: boolean }>(
+          `SELECT u.id, COALESCE(p.emotion_logging_enabled, true) as logging_enabled
+           FROM users u
+           LEFT JOIN user_preferences p ON u.id = p.user_id
+           WHERE u.id = $1`,
+          [userId]
+        );
 
-      if (userCheck.rows.length === 0) {
-        logger.warn('[EmotionDetection] User not found, skipping emotion log', {
-          userId,
-          emotionCategory: emotion.category,
-        });
-        return ''; // Return empty ID if user doesn't exist
-      }
+        if (check.rows.length === 0) {
+          this.userLoggingCache.set(userId, { enabled: false, expiresAt: Date.now() + 5 * 60 * 1000 });
+          logger.warn('[EmotionDetection] User not found, skipping emotion log', { userId, emotionCategory: emotion.category });
+          return '';
+        }
 
-      // Check if emotion logging is enabled for user
-      const preferencesResult = await query<{ emotion_logging_enabled: boolean }>(
-        `SELECT emotion_logging_enabled 
-         FROM user_preferences 
-         WHERE user_id = $1`,
-        [userId]
-      );
+        const enabled = check.rows[0].logging_enabled !== false;
+        this.userLoggingCache.set(userId, { enabled, expiresAt: Date.now() + 5 * 60 * 1000 });
 
-      if (
-        preferencesResult.rows.length > 0 &&
-        preferencesResult.rows[0].emotion_logging_enabled === false
-      ) {
-        logger.info('[EmotionDetection] Emotion logging disabled for user', { userId });
-        return ''; // Return empty ID if logging disabled
+        if (!enabled) {
+          logger.info('[EmotionDetection] Emotion logging disabled for user', { userId });
+          return '';
+        }
       }
 
       const source = options?.source || 'text';
@@ -482,7 +557,7 @@ Provide a brief, empathetic explanation of why this emotion might be present.`;
           options?.conversationId || null,
           emotion.timestamp,
           emotion.category,
-          emotion.confidence,
+          Number.isFinite(emotion.confidence) ? emotion.confidence : 50,
           source,
           JSON.stringify(emotion.rawData || {}),
         ]

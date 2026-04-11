@@ -37,7 +37,6 @@ import {
   Brain,
   Zap,
   Footprints,
-  Thermometer,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -161,7 +160,7 @@ const rarityGradients: Record<string, string> = {
 };
 
 // Activity type to icon/color mapping
-const activityTypeConfig: Record<string, { icon: React.ElementType; color: string; bgColor: string }> = {
+const activityTypeConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string }> = {
   workout: { icon: Dumbbell, color: "text-blue-500", bgColor: "bg-blue-500/10" },
   meal: { icon: Apple, color: "text-green-500", bgColor: "bg-green-500/10" },
   sleep: { icon: Moon, color: "text-purple-500", bgColor: "bg-purple-500/10" },
@@ -245,7 +244,7 @@ function ProfileSkeleton() {
   return (
     <MainLayout>
       <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20">
-        <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="container mx-auto px-4 py-8 max-w-8xl">
           <div className="relative mb-8">
             <Skeleton className="h-64 w-full rounded-3xl" />
             <div className="absolute -bottom-16 left-8 flex items-end gap-6">
@@ -350,7 +349,7 @@ function StatCard({
   suffix,
   gradient,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
   suffix: string;
@@ -358,7 +357,9 @@ function StatCard({
 }) {
   return (
     <motion.div
-      variants={itemVariants}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 100 }}
       whileHover={{ scale: 1.03, y: -4 }}
       whileTap={{ scale: 0.98 }}
       className="relative group cursor-pointer"
@@ -652,7 +653,7 @@ export default function ProfilePageContent() {
           <div className="absolute -bottom-40 right-1/4 w-[500px] h-[500px] bg-gradient-to-br from-pink-500/15 to-rose-500/15 rounded-full blur-[100px]" />
         </div>
 
-        <div className="relative container mx-auto px-4 py-8 max-w-6xl">
+        <div className="relative container mx-auto px-4 py-8 max-w-8xl">
           {/* Back Button */}
           <motion.div
             initial={{ opacity: 0, x: -10 }}
@@ -854,7 +855,7 @@ export default function ProfilePageContent() {
                 {/* Left Column - Main Content */}
                 <div className="lg:col-span-2 space-y-6">
                   {/* Stats Cards */}
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100 }}>
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-semibold flex items-center gap-2">
                         <BarChart3 className="w-5 h-5 text-primary" />
@@ -944,7 +945,7 @@ export default function ProfilePageContent() {
                   </motion.div>
 
                   {/* Personal Information */}
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100, delay: 0.1 }}>
                     <Card className="border-0 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
                       <div className="p-6">
                         <div className="flex items-center justify-between mb-6">
@@ -1044,7 +1045,7 @@ export default function ProfilePageContent() {
                   </motion.div>
 
                   {/* Achievements */}
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100, delay: 0.2 }}>
                     <Card className="border-0 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
                       <div className="p-6">
                         <div className="flex items-center justify-between mb-6">
@@ -1138,7 +1139,7 @@ export default function ProfilePageContent() {
                 {/* Right Column - Sidebar */}
                 <div className="space-y-6">
                   {/* Weekly Progress */}
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100 }}>
                     <Card className="border-0 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
                       <div className="p-6">
                         <h2 className="text-lg font-semibold flex items-center gap-2 mb-6">
@@ -1187,7 +1188,7 @@ export default function ProfilePageContent() {
 
                   {/* Goals Summary */}
                   {goalsStats.total > 0 && (
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100, delay: 0.1 }}>
                     <Card className="border-0 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
                       <div className="p-6">
                         <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
@@ -1226,7 +1227,7 @@ export default function ProfilePageContent() {
 
                   {/* Health Vitals (WHOOP + Metrics) */}
                   {whoopData && (
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100, delay: 0.15 }}>
                     <Card className="border-0 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
                       <div className="p-6">
                         <h2 className="text-lg font-semibold flex items-center gap-2 mb-5">
@@ -1313,7 +1314,7 @@ export default function ProfilePageContent() {
                   )}
 
                   {/* Recent Activity */}
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100, delay: 0.2 }}>
                     <Card className="border-0 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
                       <div className="p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -1377,7 +1378,7 @@ export default function ProfilePageContent() {
                   </motion.div>
 
                   {/* Quick Actions */}
-                  <motion.div variants={itemVariants}>
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100, delay: 0.25 }}>
                     <Card className="border-0 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
                       <div className="p-6">
                         <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">

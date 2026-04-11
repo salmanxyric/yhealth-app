@@ -111,7 +111,7 @@ function AnimatedStat({
           {suffix}
         </span>
       </p>
-      <p className="text-xs text-muted-foreground/60 mt-0.5">{label}</p>
+      <p className="text-xs text-muted-foreground/80 mt-0.5">{label}</p>
     </div>
   );
 }
@@ -122,7 +122,7 @@ function PulsingIcon({
   gradient,
   ringColor,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<Record<string, unknown>>;
   gradient: string;
   ringColor: string;
 }) {
@@ -247,6 +247,48 @@ export function ThreePillarsSection() {
         <div className="absolute bottom-1/4 right-[10%] w-72 h-72 bg-pink-500/[0.04] rounded-full blur-[100px]" />
       </div>
 
+      {/* Spotlight Beam — dramatic light cone from above */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full pointer-events-none -z-[1]" aria-hidden="true">
+        {/* Main beam cone */}
+        <motion.div
+          className="absolute top-0 left-1/2 -translate-x-1/2"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: "280px solid transparent",
+            borderRight: "280px solid transparent",
+            borderTop: "500px solid hsl(220 80% 70% / 0.06)",
+            filter: "blur(30px)",
+          }}
+          animate={{ opacity: [0.5, 0.8, 0.5] }}
+          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+        />
+        {/* Inner bright beam */}
+        <motion.div
+          className="absolute top-0 left-1/2 -translate-x-1/2"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: "120px solid transparent",
+            borderRight: "120px solid transparent",
+            borderTop: "400px solid hsl(220 90% 80% / 0.1)",
+            filter: "blur(20px)",
+          }}
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+        />
+        {/* Top source glow */}
+        <motion.div
+          className="absolute -top-10 left-1/2 -translate-x-1/2 w-40 h-20 rounded-full"
+          style={{
+            background: "radial-gradient(ellipse, hsl(220 90% 85% / 0.4) 0%, hsl(260 80% 70% / 0.15) 50%, transparent 80%)",
+            filter: "blur(15px)",
+          }}
+          animate={{ scale: [1, 1.2, 1], opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+
       <div className="container mx-auto px-4 sm:px-6">
         {/* Header */}
         <GSAPScrollReveal
@@ -257,7 +299,7 @@ export function ThreePillarsSection() {
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-xs sm:text-sm font-medium text-primary mb-6">
             <Sparkles className="w-3.5 h-3.5" />
-            The YHealth Trinity
+            The Balencia Trinity
           </div>
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.1]">
             One platform.{" "}
@@ -298,7 +340,7 @@ export function ThreePillarsSection() {
         {/* Pillar Cards */}
         <div
           ref={cardsRef}
-          className="grid md:grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto"
+          className="grid md:grid-cols-3 gap-6 lg:gap-8 max-w-8xl mx-auto"
           style={{ perspective: "1200px" }}
         >
           {pillars.map((pillar, i) => {
@@ -306,7 +348,7 @@ export function ThreePillarsSection() {
             return (
               <motion.div
                 key={pillar.title}
-                className="pillar-card group relative rounded-3xl border border-white/[0.08] bg-white/[0.015] backdrop-blur-sm overflow-hidden transition-all duration-500 hover:border-white/20"
+                className="pillar-card group relative rounded-3xl border border-white/[0.12] bg-white/[0.07] backdrop-blur-sm overflow-hidden transition-all duration-500 hover:border-white/20"
                 whileHover={{
                   y: -8,
                   boxShadow: `0 0 80px -20px ${pillar.glowColor}, 0 0 0 1px rgba(255,255,255,0.12)`,
@@ -382,7 +424,7 @@ export function ThreePillarsSection() {
                             strokeWidth={3}
                           />
                         </div>
-                        <span className="text-sm text-muted-foreground/80 group-hover/item:text-foreground/80 transition-colors">
+                        <span className="text-sm text-muted-foreground/90 group-hover/item:text-foreground/90 transition-colors">
                           {feature}
                         </span>
                       </motion.div>
@@ -390,10 +432,10 @@ export function ThreePillarsSection() {
                   </div>
 
                   {/* Bottom connector line */}
-                  <div className="mt-7 pt-5 border-t border-white/[0.06]">
+                  <div className="mt-7 pt-5 border-t border-white/[0.12]">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-3.5 h-3.5 text-primary/60" />
-                      <span className="text-xs text-muted-foreground/50 font-medium">
+                      <span className="text-xs text-muted-foreground/80 font-medium">
                         AI-optimized · Real-time · Adaptive
                       </span>
                     </div>

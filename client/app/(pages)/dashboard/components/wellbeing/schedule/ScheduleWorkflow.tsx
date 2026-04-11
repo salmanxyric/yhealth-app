@@ -1,6 +1,6 @@
 /**
  * @file ScheduleWorkflow Component
- * @description React Flow wrapper for schedule workflow visualization
+ * @description n8n-style React Flow canvas for schedule workflow visualization
  */
 
 "use client";
@@ -27,33 +27,37 @@ import {
 import "@xyflow/react/dist/style.css";
 import WorkflowNode, { type WorkflowNodeData } from "./WorkflowNode";
 import WorkflowEdge, { type WorkflowEdgeData } from "./WorkflowEdge";
-import type { DailySchedule, ScheduleItem } from "@/src/shared/services/schedule.service";
+import type {
+  DailySchedule,
+  ScheduleItem,
+} from "@/src/shared/services/schedule.service";
 
-// Helper function to convert time string to minutes
+/* ─────────── Helpers ─────────── */
+
 const timeToMinutes = (time: string): number => {
   if (!time) return 0;
-  const [hours, minutes] = time.split(':').map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
   return (hours || 0) * 60 + (minutes || 0);
 };
 
-// Helper function to get end time of an activity
 const getEndTime = (item: ScheduleItem): number => {
   const startMinutes = timeToMinutes(item.startTime);
-  if (item.endTime) {
-    return timeToMinutes(item.endTime);
-  }
-  if (item.durationMinutes) {
-    return startMinutes + item.durationMinutes;
-  }
-  return startMinutes + 30; // Default 30 minutes
+  if (item.endTime) return timeToMinutes(item.endTime);
+  if (item.durationMinutes) return startMinutes + item.durationMinutes;
+  return startMinutes + 30;
 };
+
+/* ─────────── Types ─────────── */
 
 interface ScheduleWorkflowProps {
   schedule: DailySchedule;
   onNodeEdit: (item: ScheduleItem) => void;
   onNodeDelete: (item: ScheduleItem) => void;
   onNodeCreate?: (position: { x: number; y: number }) => Promise<void>;
-  onNodePositionChange: (itemId: string, position: { x: number; y: number }) => void;
+  onNodePositionChange: (
+    itemId: string,
+    position: { x: number; y: number }
+  ) => void;
   onEdgeCreate: (sourceId: string, targetId: string) => Promise<void>;
   onEdgeDelete: (linkId: string) => Promise<void>;
   onAutoConnect?: () => Promise<void>;
@@ -67,6 +71,8 @@ const edgeTypes = {
   workflow: WorkflowEdge as unknown,
 } as EdgeTypes;
 
+/* ─────────── Canvas Content ─────────── */
+
 function ScheduleWorkflowContent({
   schedule,
   onNodeEdit,
@@ -77,101 +83,104 @@ function ScheduleWorkflowContent({
   onEdgeDelete,
   onAutoConnect,
 }: ScheduleWorkflowProps) {
-  // Calculate time-based positions for nodes
-  // ALWAYS prioritize saved positions from metadata
-  const calculateTimeBasedPosition = useCallback((item: ScheduleItem): { x: number; y: number } => {
-    // ALWAYS check metadata first - this is the saved position
-    const metadata = item.metadata as { x?: number; y?: number } | undefined;
-    if (metadata && typeof metadata.x === 'number' && typeof metadata.y === 'number') {
-      // Validate positions are reasonable (not NaN, not Infinity)
-      if (isFinite(metadata.x) && isFinite(metadata.y) && metadata.x >= 0 && metadata.y >= 0) {
-        return {
-          x: metadata.x,
-          y: metadata.y,
-        };
-      }
-    }
-
-    // Calculate position based on time
-    const allTimes = schedule.items.flatMap((i) => {
-      const start = timeToMinutes(i.startTime);
-      const end = getEndTime(i);
-      return [start, end];
-    });
-    const minTime = Math.min(...allTimes);
-    const maxTime = Math.max(...allTimes);
-    const timeRange = maxTime - minTime || 1;
-
-    // Calculate X position based on start time (time flows left to right)
-    const startMinutes = timeToMinutes(item.startTime);
-    const timeProgress = (startMinutes - minTime) / timeRange;
-    const canvasWidth = 1400;
-    const x = 150 + timeProgress * canvasWidth;
-
-    // Group overlapping items vertically
-    const overlappingGroups: ScheduleItem[][] = [];
-    const processed = new Set<string>();
-
-    schedule.items.forEach((currentItem) => {
-      if (processed.has(currentItem.id)) return;
-
-      const currentStart = timeToMinutes(currentItem.startTime);
-      const currentEnd = getEndTime(currentItem);
-      const group = [currentItem];
-      processed.add(currentItem.id);
-
-      schedule.items.forEach((otherItem) => {
-        if (processed.has(otherItem.id)) return;
-
-        const otherStart = timeToMinutes(otherItem.startTime);
-        const otherEnd = getEndTime(otherItem);
-
-        // Check if items overlap in time
+  const calculateTimeBasedPosition = useCallback(
+    (item: ScheduleItem): { x: number; y: number } => {
+      // Saved position from metadata takes priority
+      const metadata = item.metadata as
+        | { x?: number; y?: number }
+        | undefined;
+      if (
+        metadata &&
+        typeof metadata.x === "number" &&
+        typeof metadata.y === "number"
+      ) {
         if (
-          (otherStart >= currentStart && otherStart < currentEnd) ||
-          (otherEnd > currentStart && otherEnd <= currentEnd) ||
-          (otherStart <= currentStart && otherEnd >= currentEnd)
+          isFinite(metadata.x) &&
+          isFinite(metadata.y) &&
+          metadata.x >= 0 &&
+          metadata.y >= 0
         ) {
-          group.push(otherItem);
-          processed.add(otherItem.id);
+          return { x: metadata.x, y: metadata.y };
         }
+      }
+
+      // Time-based fallback
+      const allTimes = schedule.items.flatMap((i) => {
+        const start = timeToMinutes(i.startTime);
+        const end = getEndTime(i);
+        return [start, end];
+      });
+      const minTime = Math.min(...allTimes);
+      const maxTime = Math.max(...allTimes);
+      const timeRange = maxTime - minTime || 1;
+
+      const startMinutes = timeToMinutes(item.startTime);
+      const timeProgress = (startMinutes - minTime) / timeRange;
+      const canvasWidth = 1400;
+      const x = 150 + timeProgress * canvasWidth;
+
+      // Vertical grouping for overlapping items
+      const overlappingGroups: ScheduleItem[][] = [];
+      const processed = new Set<string>();
+
+      schedule.items.forEach((currentItem) => {
+        if (processed.has(currentItem.id)) return;
+
+        const currentStart = timeToMinutes(currentItem.startTime);
+        const currentEnd = getEndTime(currentItem);
+        const group = [currentItem];
+        processed.add(currentItem.id);
+
+        schedule.items.forEach((otherItem) => {
+          if (processed.has(otherItem.id)) return;
+          const otherStart = timeToMinutes(otherItem.startTime);
+          const otherEnd = getEndTime(otherItem);
+
+          if (
+            (otherStart >= currentStart && otherStart < currentEnd) ||
+            (otherEnd > currentStart && otherEnd <= currentEnd) ||
+            (otherStart <= currentStart && otherEnd >= currentEnd)
+          ) {
+            group.push(otherItem);
+            processed.add(otherItem.id);
+          }
+        });
+
+        overlappingGroups.push(group);
       });
 
-      overlappingGroups.push(group);
-    });
+      const itemGroup = overlappingGroups.find((group) =>
+        group.some((i) => i.id === item.id)
+      );
+      const groupIndex = overlappingGroups.indexOf(itemGroup || []);
+      const itemIndexInGroup =
+        itemGroup?.findIndex((i) => i.id === item.id) || 0;
 
-    // Find which group this item belongs to
-    const itemGroup = overlappingGroups.find((group) =>
-      group.some((i) => i.id === item.id)
-    );
-    const groupIndex = overlappingGroups.indexOf(itemGroup || []);
-    const itemIndexInGroup = itemGroup?.findIndex((i) => i.id === item.id) || 0;
+      const ySpacing = 200;
+      const y = 150 + groupIndex * ySpacing + itemIndexInGroup * 180;
 
-    // Position items in the same time group vertically
-    const ySpacing = 200;
-    const y = 150 + groupIndex * ySpacing + itemIndexInGroup * 180;
+      return { x, y };
+    },
+    [schedule]
+  );
 
-    return { x, y };
-  }, [schedule]);
-
-  // Node defaults for React Flow
   const nodeDefaults = {
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
   };
 
-  // Convert ScheduleItem[] to React Flow nodes
-   
+  // Convert items to nodes
   const initialNodes = useMemo(() => {
     return schedule.items.map((item) => {
       const position = calculateTimeBasedPosition(item);
       const connectionCount = schedule.links.filter(
-        (link) => link.sourceItemId === item.id || link.targetItemId === item.id
+        (link) =>
+          link.sourceItemId === item.id || link.targetItemId === item.id
       ).length;
 
       return {
         id: item.id,
-        type: 'workflow',
+        type: "workflow",
         position,
         ...nodeDefaults,
         data: {
@@ -182,20 +191,23 @@ function ScheduleWorkflowContent({
         },
       } as Node;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schedule.items, schedule.links, calculateTimeBasedPosition, onNodeEdit, onNodeDelete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    schedule.items,
+    schedule.links,
+    calculateTimeBasedPosition,
+    onNodeEdit,
+    onNodeDelete,
+  ]);
 
-  // Convert ScheduleLink[] to React Flow edges
+  // Convert links to edges
   const initialEdges = useMemo(() => {
     return schedule.links.map((link) => ({
       id: link.id,
       source: link.sourceItemId,
       target: link.targetItemId,
-      type: 'workflow',
+      type: "workflow",
       animated: true,
-      style: {
-        strokeDasharray: '8,4',
-      },
       data: {
         linkId: link.id,
         onDelete: async (linkId: string) => {
@@ -209,27 +221,26 @@ function ScheduleWorkflowContent({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Update nodes when schedule changes
+  // Sync nodes with schedule
   useEffect(() => {
     const itemIds = new Set(schedule.items.map((i) => i.id));
-    
+
     setNodes((currentNodes) => {
-      // First, remove nodes that no longer exist in schedule (deleted items)
       const nodesToKeep = currentNodes.filter((node) => itemIds.has(node.id));
-      
-      // Then, update or add nodes for current items
-      const updatedNodes = schedule.items.map((item) => {
+
+      return schedule.items.map((item) => {
         const existingNode = nodesToKeep.find((n) => n.id === item.id);
-        // ALWAYS prioritize saved position from metadata, then existing node position, then calculate
         const savedPosition = calculateTimeBasedPosition(item);
-        const position = savedPosition || existingNode?.position || { x: 100, y: 100 };
+        const position =
+          savedPosition || existingNode?.position || { x: 100, y: 100 };
         const connectionCount = schedule.links.filter(
-          (link) => link.sourceItemId === item.id || link.targetItemId === item.id
+          (link) =>
+            link.sourceItemId === item.id || link.targetItemId === item.id
         ).length;
 
         return {
           id: item.id,
-          type: 'workflow',
+          type: "workflow",
           position,
           ...nodeDefaults,
           data: {
@@ -240,30 +251,32 @@ function ScheduleWorkflowContent({
           },
         } as Node;
       });
-
-      return updatedNodes;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schedule.items, schedule.links, calculateTimeBasedPosition, onNodeEdit, onNodeDelete, setNodes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    schedule.items,
+    schedule.links,
+    calculateTimeBasedPosition,
+    onNodeEdit,
+    onNodeDelete,
+    setNodes,
+  ]);
 
-  // Update edges when schedule changes
+  // Sync edges with schedule
   useEffect(() => {
     const itemIds = new Set(schedule.items.map((i) => i.id));
-    
-    // Filter out edges that reference deleted items
+
     const validLinks = schedule.links.filter(
-      (link) => itemIds.has(link.sourceItemId) && itemIds.has(link.targetItemId)
+      (link) =>
+        itemIds.has(link.sourceItemId) && itemIds.has(link.targetItemId)
     );
-    
+
     const newEdges = validLinks.map((link) => ({
       id: link.id,
       source: link.sourceItemId,
       target: link.targetItemId,
-      type: 'workflow',
+      type: "workflow",
       animated: true,
-      style: {
-        strokeDasharray: '8,4',
-      },
       data: {
         linkId: link.id,
         onDelete: async (linkId: string) => {
@@ -276,67 +289,53 @@ function ScheduleWorkflowContent({
     setEdges(newEdges);
   }, [schedule.items, schedule.links, onEdgeDelete, setEdges]);
 
-  // Handle node drag end - save position to database
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      onNodePositionChange(node.id, { x: node.position.x, y: node.position.y });
+      onNodePositionChange(node.id, {
+        x: node.position.x,
+        y: node.position.y,
+      });
     },
     [onNodePositionChange]
   );
 
-  // Handle new connection creation
   const onConnect = useCallback(
     async (params: Connection) => {
       if (!params.source || !params.target) return;
-      
-      // Check if edge already exists
       const edgeExists = edges.some(
         (e) => e.source === params.source && e.target === params.target
       );
       if (edgeExists) return;
-
-      // Create edge in React Flow
       setEdges((eds) => addEdge(params, eds));
-
-      // Create link in database
       await onEdgeCreate(params.source, params.target);
     },
     [edges, setEdges, onEdgeCreate]
   );
 
-  // Handle node deletion (when user deletes nodes via Delete key or delete button) - n8n style
-  const onNodesDelete = useCallback(
-    async (deletedNodes: Node[]) => {
-      for (const node of deletedNodes) {
-        const nodeData = node.data as unknown as WorkflowNodeData | undefined;
-        if (nodeData?.item && nodeData?.onDelete) {
-          // Call the delete handler which will show confirmation and delete from database
-          nodeData.onDelete();
-        }
+  const onNodesDelete = useCallback(async (deletedNodes: Node[]) => {
+    for (const node of deletedNodes) {
+      const nodeData = node.data as unknown as WorkflowNodeData | undefined;
+      if (nodeData?.item && nodeData?.onDelete) {
+        nodeData.onDelete();
       }
-    },
-    []
-  );
+    }
+  }, []);
 
-  // Handle edge deletion (when user deletes edges via Delete key or edge delete button)
-  const onEdgesDelete = useCallback(
-    async (deletedEdges: Edge[]) => {
-      for (const edge of deletedEdges) {
-        const edgeData = edge.data as WorkflowEdgeData | undefined;
-        if (edgeData?.linkId && edgeData?.onDelete) {
-          await edgeData.onDelete(edgeData.linkId);
-        }
+  const onEdgesDelete = useCallback(async (deletedEdges: Edge[]) => {
+    for (const edge of deletedEdges) {
+      const edgeData = edge.data as WorkflowEdgeData | undefined;
+      if (edgeData?.linkId && edgeData?.onDelete) {
+        await edgeData.onDelete(edgeData.linkId);
       }
-    },
-    []
-  );
+    }
+  }, []);
 
-  // Handle pane click to create new node (double-click)
   const onPaneClick = useCallback(
     async (event: React.MouseEvent) => {
-      // Only create on double-click to avoid accidental creation
       if (event.detail === 2 && onNodeCreate) {
-        const reactFlowBounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        const reactFlowBounds = (
+          event.currentTarget as HTMLElement
+        ).getBoundingClientRect();
         const position = {
           x: event.clientX - reactFlowBounds.left,
           y: event.clientY - reactFlowBounds.top,
@@ -347,11 +346,10 @@ function ScheduleWorkflowContent({
     [onNodeCreate]
   );
 
-  // Track if auto-connect has already run to prevent continuous re-renders
+  // Auto-connect on initial mount only
   const autoConnectRanRef = useRef(false);
   const lastScheduleDateRef = useRef(schedule.scheduleDate);
 
-  // Reset auto-connect flag when schedule date changes (new day loaded)
   useEffect(() => {
     if (schedule.scheduleDate !== lastScheduleDateRef.current) {
       autoConnectRanRef.current = false;
@@ -359,23 +357,19 @@ function ScheduleWorkflowContent({
     }
   }, [schedule.scheduleDate]);
 
-  // Auto-connect ONLY on initial mount (not on every items change)
-  // This prevents continuous re-renders when auto-connect updates the schedule
   useEffect(() => {
-    if (onAutoConnect && !autoConnectRanRef.current && schedule.items.length > 0) {
+    if (
+      onAutoConnect &&
+      !autoConnectRanRef.current &&
+      schedule.items.length > 0
+    ) {
       autoConnectRanRef.current = true;
       onAutoConnect();
     }
   }, [onAutoConnect, schedule.items.length]);
 
   return (
-    <div className="w-full h-[700px] rounded-2xl overflow-hidden border border-slate-700/50 relative" 
-      style={{
-        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%)',
-        boxShadow: '0 25px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(16, 185, 129, 0.1)',
-        backdropFilter: 'blur(20px)',
-      }}
-    >
+    <div className="absolute inset-0">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -389,72 +383,62 @@ function ScheduleWorkflowContent({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.3 }}
         minZoom={0.1}
-        maxZoom={2}
+        maxZoom={2.5}
         defaultEdgeOptions={{
           animated: true,
           selectable: true,
-          style: { 
-            strokeWidth: 3,
-            stroke: '#10b981',
-            filter: 'drop-shadow(0 0 4px rgba(16, 185, 129, 0.4))',
+          style: {
+            strokeWidth: 2,
+            stroke: "#10b981",
           },
         }}
-        connectionLineStyle={{ 
-          stroke: '#10b981', 
-          strokeWidth: 3.5, 
-          strokeDasharray: '12,6',
-          filter: 'drop-shadow(0 0 6px rgba(16, 185, 129, 0.6)) drop-shadow(0 0 2px rgba(16, 185, 129, 0.8))',
+        connectionLineStyle={{
+          stroke: "#10b981",
+          strokeWidth: 2.5,
+          strokeDasharray: "8,4",
         }}
-        connectionLineType={ConnectionLineType.Bezier}
+        connectionLineType={ConnectionLineType.SmoothStep}
         snapToGrid={true}
         snapGrid={[20, 20]}
         deleteKeyCode="Delete"
         multiSelectionKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
       >
-        <Background 
-          variant={BackgroundVariant.Dots} 
-          gap={32} 
-          size={2} 
-          color="#64748b"
-          style={{ opacity: 0.25 }}
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color="rgba(255,255,255,0.08)"
         />
-        {/* Additional grid overlay for n8n-like appearance */}
-        <div 
-          className="absolute inset-0 pointer-events-none"
+
+        {/* Controls - bottom-left */}
+        <Controls
           style={{
-            backgroundImage: `
-              linear-gradient(rgba(16, 185, 129, 0.03) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(16, 185, 129, 0.03) 1px, transparent 1px)
-            `,
-            backgroundSize: '40px 40px',
-          }}
-        />
-        <Controls 
-          style={{
-            background: 'rgba(15, 23, 42, 0.95)',
-            backdropFilter: 'blur(16px) saturate(180%)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            borderRadius: '14px',
-            padding: '10px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+            background: "rgba(13, 13, 20, 0.9)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(255, 255, 255, 0.06)",
+            borderRadius: "10px",
+            padding: "4px",
+            boxShadow: "0 4px 24px rgba(0, 0, 0, 0.4)",
           }}
           showInteractive={false}
         />
+
+        {/* Minimap - bottom-right */}
         <MiniMap
           nodeColor={(node) => {
             const item = (node.data as { item: ScheduleItem })?.item;
-            return item?.color || '#10b981';
+            return item?.color || "#10b981";
           }}
-          maskColor="rgba(0, 0, 0, 0.75)"
+          maskColor="rgba(0, 0, 0, 0.8)"
           style={{
-            background: 'rgba(15, 23, 42, 0.95)',
-            backdropFilter: 'blur(16px) saturate(180%)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            borderRadius: '14px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+            background: "rgba(13, 13, 20, 0.9)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(255, 255, 255, 0.06)",
+            borderRadius: "10px",
+            boxShadow: "0 4px 24px rgba(0, 0, 0, 0.4)",
           }}
           pannable
           zoomable
@@ -464,6 +448,8 @@ function ScheduleWorkflowContent({
   );
 }
 
+/* ─────────── Exported Wrapper ─────────── */
+
 export default function ScheduleWorkflow(props: ScheduleWorkflowProps) {
   return (
     <ReactFlowProvider>
@@ -471,4 +457,3 @@ export default function ScheduleWorkflow(props: ScheduleWorkflowProps) {
     </ReactFlowProvider>
   );
 }
-

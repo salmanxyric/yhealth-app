@@ -3,1114 +3,638 @@
 import { useRef, useState, useEffect, useCallback, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, useScroll, useInView, useMotionValue, useSpring } from "framer-motion";
-import { ArrowRight, Play, Sparkles, Brain, Activity, Heart, Zap, Shield, Cpu } from "lucide-react";
-import { useGSAP } from "@/hooks/use-gsap";
-import { gsap } from "@/lib/gsap-init";
+import {
+  ArrowRight, Play, Sparkles, Dumbbell, Apple, Brain,
+  BookOpen, Target, Heart, Shield, Zap, Cpu,
+  Briefcase, DollarSign,
+} from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 
-const stats = [
-  { value: 150, suffix: "K+", label: "Lives Transformed" },
-  { value: 97, suffix: "%", label: "Goal Completion" },
-  { value: 4.9, suffix: "/5", label: "User Rating", decimals: 1 },
+// ─── Constants ────────────────────────────────────────────────────────
+const DOMAINS = [
+  { Icon: Dumbbell,   label: "Fitness",       color: "#f97316", rgb: "249,115,22",  angle: 0   },
+  { Icon: Apple,      label: "Nutrition",      color: "#10b981", rgb: "16,185,129",  angle: 45  },
+  { Icon: Brain,      label: "Mindfulness",    color: "#a78bfa", rgb: "167,139,250", angle: 90  },
+  { Icon: BookOpen,   label: "Journal",        color: "#fbbf24", rgb: "251,191,36",  angle: 135 },
+  { Icon: Target,     label: "Habits",         color: "#22d3ee", rgb: "34,211,238",  angle: 180 },
+  { Icon: Heart,      label: "Relationships",  color: "#fb7185", rgb: "251,113,133", angle: 225 },
+  { Icon: Briefcase,  label: "Career",         color: "#60a5fa", rgb: "96,165,250",  angle: 270 },
+  { Icon: DollarSign, label: "Finance",        color: "#bef264", rgb: "190,242,100", angle: 315 },
 ];
 
-const pillars = [
-  { icon: Activity, label: "Fitness", color: "from-cyan-400 to-cyan-600", glow: "cyan" },
-  { icon: Heart, label: "Nutrition", color: "from-purple-400 to-purple-600", glow: "purple" },
-  { icon: Brain, label: "Wellbeing", color: "from-pink-400 to-pink-600", glow: "pink" },
-];
+const WORDS    = ["Coached", "Optimized", "Transformed", "Guided"];
+// Verified geometry — RY=148 gives 34px gap at top/bottom (no sphere collision)
+// Adjacent card spacing at 45° intervals ≈ 111px (card is 82px wide — no overlap)
+const ORBIT_RX = 210;  // horizontal radius
+const ORBIT_RY = 148;  // vertical radius (independent of RX — no TILT multiplier)
 
-// ─── Typewriter effect with glitch ───────────────────────────────────
-function TypewriterText({ text, className = "", delay = 0 }: { text: string; className?: string; delay?: number }) {
-  const [displayedChars, setDisplayedChars] = useState(0);
-  const [showCursor, setShowCursor] = useState(true);
-  const [glitchActive, setGlitchActive] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true });
+// ─── Injected CSS ─────────────────────────────────────────────────────
+const HERO_CSS = `
+  .h-root  { font-family:'DM Sans',system-ui,sans-serif; }
+  .h-disp  { font-family:'Bricolage Grotesque',system-ui,sans-serif; }
+  .h-hero-title { line-height: 1.14; text-wrap: balance; }
+  .h-hero-line { display: block; }
+  .h-hero-line-dynamic { display: block; overflow: hidden; min-height: 1.2em; }
 
-  useEffect(() => {
-    if (!isInView) return;
-    const timeout = setTimeout(() => {
-      let i = 0;
-      const interval = setInterval(() => {
-        i++;
-        setDisplayedChars(i);
-        // Random glitch effect
-        if (Math.random() < 0.1 && i < text.length) {
-          setGlitchActive(true);
-          setTimeout(() => setGlitchActive(false), 50);
-        }
-        if (i >= text.length) {
-          clearInterval(interval);
-          setTimeout(() => setShowCursor(false), 2000);
-        }
-      }, 70);
-      return () => clearInterval(interval);
-    }, delay);
-    return () => clearTimeout(timeout);
-  }, [isInView, text, delay]);
+  @keyframes h-aurora1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(60px,-40px) scale(1.12)} }
+  @keyframes h-aurora2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-50px,30px) scale(0.9)} }
+  @keyframes h-breathe { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:.85;transform:scale(1.1)} }
+  @keyframes h-pulse   { 0%{transform:scale(1);opacity:.65} 100%{transform:scale(2.9);opacity:0} }
+  @keyframes h-spin    { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes h-ping    { 0%{transform:scale(1);opacity:.9} 100%{transform:scale(2.2);opacity:0} }
+  @keyframes h-ticker  { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  @keyframes h-shimmer { from{background-position:-200% 0} to{background-position:200% 0} }
+  @keyframes h-word    { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
+  @keyframes h-scan    { 0%{transform:translateY(-74px);opacity:0} 12%{opacity:.7} 88%{opacity:.7} 100%{transform:translateY(74px);opacity:0} }
+  @keyframes h-fade-up { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes h-orb-glow{ 0%,100%{box-shadow:0 0 80px rgba(14,165,233,.38),0 0 160px rgba(139,92,246,.18),inset 0 0 55px rgba(0,0,0,.85)} 50%{box-shadow:0 0 100px rgba(14,165,233,.48),0 0 200px rgba(139,92,246,.25),inset 0 0 55px rgba(0,0,0,.85)} }
 
-  return (
-    <span ref={ref} className={`relative ${className}`}>
-      {text.split("").map((char, i) => (
-        <motion.span
-          key={i}
-          initial={{ opacity: 0, y: 10, rotateX: -90 }}
-          animate={i < displayedChars ? { opacity: 1, y: 0, rotateX: 0 } : { opacity: 0, y: 10, rotateX: -90 }}
-          transition={{ duration: 0.1 }}
-          className={`inline-block ${glitchActive && i === displayedChars - 1 ? 'text-primary glitch-text' : ''}`}
-          style={{ whiteSpace: char === " " ? "pre" : undefined, transformStyle: "preserve-3d" }}
-        >
-          {char}
-        </motion.span>
-      ))}
-      {showCursor && isInView && (
-        <motion.span
-          animate={{ opacity: [1, 0], scaleY: [1, 0.5, 1] }}
-          transition={{ duration: 0.5, repeat: Infinity, repeatType: "reverse" }}
-          className="inline-block w-[3px] h-[0.9em] bg-primary ml-0.5 align-middle shadow-[0_0_10px_hsl(var(--primary))]"
-        />
-      )}
-    </span>
-  );
-}
+  .h-card-orbit { transition:box-shadow .3s ease; }
+  .h-card-orbit:hover { transform:scale(1.18) !important; opacity:1 !important; }
 
-// ─── Animated count-up hook ──────────────────────────────────────────
-function useCountUp(target: number, decimals = 0, duration = 1500, enabled = false) {
-  const [value, setValue] = useState(0);
-  const rafRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(parseFloat((eased * target).toFixed(decimals)));
-      if (progress < 1) rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [target, decimals, duration, enabled]);
-
-  return value;
-}
-
-// ─── Animated Stat with holographic effect ──────────────────────────
-function AnimatedStat({ value, suffix, label, decimals = 0, delay }: {
-  value: number; suffix: string; label: string; decimals?: number; delay: number;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true });
-  const count = useCountUp(value, decimals, 1500, isInView);
-  const displayValue = Number.isFinite(count) ? count : value;
-  const valueStr = decimals > 0 ? displayValue.toFixed(decimals) : String(Math.round(displayValue));
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      className="text-center group cursor-default"
-    >
-      <div className="relative">
-        <div className="text-2xl sm:text-3xl font-bold gradient-text tabular-nums holographic-text">
-          {valueStr}{suffix}
-        </div>
-        <motion.div
-          className="absolute -inset-2 rounded-lg bg-gradient-to-r from-primary/20 via-purple-500/20 to-pink-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-        />
-      </div>
-      <div className="text-sm text-muted-foreground mt-1">{label}</div>
-    </motion.div>
-  );
-}
-
-// ─── Scroll progress bar (cyberpunk style) ──────────────────────────
-function ScrollProgressBar() {
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
-
-  return (
-    <motion.div
-      className="fixed top-0 left-0 right-0 h-[3px] z-[100] origin-left"
-      style={{
-        scaleX,
-        background: "linear-gradient(90deg, hsl(var(--primary)), hsl(190 90% 50%), hsl(280 80% 60%), hsl(330 80% 60%))",
-        boxShadow: "0 0 20px hsl(var(--primary)), 0 0 40px hsl(190 90% 50%)",
-      }}
-    />
-  );
-}
-
-// ─── Sci-Fi Grid Floor ───────────────────────────────────────────────
-function SciFiGrid() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ perspective: "1000px" }}>
-      {/* Horizon grid */}
-      <div 
-        className="absolute bottom-0 left-0 right-0 h-[60%] origin-bottom"
-        style={{ 
-          transform: "rotateX(60deg)",
-          background: `
-            linear-gradient(to bottom, transparent 0%, hsl(var(--primary) / 0.03) 100%),
-            linear-gradient(90deg, hsl(var(--primary) / 0.2) 1px, transparent 1px),
-            linear-gradient(hsl(var(--primary) / 0.2) 1px, transparent 1px)
-          `,
-          backgroundSize: "100% 100%, 80px 80px, 80px 80px",
-          maskImage: "linear-gradient(to top, black 0%, transparent 100%)",
-          WebkitMaskImage: "linear-gradient(to top, black 0%, transparent 100%)",
-        }}
-      >
-        {/* Animated grid lines moving */}
-        <motion.div
-          className="absolute inset-0"
-          style={{
-            background: `
-              linear-gradient(90deg, transparent 0%, hsl(var(--primary) / 0.3) 50%, transparent 100%)
-            `,
-            backgroundSize: "200% 100%",
-          }}
-          animate={{
-            backgroundPosition: ["200% 0%", "0% 0%"],
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
-      
-      {/* Floating grid nodes */}
-      {[...Array(20)].map((_, i) => (
-        <motion.div
-          key={i}
-          className="absolute w-1 h-1 rounded-full bg-primary"
-          style={{
-            left: `${5 + (i * 4.5)}%`,
-            bottom: `${10 + (i % 5) * 8}%`,
-            boxShadow: "0 0 10px hsl(var(--primary)), 0 0 20px hsl(var(--primary))",
-          }}
-          animate={{
-            opacity: [0.2, 1, 0.2],
-            scale: [1, 1.5, 1],
-          }}
-          transition={{
-            duration: 2 + (i % 3),
-            repeat: Infinity,
-            delay: i * 0.2,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Data Stream Animation ───────────────────────────────────────────
-function DataStreams() {
-  const streams = [
-    { x: 10, delay: 0, speed: 3, color: "hsl(var(--primary))" },
-    { x: 25, delay: 0.5, speed: 4, color: "hsl(190 90% 50%)" },
-    { x: 40, delay: 1, speed: 2.5, color: "hsl(280 80% 60%)" },
-    { x: 60, delay: 0.3, speed: 3.5, color: "hsl(330 80% 60%)" },
-    { x: 75, delay: 0.8, speed: 2, color: "hsl(var(--primary))" },
-    { x: 90, delay: 0.2, speed: 4.5, color: "hsl(190 90% 50%)" },
-  ];
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {streams.map((stream, i) => (
-        <motion.div
-          key={i}
-          className="absolute w-[2px] h-20 rounded-full"
-          style={{
-            left: `${stream.x}%`,
-            background: `linear-gradient(to bottom, transparent, ${stream.color}, transparent)`,
-            boxShadow: `0 0 20px ${stream.color}, 0 0 40px ${stream.color}`,
-          }}
-          animate={{
-            top: ["-10%", "110%"],
-            opacity: [0, 1, 1, 0],
-          }}
-          transition={{
-            duration: stream.speed,
-            repeat: Infinity,
-            delay: stream.delay,
-            ease: "linear",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Holographic Card ────────────────────────────────────────────────
-function HolographicCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [rotateX, setRotateX] = useState(0);
-  const [rotateY, setRotateY] = useState(0);
-  const [glarePosition, setGlarePosition] = useState({ x: 50, y: 50 });
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    setRotateX((y - 0.5) * -20);
-    setRotateY((x - 0.5) * 20);
-    setGlarePosition({ x: x * 100, y: y * 100 });
-  };
-
-  const handleMouseLeave = () => {
-    setRotateX(0);
-    setRotateY(0);
-    setGlarePosition({ x: 50, y: 50 });
-  };
-
-  return (
-    <div
-      ref={cardRef}
-      className={`relative ${className}`}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      style={{
-        transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
-        transformStyle: "preserve-3d",
-        transition: "transform 0.1s ease-out",
-      }}
-    >
-      {/* Holographic gradient overlay */}
-      <div
-        className="absolute inset-0 rounded-2xl pointer-events-none z-10"
-        style={{
-          background: `radial-gradient(circle at ${glarePosition.x}% ${glarePosition.y}%, rgba(255,255,255,0.3) 0%, transparent 60%)`,
-          mixBlendMode: "overlay",
-        }}
-      />
-      {/* Rainbow border glow */}
-      <div 
-        className="absolute -inset-[1px] rounded-2xl opacity-50 blur-sm"
-        style={{
-          background: "linear-gradient(135deg, hsl(var(--primary)), hsl(190 90% 50%), hsl(280 80% 60%), hsl(330 80% 60%))",
-        }}
-      />
-      {children}
-    </div>
-  );
-}
-
-// ─── AI Core with enhanced 3D tilt and sci-fi elements ────────────────
-function AICore() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const rotateX = useMotionValue(0);
-  const rotateY = useMotionValue(0);
-  const springRotateX = useSpring(rotateX, { stiffness: 150, damping: 20 });
-  const springRotateY = useSpring(rotateY, { stiffness: 150, damping: 20 });
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = (e.clientX - cx) / (rect.width / 2);
-    const dy = (e.clientY - cy) / (rect.height / 2);
-    rotateY.set(dx * 15);
-    rotateX.set(-dy * 15);
-  }, [rotateX, rotateY]);
-
-  const handleMouseLeave = useCallback(() => {
-    rotateX.set(0);
-    rotateY.set(0);
-  }, [rotateX, rotateY]);
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-full flex items-center justify-center"
-      style={{ perspective: "1000px" }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      <motion.div
-        className="relative w-full h-full flex items-center justify-center"
-        style={{ rotateX: springRotateX, rotateY: springRotateY, transformStyle: "preserve-3d" }}
-      >
-        {/* Deep background glow layers - refined */}
-        <div className="absolute w-[450px] h-[450px] rounded-full bg-gradient-to-br from-primary/15 via-purple-500/10 to-cyan-500/10 blur-[100px]" />
-        <motion.div 
-          className="absolute w-[350px] h-[350px] rounded-full bg-gradient-to-br from-primary/10 to-purple-500/5 blur-[80px]"
-          animate={{ scale: [1, 1.1, 1], opacity: [0.4, 0.6, 0.4] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-        />
-
-        {/* Elegant hexagonal frame - SVG based for better rendering */}
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-          className="absolute w-[360px] h-[360px]"
-        >
-          <svg className="w-full h-full" viewBox="0 0 100 100">
-            <defs>
-              <linearGradient id="hexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="hsl(var(--primary) / 0.6)" />
-                <stop offset="50%" stopColor="hsl(280 80% 60% / 0.4)" />
-                <stop offset="100%" stopColor="hsl(190 90% 50% / 0.6)" />
-              </linearGradient>
-              <filter id="hexGlow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                <feMerge>
-                  <feMergeNode in="coloredBlur"/>
-                  <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-              </filter>
-            </defs>
-            {/* Main hexagon stroke */}
-            <polygon
-              points="50,2 95,25 95,75 50,98 5,75 5,25"
-              fill="none"
-              stroke="url(#hexGradient)"
-              strokeWidth="0.5"
-              filter="url(#hexGlow)"
-              opacity="0.8"
-            />
-            {/* Inner hexagon for depth */}
-            <polygon
-              points="50,8 89,28 89,72 50,92 11,72 11,28"
-              fill="none"
-              stroke="hsl(var(--primary) / 0.2)"
-              strokeWidth="0.3"
-            />
-            {/* Corner accents - small dots */}
-            {[
-              { cx: 50, cy: 2 },
-              { cx: 95, cy: 25 },
-              { cx: 95, cy: 75 },
-              { cx: 50, cy: 98 },
-              { cx: 5, cy: 75 },
-              { cx: 5, cy: 25 },
-            ].map((pos, i) => (
-              <motion.circle
-                key={i}
-                cx={pos.cx}
-                cy={pos.cy}
-                r="1.5"
-                fill="hsl(var(--primary))"
-                filter="url(#hexGlow)"
-                initial={{ opacity: 0.4 }}
-                animate={{ opacity: [0.4, 0.9, 0.4] }}
-                transition={{ duration: 2, repeat: Infinity, delay: i * 0.3 }}
-              />
-            ))}
-          </svg>
-        </motion.div>
-
-        {/* Middle ring - elegant dotted circle */}
-        <motion.div
-          animate={{ rotate: -360 }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute w-[280px] h-[280px]"
-        >
-          <svg className="w-full h-full" viewBox="0 0 100 100">
-            <defs>
-              <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="hsl(280 80% 60% / 0.3)" />
-                <stop offset="50%" stopColor="hsl(190 90% 50% / 0.3)" />
-                <stop offset="100%" stopColor="hsl(280 80% 60% / 0.3)" />
-              </linearGradient>
-            </defs>
-            {/* Dotted ring */}
-            <circle
-              cx="50"
-              cy="50"
-              r="48"
-              fill="none"
-              stroke="url(#ringGradient)"
-              strokeWidth="0.5"
-              strokeDasharray="4 6"
-              opacity="0.6"
-            />
-            {/* Small accent dots */}
-            {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => {
-              const rad = (angle * Math.PI) / 180;
-              const x = 50 + 48 * Math.cos(rad);
-              const y = 50 + 48 * Math.sin(rad);
-              return (
-                <motion.circle
-                  key={i}
-                  cx={x}
-                  cy={y}
-                  r="1"
-                  fill="hsl(280 80% 60%)"
-                  initial={{ opacity: 0.3 }}
-                  animate={{ opacity: [0.3, 0.8, 0.3] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.15 }}
-                />
-              );
-            })}
-          </svg>
-        </motion.div>
-
-        {/* Inner ring - subtle glow ring */}
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-          className="absolute w-[200px] h-[200px] rounded-full"
-          style={{ 
-            background: "radial-gradient(circle, hsl(var(--primary) / 0.05) 0%, transparent 70%)",
-            border: "1px solid hsl(var(--primary) / 0.2)",
-            boxShadow: "0 0 40px hsl(var(--primary) / 0.1), inset 0 0 40px hsl(var(--primary) / 0.05)",
-          }}
-        />
-
-        {/* Core with refined holographic effect */}
-        <motion.div
-          animate={{ scale: [1, 1.03, 1] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          className="relative w-28 h-28"
-          style={{ transformStyle: "preserve-3d" }}
-        >
-          {/* Soft outer glow */}
-          <div className="absolute -inset-4 rounded-full bg-gradient-to-br from-primary/30 via-purple-500/20 to-cyan-500/30 blur-xl" />
-          
-          {/* Core gradient sphere */}
-          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary via-purple-500 to-cyan-500"
-               style={{ boxShadow: "0 0 30px hsl(var(--primary) / 0.6), inset 0 0 20px rgba(255,255,255,0.2)" }} />
-          
-          {/* Glass effect overlay */}
-          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/30 via-transparent to-transparent" />
-          
-          {/* Inner core with icon */}
-          <div className="absolute inset-1 rounded-full bg-gradient-to-br from-white/10 to-transparent backdrop-blur-sm flex items-center justify-center border border-white/20">
-            <Brain className="w-12 h-12 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]" />
-          </div>
-
-          {/* Subtle pulse rings */}
-          {[0, 0.7].map((delay, i) => (
-            <motion.div
-              key={i}
-              className="absolute inset-0 rounded-full border"
-              style={{ 
-                borderColor: i === 0 ? "hsl(var(--primary) / 0.3)" : "hsl(280 80% 60% / 0.3)",
-              }}
-              animate={{ scale: [1, 1.8 + i * 0.3], opacity: [0.5, 0] }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: "easeOut", delay }}
-            />
-          ))}
-        </motion.div>
-
-        {/* Orbiting satellites - refined */}
-        {pillars.map((pillar, i) => (
-          <motion.div
-            key={pillar.label}
-            className="absolute"
-            style={{ top: "50%", left: "50%" }}
-            animate={{ rotate: [i * 120, i * 120 + 360] }}
-            transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-          >
-            <motion.div
-              className={`-translate-x-1/2 -translate-y-1/2 absolute p-2.5 rounded-lg backdrop-blur-sm border`}
-              style={{
-                transform: `translateX(160px)`,
-                background: pillar.glow === "cyan" 
-                  ? "linear-gradient(135deg, hsl(190 90% 50% / 0.15), transparent)" 
-                  : pillar.glow === "purple" 
-                    ? "linear-gradient(135deg, hsl(280 80% 60% / 0.15), transparent)" 
-                    : "linear-gradient(135deg, hsl(330 80% 60% / 0.15), transparent)",
-                borderColor: pillar.glow === "cyan" 
-                  ? "hsl(190 90% 50% / 0.3)" 
-                  : pillar.glow === "purple" 
-                    ? "hsl(280 80% 60% / 0.3)" 
-                    : "hsl(330 80% 60% / 0.3)",
-                boxShadow: `0 0 15px ${pillar.glow === "cyan" ? "hsl(190 90% 50% / 0.2)" : pillar.glow === "purple" ? "hsl(280 80% 60% / 0.2)" : "hsl(330 80% 60% / 0.2)"}`,
-              }}
-              animate={{ rotate: [-i * 120, -i * 120 - 360] }}
-              transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-            >
-              <pillar.icon className="w-4 h-4 text-white/90" />
-            </motion.div>
-          </motion.div>
-        ))}
-      </motion.div>
-    </div>
-  );
-}
-
-// ─── Cyberpunk Badge ─────────────────────────────────────────────────
-function CyberpunkBadge() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-      className="inline-flex"
-    >
-      <motion.div
-        whileHover={{ scale: 1.02 }}
-        className="relative inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium overflow-hidden group"
-        style={{ 
-          background: "linear-gradient(135deg, rgba(0,0,0,0.6), rgba(20,20,40,0.8))",
-          border: "1px solid hsl(var(--primary) / 0.3)",
-          backdropFilter: "blur(20px)",
-        }}
-      >
-        {/* Animated border gradient */}
-        <motion.div
-          className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-          style={{
-            background: "linear-gradient(90deg, hsl(var(--primary)), hsl(190 90% 50%), hsl(280 80% 60%), hsl(var(--primary)))",
-            backgroundSize: "300% 100%",
-          }}
-          animate={{ backgroundPosition: ["0% 0%", "300% 0%"] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-        />
-        <div className="absolute inset-[1px] rounded-full bg-gradient-to-r from-background/90 to-background/80" />
-        
-        {/* Content */}
-        <div className="relative flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]" />
-          </span>
-          <span className="gradient-text font-semibold">Intelligent Wellness Platform</span>
-          <Sparkles className="w-4 h-4 text-primary" />
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// ─── Holographic Button ──────────────────────────────────────────────
-function HolographicButton({ 
-  children, 
-  variant = "primary",
-  href,
-  onClick,
-  isAuthenticated = false,
-}: { 
-  children: React.ReactNode; 
-  variant?: "primary" | "outline";
-  href?: string;
-  onClick?: () => void;
-  isAuthenticated?: boolean;
-}) {
-  const [isHovered, setIsHovered] = useState(false);
-  const router = useRouter();
-  
-  // If authenticated, always go to dashboard instead of signup
-  const targetHref = isAuthenticated ? "/dashboard" : href;
-  
-  const handleClick = (e: React.MouseEvent) => {
-    if (isAuthenticated && href === "/auth/signup") {
-      e.preventDefault();
-      router.push("/dashboard");
-    } else if (onClick) {
-      onClick();
-    }
-  };
-  
-  if (targetHref) {
-    return (
-      <Link
-        href={targetHref}
-        onClick={handleClick}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        className={`relative group inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-xl overflow-hidden transition-all duration-300 ${
-          variant === "primary"
-            ? "text-white"
-            : "text-white border border-white/20 hover:border-white/40"
-        }`}
-      >
-        {/* Gradient Background */}
-        {variant === "primary" && (
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500"
-            animate={{
-              backgroundPosition: isHovered ? "100% 0" : "0% 0",
-            }}
-            transition={{ duration: 0.3 }}
-          />
-        )}
-
-        {/* Glass overlay on hover */}
-        <motion.div
-          className="absolute inset-0 bg-white/0"
-          animate={{ backgroundColor: isHovered ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0)" }}
-          transition={{ duration: 0.2 }}
-        />
-
-        {/* Content */}
-        <span className="relative z-10 flex items-center gap-2">
-          {children}
-        </span>
-      </Link>
-    );
+  .h-cta-primary {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:14px 28px; border-radius:14px;
+    font-family:'DM Sans',sans-serif; font-weight:600; font-size:16px;
+    color:white; cursor:pointer; border:none; letter-spacing:-.01em;
+    background:linear-gradient(135deg,#f97316,#ef4444,#dc2626);
+    box-shadow:0 4px 24px rgba(249,115,22,.42),0 2px 8px rgba(0,0,0,.3);
+    transition:transform .2s ease,box-shadow .2s ease;
+    position:relative; overflow:hidden;
   }
+  .h-cta-primary:hover { transform:translateY(-2px); box-shadow:0 8px 36px rgba(249,115,22,.55),0 4px 16px rgba(0,0,0,.4); }
+  .h-cta-primary::before {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.28) 50%,transparent 60%);
+    transform:translateX(-100%); transition:transform .55s ease;
+  }
+  .h-cta-primary:hover::before { transform:translateX(210%); }
 
+  .h-cta-glass {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:14px 28px; border-radius:14px;
+    font-family:'DM Sans',sans-serif; font-weight:500; font-size:16px;
+    color:rgba(255,255,255,.8); cursor:pointer;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.13);
+    backdrop-filter:blur(20px);
+    transition:all .2s ease;
+  }
+  .h-cta-glass:hover { background:rgba(255,255,255,.09); border-color:rgba(255,255,255,.26); transform:translateY(-2px); }
+`;
+
+// ─── Sphere Component ─────────────────────────────────────────────────
+function CentralSphere() {
   return (
-    <button
-      onClick={handleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className={`relative group inline-flex items-center justify-center h-14 px-8 text-lg font-medium rounded-xl overflow-hidden transition-all duration-300 ${
-        variant === "primary" 
-          ? "text-white" 
-          : "text-foreground border border-white/20"
-      }`}
-    >
-      {/* Background */}
-      <div className={`absolute inset-0 transition-opacity duration-300 ${
-        variant === "primary" 
-          ? "bg-gradient-to-r from-primary via-purple-500 to-cyan-500 opacity-100 group-hover:opacity-90" 
-          : "bg-white/5 backdrop-blur-xl"
-      }`} />
-      
-      {/* Holographic shine effect */}
-      <motion.div
-        className="absolute inset-0 opacity-0 group-hover:opacity-100"
-        style={{
-          background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.3) 50%, transparent 60%)",
-        }}
-        animate={isHovered ? { x: ["-100%", "200%"] } : { x: "-100%" }}
-        transition={{ duration: 0.6, ease: "easeInOut" }}
-      />
-      
-      {/* Glow */}
-      <div className={`absolute inset-0 blur-xl transition-opacity duration-300 ${
-        variant === "primary" 
-          ? "bg-primary/50 opacity-0 group-hover:opacity-100" 
-          : ""
-      }`} />
-      
-      {/* Border glow */}
-      <div className={`absolute -inset-[1px] rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${
-        variant === "primary"
-          ? "bg-gradient-to-r from-primary via-purple-500 to-cyan-500 blur-sm"
-          : "bg-white/30 blur-sm"
-      }`} />
-      
-      <span className="relative z-10 flex items-center gap-2">
-        {children}
-      </span>
-    </button>
+    <div style={{ position: "relative", zIndex: 100, flexShrink: 0 }}>
+      {/* Outer ambient halo */}
+      <div style={{
+        position: "absolute", inset: -84, borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(14,165,233,.24) 0%, rgba(139,92,246,.13) 45%, transparent 70%)",
+        filter: "blur(28px)",
+        animation: "h-breathe 6s ease-in-out infinite",
+      }} />
+
+      {/* Pulse rings */}
+      {[0, 1.5, 3].map((delay, i) => (
+        <div key={i} style={{
+          position: "absolute", inset: -(20 + i * 6), borderRadius: "50%",
+          border: `1px solid rgba(14,165,233,${.36 - i * .07})`,
+          animation: `h-pulse 4.6s ease-out ${delay}s infinite`,
+        }} />
+      ))}
+
+      {/* Spinning conic rim */}
+      <div style={{
+        position: "absolute", inset: -3, borderRadius: "50%", padding: 2,
+        background: "conic-gradient(from 0deg, rgba(14,165,233,.75), rgba(139,92,246,.58), rgba(249,115,22,.48), rgba(14,165,233,.75))",
+        animation: "h-spin 6s linear infinite",
+      }}>
+        <div style={{ borderRadius: "50%", width: "100%", height: "100%", background: "#020209" }} />
+      </div>
+
+      {/* Sphere body */}
+      <div style={{
+        position: "relative", width: 152, height: 152, borderRadius: "50%",
+        background: "radial-gradient(circle at 34% 28%, #1c2b4a 0%, #0d1628 50%, #060813 100%)",
+        animation: "h-orb-glow 5s ease-in-out infinite",
+        overflow: "hidden",
+      }}>
+        {/* Rotating atmosphere */}
+        <div style={{
+          position: "absolute", inset: 0, borderRadius: "50%",
+          background: "conic-gradient(from 0deg, transparent 0%, rgba(14,165,233,.16) 20%, transparent 38%, rgba(139,92,246,.1) 58%, transparent 75%)",
+          animation: "h-spin 9s linear infinite",
+        }} />
+        {/* Horizontal scan sweep */}
+        <div style={{
+          position: "absolute", left: 0, right: 0, height: 1, top: "50%", marginTop: -0.5,
+          background: "linear-gradient(90deg, transparent, rgba(14,165,233,.65), rgba(14,165,233,.65), transparent)",
+          boxShadow: "0 0 12px rgba(14,165,233,.55), 0 0 4px rgba(14,165,233,.95)",
+          animation: "h-scan 3.8s ease-in-out infinite",
+        }} />
+        {/* Specular highlight */}
+        <div style={{
+          position: "absolute", top: "7%", left: "13%", width: "42%", height: "30%",
+          borderRadius: "50%",
+          background: "radial-gradient(ellipse, rgba(255,255,255,.2) 0%, transparent 70%)",
+          filter: "blur(4px)", transform: "rotate(-28deg)",
+        }} />
+        {/* Purple rim light */}
+        <div style={{
+          position: "absolute", bottom: "4%", right: "4%", width: "44%", height: "44%",
+          borderRadius: "50%",
+          background: "radial-gradient(ellipse, rgba(139,92,246,.4) 0%, transparent 70%)",
+          filter: "blur(10px)",
+        }} />
+        {/* Brain icon */}
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 }}>
+          <Brain style={{
+            width: 58, height: 58,
+            color: "rgba(20,215,255,.92)",
+            filter: "drop-shadow(0 0 20px rgba(20,215,255,.78)) drop-shadow(0 0 55px rgba(20,215,255,.38))",
+          }} />
+        </div>
+      </div>
+    </div>
   );
 }
 
-// ─── Live dynamic counter with sci-fi style ──────────────────────────
-function LiveDynamicCounter() {
-  const [count, setCount] = useState(127);
-  const ref = useRef<HTMLDivElement>(null);
+// ─── Live Badge ───────────────────────────────────────────────────────
+function LiveBadge() {
+  return (
+    <div style={{ display: "inline-flex" }}>
+      <div style={{
+        display: "inline-flex", alignItems: "center", gap: 8,
+        padding: "8px 18px", borderRadius: 100,
+        background: "rgba(0,0,0,.45)",
+        border: "1px solid rgba(14,165,233,.25)",
+        backdropFilter: "blur(20px)",
+      }}>
+        <span style={{ position: "relative", display: "flex", width: 8, height: 8, flexShrink: 0 }}>
+          <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#10b981", animation: "h-ping 1.6s ease-out infinite" }} />
+          <span style={{ position: "relative", width: 8, height: 8, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }} />
+        </span>
+        <span className="h-disp" style={{
+          fontSize: 13, fontWeight: 600, letterSpacing: ".02em",
+          background: "linear-gradient(90deg, #fbbf24, #14b8a6, #a78bfa)",
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
+        }}>
+          Intelligent Life Coach
+        </span>
+        <Sparkles style={{ width: 13, height: 13, color: "#fbbf24", flexShrink: 0 }} />
+      </div>
+    </div>
+  );
+}
 
+// ─── Domain Ticker ────────────────────────────────────────────────────
+function DomainTicker() {
+  const doubled = [...DOMAINS, ...DOMAINS];
+  return (
+    <div style={{ overflow: "hidden", position: "relative", maxWidth: 500 }}>
+      <div style={{
+        position: "absolute", left: 0, top: 0, bottom: 0, width: 52,
+        background: "linear-gradient(90deg, #020209, transparent)", zIndex: 2,
+      }} />
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: 52,
+        background: "linear-gradient(270deg, #020209, transparent)", zIndex: 2,
+      }} />
+      <div style={{ display: "flex", gap: 10, animation: "h-ticker 24s linear infinite", width: "max-content" }}>
+        {doubled.map((d, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "7px 14px", borderRadius: 10, flexShrink: 0,
+            background: `rgba(${d.rgb},.07)`,
+            border: `1px solid rgba(${d.rgb},.18)`,
+            backdropFilter: "blur(12px)",
+          }}>
+            <d.Icon style={{ width: 12, height: 12, color: d.color }} />
+            <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.72)", whiteSpace: "nowrap" }}>
+              {d.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Hero Section ─────────────────────────────────────────────────────
+export function HeroSection() {
+  const [word, setWord]         = useState(0);
+  const [wordKey, setWordKey]   = useState(0);
+  const [liveCount, setLiveCount] = useState(127);
+  const [statVals, setStatVals] = useState([0, 0, 0, 0]);
+  const [mouse, setMouse]       = useState({ x: 0, y: 0 });
+
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const rafRef   = useRef<number>(0);
+  const angleRef = useRef(0);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  const { isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  // Word rotation
   useEffect(() => {
     const t = setInterval(() => {
-      setCount((c) => Math.min(999, c + Math.floor(Math.random() * 2)));
-    }, 4000);
+      setWord(w => (w + 1) % WORDS.length);
+      setWordKey(k => k + 1);
+    }, 3000);
     return () => clearInterval(t);
   }, []);
 
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.6 }}
-      className="flex items-center gap-3 pt-2"
-    >
-      <div className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]" />
-        </span>
-        <span className="text-sm text-emerald-400 font-mono">
-          <span className="font-bold tabular-nums">{count}</span> ACTIVE
-        </span>
-      </div>
-      <span className="text-sm text-muted-foreground">users optimizing their health right now</span>
-    </motion.div>
-  );
-}
+  // Live counter
+  useEffect(() => {
+    const t = setInterval(() => setLiveCount(c => Math.min(999, c + Math.floor(Math.random() * 2))), 4000);
+    return () => clearInterval(t);
+  }, []);
 
-// ─── Floating particles with connection lines ────────────────────────
-function ConnectedParticles() {
-  const particles = [
-    { x: 15, y: 20, color: "hsl(var(--primary))", size: 3 },
-    { x: 25, y: 35, color: "hsl(190 90% 50%)", size: 2 },
-    { x: 35, y: 15, color: "hsl(280 80% 60%)", size: 4 },
-    { x: 45, y: 40, color: "hsl(330 80% 60%)", size: 2 },
-    { x: 55, y: 25, color: "hsl(var(--primary))", size: 3 },
-    { x: 65, y: 45, color: "hsl(190 90% 50%)", size: 2 },
-    { x: 75, y: 30, color: "hsl(280 80% 60%)", size: 4 },
-    { x: 85, y: 50, color: "hsl(330 80% 60%)", size: 3 },
+  // Stat count-up
+  useEffect(() => {
+    const TARGETS = [150, 97, 4.9, 14];
+    const DECS    = [0, 0, 1, 0];
+    const start   = Date.now();
+    const dur     = 1800;
+    const tick = () => {
+      const p = Math.min((Date.now() - start) / dur, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      setStatVals(TARGETS.map((t, i) => Number((t * e).toFixed(DECS[i]))));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    const timeout = setTimeout(() => requestAnimationFrame(tick), 600);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  // 3D orbit RAF
+  useEffect(() => {
+    const animate = () => {
+      angleRef.current += 0.0035;
+      cardRefs.current.forEach((card, i) => {
+        if (!card) return;
+        const baseRad  = ((DOMAINS[i].angle - 90) * Math.PI) / 180;
+        const totalRad = baseRad + angleRef.current;
+        const x     = Math.cos(totalRad) * ORBIT_RX;
+        const y     = Math.sin(totalRad) * ORBIT_RY;
+        const depth = Math.sin(totalRad);
+        const scale   = 0.82 + 0.18 * (1 + depth) / 2;
+        const opacity = 0.62 + 0.38 * (1 + depth) / 2;
+        const zi      = Math.round(1 + ((1 + depth) / 2) * 99);
+        card.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) scale(${scale.toFixed(3)})`;
+        card.style.opacity   = opacity.toFixed(3);
+        card.style.zIndex    = String(zi);
+      });
+      rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  // Mouse parallax
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const r = sectionRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setMouse({
+      x: ((e.clientX - r.left) / r.width  - 0.5) * 28,
+      y: ((e.clientY - r.top)  / r.height - 0.5) * 18,
+    });
+  }, []);
+
+  const STATS = [
+    { v: statVals[0], s: "K+", l: "Lives Coached"   },
+    { v: statVals[1], s: "%",  l: "Goal Completion"  },
+    { v: statVals[2], s: "★",  l: "User Rating"      },
+    { v: statVals[3], s: "+",  l: "Life Domains"     },
   ];
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {/* Connection lines */}
-      <svg className="absolute inset-0 w-full h-full">
-        {particles.map((p1, i) => 
-          particles.slice(i + 1).map((p2, j) => {
-            const distance = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-            if (distance > 30) return null;
-            return (
-              <motion.line
-                key={`${i}-${j}`}
-                x1={`${p1.x}%`}
-                y1={`${p1.y}%`}
-                x2={`${p2.x}%`}
-                y2={`${p2.y}%`}
-                stroke="hsl(var(--primary) / 0.2)"
-                strokeWidth="1"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0.1, 0.3, 0.1] }}
-                transition={{ duration: 3, repeat: Infinity, delay: (i + j) * 0.2 }}
-              />
-            );
-          })
-        )}
-      </svg>
-      
-      {/* Particles */}
-      {particles.map((p, i) => (
-        <motion.div
-          key={i}
-          className="absolute rounded-full"
-          style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            width: p.size * 3,
-            height: p.size * 3,
-            background: p.color,
-            boxShadow: `0 0 ${p.size * 5}px ${p.color}, 0 0 ${p.size * 10}px ${p.color}`,
-          }}
-          animate={{
-            y: [0, -20, 0],
-            x: [0, (i % 2 === 0 ? 10 : -10), 0],
-            opacity: [0.4, 0.8, 0.4],
-            scale: [1, 1.2, 1],
-          }}
-          transition={{
-            duration: 5 + i,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: i * 0.3,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── HERO SECTION ────────────────────────────────────────────────────
-export function HeroSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const { isAuthenticated } = useAuth();
-
-  useGSAP(() => {
-    if (!contentRef.current || !sectionRef.current) return;
-
-    gsap.to(contentRef.current, {
-      scale: 0.95,
-      opacity: 0.5,
-      y: -50,
-      ease: "none",
-      scrollTrigger: {
-        trigger: sectionRef.current,
-        start: "top top",
-        end: "bottom top",
-        scrub: 1,
-      },
-    });
-  }, sectionRef);
-
-  return (
     <>
-      <ScrollProgressBar />
-      <section ref={sectionRef} className="relative min-h-screen flex items-center pt-20 overflow-hidden">
-        {/* Multi-layer background */}
-        <div className="absolute inset-0 -z-10">
-          {/* Base gradient */}
-          <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-background" />
-          
-          {/* Animated mesh gradient */}
-          <div className="absolute inset-0 opacity-30">
-            <motion.div
-              className="absolute inset-0"
-              style={{
-                background: `
-                  radial-gradient(ellipse at 20% 80%, hsl(var(--primary) / 0.15) 0%, transparent 50%),
-                  radial-gradient(ellipse at 80% 20%, hsl(280 80% 60% / 0.15) 0%, transparent 50%),
-                  radial-gradient(ellipse at 40% 40%, hsl(190 90% 50% / 0.1) 0%, transparent 40%)
-                `,
-              }}
-              animate={{
-                scale: [1, 1.1, 1],
-                rotate: [0, 5, 0],
-              }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            />
-          </div>
+      {/* Font import as <link> — @import inside <style> is unreliable */}
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap"
+      />
+      <style>{HERO_CSS}</style>
 
-          {/* Sci-fi grid floor */}
-          <SciFiGrid />
-          
-          {/* Data streams */}
-          <DataStreams />
-          
-          {/* Connected particles */}
-          <ConnectedParticles />
-          
+      <section
+        ref={sectionRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setMouse({ x: 0, y: 0 })}
+        className="h-root"
+        style={{
+          minHeight: "100vh",
+          background: "#020209",
+          position: "relative",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: "80px 0 160px",
+        }}
+      >
+        {/* ── Background ── */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}>
+          {/* Aurora 1 */}
+          <div style={{
+            position: "absolute", top: "-15%", left: "-15%", width: "65%", height: "70%",
+            borderRadius: "50%",
+            background: "radial-gradient(ellipse, rgba(14,165,233,.1) 0%, rgba(99,102,241,.07) 40%, transparent 70%)",
+            filter: "blur(80px)",
+            animation: "h-aurora1 20s ease-in-out infinite",
+          }} />
+          {/* Aurora 2 */}
+          <div style={{
+            position: "absolute", bottom: "-10%", right: "-5%", width: "55%", height: "60%",
+            borderRadius: "50%",
+            background: "radial-gradient(ellipse, rgba(139,92,246,.08) 0%, rgba(249,115,22,.05) 40%, transparent 70%)",
+            filter: "blur(100px)",
+            animation: "h-aurora2 24s ease-in-out infinite",
+          }} />
+          {/* Dot grid */}
+          <div style={{
+            position: "absolute", inset: 0,
+            backgroundImage: "radial-gradient(rgba(20,210,255,.03) 1px, transparent 1px)",
+            backgroundSize: "44px 44px",
+            maskImage: "radial-gradient(ellipse at 65% 40%, black 0%, transparent 62%)",
+            WebkitMaskImage: "radial-gradient(ellipse at 65% 40%, black 0%, transparent 62%)",
+          }} />
           {/* Vignette */}
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,transparent_50%,rgba(0,0,0,0.4)_100%)]" />
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "radial-gradient(ellipse at center, transparent 35%, rgba(2,2,9,.75) 100%)",
+          }} />
+          {/* Top accent line */}
+          <div style={{
+            position: "absolute", top: 0, left: 0, right: 0, height: 1,
+            background: "linear-gradient(90deg, transparent, rgba(14,165,233,.55), rgba(139,92,246,.38), transparent)",
+          }} />
         </div>
 
-        {/* Main content */}
-        <div ref={contentRef} className="container mx-auto px-4 relative z-10" style={{ willChange: "transform, opacity" }}>
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            {/* Left Content */}
-            <div className="space-y-8">
-              {/* Cyberpunk Badge */}
-              <CyberpunkBadge />
+        {/* ── Main Grid ── */}
+        <div style={{
+          maxWidth: 1300,
+          margin: "0 auto",
+          padding: "0 52px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 48,
+          alignItems: "center",
+          position: "relative",
+          zIndex: 10,
+          width: "100%",
+        }}>
+          {/* LEFT: Content */}
+          <div style={{
+            display: "flex", flexDirection: "column", gap: 26,
+            animation: "h-fade-up .7s ease forwards",
+          }}>
+            <LiveBadge />
 
-              {/* Heading with sci-fi styling */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.1 }}
-              >
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold leading-tight">
-                  <span className="block text-foreground/90">The Future of</span>
-                  <span className="block mt-2">
-                    <span className="gradient-text-animated glitch-text-wrapper">
-                      <TypewriterText text="Health Is Personal" delay={600} />
-                    </span>
+            {/* Headline */}
+            <div className="h-disp">
+              <h1 className="h-hero-title" style={{
+                fontSize: "clamp(46px, 5.5vw, 78px)",
+                fontWeight: 800,
+                letterSpacing: "-.035em",
+                margin: 0,
+                color: "rgba(255,255,255,.93)",
+              }}>
+                <span className="h-hero-line">Your Life,</span>
+                <span className="h-hero-line">Intelligently</span>
+                <span className="h-hero-line-dynamic">
+                  <span
+                    key={wordKey}
+                    style={{
+                      display: "inline-block",
+                      background: "linear-gradient(135deg, #fbbf24 0%, #f97316 40%, #a78bfa 100%)",
+                      backgroundSize: "200% 100%",
+                      WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
+                      animation: "h-shimmer 4s linear infinite, h-word .4s cubic-bezier(.25,.46,.45,.94) forwards",
+                    }}
+                  >
+                    {WORDS[word]}
                   </span>
-                </h1>
-              </motion.div>
-
-              {/* Description with highlight words */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.2 }}
-              >
-                <p className="text-lg sm:text-xl text-muted-foreground max-w-lg leading-relaxed">
-                  An AI coach that learns your body, adapts to your life, and evolves with your goals. 
-                  Unifying{" "}
-                  <span className="relative inline-block">
-                    <span className="text-cyan-400 font-semibold">Fitness</span>
-                    <motion.span 
-                      className="absolute -bottom-1 left-0 h-[2px] bg-cyan-400"
-                      initial={{ width: 0 }}
-                      animate={{ width: "100%" }}
-                      transition={{ delay: 1, duration: 0.5 }}
-                    />
-                  </span>
-                  ,{" "}
-                  <span className="relative inline-block">
-                    <span className="text-purple-400 font-semibold">Nutrition</span>
-                    <motion.span 
-                      className="absolute -bottom-1 left-0 h-[2px] bg-purple-400"
-                      initial={{ width: 0 }}
-                      animate={{ width: "100%" }}
-                      transition={{ delay: 1.2, duration: 0.5 }}
-                    />
-                  </span>
-                  , and{" "}
-                  <span className="relative inline-block">
-                    <span className="text-pink-400 font-semibold">Wellbeing</span>
-                    <motion.span 
-                      className="absolute -bottom-1 left-0 h-[2px] bg-pink-400"
-                      initial={{ width: 0 }}
-                      animate={{ width: "100%" }}
-                      transition={{ delay: 1.4, duration: 0.5 }}
-                    />
-                  </span>
-                  {" "}into one seamless experience — powered by real-time biometric intelligence.
-                </p>
-              </motion.div>
-
-              {/* Three Pillars - Holographic Cards */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-                className="flex flex-wrap gap-3"
-              >
-                {pillars.map((pillar, i) => {
-                  const Icon = pillar.icon;
-                  return (
-                    <HolographicCard key={pillar.label} className="group">
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.4 + i * 0.1 }}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r ${pillar.color} bg-opacity-10 border border-current/20 backdrop-blur-sm transition-all duration-300 group-hover:scale-105`}
-                        style={{
-                          boxShadow: pillar.glow === "cyan" 
-                            ? "0 0 20px hsl(190 90% 50% / 0.3)" 
-                            : pillar.glow === "purple" 
-                              ? "0 0 20px hsl(280 80% 60% / 0.3)" 
-                              : "0 0 20px hsl(330 80% 60% / 0.3)",
-                        }}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span className="text-sm font-medium">{pillar.label}</span>
-                      </motion.div>
-                    </HolographicCard>
-                  );
-                })}
-              </motion.div>
-
-              {/* CTA Buttons - Holographic */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.4 }}
-                className="flex flex-col sm:flex-row gap-4"
-              >
-                <HolographicButton 
-                  href="/auth/signup" 
-                  isAuthenticated={isAuthenticated}
-                >
-                  {isAuthenticated ? (
-                    <>
-                      Go to Dashboard
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </>
-                  ) : (
-                    <>
-                      Start Your Transformation
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </>
-                  )}
-                </HolographicButton>
-                
-                {!isAuthenticated && (
-                  <HolographicButton variant="outline">
-                    <Play className="mr-2 h-5 w-5" />
-                    See It in Action
-                  </HolographicButton>
-                )}
-              </motion.div>
-              
-              {/* Trust indicators */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground"
-              >
-                <span className="flex items-center gap-1">
-                  <Shield className="w-3 h-3 text-emerald-400" />
-                  HIPAA Compliant
                 </span>
-                <span className="flex items-center gap-1">
-                  <Zap className="w-3 h-3 text-amber-400" />
-                  60-sec Setup
-                </span>
-                <span className="flex items-center gap-1">
-                  <Cpu className="w-3 h-3 text-cyan-400" />
-                  AI-Powered
-                </span>
-              </motion.div>
-
-              <LiveDynamicCounter />
-
-              {/* Animated Stats */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.5 }}
-                className="flex flex-wrap items-center gap-x-8 gap-y-3 pt-4 border-t border-white/10"
-              >
-                {stats.map((stat, index) => (
-                  <Fragment key={stat.label}>
-                    <AnimatedStat
-                      value={stat.value}
-                      suffix={stat.suffix}
-                      label={stat.label}
-                      decimals={stat.decimals ?? 0}
-                      delay={0.6 + index * 0.1}
-                    />
-                  </Fragment>
-                ))}
-              </motion.div>
+              </h1>
             </div>
 
-            {/* Right Content — AI Visualization */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 1, delay: 0.3 }}
-              className="relative h-[600px] hidden lg:flex items-center justify-center"
+            {/* Subtitle */}
+            <p style={{
+              fontSize: 17, lineHeight: 1.72,
+              color: "rgba(255,255,255,.47)",
+              maxWidth: 460, margin: 0,
+              letterSpacing: "-.01em", fontWeight: 300,
+            }}>
+              AI that coaches your{" "}
+              <span style={{ color: "#f97316", fontWeight: 500 }}>fitness</span>,{" "}
+              <span style={{ color: "#10b981", fontWeight: 500 }}>nutrition</span>,{" "}
+              <span style={{ color: "#60a5fa", fontWeight: 500 }}>career</span>,{" "}
+              <span style={{ color: "#fb7185", fontWeight: 500 }}>relationships</span>, and{" "}
+              <span style={{ color: "#a78bfa", fontWeight: 500 }}>more</span> — one AI, every dimension of you.
+            </p>
+
+            <DomainTicker />
+
+            {/* CTAs */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {isAuthenticated ? (
+                <button className="h-cta-primary" onClick={() => router.push("/dashboard")}>
+                  Go to Dashboard <ArrowRight style={{ width: 18, height: 18 }} />
+                </button>
+              ) : (
+                <>
+                  <Link href="/auth/signup" className="h-cta-primary" style={{ textDecoration: "none" }}>
+                    Start Your Journey <ArrowRight style={{ width: 18, height: 18 }} />
+                  </Link>
+                  <button className="h-cta-glass">
+                    <Play style={{ width: 15, height: 15 }} /> See It in Action
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Trust indicators */}
+            <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
+              {[
+                { Icon: Shield,   label: "HIPAA Compliant", c: "#10b981" },
+                { Icon: Zap,      label: "60-sec Setup",    c: "#fbbf24" },
+                { Icon: Cpu,      label: "AI-Powered",      c: "#a78bfa" },
+              ].map(({ Icon, label, c }) => (
+                <span key={label} style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  fontSize: 12, color: "rgba(255,255,255,.38)", letterSpacing: ".02em",
+                }}>
+                  <Icon style={{ width: 13, height: 13, color: c }} /> {label}
+                </span>
+              ))}
+            </div>
+
+            {/* Live counter */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "6px 14px", borderRadius: 8,
+                background: "rgba(16,185,129,.08)",
+                border: "1px solid rgba(16,185,129,.2)",
+              }}>
+                <span style={{ position: "relative", display: "flex", width: 8, height: 8 }}>
+                  <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#10b981", animation: "h-ping 1.6s ease-out infinite" }} />
+                  <span style={{ position: "relative", width: 8, height: 8, borderRadius: "50%", background: "#10b981" }} />
+                </span>
+                <span className="h-disp" style={{ fontSize: 13, color: "#10b981", fontWeight: 600 }}>
+                  {liveCount} active
+                </span>
+              </div>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,.35)" }}>
+                users improving right now
+              </span>
+            </div>
+          </div>
+
+          {/* RIGHT: 3D Orb */}
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 560 }}>
+            <div
+              style={{
+                position: "relative",
+                width: 520, height: 520,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transform: `perspective(1200px) rotateX(${-mouse.y * 0.25}deg) rotateY(${mouse.x * 0.25}deg)`,
+                transition: "transform .08s ease",
+              }}
             >
-              <AICore />
-              
-              {/* Decorative tech elements */}
-              <div className="absolute top-10 right-10 text-xs font-mono text-primary/50">
-                <motion.div
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ duration: 2, repeat: Infinity }}
+              {/* Decorative orbit ellipse */}
+              <div style={{
+                position: "absolute",
+                width: 478, height: 236,
+                borderRadius: "50%",
+                border: "1px solid rgba(14,165,233,.07)",
+                pointerEvents: "none",
+              }} />
+
+              {/* Orbit cards */}
+              {DOMAINS.map((domain, i) => (
+                <div
+                  key={domain.label}
+                  ref={el => { cardRefs.current[i] = el; }}
+                  className="h-card-orbit"
+                  style={{
+                    position: "absolute",
+                    left: "50%", top: "50%",
+                    width: 94, height: 94,
+                    willChange: "transform, opacity",
+                  }}
                 >
-                  SYS.ONLINE
-                </motion.div>
+                  <div style={{
+                    width: "100%", height: "100%",
+                    borderRadius: 22,
+                    background: `linear-gradient(145deg, rgba(${domain.rgb},.15) 0%, rgba(5,5,20,.9) 100%)`,
+                    border: `1px solid rgba(${domain.rgb},.25)`,
+                    backdropFilter: "blur(24px)",
+                    boxShadow: `0 0 32px rgba(${domain.rgb},.18), 0 24px 60px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.09)`,
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                    gap: 9, position: "relative", overflow: "hidden",
+                  }}>
+                    {/* Top sheen */}
+                    <div style={{
+                      position: "absolute", top: 0, left: 0, right: 0, height: "45%",
+                      background: `linear-gradient(180deg, rgba(${domain.rgb},.09) 0%, transparent 100%)`,
+                    }} />
+                    {/* Icon */}
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 12, position: "relative", zIndex: 1,
+                      background: `linear-gradient(135deg, rgba(${domain.rgb},.3) 0%, rgba(${domain.rgb},.07) 100%)`,
+                      boxShadow: `0 4px 16px rgba(${domain.rgb},.28), inset 0 1px 0 rgba(255,255,255,.12)`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <domain.Icon style={{
+                        width: 19, height: 19,
+                        color: domain.color,
+                        filter: `drop-shadow(0 0 7px ${domain.color}bb)`,
+                      }} />
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700,
+                      color: domain.color,
+                      letterSpacing: ".05em",
+                      fontFamily: "'Bricolage Grotesque', sans-serif",
+                      position: "relative", zIndex: 1,
+                    }}>
+                      {domain.label}
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Sphere sits at z-index 50 — cards range 1-100, passing in front/behind */}
+              <div style={{ position: "relative", zIndex: 50 }}>
+                <CentralSphere />
               </div>
-              <div className="absolute bottom-10 left-10 text-xs font-mono text-primary/50">
-                <motion.div
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ duration: 2, repeat: Infinity, delay: 1 }}
-                >
-                  AI.ACTIVE
-                </motion.div>
-              </div>
-            </motion.div>
+            </div>
           </div>
         </div>
 
-        {/* Scroll Indicator with sci-fi style */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.5 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        >
-          <motion.div
-            animate={{ y: [0, 10, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="flex flex-col items-center gap-2"
-          >
-            <span className="text-xs text-muted-foreground uppercase tracking-widest font-mono">Scroll to explore</span>
-            <div className="w-6 h-10 rounded-full border-2 border-primary/30 flex justify-center pt-2 relative overflow-hidden">
-              <motion.div
-                animate={{ y: [0, 12, 0], opacity: [1, 0.3, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-                className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]"
-              />
-              {/* Scan line */}
-              <motion.div
-                className="absolute inset-0 bg-gradient-to-b from-primary/20 to-transparent h-1/2"
-                animate={{ y: ["-100%", "200%"] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              />
-            </div>
-          </motion.div>
-        </motion.div>
+        {/* ── Stats Bar ── */}
+        <div style={{
+          position: "absolute", bottom: 32, left: 0, right: 0,
+          padding: "0 52px", zIndex: 20,
+        }}>
+          <div style={{
+            maxWidth: 780, margin: "0 auto",
+            display: "flex",
+            background: "rgba(255,255,255,.03)",
+            border: "1px solid rgba(255,255,255,.07)",
+            borderRadius: 20,
+            backdropFilter: "blur(32px)",
+            overflow: "hidden",
+          }}>
+            {STATS.map((stat, i) => (
+              <div key={stat.l} style={{
+                flex: 1, padding: "20px 24px", textAlign: "center",
+                borderRight: i < STATS.length - 1 ? "1px solid rgba(255,255,255,.06)" : "none",
+              }}>
+                <div className="h-disp" style={{
+                  fontSize: 30, fontWeight: 700,
+                  color: "rgba(255,255,255,.9)",
+                  letterSpacing: "-.025em", lineHeight: 1,
+                }}>
+                  {stat.v}{stat.s}
+                </div>
+                <div style={{
+                  fontSize: 11, color: "rgba(255,255,255,.33)",
+                  marginTop: 6, letterSpacing: ".06em",
+                  textTransform: "uppercase", fontWeight: 500,
+                }}>
+                  {stat.l}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-        {/* Decorative tech lines */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-        <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
-        <div className="absolute top-0 bottom-0 right-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
-        
-        {/* Corner accents */}
-        <div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-primary/30" />
-        <div className="absolute top-4 right-4 w-8 h-8 border-r-2 border-t-2 border-primary/30" />
-        <div className="absolute bottom-4 left-4 w-8 h-8 border-l-2 border-b-2 border-primary/30" />
-        <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/30" />
+        {/* Scroll indicator */}
+        <div style={{
+          position: "absolute", bottom: 120, left: "50%", transform: "translateX(-50%)",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 20,
+        }}>
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,.25)", letterSpacing: ".18em", textTransform: "uppercase" }}>
+            Scroll
+          </span>
+          <div style={{
+            width: 22, height: 36, borderRadius: 11,
+            border: "1px solid rgba(255,255,255,.15)",
+            display: "flex", justifyContent: "center", paddingTop: 6,
+          }}>
+            <div style={{
+              width: 4, height: 8, borderRadius: 2,
+              background: "rgba(14,165,233,.7)",
+              animation: "h-scan 1.8s ease-in-out infinite",
+            }} />
+          </div>
+        </div>
       </section>
     </>
   );

@@ -21,7 +21,7 @@ import { TourProgressBar } from "./TourProgressBar";
 import { calculateTooltipPosition, interpolateText } from "./tour-utils";
 import type { TourStepConfig, TooltipPosition } from "./types";
 
-const ICON_MAP: Record<string, React.ElementType> = {
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Activity,
   Trophy,
   Bot,
@@ -181,7 +181,7 @@ export function TourTooltip({
 interface TooltipContentProps {
   title: string;
   description: string;
-  Icon: React.ElementType | null;
+  Icon: React.ComponentType<{ className?: string }> | null;
   accentGradient: string;
   primaryCta: string;
   isFirstStep: boolean;

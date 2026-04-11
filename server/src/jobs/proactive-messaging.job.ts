@@ -12,13 +12,18 @@ import { query } from '../database/pg.js';
 import { logger } from '../services/logger.service.js';
 import { proactiveMessagingService } from '../services/proactive-messaging.service.js';
 import { comprehensiveUserContextService } from '../services/comprehensive-user-context.service.js';
+import { llmCircuitBreaker } from '../services/llm-circuit-breaker.service.js';
 
 // ============================================
 // CONFIGURATION
 // ============================================
 
-const JOB_INTERVAL_MS = 2 * 60 * 60 * 1000; // Check every 2 hours (12x per day) — ensures all time windows get hit
-const STARTUP_DELAY_MS = 30 * 1000; // 30-second delay before first run
+const JOB_INTERVAL_MS = process.env.PROACTIVE_JOB_INTERVAL_MS
+  ? parseInt(process.env.PROACTIVE_JOB_INTERVAL_MS, 10)
+  : 3 * 60 * 60 * 1000; // Default: 3 hours (8x per day) — staggered from daily analysis (2h)
+const STARTUP_DELAY_MS = process.env.PROACTIVE_STARTUP_DELAY_MS
+  ? parseInt(process.env.PROACTIVE_STARTUP_DELAY_MS, 10)
+  : 30 * 1000; // Default: 30-second delay before first run
 const BATCH_SIZE = 3; // Users processed in parallel per batch
 const INTER_BATCH_DELAY_MS = 2000; // 2 seconds between batches
 let isRunning = false;
@@ -82,7 +87,19 @@ async function processProactiveMessages(): Promise<void> {
   const startTime = Date.now();
 
   try {
-    logger.info('[ProactiveMessagingJob] Starting proactive message check');
+    // Log circuit breaker status at the start of every run
+    const cbStatus = llmCircuitBreaker.getStatus();
+    logger.info('[ProactiveMessagingJob] Starting proactive message check', {
+      circuitBreaker: cbStatus.state,
+      consecutiveFailures: cbStatus.consecutiveFailures,
+      cooldownRemainingMs: cbStatus.cooldownRemaining,
+    });
+
+    // Auto-reset: if circuit breaker has been OPEN for > 2 hours, force reset
+    // This prevents a single 429 from killing proactive messaging for days
+    if (cbStatus.state === 'OPEN' && cbStatus.cooldownRemaining <= 0) {
+      logger.warn('[ProactiveMessagingJob] Circuit breaker stuck OPEN past cooldown — forcing probe');
+    }
 
     // Get all active users with their timezone for per-user local time checks
     const usersResult = await query<{ id: string; timezone: string }>(
@@ -105,6 +122,8 @@ async function processProactiveMessages(): Promise<void> {
       score_declining: 0, plan_non_adherence: 0,
       overtraining_risk: 0, commitment_followup: 0,
       recovery_trend_alert: 0, positive_momentum: 0,
+      life_goal_checkin: 0, life_goal_stalled: 0, life_goal_milestone: 0, life_goal_encouragement: 0,
+      intention_reminder: 0, intention_reflection: 0,
     };
     let errors = 0;
     let skippedCapped = 0;
@@ -154,6 +173,24 @@ async function processProactiveMessages(): Promise<void> {
                 timezone: user.timezone,
                 sending: topCandidates.map(c => `${c.type}(${c.score})`),
               });
+            } else {
+              // Diagnostic: log WHY no candidates were eligible
+              const allScored = candidates.length;
+              const eligible = candidates.filter(c => c.eligible).length;
+              const timeValid = candidates.filter(c => c.eligible && c.timeWindowValid).length;
+              logger.info('[ProactiveMessagingJob] No eligible candidates for user', {
+                userId: user.id.slice(0, 8),
+                userHour,
+                timezone: user.timezone,
+                totalScored: allScored,
+                eligible,
+                eligibleAndTimeValid: timeValid,
+                maxToSend,
+                topIneligible: candidates
+                  .filter(c => !c.eligible || !c.timeWindowValid)
+                  .slice(0, 5)
+                  .map(c => `${c.type}(elig=${c.eligible},tw=${c.timeWindowValid},s=${c.score})`),
+              });
             }
 
             // Dispatch to existing checkAndSend* methods (they handle enrichment + generation + sending)
@@ -186,8 +223,27 @@ async function processProactiveMessages(): Promise<void> {
                 case 'commitment_followup': sent = await proactiveMessagingService.checkAndSendCommitmentFollowup(user.id, context, cooldown); break;
                 case 'recovery_trend_alert': sent = await proactiveMessagingService.checkAndSendRecoveryTrendAlert(user.id, context, cooldown); break;
                 case 'positive_momentum': sent = await proactiveMessagingService.checkAndSendPositiveMomentum(user.id, context, cooldown); break;
+                // Life goal & intention handlers
+                case 'life_goal_checkin': sent = await proactiveMessagingService.checkAndSendLifeGoalCheckin(user.id, context, cooldown); break;
+                case 'life_goal_stalled': sent = await proactiveMessagingService.checkAndSendLifeGoalStalled(user.id, context, cooldown); break;
+                case 'life_goal_milestone': sent = await proactiveMessagingService.checkAndSendLifeGoalMilestone(user.id, context, cooldown); break;
+                case 'life_goal_encouragement': sent = await proactiveMessagingService.checkAndSendLifeGoalEncouragement(user.id, context, cooldown); break;
+                case 'intention_reminder': sent = await proactiveMessagingService.checkAndSendIntentionReminder(user.id, context, cooldown); break;
+                case 'intention_reflection': sent = await proactiveMessagingService.checkAndSendIntentionReflection(user.id, context, cooldown); break;
+                // Data-gap collection messages
+                case 'data_gap_dinner': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_dinner', context, cooldown); break;
+                case 'data_gap_mood': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_mood', context, cooldown); break;
+                case 'data_gap_workout_feedback': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_workout_feedback', context, cooldown); break;
               }
-              if (sent) counters[candidate.type]++;
+              if (sent) {
+                counters[candidate.type]++;
+              } else {
+                logger.debug('[ProactiveMessagingJob] Candidate handler returned false', {
+                  userId: user.id.slice(0, 8),
+                  type: candidate.type,
+                  score: candidate.score,
+                });
+              }
             }
 
           } catch (error) {
@@ -208,6 +264,7 @@ async function processProactiveMessages(): Promise<void> {
 
     const totalSent = Object.values(counters).reduce((sum, c) => sum + c, 0);
     const duration = Date.now() - startTime;
+    const cbStatusEnd = llmCircuitBreaker.getStatus();
     logger.info('[ProactiveMessagingJob] Completed proactive message check', {
       userCount: users.length,
       skippedCapped,
@@ -216,7 +273,20 @@ async function processProactiveMessages(): Promise<void> {
       ...counters,
       errors,
       durationMs: duration,
+      circuitBreakerEnd: cbStatusEnd.state,
+      circuitBreakerFailures: cbStatusEnd.consecutiveFailures,
     });
+
+    // Alert if no messages were sent to any user (pipeline may be broken)
+    if (totalSent === 0 && users.length > 0 && skippedTimeWindow < users.length) {
+      logger.warn('[ProactiveMessagingJob] ALERT: Zero messages sent this cycle despite eligible users', {
+        userCount: users.length,
+        skippedCapped,
+        skippedTimeWindow,
+        errors,
+        circuitBreaker: cbStatusEnd.state,
+      });
+    }
   } catch (error) {
     logger.error('[ProactiveMessagingJob] Error processing proactive messages', {
       error: error instanceof Error ? error.message : 'Unknown error',

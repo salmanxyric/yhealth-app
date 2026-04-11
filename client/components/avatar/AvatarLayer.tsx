@@ -24,6 +24,7 @@ import {
   MOOD_TO_EXPRESSION,
   EMOTION_TO_EXPRESSION,
 } from "@/lib/avatar/vrmMappings";
+import type { GestureType } from "@/lib/avatar/gestureSystem";
 import { AvatarCard } from "./AvatarCard";
 
 // ============================================
@@ -44,6 +45,8 @@ export interface AvatarLayerHandle {
   stopSpeaking: () => void;
   /** Drive avatar expression + body language from backend AI emotion detection. */
   setEmotionFromBackend: (emotion: string, confidence: number) => void;
+  /** Queue a named discrete gesture (wave, point, shrug, etc.). */
+  queueGesture: (type: GestureType) => void;
 }
 
 // ============================================
@@ -86,7 +89,7 @@ export const AvatarLayer = forwardRef<AvatarLayerHandle, AvatarLayerProps>(
 
     // ---- Hooks ----
 
-    const { vrmRef, loadVrm, isLoading, error } = useThreeVrm({
+    const { vrmRef, loadVrm, isLoading, error, queueGesture } = useThreeVrm({
       canvasRef,
       vrmUrl,
       mouthValueRef,
@@ -191,8 +194,9 @@ export const AvatarLayer = forwardRef<AvatarLayerHandle, AvatarLayerProps>(
           expressions.setExpression(expr, intensity, 400);
           emotionModRef.current = expr; // drives full-body animation modulation
         },
+        queueGesture,
       }),
-      [loadVrm, vrmUrl, expressions, lipSync]
+      [loadVrm, vrmUrl, expressions, lipSync, queueGesture]
     );
 
     // ---- Render ----

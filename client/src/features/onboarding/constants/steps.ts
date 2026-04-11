@@ -28,15 +28,20 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
   {
     id: 4,
     label: 'Set Your Goals',
-    shortLabel: 'Goals',
+    shortLabel: 'My Plan',
   },
   {
     id: 5,
+    label: 'Life Goals',
+    shortLabel: 'Life Coach',
+  },
+  {
+    id: 6,
     label: 'Set Preferences',
     shortLabel: 'Preferences',
   },
   {
-    id: 6,
+    id: 7,
     label: 'Generate Plan',
     shortLabel: 'Plan',
   },

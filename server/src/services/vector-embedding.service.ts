@@ -1,7 +1,79 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
+import { Embeddings } from '@langchain/core/embeddings';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { query } from '../database/pg.js';
+
+/**
+ * Thrown when an embedding provider returns an authentication error (401/403).
+ * Signals to BullMQ worker that retries are pointless.
+ */
+export class EmbeddingAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EmbeddingAuthError';
+  }
+}
+
+// Task types for Gemini embeddings
+type GeminiTaskType = 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY' | 'SEMANTIC_SIMILARITY' | 'CLASSIFICATION' | 'CLUSTERING';
+
+/**
+ * Direct REST-based Gemini Embedding 2 — bypasses @google/generative-ai SDK entirely.
+ * Verified available models via ListModels API: gemini-embedding-2-preview (768 dims with outputDimensionality).
+ * Uses outputDimensionality=768 to match existing pgvector columns.
+ */
+class GeminiDirectEmbeddings extends Embeddings {
+  private apiKey: string;
+  private model: string;
+  private outputDimensionality: number;
+  taskType: GeminiTaskType;
+
+  constructor(fields: { apiKey: string; model?: string; taskType?: GeminiTaskType; outputDimensionality?: number }) {
+    super({});
+    this.apiKey = fields.apiKey;
+    this.model = fields.model || 'gemini-embedding-2-preview';
+    this.taskType = fields.taskType || 'RETRIEVAL_DOCUMENT';
+    this.outputDimensionality = fields.outputDimensionality || 768;
+  }
+
+  async embedQuery(text: string): Promise<number[]> {
+    return this._embed(text, this.taskType);
+  }
+
+  async embedDocuments(documents: string[]): Promise<number[][]> {
+    const results: number[][] = [];
+    for (const doc of documents) {
+      results.push(await this._embed(doc, 'RETRIEVAL_DOCUMENT'));
+    }
+    return results;
+  }
+
+  private async _embed(text: string, taskType: GeminiTaskType): Promise<number[]> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:embedContent?key=${this.apiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: `models/${this.model}`,
+        content: { parts: [{ text }] },
+        taskType,
+        outputDimensionality: this.outputDimensionality,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Gemini embedding error (${response.status}): ${errorBody}`);
+    }
+
+    const data = await response.json() as { embedding: { values: number[] } };
+    return data.embedding.values;
+  }
+}
+
+// Embedding provider type
+type EmbeddingProvider = OpenAIEmbeddings | GeminiDirectEmbeddings;
 
 // ============================================================================
 // Types
@@ -48,19 +120,32 @@ export interface KnowledgeSearchResult {
 // ============================================================================
 
 class VectorEmbeddingService {
-  private embeddings: OpenAIEmbeddings;
-  private readonly embeddingModel = 'text-embedding-3-small';
-  private readonly dimensions = 1536;
+  private embeddings: EmbeddingProvider;
+  private providerName: string;
+  private fallbackProviders: Array<{ name: string; create: () => EmbeddingProvider }> = [];
+  private readonly dimensions: number;
   private vectorExtensionAvailable: boolean | null = null; // null = not checked yet
   private extensionCheckPromise: Promise<boolean> | null = null;
+  private geminiEmbeddings: GeminiDirectEmbeddings | null = null;
+  /** In-flight de-duplication: concurrent embedText() calls for the same text share one API request */
+  private embeddingInflight: Map<string, Promise<number[]>> = new Map();
+  /** Primary provider factory for auto-recovery after quota cooldown */
+  private primaryProvider: { name: string; create: () => EmbeddingProvider } | null = null;
+  /** Timestamp when fallback was activated (null = using primary) */
+  private fallbackActivatedAt: number | null = null;
+  /** Cooldown before attempting to recover primary provider (60s = typical quota reset) */
+  private readonly primaryCooldownMs = 60_000;
 
   constructor() {
-    this.embeddings = new OpenAIEmbeddings({
-      openAIApiKey: env.openai.apiKey,
-      modelName: this.embeddingModel,
-      dimensions: this.dimensions,
-    });
-    
+    // Initialize embedding provider with fallback chain: OpenAI → Gemini
+    const { embeddings, providerName, dimensions, fallbacks } = this.initializeProvider();
+    this.embeddings = embeddings;
+    this.providerName = providerName;
+    this.dimensions = dimensions;
+    this.fallbackProviders = fallbacks;
+
+    logger.info(`[VectorEmbedding] Using ${this.providerName} for embeddings (dimensions: ${this.dimensions})`);
+
     // Check vector extension availability on startup (non-blocking)
     this.checkVectorExtension()
       .then((available) => {
@@ -73,6 +158,168 @@ class VectorEmbeddingService {
       .catch(() => {
         // Silently fail - will be checked on first use
       });
+  }
+
+  /**
+   * Check if an API key looks like a real key (not a placeholder).
+   */
+  private static isValidApiKey(key: string | undefined): boolean {
+    if (!key || key.length < 10) return false;
+    const placeholders = [
+      /^your[_-]?key/i,
+      /^sk-xxx/i,
+      /^placeholder/i,
+      /^change[_-]?me/i,
+      /^insert[_-]?/i,
+      /^todo/i,
+      /^REPLACE/i,
+      /^test[_-]?key/i,
+      /^fake[_-]?/i,
+      /^dummy/i,
+    ];
+    return !placeholders.some((re) => re.test(key));
+  }
+
+  /**
+   * Initialize embedding provider with fallback chain.
+   * Priority: Gemini → OpenAI
+   */
+  private initializeProvider(): {
+    embeddings: EmbeddingProvider;
+    providerName: string;
+    dimensions: number;
+    fallbacks: Array<{ name: string; create: () => EmbeddingProvider }>;
+  } {
+    const providers: Array<{
+      name: string;
+      available: boolean;
+      create: () => EmbeddingProvider;
+      dimensions: number;
+    }> = [
+      {
+        name: 'gemini',
+        available: VectorEmbeddingService.isValidApiKey(env.gemini.apiKey),
+        create: () => new GeminiDirectEmbeddings({
+          apiKey: env.gemini.apiKey!,
+          model: 'gemini-embedding-2-preview',
+          outputDimensionality: 1536, // Match existing vector(1536) DB columns
+        }),
+        dimensions: 1536,
+      },
+      {
+        name: 'openai',
+        available: VectorEmbeddingService.isValidApiKey(env.openai.apiKey),
+        create: () => new OpenAIEmbeddings({
+          openAIApiKey: env.openai.apiKey,
+          modelName: 'text-embedding-3-small',
+          dimensions: 1536,
+        }),
+        dimensions: 1536,
+      },
+    ];
+
+    // Warn about placeholder keys
+    for (const p of providers) {
+      const rawKey = p.name === 'gemini' ? env.gemini.apiKey : env.openai.apiKey;
+      if (rawKey && !p.available) {
+        logger.warn(`[VectorEmbedding] ${p.name} API key looks like a placeholder — skipping provider`);
+      }
+    }
+
+    // Find first available provider
+    const available = providers.filter((p) => p.available);
+    if (available.length === 0) {
+      logger.warn('[VectorEmbedding] No valid embedding API keys configured. Embeddings will be disabled.');
+      return {
+        embeddings: providers[0].create(),
+        providerName: 'none',
+        dimensions: 1536,
+        fallbacks: [],
+      };
+    }
+
+    const primary = available[0];
+    const fallbacks = available.slice(1).map((p) => ({ name: p.name, create: p.create }));
+
+    // Save primary factory for auto-recovery after quota cooldown
+    this.primaryProvider = { name: primary.name, create: primary.create };
+
+    return {
+      embeddings: primary.create(),
+      providerName: primary.name,
+      dimensions: primary.dimensions,
+      fallbacks,
+    };
+  }
+
+  /**
+   * Switch to the next available fallback provider.
+   * Returns true if switched, false if no fallbacks left.
+   */
+  private switchToFallback(): boolean {
+    if (this.fallbackProviders.length === 0) return false;
+
+    const next = this.fallbackProviders.shift()!;
+    this.embeddings = next.create();
+    this.providerName = next.name;
+    this.fallbackActivatedAt = Date.now();
+    logger.warn(`[VectorEmbedding] Switched to ${next.name} embeddings (previous provider quota exceeded)`);
+    return true;
+  }
+
+  /**
+   * Try reverting to primary provider after cooldown period.
+   * Called before each embedding request to check if recovery is possible.
+   */
+  private maybeRecoverPrimary(): void {
+    if (
+      !this.fallbackActivatedAt ||
+      !this.primaryProvider ||
+      this.providerName === this.primaryProvider.name
+    ) {
+      return;
+    }
+    if (Date.now() - this.fallbackActivatedAt >= this.primaryCooldownMs) {
+      logger.info(`[VectorEmbedding] Cooldown elapsed, recovering primary provider: ${this.primaryProvider.name}`);
+      // Save current provider as fallback before switching back
+      const currentName = this.providerName;
+      const currentCreate = () => this.embeddings;
+      this.fallbackProviders.push({ name: currentName, create: currentCreate });
+      // Restore primary
+      this.embeddings = this.primaryProvider.create();
+      this.providerName = this.primaryProvider.name;
+      this.fallbackActivatedAt = null;
+    }
+  }
+
+  /**
+   * Check if an error is a quota/rate limit error that should trigger fallback.
+   */
+  private isQuotaError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    const name = error instanceof Error ? error.name : '';
+    return (
+      name === 'InsufficientQuotaError' ||
+      msg.includes('429') ||
+      msg.includes('quota') ||
+      msg.includes('rate limit') ||
+      msg.includes('exceeded')
+    );
+  }
+
+  /**
+   * Check if an error is an authentication/authorization error (unrecoverable).
+   */
+  private isAuthError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    return (
+      msg.includes('401') ||
+      msg.includes('403') ||
+      msg.includes('Unauthorized') ||
+      msg.includes('Incorrect API key') ||
+      msg.includes('Invalid API key') ||
+      msg.includes('invalid_api_key')
+    );
   }
 
   /**
@@ -163,31 +410,85 @@ class VectorEmbeddingService {
   // ============================================================================
 
   /**
-   * Generate embedding for a single text
+   * Generate embedding for a single text.
+   * Uses in-flight de-duplication: concurrent calls with identical text share one API request.
    */
   async embedText(text: string): Promise<number[]> {
-    try {
-      const cleanText = this.preprocessText(text);
-      const embedding = await this.embeddings.embedQuery(cleanText);
-      logger.debug('Generated embedding', { textLength: text.length, dimensions: embedding.length });
-      return embedding;
-    } catch (error) {
-      logger.error('Failed to generate embedding', { error: (error as Error).message });
-      throw error;
+    this.maybeRecoverPrimary();
+    const cleanText = this.preprocessText(text);
+
+    // De-duplicate concurrent identical embedding requests
+    const inflight = this.embeddingInflight.get(cleanText);
+    if (inflight) {
+      logger.debug('Embedding de-dup hit', { provider: this.providerName, textLength: text.length });
+      return inflight;
     }
+
+    const promise = (async () => {
+      try {
+        const embedding = await this.embeddings.embedQuery(cleanText);
+        logger.debug('Generated embedding', { provider: this.providerName, textLength: text.length, dimensions: embedding.length });
+        return embedding;
+      } catch (error) {
+        // Auth errors are unrecoverable — don't retry, don't fallback
+        if (this.isAuthError(error)) {
+          logger.error('[VectorEmbedding] Auth error (unrecoverable)', { provider: this.providerName, error: (error as Error).message });
+          throw new EmbeddingAuthError(`Embedding auth failed on ${this.providerName}: ${(error as Error).message}`);
+        }
+        // Quota errors — try fallback provider
+        if (this.isQuotaError(error) && this.switchToFallback()) {
+          try {
+            const embedding = await this.embeddings.embedQuery(cleanText);
+            logger.debug('Generated embedding via fallback', { provider: this.providerName, textLength: text.length, dimensions: embedding.length });
+            return embedding;
+          } catch (fallbackError) {
+            if (this.isAuthError(fallbackError)) {
+              logger.error('[VectorEmbedding] Fallback auth error (unrecoverable)', { provider: this.providerName, error: (fallbackError as Error).message });
+              throw new EmbeddingAuthError(`Embedding auth failed on fallback ${this.providerName}: ${(fallbackError as Error).message}`);
+            }
+            throw fallbackError;
+          }
+        }
+        logger.error('Failed to generate embedding', { provider: this.providerName, error: (error as Error).message });
+        throw error;
+      } finally {
+        // Keep entry briefly to catch near-concurrent calls, then clean up
+        setTimeout(() => this.embeddingInflight.delete(cleanText), 200);
+      }
+    })();
+
+    this.embeddingInflight.set(cleanText, promise);
+    return promise;
   }
 
   /**
    * Generate embeddings for multiple texts (batch processing)
    */
   async embedTexts(texts: string[]): Promise<number[][]> {
+    this.maybeRecoverPrimary();
+    const cleanTexts = texts.map((t) => this.preprocessText(t));
     try {
-      const cleanTexts = texts.map((t) => this.preprocessText(t));
       const embeddings = await this.embeddings.embedDocuments(cleanTexts);
-      logger.debug('Generated batch embeddings', { count: texts.length });
+      logger.debug('Generated batch embeddings', { provider: this.providerName, count: texts.length });
       return embeddings;
     } catch (error) {
-      logger.error('Failed to generate batch embeddings', { error: (error as Error).message });
+      if (this.isAuthError(error)) {
+        logger.error('[VectorEmbedding] Auth error in batch (unrecoverable)', { provider: this.providerName, error: (error as Error).message });
+        throw new EmbeddingAuthError(`Batch embedding auth failed on ${this.providerName}: ${(error as Error).message}`);
+      }
+      if (this.isQuotaError(error) && this.switchToFallback()) {
+        try {
+          const embeddings = await this.embeddings.embedDocuments(cleanTexts);
+          logger.debug('Generated batch embeddings via fallback', { provider: this.providerName, count: texts.length });
+          return embeddings;
+        } catch (fallbackError) {
+          if (this.isAuthError(fallbackError)) {
+            throw new EmbeddingAuthError(`Batch embedding auth failed on fallback ${this.providerName}: ${(fallbackError as Error).message}`);
+          }
+          throw fallbackError;
+        }
+      }
+      logger.error('Failed to generate batch embeddings', { provider: this.providerName, error: (error as Error).message });
       throw error;
     }
   }
@@ -200,6 +501,47 @@ class VectorEmbeddingService {
       .trim()
       .replace(/\s+/g, ' ') 
       .slice(0, 8000);
+  }
+
+  // ============================================================================
+  // Gemini 768-dim Embedding (for life history)
+  // ============================================================================
+
+  /**
+   * Generate a 768-dim embedding using Gemini Embedding 2 (gemini-embedding-2-preview).
+   * Separate from the main embedding pipeline (which uses OpenAI 1536-dim).
+   * Used exclusively for the user_life_history table.
+   *
+   * @param text - Text to embed
+   * @param taskType - 'RETRIEVAL_DOCUMENT' for storage, 'RETRIEVAL_QUERY' for search
+   * @returns 768-dimensional embedding array
+   */
+  async embedWithGemini(
+    text: string,
+    taskType: GeminiTaskType = 'RETRIEVAL_DOCUMENT',
+  ): Promise<number[]> {
+    if (!this.geminiEmbeddings) {
+      if (!env.gemini.apiKey) {
+        throw new Error('[VectorEmbedding] Gemini API key not configured — cannot generate life history embeddings');
+      }
+      this.geminiEmbeddings = new GeminiDirectEmbeddings({
+        apiKey: env.gemini.apiKey,
+        model: 'gemini-embedding-2-preview',
+        taskType,
+      });
+    }
+
+    const cleanText = this.preprocessText(text);
+    try {
+      // Update taskType for this call (document vs query)
+      this.geminiEmbeddings.taskType = taskType;
+      const embedding = await this.geminiEmbeddings.embedQuery(cleanText);
+      logger.debug('Generated Gemini embedding', { textLength: text.length, dimensions: embedding.length, taskType });
+      return embedding;
+    } catch (error) {
+      logger.error('Failed to generate Gemini embedding', { error: (error as Error).message, taskType });
+      throw error;
+    }
   }
 
   // ============================================================================
@@ -291,6 +633,76 @@ class VectorEmbeddingService {
 
     logger.debug('Stored message embedding', { id: result.rows[0].id, conversationId, role });
     return result.rows[0].id;
+  }
+
+  /**
+   * Store a chat message WITHOUT generating an embedding (fast path).
+   * The embedding can be backfilled later via updateMessageEmbedding() from the async worker.
+   */
+  async storeMessage(params: {
+    conversationId: string;
+    userId: string;
+    role: string;
+    content: string;
+    sequenceNumber: number;
+    metadata?: Record<string, unknown>;
+    toolCalls?: Record<string, unknown>;
+    extractedEntities?: unknown[];
+  }): Promise<string> {
+    const {
+      conversationId,
+      userId,
+      role,
+      content,
+      sequenceNumber,
+      metadata = {},
+      toolCalls,
+      extractedEntities = [],
+    } = params;
+
+    const result = await query<{ id: string }>(
+      `INSERT INTO rag_messages
+        (conversation_id, user_id, role, content, sequence_number, metadata, tool_calls, extracted_entities)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        conversationId,
+        userId,
+        role,
+        content,
+        sequenceNumber,
+        JSON.stringify(metadata),
+        toolCalls ? JSON.stringify(toolCalls) : null,
+        JSON.stringify(extractedEntities),
+      ]
+    );
+
+    // Update conversation message count and last_message_at
+    await query(
+      `UPDATE rag_conversations
+       SET message_count = message_count + 1,
+           last_message_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [conversationId]
+    );
+
+    logger.debug('Stored message (embedding deferred)', { id: result.rows[0].id, conversationId, role });
+    return result.rows[0].id;
+  }
+
+  /**
+   * Backfill embedding for an existing rag_message row.
+   * Called by the async embedding worker after storeMessage().
+   */
+  async updateMessageEmbedding(messageId: string, content: string): Promise<void> {
+    const embedding = await this.embedText(content);
+    const embeddingStr = `[${embedding.join(',')}]`;
+    await query(
+      `UPDATE rag_messages SET embedding = $1 WHERE id = $2`,
+      [embeddingStr, messageId]
+    );
+    logger.debug('Backfilled message embedding', { messageId });
   }
 
   /**
@@ -999,7 +1411,7 @@ class VectorEmbeddingService {
     const msgResult = await query(
       `SELECT id, role, content, sequence_number, created_at
        FROM rag_messages
-       WHERE conversation_id = $1
+       WHERE conversation_id = $1 AND role IN ('user', 'assistant')
        ORDER BY sequence_number DESC
        LIMIT $2`,
       [conversationId, messageLimit]
@@ -1073,19 +1485,26 @@ class VectorEmbeddingService {
     const { userId, status, limit = 20 } = params;
 
     let sql = `
-      SELECT id, title, session_type, status, message_count, last_message_at, created_at
-      FROM rag_conversations
-      WHERE user_id = $1
+      SELECT c.id, c.title, c.session_type, c.status, c.message_count, c.last_message_at, c.created_at,
+        lm.content AS last_message_preview,
+        lm.role AS last_message_role
+      FROM rag_conversations c
+      LEFT JOIN LATERAL (
+        SELECT content, role FROM rag_messages
+        WHERE conversation_id = c.id
+        ORDER BY created_at DESC LIMIT 1
+      ) lm ON true
+      WHERE c.user_id = $1
     `;
 
     const queryParams: (string | number)[] = [userId];
 
     if (status) {
-      sql += ` AND status = $2`;
+      sql += ` AND c.status = $2`;
       queryParams.push(status);
     }
 
-    sql += ` ORDER BY last_message_at DESC LIMIT $${queryParams.length + 1}`;
+    sql += ` ORDER BY c.last_message_at DESC LIMIT $${queryParams.length + 1}`;
     queryParams.push(limit);
 
     const result = await query(sql, queryParams);
@@ -1098,6 +1517,8 @@ class VectorEmbeddingService {
       messageCount: row.message_count,
       lastMessageAt: row.last_message_at,
       createdAt: row.created_at,
+      lastMessagePreview: row.last_message_preview ? String(row.last_message_preview).slice(0, 80) : null,
+      lastMessageRole: row.last_message_role || null,
     }));
   }
 

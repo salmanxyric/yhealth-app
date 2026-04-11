@@ -3,6 +3,7 @@ import { aiCoachController } from '../controllers/ai-coach.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { uploadImage } from '../middlewares/upload.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
+import { aiGenerationLimiter } from '../middlewares/rateLimiter.middleware.js';
 import {
   startConversationSchema,
   sendMessageSchema,
@@ -14,9 +15,6 @@ import {
 } from '../validators/ai-coach.validator.js';
 
 const router = Router();
-
-// Rate limiter disabled for development
-// TODO: Re-enable in production with appropriate limits
 
 /**
  * @route   GET /api/ai-coach/status
@@ -123,7 +121,7 @@ router.post('/chat', authenticate, validate(chatSchema), aiCoachController.chat)
  *            customGoalText?: string
  *          }
  */
-router.post('/generate-goals', authenticate, validate(generateGoalsSchema), aiCoachController.generateGoals);
+router.post('/generate-goals', authenticate, aiGenerationLimiter, validate(generateGoalsSchema), aiCoachController.generateGoals);
 
 // ============================================================================
 // MCQ Dynamic Question Generation

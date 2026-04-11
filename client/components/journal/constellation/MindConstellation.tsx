@@ -53,7 +53,7 @@ interface MindConstellationProps {
 // ============================================
 
 const INNER_RADIUS = 0.15;
-const OUTER_RADIUS = 0.45;
+const OUTER_RADIUS = 0.42;
 const TILT_Y = 0.52;
 
 // ============================================
@@ -69,7 +69,7 @@ function getDateRange(filter: FilterPeriod): { startDate?: string; endDate?: str
     };
   }
   // month
-  const start = new Date(filter.year, filter.month, 1);
+  const _start = new Date(filter.year, filter.month, 1);
   const end = new Date(filter.year, filter.month + 1, 0); // last day of month
   const pad = (n: number) => String(n).padStart(2, "0");
   return {
@@ -150,11 +150,30 @@ export function MindConstellation({
     return () => window.removeEventListener("journal-logged", handler);
   }, [fetchEntries]);
 
+  // --- Group entries by date ---
+  const dateGroups = useMemo(() => {
+    const groups = new Map<string, JournalEntry[]>();
+    for (const entry of entries) {
+      const dateKey = entry.loggedAt.split("T")[0];
+      const existing = groups.get(dateKey);
+      if (existing) {
+        existing.push(entry);
+      } else {
+        groups.set(dateKey, [entry]);
+      }
+    }
+    // Sort entries within each group by time (newest first)
+    for (const group of groups.values()) {
+      group.sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime());
+    }
+    return groups;
+  }, [entries]);
+
   // --- Interaction state ---
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [clickedEntry, setClickedEntry] = useState<JournalEntry | null>(null);
+  const [clickedEntries, setClickedEntries] = useState<JournalEntry[] | null>(null);
 
-  const clearClickedEntry = useCallback(() => setClickedEntry(null), []);
+  const clearClickedEntries = useCallback(() => setClickedEntries(null), []);
 
   // --- Engine ---
   const { rotationAngle, parallaxX, parallaxY } = useObservatoryEngine({
@@ -164,53 +183,67 @@ export function MindConstellation({
     disabled: prefersReducedMotion,
   });
 
-  // --- Sorted entries (newest first) ---
-  const sorted = useMemo(
+  // --- Sorted date keys (oldest first → innermost orbit, newest → outermost) ---
+  const sortedDateKeys = useMemo(
     () =>
-      [...entries].sort(
-        (a, b) =>
-          new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime()
+      [...dateGroups.keys()].sort(
+        (a, b) => new Date(a).getTime() - new Date(b).getTime()
       ),
-    [entries]
+    [dateGroups]
   );
 
-  // --- Compute screen positions ---
+  // --- Representative entries (one per date, for star visuals) ---
+  const sortedRepEntries = useMemo(
+    () => sortedDateKeys.map((dk) => dateGroups.get(dk)![0]),
+    [sortedDateKeys, dateGroups]
+  );
+
+  // --- Compute screen positions (1 star per date) ---
   const cx = size.width / 2;
   const cy = size.height / 2;
   const minDim = Math.min(size.width, size.height);
 
   const screenStars: ScreenStar[] = useMemo(() => {
-    if (sorted.length === 0 || minDim === 0) return [];
+    if (sortedDateKeys.length === 0 || minDim === 0) return [];
 
-    return sorted.map((entry, i) => {
-      const t = sorted.length === 1 ? 0 : i / (sorted.length - 1);
+    return sortedDateKeys.map((dateKey, i) => {
+      const groupEntries = dateGroups.get(dateKey)!;
+      const repEntry = groupEntries[0]; // latest entry for the day
+      const count = groupEntries.length;
+
+      const t = sortedDateKeys.length === 1 ? 0 : i / (sortedDateKeys.length - 1);
       const radiusFrac = INNER_RADIUS + (OUTER_RADIUS - INNER_RADIUS) * t;
-      const angle = seededRandom(entry.id) * Math.PI * 2;
+      const angle = seededRandom(repEntry.id) * Math.PI * 2;
       const radiusPx = radiusFrac * minDim;
 
       const { x: dx, y: dy } = polarToXY(angle + rotationAngle, radiusPx, TILT_Y);
-      const visuals = computeStarVisuals(entry);
+      const visuals = computeStarVisuals(repEntry);
+
+      // Scale star size with entry count
+      const sizeBoost = Math.min((count - 1) * 5, 20);
 
       return {
-        id: entry.id,
+        id: repEntry.id,
         x: cx + dx + parallaxX,
         y: cy + dy + parallaxY,
-        domSize: visuals.domSize,
+        domSize: visuals.domSize + sizeBoost,
         color: visuals.color,
         glowColor: visuals.glowColor,
         brightness: visuals.brightness,
         twinkleSpeed: visuals.twinkleSpeed,
         twinklePhase: visuals.twinklePhase,
-        loggedAt: entry.loggedAt,
-        sentimentScore: entry.sentimentScore,
+        loggedAt: repEntry.loggedAt,
+        sentimentScore: repEntry.sentimentScore,
+        entryCount: count,
+        dateKey,
       };
     });
-  }, [sorted, rotationAngle, parallaxX, parallaxY, cx, cy, minDim]);
+  }, [sortedDateKeys, dateGroups, rotationAngle, parallaxX, parallaxY, cx, cy, minDim]);
 
   // --- Consecutive-day pairs ---
   const consecutivePairs = useMemo(
-    () => findConsecutivePairs(sorted),
-    [sorted]
+    () => findConsecutivePairs(sortedRepEntries),
+    [sortedRepEntries]
   );
 
   // --- Line points for SVG ---
@@ -222,10 +255,11 @@ export function MindConstellation({
   // --- Handlers ---
   const handleStarClick = useCallback(
     (index: number) => {
-      const entry = sorted[index];
-      if (entry) setClickedEntry(entry);
+      const dateKey = sortedDateKeys[index];
+      const group = dateKey ? dateGroups.get(dateKey) : null;
+      if (group) setClickedEntries(group);
     },
-    [sorted]
+    [sortedDateKeys, dateGroups]
   );
 
   const handleDeleteEntry = useCallback(
@@ -233,18 +267,19 @@ export function MindConstellation({
       try {
         const result = await journalService.deleteEntry(entryId);
         if (result.success) {
-          clearClickedEntry();
+          clearClickedEntries();
           fetchEntries();
         }
       } catch {
         // Error handling
       }
     },
-    [clearClickedEntry, fetchEntries]
+    [clearClickedEntries, fetchEntries]
   );
 
   // --- Hovered tooltip data ---
-  const hoveredEntry = hoveredIndex !== null ? sorted[hoveredIndex] : null;
+  const hoveredDateKey = hoveredIndex !== null ? sortedDateKeys[hoveredIndex] : null;
+  const hoveredEntries = hoveredDateKey ? dateGroups.get(hoveredDateKey) ?? null : null;
   const hoveredPosition =
     hoveredIndex !== null && screenStars[hoveredIndex]
       ? { x: screenStars[hoveredIndex].x, y: screenStars[hoveredIndex].y }
@@ -296,7 +331,7 @@ export function MindConstellation({
       {!checkinLoading && !hasCheckedInToday && (
         <div
           className="absolute left-1/2 -translate-x-1/2 flex justify-center"
-          style={{ top: 100, zIndex: 30 }}
+          style={{ top: 112, zIndex: 30 }}
         >
           <button
             onClick={onStartCheckin}
@@ -331,22 +366,22 @@ export function MindConstellation({
 
       {/* Layer 40: Tooltip */}
       <AnimatePresence>
-        {hoveredEntry && hoveredPosition && (
+        {hoveredEntries && hoveredPosition && (
           <StarTooltip
-            entry={hoveredEntry}
+            entries={hoveredEntries}
             position={hoveredPosition}
-            label={formatStarLabel(hoveredEntry.loggedAt)}
+            label={formatStarLabel(hoveredEntries[0].loggedAt)}
           />
         )}
       </AnimatePresence>
 
       {/* Layer 40: Entry modal */}
       <AnimatePresence>
-        {clickedEntry && (
+        {clickedEntries && (
           <JournalEntryModal
-            entry={clickedEntry}
-            onClose={clearClickedEntry}
-            onEdit={onEditEntry ? (entry) => { clearClickedEntry(); onEditEntry(entry); } : undefined}
+            entries={clickedEntries}
+            onClose={clearClickedEntries}
+            onEdit={onEditEntry ? (entry) => { clearClickedEntries(); onEditEntry(entry); } : undefined}
             onDelete={handleDeleteEntry}
           />
         )}

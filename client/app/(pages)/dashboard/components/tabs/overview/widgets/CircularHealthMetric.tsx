@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 
 export type HealthMetricType =
   | 'age'
@@ -125,11 +125,11 @@ export const metricColors: Record<HealthMetricType, {
   },
 };
 
-// Size configurations - reduced by 2rem (32px)
+// Size configurations - responsive (mobile-first)
 const sizeConfig = {
-  sm: { circle: 128, stroke: 8, fontSize: 'text-2xl', labelSize: 'text-xs' },
-  md: { circle: 168, stroke: 10, fontSize: 'text-3xl', labelSize: 'text-sm' },
-  lg: { circle: 208, stroke: 12, fontSize: 'text-4xl', labelSize: 'text-base' },
+  sm: { circle: 72, stroke: 5, fontSize: 'text-[14px]', labelSize: 'text-[11px]' },
+  md: { circle: 144, stroke: 8, fontSize: 'text-xl', labelSize: 'text-xs' },
+  lg: { circle: 160, stroke: 10, fontSize: 'text-lg', labelSize: 'text-sm' },
 };
 
 export function CircularHealthMetric({
@@ -138,6 +138,7 @@ export function CircularHealthMetric({
   showTrend = true,
   className = '',
 }: CircularHealthMetricProps) {
+  const instanceId = useId();
   const colors = metricColors[metric.type];
   const config = sizeConfig[size];
   const radius = (config.circle - config.stroke) / 2;
@@ -154,9 +155,7 @@ export function CircularHealthMetric({
     return 0;
   }, [metric.value, metric.max, metric.isLoading]);
 
-  const strokeDashoffset = useMemo(() => {
-    return circumference - (progress / 100) * circumference;
-  }, [circumference, progress]);
+  const dashOffset = circumference * (1 - progress / 100);
 
   // Format value display
   const displayValue = useMemo(() => {
@@ -189,6 +188,18 @@ export function CircularHealthMetric({
           viewBox={`0 0 ${config.circle} ${config.circle}`}
           aria-hidden="true"
         >
+          {/* Gradient definitions - must come before usage */}
+          <defs>
+            <linearGradient id={`gradient-${instanceId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={colors.primary} stopOpacity="1" />
+              <stop offset="100%" stopColor={colors.secondary} stopOpacity="1" />
+            </linearGradient>
+            <radialGradient id={`bg-gradient-${instanceId}`} cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor={colors.primary} stopOpacity="0.15" />
+              <stop offset="100%" stopColor={colors.secondary} stopOpacity="0.05" />
+            </radialGradient>
+          </defs>
+
           {/* Background circle with fill */}
           <circle
             cx={config.circle / 2}
@@ -209,27 +220,15 @@ export function CircularHealthMetric({
               stroke={`url(#gradient-${metric.type})`}
               strokeWidth={config.stroke}
               strokeLinecap="round"
-              strokeDasharray={circumference}
+              strokeDasharray={`${circumference} ${circumference}`}
               initial={{ strokeDashoffset: circumference }}
-              animate={{ strokeDashoffset }}
+              animate={{ strokeDashoffset: dashOffset }}
               transition={{ duration: 1.5, ease: 'easeOut' }}
               style={{
                 filter: `drop-shadow(0 0 8px ${colors.primary}40)`,
               }}
             />
           )}
-
-          {/* Gradient definitions */}
-          <defs>
-            <linearGradient id={`gradient-${metric.type}`} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor={colors.primary} stopOpacity="1" />
-              <stop offset="100%" stopColor={colors.secondary} stopOpacity="1" />
-            </linearGradient>
-            <radialGradient id={`bg-gradient-${metric.type}`} cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor={colors.primary} stopOpacity="0.15" />
-              <stop offset="100%" stopColor={colors.secondary} stopOpacity="0.05" />
-            </radialGradient>
-          </defs>
         </svg>
 
         {/* Center content */}

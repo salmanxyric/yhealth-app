@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api-client';
 import {
@@ -128,7 +128,7 @@ export function ScoringTab() {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d'>('30d');
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
 
   const fetchScoringData = useCallback(async (showRefreshing = false) => {
     try {
@@ -325,17 +325,6 @@ export function ScoringTab() {
     fetchScoringData();
   }, [fetchScoringData]);
 
-  useEffect(() => {
-    refreshIntervalRef.current = setInterval(() => {
-      fetchScoringData(true);
-    }, 5 * 60 * 1000);
-
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-    };
-  }, [fetchScoringData]);
 
   const handleRefresh = () => {
     fetchScoringData(true);
@@ -529,8 +518,8 @@ export function ScoringTab() {
         className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
       >
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-            <Sparkles className="w-8 h-8 text-emerald-400" />
+          <h2 className="text-[16px] sm:text-[18px] font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
             Recovery & Wellness Scoring
           </h2>
           <p className="text-slate-400 text-sm flex items-center gap-2">
@@ -605,11 +594,11 @@ export function ScoringTab() {
                   initial={{ scale: 0.5, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-                  className={`text-7xl font-bold ${getScoreColor(data.currentScore.recoveryScore)}`}
+                  className={`text-3xl sm:text-4xl font-bold ${getScoreColor(data.currentScore.recoveryScore)}`}
                 >
                   <AnimatedNumber value={data.currentScore.recoveryScore} />
                 </motion.p>
-                <span className="text-2xl text-slate-400 font-medium">/100</span>
+                <span className="text-base sm:text-lg text-slate-400 font-medium">/100</span>
               </div>
               <p className="text-slate-400 text-sm mt-2">
                 {data.currentScore.recoveryScore >= 85

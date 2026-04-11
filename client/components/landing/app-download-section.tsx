@@ -359,7 +359,7 @@ export function AppDownloadSection() {
             <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-lg mx-auto lg:mx-0">
               Personalized fitness plans, real-time nutrition guidance, and
               wellbeing insights -- all powered by AI that learns your patterns
-              and adapts to your goals. Download yHealth and see results in weeks,
+              and adapts to your goals. Download Balencia and see results in weeks,
               not months.
             </p>
 

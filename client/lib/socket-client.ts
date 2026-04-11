@@ -189,6 +189,7 @@ export function subscribeToChatEvents(
     onUserLeftGroup?: (data: { chatId: string; userId: string; leftAt: string }) => void;
     onUserJoinedGroup?: (data: { chatId: string; userId: string; userName: string; joinedAt: string }) => void;
     onViewOnceOpened?: (data: { messageId: string; openedBy: string; openedAt: string }) => void;
+    onMessagesRead?: (data: { chatId: string; userId: string }) => void;
   }
 ): () => void {
   const socket = getSocket();
@@ -227,6 +228,9 @@ export function subscribeToChatEvents(
   if (handlers.onViewOnceOpened) {
     socket.on('viewOnceOpened', handlers.onViewOnceOpened);
   }
+  if (handlers.onMessagesRead) {
+    socket.on('messagesRead', handlers.onMessagesRead);
+  }
 
   // Return cleanup function
   return () => {
@@ -237,6 +241,7 @@ export function subscribeToChatEvents(
       if (handlers.onMessageReaction) socket.off('messageReaction', handlers.onMessageReaction);
       if (handlers.onTyping) socket.off('typing', handlers.onTyping);
       if (handlers.onStopTyping) socket.off('stopTyping', handlers.onStopTyping);
+      if (handlers.onMessagesRead) socket.off('messagesRead', handlers.onMessagesRead);
       if (handlers.onUserLeftGroup) socket.off('userLeftGroup', handlers.onUserLeftGroup);
       if (handlers.onUserJoinedGroup) socket.off('userJoinedGroup', handlers.onUserJoinedGroup);
       if (handlers.onViewOnceOpened) socket.off('viewOnceOpened', handlers.onViewOnceOpened);
@@ -312,3 +317,223 @@ export function subscribeToUnreadCountUpdates(
   };
 }
 
+// ============================================
+// NOTIFICATION EVENTS
+// ============================================
+
+export interface NotificationEvent {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  priority: string;
+  icon?: string;
+  actionUrl?: string;
+  createdAt: string;
+}
+
+export interface NotificationCountEvent {
+  unreadCount: number;
+  urgentCount: number;
+  highCount: number;
+}
+
+/**
+ * Subscribe to real-time notification events
+ */
+export function subscribeToNotificationEvents(handlers: {
+  onNew?: (data: NotificationEvent) => void;
+  onCount?: (data: NotificationCountEvent) => void;
+}): () => void {
+  const socket = getSocket();
+  if (!socket) {
+    return () => {};
+  }
+
+  if (handlers.onNew) socket.on('notification:new', handlers.onNew);
+  if (handlers.onCount) socket.on('notification:count', handlers.onCount);
+
+  return () => {
+    if (socket) {
+      if (handlers.onNew) socket.off('notification:new', handlers.onNew);
+      if (handlers.onCount) socket.off('notification:count', handlers.onCount);
+    }
+  };
+}
+
+// ============================================
+// VISION COACHING EVENTS
+// ============================================
+
+export interface VisionStateEvent {
+  exerciseDetected: string | null;
+  repCount: number;
+  attentionState: 'focused' | 'distracted' | 'unknown';
+  confidence: number;
+}
+
+export interface VisionCoachingEvent {
+  message: string;
+  severity: 'info' | 'warning';
+  timestamp: number;
+}
+
+export interface VisionFoodEvent {
+  item: string;
+  timestamp: number;
+}
+
+/**
+ * Subscribe to real-time vision coaching events
+ */
+export function subscribeToVisionEvents(handlers: {
+  onState?: (data: VisionStateEvent) => void;
+  onCoaching?: (data: VisionCoachingEvent) => void;
+  onThrottle?: (data: { intervalMs: number }) => void;
+  onError?: (data: { message: string }) => void;
+  onFood?: (data: VisionFoodEvent) => void;
+}): () => void {
+  const socket = getSocket();
+  if (!socket) {
+    return () => {};
+  }
+
+  if (handlers.onState) socket.on('vision:state', handlers.onState);
+  if (handlers.onCoaching) socket.on('vision:coaching', handlers.onCoaching);
+  if (handlers.onThrottle) socket.on('vision:throttle', handlers.onThrottle);
+  if (handlers.onError) socket.on('vision:error', handlers.onError);
+  if (handlers.onFood) socket.on('vision:food', handlers.onFood);
+
+  return () => {
+    if (socket) {
+      if (handlers.onState) socket.off('vision:state', handlers.onState);
+      if (handlers.onCoaching) socket.off('vision:coaching', handlers.onCoaching);
+      if (handlers.onThrottle) socket.off('vision:throttle', handlers.onThrottle);
+      if (handlers.onError) socket.off('vision:error', handlers.onError);
+      if (handlers.onFood) socket.off('vision:food', handlers.onFood);
+    }
+  };
+}
+
+// ============================================
+// STREAK EVENTS
+// ============================================
+
+/**
+ * Subscribe to streak status updates (e.g. activity logged, streak count changed)
+ */
+export function subscribeToStreakUpdated(
+  callback: (data: { currentStreak: number; longestStreak: number; todayActivities: string[] }) => void,
+): () => void {
+  const socket = getSocket();
+  if (!socket) {
+    return () => {};
+  }
+
+  socket.on('streak:updated', callback);
+  return () => {
+    socket.off('streak:updated', callback);
+  };
+}
+
+/**
+ * Subscribe to streak broken events (user missed a day without a freeze)
+ */
+export function subscribeToStreakBroken(
+  callback: (data: { previousStreak: number }) => void,
+): () => void {
+  const socket = getSocket();
+  if (!socket) {
+    return () => {};
+  }
+
+  socket.on('streak:broken', callback);
+  return () => {
+    socket.off('streak:broken', callback);
+  };
+}
+
+/**
+ * Subscribe to streak freeze applied events
+ */
+export function subscribeToStreakFreeze(
+  callback: (data: { freezesRemaining: number; date: string }) => void,
+): () => void {
+  const socket = getSocket();
+  if (!socket) {
+    return () => {};
+  }
+
+  socket.on('streak:freeze_applied', callback);
+  return () => {
+    socket.off('streak:freeze_applied', callback);
+  };
+}
+
+/**
+ * Subscribe to streak at-risk warnings (approaching midnight without activity)
+ */
+export function subscribeToStreakAtRisk(
+  callback: (data: { hoursRemaining: number; currentStreak: number }) => void,
+): () => void {
+  const socket = getSocket();
+  if (!socket) {
+    return () => {};
+  }
+
+  socket.on('streak:at_risk', callback);
+  return () => {
+    socket.off('streak:at_risk', callback);
+  };
+}
+
+/**
+ * Subscribe to streak milestone achievements (tier unlocked, XP bonus, etc.)
+ */
+export function subscribeToStreakMilestone(
+  callback: (data: {
+    days: number;
+    tierName: string;
+    xpBonus: number;
+    freezesEarned: number;
+    titleUnlocked: string | null;
+    badgeIcon: string;
+  }) => void,
+): () => void {
+  const socket = getSocket();
+  if (!socket) {
+    return () => {};
+  }
+
+  socket.on('streak:milestone', callback);
+  return () => {
+    socket.off('streak:milestone', callback);
+  };
+}
+
+/**
+ * Emit a vision frame to the server
+ */
+export function emitVisionFrame(frameBase64: string): void {
+  const socket = getSocket();
+  if (!socket) return;
+  socket.emit('vision:frame', { frameBase64, timestamp: Date.now() });
+}
+
+/**
+ * Start a vision coaching session
+ */
+export function startVisionSession(): void {
+  const socket = getSocket();
+  if (!socket) return;
+  socket.emit('vision:start');
+}
+
+/**
+ * Stop a vision coaching session
+ */
+export function stopVisionSession(): void {
+  const socket = getSocket();
+  if (!socket) return;
+  socket.emit('vision:stop');
+}

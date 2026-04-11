@@ -16,74 +16,78 @@ export function MindCore({ cx, cy }: Props) {
         zIndex: 10,
       }}
     >
-      {/* Central orb */}
+      {/* Central orb — refined with tighter glow */}
       <div
         className="core-pulse rounded-full"
         style={{
-          width: 164,
-          height: 164,
+          width: 140,
+          height: 140,
           background:
-            "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(168,85,247,0.6) 40%, rgba(88,28,135,0.2) 70%, transparent 100%)",
+            "radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(200,180,255,0.6) 25%, rgba(168,85,247,0.35) 50%, rgba(88,28,135,0.1) 75%, transparent 100%)",
           boxShadow:
-            "0 0 80px 24px rgba(168,85,247,0.35), 0 0 160px 60px rgba(139,92,246,0.15)",
+            "0 0 60px 20px rgba(168,85,247,0.3), 0 0 140px 60px rgba(139,92,246,0.12), 0 0 20px 8px rgba(255,255,255,0.15)",
+          animation: "core-breathe 4s ease-in-out infinite",
         }}
       />
 
-      {/* Ripple rings (4 staggered) */}
-      {[0, 1, 2, 3].map((i) => (
+      {/* Subtle ripple rings (3) */}
+      {[0, 1, 2].map((i) => (
         <div
           key={`ripple-${i}`}
-          className="core-ripple absolute rounded-full border border-purple-400/20"
+          className="core-ripple absolute rounded-full"
           style={{
-            width: 164,
-            height: 164,
+            width: 140,
+            height: 140,
             left: "50%",
             top: "50%",
             transform: "translate(-50%, -50%)",
-            animationDelay: `${i * 0.75}s`,
+            border: "1px solid rgba(168, 85, 247, 0.12)",
+            animationDelay: `${i * 1}s`,
           }}
         />
       ))}
 
-      {/* Orbit ring 1 — slow clockwise */}
+      {/* Inner orbit ring */}
       <div
-        className="core-orbit-ring absolute rounded-full border border-purple-500/10"
+        className="core-orbit-ring absolute rounded-full"
         style={{
-          width: 320,
-          height: 320,
+          width: 280,
+          height: 280,
           left: "50%",
           top: "50%",
           transform: "translate(-50%, -50%)",
-          animationDuration: "12s",
+          border: "1px solid rgba(168, 85, 247, 0.06)",
+          animationDuration: "14s",
         }}
       />
 
-      {/* Orbit ring 2 — slower counter-clockwise */}
+      {/* Outer orbit ring */}
       <div
-        className="core-orbit-ring absolute rounded-full border border-indigo-400/8"
+        className="core-orbit-ring absolute rounded-full"
         style={{
-          width: 440,
-          height: 440,
+          width: 420,
+          height: 420,
           left: "50%",
           top: "50%",
           transform: "translate(-50%, -50%)",
-          animationDuration: "18s",
+          border: "1px solid rgba(99, 102, 241, 0.04)",
+          animationDuration: "20s",
           animationDirection: "reverse",
         }}
       />
 
-      {/* Orbital particles (6) */}
+      {/* Orbital particles (6 — cleaner) */}
       {[0, 1, 2, 3, 4, 5].map((i) => {
-        const orbitRadius = i < 3 ? 160 : 220;
-        const size = 4 + (i % 3) * 2;
-        const duration = 6 + i * 0.4;
+        const orbitRadius = i < 3 ? 140 : 210;
+        const size = 4 + (i % 3) * 1.5;
+        const duration = 8 + i * 0.6;
         const colors = [
-          "bg-purple-300",
-          "bg-indigo-300",
-          "bg-blue-300",
-          "bg-violet-300",
-          "bg-purple-200",
-          "bg-indigo-200",
+          "rgba(168, 85, 247, 0.5)",
+          "rgba(99, 102, 241, 0.4)",
+          "rgba(96, 165, 250, 0.4)",
+          "rgba(139, 92, 246, 0.45)",
+          "rgba(129, 140, 248, 0.35)",
+          "rgba(56, 189, 248, 0.35)",
         ];
         return (
           <div
@@ -97,17 +101,19 @@ export function MindCore({ cx, cy }: Props) {
               marginLeft: -orbitRadius,
               marginTop: -orbitRadius,
               animationDuration: `${duration}s`,
-              animationDelay: `${i * -1}s`,
+              animationDelay: `${i * -1.2}s`,
             }}
           >
             <div
-              className={`absolute rounded-full ${colors[i]} opacity-60`}
+              className="absolute rounded-full"
               style={{
                 width: size,
                 height: size,
                 top: 0,
                 left: "50%",
                 transform: "translateX(-50%)",
+                backgroundColor: colors[i],
+                boxShadow: `0 0 ${size * 3}px ${size}px ${colors[i]}`,
               }}
             />
           </div>

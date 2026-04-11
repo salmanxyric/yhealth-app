@@ -23,7 +23,7 @@ export interface ChatMessageItemData {
   contentType?: string;
   mediaUrl?: string;
   mediaThumbnail?: string;
-  mediaType?: 'image' | 'video' | 'audio' | 'document';
+  mediaType?: 'image' | 'video' | 'audio' | 'document' | 'gif';
   fileName?: string;
   fileSize?: number;
   repliedTo?: {
@@ -36,6 +36,9 @@ export interface ChatMessageItemData {
   isPinned?: boolean;
   isViewOnce?: boolean;
   viewOnceOpenedAt?: string | null;
+  readBy?: string[];
+  /** For AI coach chats — sent messages always show as read */
+  isAiChat?: boolean;
 }
 
 interface ChatMessageItemProps {
@@ -73,7 +76,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
   const isViewOnce = message.isViewOnce;
   const viewOnceOpened = isViewOnce && !!message.viewOnceOpenedAt;
   const showMedia = !isViewOnce
-    ? (message.mediaUrl && message.mediaType !== 'audio')
+    ? (message.mediaUrl && message.mediaType !== 'audio' && message.contentType !== 'gif')
     : false;
   const showAudio = !isViewOnce
     ? (message.mediaUrl && message.mediaType === 'audio')
@@ -220,12 +223,25 @@ export const ChatMessageItem = memo(function ChatMessageItem({
               )
             )}
 
+            {/* GIF */}
+            {message.contentType === 'gif' && message.mediaUrl && (
+              <div className={cn('rounded-2xl overflow-hidden', hasTextContent ? 'mb-1' : '')}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={message.mediaUrl}
+                  alt="GIF"
+                  className="max-w-[300px] w-full h-auto rounded-2xl"
+                  loading="lazy"
+                />
+              </div>
+            )}
+
             {/* Media */}
             {showMedia && message.mediaType && message.mediaUrl && (
               <MessageMedia
                 mediaUrl={message.mediaUrl}
                 mediaThumbnail={message.mediaThumbnail}
-                mediaType={message.mediaType}
+                mediaType={message.mediaType as 'image' | 'video' | 'audio' | 'document'}
                 fileName={message.fileName}
                 fileSize={message.fileSize}
                 isOwn={isUser}
@@ -275,7 +291,12 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 }
               })()}
               {isUser && (
-                <MessageStatus status={isLoading ? 'sending' : 'read'} />
+                <MessageStatus status={
+                  isLoading ? 'sending'
+                    : message.isAiChat ? 'read'
+                    : message.readBy && message.readBy.length > 0 ? 'read'
+                    : 'delivered'
+                } />
               )}
             </div>
 

@@ -6,11 +6,11 @@
  * AI correction generation is batched for high/critical severity only.
  */
 
-import { ChatAnthropic } from '@langchain/anthropic';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
-import { env } from '../config/env.config.js';
+import { modelFactory } from './model-factory.service.js';
 import type { ComprehensiveUserContext } from './comprehensive-user-context.service.js';
 import type { DailySnapshot } from './daily-analysis.service.js';
 
@@ -638,15 +638,14 @@ const contradictionRules: ContradictionRule[] = [
 // ============================================
 
 class CrossPillarIntelligenceService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
   private tableEnsured = false;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
-      maxTokens: 400,
+    this.llm = modelFactory.getModel({
+      tier: 'default',
       temperature: 0.3,
+      maxTokens: 400,
     });
   }
 
@@ -975,11 +974,14 @@ ${contradictionDescriptions}`;
         }
       }
     } catch (error) {
+      // Refresh model on provider error so next call uses working provider
+      if (modelFactory.handleProviderError(error)) {
+        try { this.llm = modelFactory.getModel({ tier: 'default', maxTokens: 1000 }); } catch { /* no providers */ }
+      }
       logger.warn('[CrossPillarIntelligence] AI correction generation failed, using descriptions as fallback', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      // Fallback: use the description itself
       for (const c of contradictions) {
         corrections.set(c.ruleId, c.description);
       }

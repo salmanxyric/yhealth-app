@@ -6,6 +6,7 @@ import { VoiceAssistantModal } from "@/components/common/voice-assistant-modal";
 import { AlarmProvider } from "./providers/AlarmProvider";
 import { ConfirmDialogProvider } from "@/components/common/ConfirmDialog";
 import { VisitorTracker } from "@/components/VisitorTracker";
+import { PersistentPlayer } from "@/components/music/PersistentPlayer";
 import { organizationJsonLd, webSiteJsonLd } from "@/lib/structured-data";
 
 const inter = Inter({
@@ -31,52 +32,52 @@ const nunito = Nunito({
   weight: ["300", "400", "500"],
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yhealth.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://balencia.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "YHealth - AI-Powered Personal Health & Wellness Platform",
-    template: "%s | YHealth",
+    default: "Balencia - AI Life Coach for Health, Growth & Personal Transformation",
+    template: "%s | Balencia",
   },
   description:
-    "Transform your health with AI-driven fitness plans, smart nutrition tracking, mental wellness tools, and personalized coaching. Track workouts, monitor mood, build habits — all in one platform.",
+    "Your AI-powered life coach for total self-improvement. Personalized fitness plans, nutrition guidance, mental wellness tools, life goal tracking, and daily coaching — all in one platform.",
   keywords: [
-    "AI health platform",
-    "personal wellness app",
-    "AI fitness coach",
-    "smart health tracking",
-    "personalized workout plans",
-    "nutrition tracking app",
-    "mental wellness platform",
-    "health goal tracker",
+    "AI life coach",
+    "personal improvement platform",
+    "AI wellness coach",
+    "life goal tracking",
+    "personalized coaching app",
+    "self-improvement platform",
+    "mental wellness tools",
+    "holistic life coaching",
     "mood tracking",
     "habit builder",
     "guided breathing",
-    "holistic health management",
-    "digital health coach",
-    "wellness dashboard",
+    "AI-powered personal growth",
+    "digital life coach",
+    "coaching dashboard",
   ],
-  authors: [{ name: "YHealth Team", url: SITE_URL }],
-  creator: "YHealth",
-  publisher: "YHealth",
-  applicationName: "YHealth",
-  category: "Health & Wellness",
+  authors: [{ name: "Balencia Team", url: SITE_URL }],
+  creator: "Balencia",
+  publisher: "Balencia",
+  applicationName: "Balencia",
+  category: "Life Coaching & Wellness",
   openGraph: {
     type: "website",
     locale: "en_US",
     url: SITE_URL,
-    title: "YHealth - AI-Powered Personal Health & Wellness Platform",
+    title: "Balencia - AI Life Coach for Health, Growth & Personal Transformation",
     description:
-      "AI-driven fitness plans, smart nutrition tracking, mental wellness tools, and personalized coaching — all in one platform.",
-    siteName: "YHealth",
+      "AI-powered life coaching with personalized fitness plans, nutrition guidance, mental wellness tools, and life goal tracking — all in one platform.",
+    siteName: "Balencia",
   },
   twitter: {
     card: "summary_large_image",
-    title: "YHealth - AI-Powered Personal Health & Wellness Platform",
+    title: "Balencia - AI Life Coach for Health, Growth & Personal Transformation",
     description:
-      "AI-driven fitness plans, smart nutrition tracking, mental wellness tools, and personalized coaching — all in one platform.",
-    creator: "@yhealthapp",
+      "AI-powered life coaching with personalized fitness plans, nutrition guidance, mental wellness tools, and life goal tracking — all in one platform.",
+    creator: "@balenciaapp",
   },
   robots: {
     index: true,
@@ -121,6 +122,7 @@ export default function RootLayout({
             <ConfirmDialogProvider>
               <VisitorTracker />
               {children}
+              <PersistentPlayer />
               {/* <FloatingVoiceAssistantWrapper /> */}
               <VoiceAssistantModal />
             </ConfirmDialogProvider>

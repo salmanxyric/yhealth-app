@@ -5,6 +5,7 @@ import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { updateUserOnlineStatus } from '../utils/user.helpers.js';
 import { competitionStreamService } from './competition-stream.service.js';
+import { visionCoachingService } from './vision-coaching.service.js';
 import type { IJwtPayload, SocketUser, UserRole } from '../types/index.js';
 
 interface AuthenticatedSocket extends Socket {
@@ -469,6 +470,100 @@ class SocketService {
         );
       },
     );
+
+    // ============================================
+    // VISION COACHING EVENTS
+    // ============================================
+
+    socket.on('vision:start', (callback?: (ack: { sessionId: string; frameInterval: number }) => void) => {
+      if (!socket.user?.userId) return;
+      const session = visionCoachingService.getOrCreateSession(socket.user.userId);
+      logger.info('[Socket] Vision coaching started', { userId: socket.user.userId });
+      if (typeof callback === 'function') {
+        callback({ sessionId: socket.user.userId, frameInterval: session.frameInterval });
+      } else {
+        socket.emit('vision:started', { sessionId: socket.user.userId, frameInterval: session.frameInterval });
+      }
+    });
+
+    socket.on('vision:frame', async (data: { frameBase64: string; timestamp: number }) => {
+      if (!socket.user?.userId || !data?.frameBase64) return;
+      const userId = socket.user.userId;
+
+      const session = visionCoachingService.getOrCreateSession(userId);
+      if (session.isProcessing) {
+        // Drop frame if previous analysis still in-flight
+        return;
+      }
+
+      session.isProcessing = true;
+      try {
+        const result = await visionCoachingService.analyzeFrame(userId, data.frameBase64);
+
+        if (!result) {
+          // Frame was too similar to previous, no new analysis
+          session.isProcessing = false;
+          return;
+        }
+        // Reset error counter on success
+        session.consecutiveErrors = 0;
+
+        // Emit state update (exercise, reps, attention)
+        const state = visionCoachingService.getSessionState(userId);
+        if (state) {
+          socket.emit('vision:state', {
+            exerciseDetected: state.exerciseDetected,
+            repCount: state.repCount,
+            attentionState: state.attentionState,
+            confidence: result.confidence,
+          });
+        }
+
+        // Emit coaching correction if needed
+        if (result.postureCorrection) {
+          socket.emit('vision:coaching', {
+            message: result.postureCorrection,
+            severity: result.confidence > 0.7 ? 'warning' : 'info',
+            timestamp: Date.now(),
+          });
+        }
+
+        // Emit food detection
+        if (result.foodDetected) {
+          socket.emit('vision:food', {
+            item: result.foodDetected,
+            timestamp: Date.now(),
+          });
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+
+        if (errMsg === 'RATE_LIMITED') {
+          const newInterval = visionCoachingService.handleRateLimit(userId);
+          socket.emit('vision:throttle', { intervalMs: newInterval });
+        } else {
+          // Track consecutive errors to suppress log spam
+          session.consecutiveErrors = (session.consecutiveErrors || 0) + 1;
+          if (session.consecutiveErrors <= 3) {
+            logger.error('[Socket] Vision frame analysis failed', { userId, error: errMsg, consecutiveErrors: session.consecutiveErrors });
+          } else if (session.consecutiveErrors === 4) {
+            logger.warn('[Socket] Vision analysis repeatedly failing, suppressing further errors', { userId, totalErrors: session.consecutiveErrors });
+          }
+          // Only emit error to client every 5th failure to avoid UI spam
+          if (session.consecutiveErrors <= 3 || session.consecutiveErrors % 5 === 0) {
+            socket.emit('vision:error', { message: 'Vision analysis temporarily unavailable' });
+          }
+        }
+      } finally {
+        session.isProcessing = false;
+      }
+    });
+
+    socket.on('vision:stop', () => {
+      if (!socket.user?.userId) return;
+      visionCoachingService.endSession(socket.user.userId);
+      logger.info('[Socket] Vision coaching stopped', { userId: socket.user.userId });
+    });
   }
 
   /**

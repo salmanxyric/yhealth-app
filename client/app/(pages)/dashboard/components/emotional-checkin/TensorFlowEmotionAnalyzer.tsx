@@ -10,7 +10,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
-  Loader2,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
@@ -868,19 +867,19 @@ export function TensorFlowEmotionAnalyzer({
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative w-full max-w-3xl mx-4 my-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl border border-slate-700 shadow-2xl max-h-[95vh] flex flex-col"
+        className="relative w-full max-w-3xl mx-4 my-auto bg-[#0f0f18] rounded-2xl border border-white/[0.06] shadow-2xl max-h-[95vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
+        <div className="flex items-center justify-between px-5 h-14 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-purple-600 to-pink-600">
-              <Brain className="w-5 h-5 text-white" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15">
+              <Brain className="w-4 h-4 text-violet-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="text-sm font-semibold text-white">
                 AI Emotion Analysis
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-[11px] text-slate-500">
                 Real-time facial expression detection
               </p>
             </div>
@@ -890,9 +889,9 @@ export function TensorFlowEmotionAnalyzer({
               stopCamera();
               onCancel();
             }}
-            className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-white/[0.06] text-slate-500 hover:text-white transition-colors"
           >
-            <X className="w-5 h-5 text-slate-400" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -905,16 +904,156 @@ export function TensorFlowEmotionAnalyzer({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex flex-col items-center justify-center py-16 space-y-4"
+                className="flex flex-col items-center justify-center py-20 space-y-8"
               >
-                <div className="relative">
-                  <Loader2 className="w-12 h-12 animate-spin text-purple-500" />
-                  <Sparkles className="w-5 h-5 text-pink-500 absolute -top-1 -right-1 animate-pulse" />
+                {/* Neural network animation */}
+                <div className="relative w-32 h-32">
+                  {/* Outer pulsing ring */}
+                  <motion.div
+                    className="absolute inset-0 rounded-full border border-violet-500/20"
+                    animate={{
+                      scale: [1, 1.15, 1],
+                      opacity: [0.3, 0.6, 0.3],
+                    }}
+                    transition={{
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                  />
+                  {/* Mid ring */}
+                  <motion.div
+                    className="absolute inset-3 rounded-full border border-pink-500/25"
+                    animate={{
+                      scale: [1, 1.1, 1],
+                      opacity: [0.4, 0.7, 0.4],
+                    }}
+                    transition={{
+                      duration: 2.4,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: 0.3,
+                    }}
+                  />
+                  {/* Inner ring */}
+                  <motion.div
+                    className="absolute inset-6 rounded-full border border-violet-400/30"
+                    animate={{
+                      scale: [1, 1.08, 1],
+                      opacity: [0.5, 0.8, 0.5],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: 0.6,
+                    }}
+                  />
+                  {/* Rotating arc */}
+                  <motion.div
+                    className="absolute inset-1 rounded-full"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg, transparent 0%, transparent 60%, rgba(139, 92, 246, 0.3) 80%, rgba(236, 72, 153, 0.4) 90%, transparent 100%)",
+                    }}
+                    animate={{ rotate: 360 }}
+                    transition={{
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "linear",
+                    }}
+                  />
+                  {/* Center brain icon */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <motion.div
+                      className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/20 to-pink-500/20 border border-white/[0.06]"
+                      animate={{
+                        boxShadow: [
+                          "0 0 20px rgba(139, 92, 246, 0.15)",
+                          "0 0 40px rgba(139, 92, 246, 0.3)",
+                          "0 0 20px rgba(139, 92, 246, 0.15)",
+                        ],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      <Brain className="w-6 h-6 text-violet-400" />
+                    </motion.div>
+                  </div>
+
+                  {/* Floating particles */}
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute w-1.5 h-1.5 rounded-full"
+                      style={{
+                        background:
+                          i % 2 === 0
+                            ? "rgba(139, 92, 246, 0.6)"
+                            : "rgba(236, 72, 153, 0.6)",
+                        top: "50%",
+                        left: "50%",
+                      }}
+                      animate={{
+                        x: [0, Math.cos((i * Math.PI) / 3) * 52, 0],
+                        y: [0, Math.sin((i * Math.PI) / 3) * 52, 0],
+                        opacity: [0, 0.8, 0],
+                        scale: [0.5, 1, 0.5],
+                      }}
+                      transition={{
+                        duration: 2.5,
+                        repeat: Infinity,
+                        delay: i * 0.4,
+                        ease: "easeInOut",
+                      }}
+                    />
+                  ))}
                 </div>
-                <p className="text-slate-300">{loadingMessage}</p>
-                <p className="text-xs text-slate-500">
-                  Loading AI models for emotion detection...
-                </p>
+
+                {/* Text */}
+                <div className="text-center space-y-2">
+                  <motion.p
+                    className="text-sm font-medium text-white"
+                    key={loadingMessage}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {loadingMessage}
+                  </motion.p>
+                  <p className="text-[11px] text-slate-500">
+                    Loading AI models for on-device emotion detection
+                  </p>
+                </div>
+
+                {/* Step indicators */}
+                <div className="flex items-center gap-6">
+                  {[
+                    { label: "TensorFlow", icon: "tf" },
+                    { label: "BlazeFace", icon: "face" },
+                    { label: "Camera", icon: "cam" },
+                  ].map((step, i) => (
+                    <motion.div
+                      key={step.label}
+                      className="flex items-center gap-2"
+                      initial={{ opacity: 0.3 }}
+                      animate={{ opacity: [0.3, 1, 0.3] }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        delay: i * 0.7,
+                      }}
+                    >
+                      <div className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                      <span className="text-[10px] font-medium text-slate-400">
+                        {step.label}
+                      </span>
+                    </motion.div>
+                  ))}
+                </div>
               </motion.div>
             )}
 

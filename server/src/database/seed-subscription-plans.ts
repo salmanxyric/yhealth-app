@@ -1,6 +1,6 @@
 /**
  * @file Seed Subscription Plans
- * @description Creates subscription plans for yHealth: Free, 1 Month, 3 Month.
+ * @description Creates subscription plans for Balencia: Free, 1 Month, 3 Month.
  * New users get 1 week free trial (see subscription.service TRIAL_DAYS); then they can stay on Free or subscribe.
  * Run after subscription tables migration. Stripe IDs are left null; create products in Stripe via Admin or API.
  */

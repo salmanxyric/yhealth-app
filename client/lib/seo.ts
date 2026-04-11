@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yhealth.app";
-const SITE_NAME = "YHealth";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://balencia.app";
+const SITE_NAME = "Balencia";
 
 /**
  * Creates consistent metadata for any page.
@@ -59,60 +59,63 @@ export function createMetadata({
 
 export const SEO = {
   home: createMetadata({
-    title: "YHealth - AI-Powered Personal Health & Wellness Platform",
+    title: "Balencia - AI Life Coach for Health, Growth & Personal Transformation",
     description:
-      "Transform your health with AI-driven fitness plans, smart nutrition tracking, mental wellness tools, and personalized coaching. Track workouts, monitor mood, build habits — all in one platform.",
+      "Your AI-powered life coach for total self-improvement. Personalized fitness plans, nutrition guidance, mental wellness tools, life goal tracking, and daily coaching — all in one platform.",
     keywords: [
-      "AI health platform",
-      "personal wellness app",
-      "AI fitness coach",
-      "smart health tracking",
-      "personalized workout plans",
-      "nutrition tracking app",
-      "mental wellness platform",
-      "health goal tracker",
-      "AI-powered wellness",
-      "holistic health management",
+      "AI life coach",
+      "personal improvement platform",
+      "AI wellness coach",
+      "life goal tracking",
+      "personalized coaching app",
+      "self-improvement platform",
+      "proactive AI coaching",
+      "all-in-one life coach",
+      "motivation tiers",
+      "life goals",
+      "AI-powered personal growth",
+      "holistic life coaching",
+      "daily life coaching",
     ],
     path: "/",
   }),
 
   about: createMetadata({
-    title: "About YHealth - Revolutionizing Personal Health with AI",
+    title: "About Balencia - Your AI Life Coach for Personal Transformation",
     description:
-      "YHealth combines artificial intelligence with health science to deliver personalized fitness, nutrition, and mental wellness plans. Discover our mission to make proactive healthcare accessible to everyone.",
+      "Balencia combines artificial intelligence with behavioral science to deliver personalized life coaching across fitness, nutrition, mental wellness, and personal growth. Our mission: make world-class life coaching accessible to everyone.",
     keywords: [
-      "about YHealth",
-      "AI health technology",
-      "digital health innovation",
-      "personalized healthcare",
-      "health tech startup",
-      "wellness technology company",
-      "proactive healthcare platform",
+      "about Balencia",
+      "AI life coaching technology",
+      "personal transformation platform",
+      "AI-powered life improvement",
+      "life coaching startup",
+      "personal growth technology",
+      "proactive life coaching platform",
     ],
     path: "/about",
   }),
 
   plans: createMetadata({
-    title: "Plans & Pricing - YHealth",
+    title: "Plans & Pricing - Balencia",
     description:
-      "Choose the right plan for your health journey. Starter, Pro, and Premium plans with AI coaching, analytics, and personalized support. Start free, upgrade anytime.",
+      "Choose the right plan for your personal growth journey. Starter, Pro, and Premium plans with AI life coaching, analytics, and personalized support. Start free, upgrade anytime.",
     keywords: [
-      "YHealth pricing",
-      "health app plans",
+      "Balencia pricing",
+      "life coaching plans",
       "subscription plans",
-      "AI coaching pricing",
-      "wellness app subscription",
+      "AI life coach pricing",
+      "personal growth subscription",
     ],
     path: "/plans",
   }),
 
   subscription: createMetadata({
-    title: "Subscription - YHealth",
+    title: "Subscription - Balencia",
     description:
-      "Manage your yHealth subscription, view your current plan, and upgrade or change plans. Billing and usage in one place.",
+      "Manage your Balencia subscription, view your current plan, and upgrade or change plans. Billing and usage in one place.",
     keywords: [
-      "YHealth subscription",
+      "Balencia subscription",
       "manage subscription",
       "billing",
       "upgrade plan",
@@ -122,18 +125,18 @@ export const SEO = {
 
   // --- Blogs ---
   blogList: createMetadata({
-    title: "Health & Wellness Blog - Expert Tips & AI-Driven Insights",
+    title: "Life Improvement Blog - Expert Tips & AI-Driven Insights",
     description:
-      "Read expert articles on fitness, nutrition, mental health, and wellness. Evidence-based tips, AI health insights, and actionable guides to improve your daily well-being.",
+      "Read expert articles on fitness, nutrition, mental wellness, personal growth, and life improvement. Evidence-based tips, AI coaching insights, and actionable guides to become your best self.",
     keywords: [
-      "health blog",
-      "wellness articles",
+      "life improvement blog",
+      "personal growth articles",
       "fitness tips",
       "nutrition advice",
-      "mental health articles",
-      "AI health insights",
-      "wellness guide",
-      "healthy lifestyle blog",
+      "mental wellness articles",
+      "AI coaching insights",
+      "self-improvement guide",
+      "life coaching blog",
       "exercise science articles",
       "mindfulness tips",
     ],
@@ -142,11 +145,11 @@ export const SEO = {
 
   // --- Auth ---
   signIn: createMetadata({
-    title: "Sign In to YHealth - Access Your Health Dashboard",
+    title: "Sign In to Balencia - Access Your Life Coaching Dashboard",
     description:
-      "Sign in to your YHealth account to access personalized workout plans, nutrition tracking, wellness insights, and your AI health coach.",
+      "Sign in to your Balencia account to access personalized plans, life goal tracking, wellness insights, and your AI life coach.",
     keywords: [
-      "YHealth login",
+      "Balencia login",
       "health app sign in",
       "wellness dashboard login",
     ],
@@ -155,121 +158,121 @@ export const SEO = {
   }),
 
   signUp: createMetadata({
-    title: "Create Your YHealth Account - Start Your Wellness Journey",
+    title: "Create Your Balencia Account - Start Your Life Improvement Journey",
     description:
-      "Join YHealth for free and get AI-powered fitness plans, personalized nutrition tracking, mood monitoring, and a smart health coach — tailored to your goals.",
+      "Join Balencia for free and get an AI life coach with personalized fitness plans, nutrition guidance, mood monitoring, and life goal tracking — tailored to your aspirations.",
     keywords: [
-      "YHealth sign up",
-      "create health account",
-      "free wellness app",
-      "start health journey",
-      "AI health coach signup",
+      "Balencia sign up",
+      "create life coaching account",
+      "free life coach app",
+      "start personal growth journey",
+      "AI life coach signup",
     ],
     path: "/auth/signup",
   }),
 
   forgotPassword: createMetadata({
-    title: "Reset Your Password - YHealth",
-    description: "Forgot your YHealth password? Reset it securely and regain access to your personalized health dashboard.",
+    title: "Reset Your Password - Balencia",
+    description: "Forgot your Balencia password? Reset it securely and regain access to your personalized health dashboard.",
     path: "/auth/forgot-password",
     noIndex: true,
   }),
 
   resetPassword: createMetadata({
-    title: "Set New Password - YHealth",
-    description: "Create a new secure password for your YHealth account.",
+    title: "Set New Password - Balencia",
+    description: "Create a new secure password for your Balencia account.",
     path: "/auth/reset-password",
     noIndex: true,
   }),
 
   verify: createMetadata({
-    title: "Verify Your Email - YHealth",
-    description: "Verify your email address to activate your YHealth account and start tracking your health journey.",
+    title: "Verify Your Email - Balencia",
+    description: "Verify your email address to activate your Balencia account and start tracking your health journey.",
     path: "/auth/verify",
     noIndex: true,
   }),
 
   // --- Dashboard & User ---
   dashboard: createMetadata({
-    title: "Health Dashboard - Your Daily Wellness Overview",
+    title: "Your Dashboard - Daily Life Coaching Overview",
     description:
-      "View your daily health snapshot — workouts, nutrition intake, mood trends, habit streaks, and AI-generated insights all in one personalized dashboard.",
+      "View your daily snapshot — workouts, nutrition, mood trends, life goal progress, habit streaks, and AI-generated coaching insights all in one personalized dashboard.",
     keywords: [
-      "health dashboard",
-      "wellness overview",
-      "daily health tracker",
-      "fitness dashboard",
-      "personal health summary",
+      "life coaching dashboard",
+      "personal growth overview",
+      "daily progress tracker",
+      "AI coaching dashboard",
+      "life improvement summary",
     ],
     path: "/dashboard",
     noIndex: true,
   }),
 
   profile: createMetadata({
-    title: "My Health Profile - YHealth",
-    description: "View and manage your health profile, fitness stats, body metrics, and wellness achievements.",
+    title: "My Profile - Balencia",
+    description: "View and manage your profile, fitness stats, life goals, body metrics, and personal achievements.",
     path: "/profile",
     noIndex: true,
   }),
 
   profileEdit: createMetadata({
-    title: "Edit Profile - YHealth",
+    title: "Edit Profile - Balencia",
     description: "Update your personal information, health preferences, and profile settings.",
     path: "/profile/edit",
     noIndex: true,
   }),
 
   settings: createMetadata({
-    title: "Account Settings - YHealth",
-    description: "Manage your YHealth account settings, notification preferences, connected devices, and privacy controls.",
+    title: "Account Settings - Balencia",
+    description: "Manage your Balencia account settings, notification preferences, connected devices, and privacy controls.",
     path: "/settings",
     noIndex: true,
   }),
 
   notifications: createMetadata({
-    title: "Notifications - YHealth",
+    title: "Notifications - Balencia",
     description: "Stay on top of your health goals with smart reminders, workout alerts, and wellness notifications.",
     path: "/notifications",
     noIndex: true,
   }),
 
   messages: createMetadata({
-    title: "Messages - YHealth",
+    title: "Messages - Balencia",
     description: "Connect with your health community, coaches, and support team through secure messaging.",
     path: "/messages",
     noIndex: true,
   }),
 
   chat: createMetadata({
-    title: "AI Health Chat - Talk to Your Wellness Coach",
-    description: "Chat with your AI-powered health coach for instant fitness advice, nutrition tips, and personalized wellness guidance.",
+    title: "AI Life Coach Chat - Talk to Your Personal Coach",
+    description: "Chat with your AI life coach for personalized guidance on fitness, nutrition, mental wellness, life goals, and personal growth.",
     keywords: [
-      "AI health chat",
-      "wellness chatbot",
-      "health advice AI",
-      "fitness coach chat",
+      "AI life coach chat",
+      "personal coaching chatbot",
+      "life advice AI",
+      "AI personal coach chat",
     ],
     path: "/chat",
     noIndex: true,
   }),
 
   chatHistory: createMetadata({
-    title: "Chat History - YHealth",
-    description: "Review past conversations with your AI health coach and revisit personalized recommendations.",
+    title: "Chat History - Balencia",
+    description: "Review past conversations with your AI life coach and revisit personalized recommendations.",
     path: "/chat-history",
     noIndex: true,
   }),
 
   // --- Health Tracking ---
   goals: createMetadata({
-    title: "Health Goals - Set & Track Personalized Targets",
+    title: "Life Goals - Set & Track Personalized Targets",
     description:
-      "Set personalized health goals for fitness, nutrition, sleep, and wellness. Track daily progress with AI-powered insights and adaptive milestones.",
+      "Set personalized goals for fitness, nutrition, sleep, wellness, and life improvement. Track daily progress with AI-powered coaching insights and adaptive milestones.",
     keywords: [
-      "health goal setting",
-      "fitness goal tracker",
+      "life goal setting",
+      "personal growth tracker",
       "wellness targets",
-      "personalized health goals",
+      "personalized life goals",
       "smart goal tracking",
     ],
     path: "/goals",
@@ -332,30 +335,30 @@ export const SEO = {
   }),
 
   progress: createMetadata({
-    title: "Progress Reports - Visualize Your Health Transformation",
+    title: "Progress Reports - Visualize Your Personal Transformation",
     description:
-      "Visualize your health journey with detailed progress reports. Track body metrics, fitness milestones, weight trends, and overall wellness improvements.",
+      "Visualize your life improvement journey with detailed progress reports. Track body metrics, fitness milestones, life goal completion, and overall personal growth.",
     keywords: [
-      "health progress tracker",
-      "fitness progress report",
-      "body transformation tracker",
-      "wellness improvement charts",
-      "weight tracking graphs",
+      "personal growth tracker",
+      "life progress report",
+      "transformation tracker",
+      "self-improvement charts",
+      "goal tracking graphs",
     ],
     path: "/progress",
     noIndex: true,
   }),
 
   achievements: createMetadata({
-    title: "Achievements & Rewards - Celebrate Your Health Milestones",
+    title: "Achievements & Rewards - Celebrate Your Life Milestones",
     description:
-      "Earn badges, unlock achievements, and celebrate milestones on your health journey. Gamified wellness tracking to keep you motivated.",
+      "Earn badges, unlock achievements, and celebrate milestones on your personal growth journey. Gamified life coaching to keep you motivated.",
     keywords: [
-      "health achievements",
-      "fitness badges",
-      "wellness milestones",
-      "gamified health tracking",
-      "fitness rewards system",
+      "life achievements",
+      "personal growth badges",
+      "life coaching milestones",
+      "gamified self-improvement",
+      "personal rewards system",
     ],
     path: "/achievements",
     noIndex: true,
@@ -467,6 +470,22 @@ export const SEO = {
     noIndex: true,
   }),
 
+  wellbeingVision: createMetadata({
+    title: "Vision Health - Color Vision Test & Eye Exercises",
+    description:
+      "Test your color vision with Ishihara-style plates, train your eye muscles with guided exercises, and track your vision health progress over time.",
+    keywords: [
+      "color vision test",
+      "color blindness test",
+      "eye exercises",
+      "vision health",
+      "Ishihara test",
+      "eye yoga",
+    ],
+    path: "/wellbeing/vision",
+    noIndex: true,
+  }),
+
   wellbeingEmotionalCheckin: createMetadata({
     title: "Emotional Check-In - AI-Powered Wellness Assessment",
     description:
@@ -495,59 +514,73 @@ export const SEO = {
     noIndex: true,
   }),
 
+  wellbeingInsights: createMetadata({
+    title: "Wellbeing Insights - Health Correlations & Recurring Themes",
+    description:
+      "Discover patterns in your wellbeing data. See how sleep, exercise, and mood are connected, and track recurring themes from your journal entries.",
+    keywords: [
+      "health insights",
+      "wellbeing correlations",
+      "mood patterns",
+      "journal themes",
+    ],
+    path: "/wellbeing/insights",
+    noIndex: true,
+  }),
+
   // --- AI & Voice ---
   aiCoach: createMetadata({
-    title: "AI Health Coach - Personalized Wellness Guidance 24/7",
+    title: "AI Life Coach - Personalized Guidance for Total Self-Improvement",
     description:
-      "Get instant, personalized health advice from your AI wellness coach. Science-backed recommendations for fitness, nutrition, sleep, and mental health.",
+      "Get instant, personalized guidance from your AI life coach. Science-backed recommendations for fitness, nutrition, sleep, mental wellness, and personal growth goals.",
     keywords: [
-      "AI health coach",
-      "virtual wellness coach",
-      "personalized health advice",
-      "AI fitness guidance",
-      "24/7 health assistant",
+      "AI life coach",
+      "virtual life coach",
+      "personalized life guidance",
+      "AI personal growth coach",
+      "24/7 life coaching assistant",
     ],
     path: "/ai-coach",
     noIndex: true,
   }),
 
   voiceAssistant: createMetadata({
-    title: "Voice Health Assistant - Hands-Free Wellness Support",
-    description: "Interact with your AI health coach through voice. Log meals, start workouts, check progress, and get wellness tips — completely hands-free.",
+    title: "Voice Coach Assistant - Hands-Free Life Coaching Support",
+    description: "Interact with your AI life coach through voice. Log meals, start workouts, check progress, set intentions, and get coaching tips — completely hands-free.",
     keywords: [
-      "voice health assistant",
-      "hands-free fitness",
-      "voice-controlled health app",
-      "AI voice wellness",
+      "voice life coach assistant",
+      "hands-free coaching",
+      "voice-controlled coaching app",
+      "AI voice life coach",
     ],
     path: "/voice-assistant",
     noIndex: true,
   }),
 
   voiceCall: createMetadata({
-    title: "Voice Call - Talk to Your AI Health Coach",
-    description: "Have a real-time voice conversation with your AI health coach for in-depth wellness consultations and personalized health guidance.",
+    title: "Voice Call - Talk to Your AI Life Coach",
+    description: "Have a real-time voice conversation with your AI life coach for in-depth coaching sessions, wellness consultations, and personalized life guidance.",
     path: "/voice-call",
     noIndex: true,
   }),
 
   // --- Admin ---
   admin: createMetadata({
-    title: "Admin Dashboard - YHealth",
-    description: "YHealth administration panel for managing users, content, and platform settings.",
+    title: "Admin Dashboard - Balencia",
+    description: "Balencia administration panel for managing users, content, and platform settings.",
     path: "/admin",
     noIndex: true,
   }),
 
   adminBlogs: createMetadata({
-    title: "Blog Management - YHealth Admin",
+    title: "Blog Management - Balencia Admin",
     description: "Create, edit, and manage blog posts. Track engagement, publish content, and use AI to generate health articles.",
     path: "/admin/blogs",
     noIndex: true,
   }),
 
   adminBlogCreate: createMetadata({
-    title: "Create Blog Post - YHealth Admin",
+    title: "Create Blog Post - Balencia Admin",
     description: "Write and publish a new health and wellness blog post with AI-assisted content generation.",
     path: "/admin/blogs/create",
     noIndex: true,
@@ -555,19 +588,19 @@ export const SEO = {
 
   // --- Onboarding ---
   onboarding: createMetadata({
-    title: "Welcome to YHealth - Personalize Your Health Journey",
-    description: "Set up your health profile, define your wellness goals, and let our AI create a personalized plan tailored to your lifestyle.",
+    title: "Welcome to Balencia - Personalize Your Life Coaching Journey",
+    description: "Set up your profile, define your life goals, and let our AI life coach create a personalized improvement plan tailored to your lifestyle and aspirations.",
     path: "/onboarding",
     noIndex: true,
   }),
 
   // --- Legal ---
   privacy: createMetadata({
-    title: "Privacy Policy - How YHealth Protects Your Health Data",
+    title: "Privacy Policy - How Balencia Protects Your Health Data",
     description:
-      "Learn how YHealth collects, uses, and protects your personal health information. Our commitment to data privacy, GDPR compliance, and transparent data practices.",
+      "Learn how Balencia collects, uses, and protects your personal health information. Our commitment to data privacy, GDPR compliance, and transparent data practices.",
     keywords: [
-      "YHealth privacy policy",
+      "Balencia privacy policy",
       "health data privacy",
       "GDPR compliance",
       "data protection",
@@ -578,11 +611,11 @@ export const SEO = {
   }),
 
   terms: createMetadata({
-    title: "Terms of Service - YHealth Platform Agreement",
+    title: "Terms of Service - Balencia Platform Agreement",
     description:
-      "Review the terms and conditions governing your use of the YHealth AI health platform. Understand your rights, responsibilities, and our service commitments.",
+      "Review the terms and conditions governing your use of the Balencia AI health platform. Understand your rights, responsibilities, and our service commitments.",
     keywords: [
-      "YHealth terms of service",
+      "Balencia terms of service",
       "user agreement",
       "platform terms",
       "health app terms",
@@ -592,11 +625,11 @@ export const SEO = {
   }),
 
   cookies: createMetadata({
-    title: "Cookie Policy - How YHealth Uses Cookies & Tracking",
+    title: "Cookie Policy - How Balencia Uses Cookies & Tracking",
     description:
-      "Understand how YHealth uses cookies, local storage, and similar technologies to enhance your health platform experience and respect your privacy preferences.",
+      "Understand how Balencia uses cookies, local storage, and similar technologies to enhance your health platform experience and respect your privacy preferences.",
     keywords: [
-      "YHealth cookie policy",
+      "Balencia cookie policy",
       "cookies usage",
       "tracking technologies",
       "cookie preferences",
@@ -606,9 +639,9 @@ export const SEO = {
   }),
 
   hipaa: createMetadata({
-    title: "HIPAA Compliance - YHealth Health Data Protection Standards",
+    title: "HIPAA Compliance - Balencia Health Data Protection Standards",
     description:
-      "Learn about YHealth's HIPAA compliance measures, protected health information (PHI) safeguards, and our commitment to healthcare data security standards.",
+      "Learn about Balencia's HIPAA compliance measures, protected health information (PHI) safeguards, and our commitment to healthcare data security standards.",
     keywords: [
       "HIPAA compliance",
       "health data protection",
@@ -621,11 +654,11 @@ export const SEO = {
   }),
 
   security: createMetadata({
-    title: "Security - How YHealth Safeguards Your Data",
+    title: "Security - How Balencia Safeguards Your Data",
     description:
-      "Explore YHealth's enterprise-grade security infrastructure, encryption standards, SOC 2 compliance, penetration testing, and comprehensive data protection measures.",
+      "Explore Balencia's enterprise-grade security infrastructure, encryption standards, SOC 2 compliance, penetration testing, and comprehensive data protection measures.",
     keywords: [
-      "YHealth security",
+      "Balencia security",
       "data encryption",
       "SOC 2 compliance",
       "health app security",
@@ -636,34 +669,49 @@ export const SEO = {
   }),
 
   // --- Resources ---
-  helpCenter: createMetadata({
-    title: "Help Center - YHealth Support & Guides",
+  faq: createMetadata({
+    title: "FAQ - Frequently Asked Questions About Balencia",
     description:
-      "Find answers to your questions about YHealth. Browse our help articles, tutorials, and guides to get the most out of your AI-powered health platform.",
+      "Get answers to common questions about Balencia's AI coaching, data security, wearable integrations, pricing, and more. Everything you need to know in one place.",
     keywords: [
-      "YHealth help",
+      "Balencia FAQ",
+      "health app questions",
+      "AI coaching FAQ",
+      "Balencia security",
+      "wearable integrations",
+      "Balencia pricing",
+    ],
+    path: "/faq",
+  }),
+
+  helpCenter: createMetadata({
+    title: "Help Center - Balencia Support & Guides",
+    description:
+      "Find answers to your questions about Balencia. Browse our help articles, tutorials, and guides to get the most out of your AI-powered health platform.",
+    keywords: [
+      "Balencia help",
       "support center",
       "health app help",
-      "YHealth FAQ",
+      "Balencia FAQ",
       "user guides",
-      "YHealth tutorials",
+      "Balencia tutorials",
       "health platform support",
     ],
     path: "/help",
   }),
 
   community: createMetadata({
-    title: "Community - Connect with Health Enthusiasts",
+    title: "Community - Connect with Growth-Minded Individuals",
     description:
-      "Join the YHealth community. Share your wellness journey, ask questions, exchange tips, and connect with thousands of health-conscious individuals.",
+      "Join the Balencia community. Share your personal growth journey, ask questions, exchange tips, and connect with thousands of people committed to self-improvement.",
     keywords: [
-      "health community",
-      "wellness forum",
-      "fitness community",
-      "health discussions",
-      "wellness support group",
-      "health tips sharing",
-      "fitness social network",
+      "personal growth community",
+      "self-improvement forum",
+      "life coaching community",
+      "personal development discussions",
+      "growth support group",
+      "life improvement tips",
+      "coaching social network",
     ],
     path: "/community",
   }),
@@ -686,52 +734,52 @@ export const SEO = {
 
   // --- Company ---
   careers: createMetadata({
-    title: "Careers at YHealth - Join Our Mission to Transform Health",
+    title: "Careers at Balencia - Join Our Mission to Transform Lives",
     description:
-      "Explore exciting career opportunities at YHealth. Join our team of innovators building the future of AI-powered personal health and wellness.",
+      "Explore exciting career opportunities at Balencia. Join our team of innovators building the future of AI-powered life coaching and personal transformation.",
     keywords: [
-      "YHealth careers",
-      "health tech jobs",
-      "AI health jobs",
-      "wellness startup careers",
-      "health technology careers",
-      "join YHealth team",
+      "Balencia careers",
+      "life coaching tech jobs",
+      "AI coaching jobs",
+      "personal growth startup careers",
+      "coaching technology careers",
+      "join Balencia team",
     ],
     path: "/careers",
   }),
 
   press: createMetadata({
-    title: "Press & Media - YHealth News & Coverage",
+    title: "Press & Media - Balencia News & Coverage",
     description:
-      "Stay updated with the latest YHealth news, media coverage, press releases, and company announcements. Download brand assets and press kit.",
+      "Stay updated with the latest Balencia news, media coverage, press releases, and company announcements. Download brand assets and press kit.",
     keywords: [
-      "YHealth press",
-      "YHealth news",
+      "Balencia press",
+      "Balencia news",
       "health tech news",
-      "YHealth media",
+      "Balencia media",
       "press releases",
-      "YHealth announcements",
+      "Balencia announcements",
     ],
     path: "/press",
   }),
   // --- Contact ---
   contact: createMetadata({
-    title: "Contact Us - Get in Touch with YHealth",
+    title: "Contact Us - Get in Touch with Balencia",
     description:
-      "Have questions about YHealth? Reach out to our team for support, partnerships, or general inquiries. We're here to help you on your wellness journey.",
+      "Have questions about Balencia? Reach out to our team for support, partnerships, or general inquiries. We're here to help you on your wellness journey.",
     keywords: [
-      "contact YHealth",
-      "YHealth support",
+      "contact Balencia",
+      "Balencia support",
       "health app contact",
       "wellness platform help",
-      "get in touch YHealth",
+      "get in touch Balencia",
     ],
     path: "/contact",
   }),
 
   // --- Fitness & Social ---
   exercises: createMetadata({
-    title: "Exercise Library - Browse AI-Curated Workouts | YHealth",
+    title: "Exercise Library - Browse AI-Curated Workouts | Balencia",
     description:
       "Explore hundreds of AI-curated exercises with step-by-step guides, muscle group targeting, difficulty levels, and video demonstrations. Build your perfect workout routine.",
     keywords: [
@@ -748,7 +796,7 @@ export const SEO = {
   }),
 
   leaderboard: createMetadata({
-    title: "Leaderboard - Compete & Track Your Fitness Rank | YHealth",
+    title: "Leaderboard - Compete & Track Your Fitness Rank | Balencia",
     description:
       "See how you stack up against other health enthusiasts. Track your ranking, compete in fitness challenges, and climb the leaderboard with consistent healthy habits.",
     keywords: [
@@ -763,7 +811,7 @@ export const SEO = {
   }),
 
   competitions: createMetadata({
-    title: "Competitions - Join Health & Fitness Challenges | YHealth",
+    title: "Competitions - Join Health & Fitness Challenges | Balencia",
     description:
       "Join exciting health and fitness competitions. Challenge friends, track team progress, earn rewards, and stay motivated with community-driven wellness challenges.",
     keywords: [
@@ -775,5 +823,22 @@ export const SEO = {
       "health competition platform",
     ],
     path: "/competitions",
+  }),
+
+  yoga: createMetadata({
+    title: "Yoga & Meditation - AI-Powered Sessions | Balencia",
+    description:
+      "Practice yoga and meditation with AI-generated sessions personalized to your health data. Recovery flows, breathwork, guided meditation, and real-time pose library.",
+    keywords: [
+      "yoga app",
+      "guided meditation",
+      "recovery yoga",
+      "breathwork exercises",
+      "AI yoga sessions",
+      "yoga pose library",
+      "meditation timer",
+      "yoga streak tracker",
+    ],
+    path: "/yoga",
   }),
 } as const;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -75,6 +75,7 @@ export default function AdminUsersPageContent() {
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -97,6 +98,8 @@ export default function AdminUsersPageContent() {
     unverified: 0,
     by_role: {} as Record<string, number>,
   });
+  const hasLoadedOnce = useRef(false);
+
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     title: string;
@@ -130,8 +133,12 @@ export default function AdminUsersPageContent() {
       verified: string = "all",
       itemsPerPage: number = 20
     ) => {
+      const isInitialLoad = !hasLoadedOnce.current;
       try {
-        setLoading(true);
+        if (isInitialLoad) {
+          setLoading(true);
+        }
+        setFetching(true);
         setError(null);
 
         const params: Record<string, string> = {
@@ -163,12 +170,13 @@ export default function AdminUsersPageContent() {
         ]);
 
         if (usersResponse.success && usersResponse.data) {
-          const users = Array.isArray(usersResponse.data) ? usersResponse.data : [];
+          const fetchedUsers = Array.isArray(usersResponse.data) ? usersResponse.data : [];
           const meta = usersResponse.meta;
 
-          setUsers(users);
+          setUsers(fetchedUsers);
           setTotalPages(meta?.totalPages || 1);
           setTotal(meta?.total || 0);
+          hasLoadedOnce.current = true;
         } else {
           throw new Error("Failed to fetch users");
         }
@@ -184,6 +192,7 @@ export default function AdminUsersPageContent() {
         }
       } finally {
         setLoading(false);
+        setFetching(false);
       }
     },
     [sortBy, sortOrder]
@@ -195,10 +204,10 @@ export default function AdminUsersPageContent() {
     }
   }, [page, searchQuery, roleFilter, statusFilter, verifiedFilter, limit, user, fetchUsers, sortBy, sortOrder]);
 
-  const handleSearch = (query: string) => {
+  const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
     setPage(1);
-  };
+  }, []);
 
   const handleDelete = (userId: string) => {
     setConfirmModal({
@@ -619,8 +628,8 @@ export default function AdminUsersPageContent() {
         )}
       </motion.div>
 
-      {/* Loading State */}
-      {loading && (
+      {/* Initial Loading State — only on first load when no data yet */}
+      {loading && users.length === 0 && (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
             <div
@@ -662,8 +671,8 @@ export default function AdminUsersPageContent() {
         </motion.div>
       )}
 
-      {/* User Content */}
-      {!loading && !error && (
+      {/* User Content — stays visible during pagination (dimmed while fetching) */}
+      {!(loading && users.length === 0) && !error && (
         <>
           {/* Empty State */}
           {users.length === 0 && (
@@ -696,13 +705,26 @@ export default function AdminUsersPageContent() {
             </motion.div>
           )}
 
+          {/* Fetching overlay — subtle indicator while paginating */}
+          {fetching && users.length > 0 && (
+            <div className="flex items-center justify-center py-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 border border-slate-700/40">
+                <div className="h-3 w-3 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" />
+                <span className="text-xs text-slate-400">Loading...</span>
+              </div>
+            </div>
+          )}
+
           {/* Grid View */}
           {users.length > 0 && viewMode === "grid" && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+              className={cn(
+                "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 transition-opacity duration-200",
+                fetching && "opacity-50 pointer-events-none"
+              )}
             >
               <AnimatePresence mode="popLayout">
                 {users.map((user, index) => (
@@ -908,7 +930,10 @@ export default function AdminUsersPageContent() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
-              className="rounded-2xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-sm overflow-hidden shadow-xl shadow-black/10"
+              className={cn(
+                "rounded-2xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-sm overflow-hidden shadow-xl shadow-black/10 transition-opacity duration-200",
+                fetching && "opacity-50 pointer-events-none"
+              )}
             >
               <Table>
                 <TableHeader>

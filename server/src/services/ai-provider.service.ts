@@ -18,6 +18,9 @@ export interface AICompletionRequest {
   maxTokens?: number;
   temperature?: number;
   timeout?: number; // Optional timeout override (in milliseconds)
+  model?: string;   // Override default model (e.g., 'gemini-2.5-pro' for high-quality generation)
+  jsonMode?: boolean; // Request JSON output format (Gemini responseMimeType)
+  imageBase64?: string; // Base64 image for vision models (data:image/jpeg;base64,... or raw base64)
 }
 
 export interface AICompletionResponse {
@@ -39,6 +42,7 @@ interface GeminiResponse {
         text?: string;
       }>;
     };
+    finishReason?: string;
   }>;
 }
 
@@ -85,41 +89,41 @@ class AIProviderService {
   }
 
   private initializeProviders(): void {
-    // Initialize OpenAI
-    if (env.openai.apiKey) {
-      try {
-        this.openaiClient = new OpenAI({
-          apiKey: env.openai.apiKey,
-          timeout: 60000, // Increased to 60 seconds for large prompts
-          maxRetries: 1,
-        });
-        this.providers.push({ name: 'openai', isAvailable: true, priority: 1 });
-        logger.info('[AIProvider] OpenAI initialized');
-      } catch (error) {
-        logger.warn('[AIProvider] Failed to initialize OpenAI', { error });
-      }
+    // Initialize Gemini as PRIMARY (will use REST API directly)
+    if (env.gemini.apiKey) {
+      this.providers.push({ name: 'gemini', isAvailable: true, priority: 1 });
+      logger.info('[AIProvider] Gemini initialized (primary)');
     }
 
-    // Initialize DeepSeek (OpenAI-compatible API)
+    // Initialize DeepSeek (OpenAI-compatible API) as secondary
     if (env.deepseek.apiKey) {
       try {
         this.deepseekClient = new OpenAI({
           apiKey: env.deepseek.apiKey,
           baseURL: `${env.deepseek.baseUrl}/v1`,
-          timeout: 60000, // Increased to 60 seconds for large prompts
+          timeout: 60000,
           maxRetries: 1,
         });
         this.providers.push({ name: 'deepseek', isAvailable: true, priority: 2 });
-        logger.info('[AIProvider] DeepSeek initialized');
+        logger.info('[AIProvider] DeepSeek initialized (fallback)');
       } catch (error) {
         logger.warn('[AIProvider] Failed to initialize DeepSeek', { error });
       }
     }
 
-    // Initialize Gemini (will use REST API directly)
-    if (env.gemini.apiKey) {
-      this.providers.push({ name: 'gemini', isAvailable: true, priority: 3 });
-      logger.info('[AIProvider] Gemini initialized');
+    // Initialize OpenAI as last resort fallback
+    if (env.openai.apiKey) {
+      try {
+        this.openaiClient = new OpenAI({
+          apiKey: env.openai.apiKey,
+          timeout: 60000,
+          maxRetries: 1,
+        });
+        this.providers.push({ name: 'openai', isAvailable: true, priority: 3 });
+        logger.info('[AIProvider] OpenAI initialized (fallback)');
+      } catch (error) {
+        logger.warn('[AIProvider] Failed to initialize OpenAI', { error });
+      }
     }
 
     // Sort providers by priority
@@ -150,7 +154,11 @@ class AIProviderService {
    * Generate completion with automatic fallback
    */
   async generateCompletion(request: AICompletionRequest): Promise<AICompletionResponse> {
-    const { systemPrompt, userPrompt, maxTokens = 1000, temperature = 0.7 } = request;
+    const fullRequest: AICompletionRequest = {
+      ...request,
+      maxTokens: request.maxTokens ?? 1000,
+      temperature: request.temperature ?? 0.7,
+    };
 
     const errors: Array<{ provider: string; error: string }> = [];
 
@@ -159,12 +167,7 @@ class AIProviderService {
       try {
         logger.info(`[AIProvider] Attempting completion with ${provider.name}`);
 
-        const result = await this.callProvider(provider.name, {
-          systemPrompt,
-          userPrompt,
-          maxTokens,
-          temperature,
-        });
+        const result = await this.callProvider(provider.name, fullRequest);
 
         logger.info(`[AIProvider] Successfully completed with ${provider.name}`);
         return result;
@@ -241,6 +244,7 @@ class AIProviderService {
       model,
       ...this.getTokenParameter(model, request.maxTokens || 1000),
       ...(supportsTemp ? { temperature: request.temperature } : {}),
+      ...(request.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
       messages: [
         { role: 'system', content: request.systemPrompt },
         { role: 'user', content: request.userPrompt },
@@ -272,6 +276,7 @@ class AIProviderService {
       model,
       ...this.getTokenParameter(model, request.maxTokens || 1000),
       temperature: request.temperature,
+      ...(request.jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
       messages: [
         { role: 'system', content: request.systemPrompt },
         { role: 'user', content: request.userPrompt },
@@ -298,63 +303,101 @@ class AIProviderService {
       throw new Error('Gemini API key not configured');
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.gemini.model}:generateContent?key=${env.gemini.apiKey}`;
+    const primaryModel = request.model || (request.imageBase64 ? (env.gemini.visionModel || env.gemini.model) : env.gemini.model);
+    const GEMINI_FALLBACK_MODELS = [primaryModel, 'gemini-2.5-flash-lite'];
+    let geminiModel = primaryModel;
     const timeout = request.timeout || 60000; // Default 60 seconds
 
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    // Try each Gemini model in order (primary → fallback)
+    for (let modelIdx = 0; modelIdx < GEMINI_FALLBACK_MODELS.length; modelIdx++) {
+      geminiModel = GEMINI_FALLBACK_MODELS[modelIdx];
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${env.gemini.apiKey}`;
 
-    try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-        signal: controller.signal,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: request.systemPrompt }],
+            },
+            contents: [
               {
-                text: `${request.systemPrompt}\n\n${request.userPrompt}`,
+                role: 'user',
+                parts: [
+                  { text: request.userPrompt },
+                  ...(request.imageBase64 ? [{
+                    inlineData: {
+                      mimeType: request.imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+                      data: request.imageBase64.replace(/^data:image\/[a-z]+;base64,/, ''),
+                    },
+                  }] : []),
+                ],
               },
             ],
-          },
-        ],
-        generationConfig: {
-          temperature: request.temperature,
-          maxOutputTokens: request.maxTokens,
-        },
-      }),
-    });
+            generationConfig: {
+              temperature: request.temperature,
+              maxOutputTokens: request.maxTokens,
+              ...(request.jsonMode ? { responseMimeType: 'application/json' } : {}),
+            },
+          }),
+        });
 
-      clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Gemini API error: ${response.status} - ${error}`);
-    }
+        if (!response.ok) {
+          const errorText = await response.text();
+          // If 503/429 and we have a fallback model, try it
+          if ((response.status === 503 || response.status === 429) && modelIdx < GEMINI_FALLBACK_MODELS.length - 1) {
+            logger.warn(`[AIProvider] Gemini ${geminiModel} returned ${response.status}, trying fallback model`, {
+              model: geminiModel,
+              fallback: GEMINI_FALLBACK_MODELS[modelIdx + 1],
+            });
+            continue;
+          }
+          throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+        }
 
-    const data = await response.json() as GeminiResponse;
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const data = await response.json() as GeminiResponse;
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const content = parts.map(p => p.text || '').join('');
 
-    if (!content) {
-      throw new Error('Empty response from Gemini');
-    }
+        if (!content) {
+          throw new Error('Empty response from Gemini');
+        }
 
-    return {
-      content,
-      provider: 'gemini',
-      model: env.gemini.model,
-    };
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timed out.');
+        const finishReason = data.candidates?.[0]?.finishReason;
+        if (finishReason === 'MAX_TOKENS') {
+          logger.warn(`[AIProvider] Gemini response truncated (MAX_TOKENS)`, { model: geminiModel, maxTokens: request.maxTokens });
+          // If truncated and we have a fallback with higher limits, DON'T retry — return what we have
+          // The caller should increase maxTokens instead
+        }
+
+        logger.info(`[AIProvider] Gemini completed`, { model: geminiModel, jsonMode: !!request.jsonMode, finishReason });
+
+        return { content, provider: 'gemini', model: geminiModel };
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          // Timeout — try fallback model
+          if (modelIdx < GEMINI_FALLBACK_MODELS.length - 1) {
+            logger.warn(`[AIProvider] Gemini ${geminiModel} timed out, trying fallback model`);
+            continue;
+          }
+          throw new Error('Request timed out.');
+        }
+        // Non-retryable error or last model — throw
+        if (modelIdx >= GEMINI_FALLBACK_MODELS.length - 1) throw error;
+        logger.warn(`[AIProvider] Gemini ${geminiModel} failed, trying fallback`, { error: (error as Error).message });
+        continue;
       }
-      throw error;
     }
+
+    throw new Error('All Gemini models failed');
   }
 
   /**

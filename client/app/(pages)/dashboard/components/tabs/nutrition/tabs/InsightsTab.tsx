@@ -119,7 +119,7 @@ export function InsightsTab({ onOpenPreferences }: InsightsTabProps) {
       {/* Header with Refresh */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">Nutrition Insights</h2>
+          <h2 className="text-base font-semibold text-white">Nutrition Insights</h2>
           <p className="text-sm text-slate-400">AI-powered analysis of your eating patterns</p>
         </div>
         <div className="flex items-center gap-2">
@@ -160,14 +160,14 @@ export function InsightsTab({ onOpenPreferences }: InsightsTabProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-xl bg-slate-900/50">
               <p className="text-sm text-slate-400 mb-1">Base Target</p>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-lg font-semibold text-white">
                 {adjustedTargets.baseCalories.toLocaleString()}
                 <span className="text-sm font-normal text-slate-400 ml-1">kcal</span>
               </p>
             </div>
             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
               <p className="text-sm text-emerald-400 mb-1">Adjusted Target</p>
-              <p className="text-2xl font-bold text-emerald-400">
+              <p className="text-lg font-semibold text-emerald-400">
                 {adjustedTargets.adjustedCalories.toLocaleString()}
                 <span className="text-sm font-normal text-emerald-300 ml-1">kcal</span>
               </p>

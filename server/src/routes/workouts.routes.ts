@@ -569,38 +569,25 @@ router.post(
       return;
     }
 
-    const systemPrompt = `You are a certified personal trainer. Suggest exercises based on the user's criteria. Always respond with valid JSON.
+    const systemPrompt = `You are a certified personal trainer. Suggest exercises as valid JSON only — no markdown, no code blocks.
 
-Respond ONLY with a JSON object in this exact format (no markdown, no code blocks):
-{
-  "exercises": [
-    {
-      "name": "Exercise name",
-      "sets": 3,
-      "reps": "10-12",
-      "restSeconds": 60,
-      "muscleGroup": "Primary muscle",
-      "instructions": ["Step 1", "Step 2"],
-      "tips": "Form tips"
-    }
-  ],
-  "workoutTips": ["General tip 1", "General tip 2"]
-}
+STRICT FORMAT — every exercise must match this exactly:
+{"exercises":[{"name":"Barbell Squat","sets":4,"reps":"8-10","restSeconds":90,"muscleGroup":"Legs","instructions":["Feet shoulder-width, bar on upper back","Squat to parallel, drive through heels"],"tips":"Keep chest up"}],"workoutTips":["Warm up 5 min before starting"]}
 
-Consider:
-- Target muscle groups: ${muscleGroups.length > 0 ? muscleGroups.join(', ') : 'Full body'}
-- Difficulty: ${difficulty}
-- Available equipment: ${equipment.length > 0 ? equipment.join(', ') : 'Bodyweight only'}
-- Target duration: ${duration} minutes
+RULES:
+- Suggest 6-8 exercises for: ${muscleGroups.length > 0 ? muscleGroups.join(', ') : 'Full body'}, ${difficulty}, ${duration} min
+- Equipment: ${equipment.length > 0 ? equipment.join(', ') : 'Bodyweight only'}
 - Goal: ${goalCategory.replace('_', ' ')}
-
-Suggest 6-8 exercises that form a complete workout.`;
+- instructions: MAX 2-3 SHORT steps (under 15 words each). NO long sentences.
+- tips: ONE short sentence (under 15 words)
+- muscleGroup: ONE primary muscle only (e.g. "Chest" not "Chest, Shoulders, Triceps")
+- Keep total response COMPACT — under 2000 tokens`;
 
     try {
       const response = await aiProviderService.generateCompletion({
         systemPrompt,
         userPrompt: `Create a ${difficulty} workout targeting ${muscleGroups.length > 0 ? muscleGroups.join(', ') : 'full body'} for about ${duration} minutes.`,
-        maxTokens: 1500,
+        maxTokens: 3000,
         temperature: 0.7,
       });
 
@@ -619,18 +606,44 @@ Suggest 6-8 exercises that form a complete workout.`;
 
       try {
         let jsonStr = response.content.trim();
-        const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[1].trim();
+        // Strip markdown code blocks if present
+        const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (codeBlockMatch) {
+          jsonStr = codeBlockMatch[1].trim();
+        }
+        // Extract JSON object if surrounded by extra text
+        const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          jsonStr = objMatch[0];
         }
         exerciseData = JSON.parse(jsonStr);
       } catch {
-        logger.warn('[Workouts] Failed to parse AI exercise suggestions', { userId, response: response.content });
-        res.status(500).json({
-          success: false,
-          error: 'Failed to parse AI response',
-        });
-        return;
+        // Attempt to salvage truncated JSON
+        try {
+          let salvaged = response.content.trim();
+          const objMatch = salvaged.match(/\{[\s\S]*/);
+          if (objMatch) {
+            salvaged = objMatch[0];
+            // Remove trailing incomplete value
+            salvaged = salvaged.replace(/,\s*\{[^}]*$/, '');  // Remove last incomplete exercise object
+            salvaged = salvaged.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+            // Close open arrays and objects
+            const openBraces = (salvaged.match(/\{/g) || []).length - (salvaged.match(/\}/g) || []).length;
+            const openBrackets = (salvaged.match(/\[/g) || []).length - (salvaged.match(/\]/g) || []).length;
+            salvaged += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+            exerciseData = JSON.parse(salvaged);
+            logger.info('[Workouts] Salvaged truncated AI exercise response', { userId, exerciseCount: exerciseData.exercises?.length });
+          } else {
+            throw new Error('No JSON found');
+          }
+        } catch {
+          logger.warn('[Workouts] Failed to parse AI exercise suggestions', { userId, response: response.content });
+          res.status(500).json({
+            success: false,
+            error: 'Failed to parse AI response',
+          });
+          return;
+        }
       }
 
       logger.info('[Workouts] AI suggested exercises', { userId, count: exerciseData.exercises?.length, provider: response.provider });

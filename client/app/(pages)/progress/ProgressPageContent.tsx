@@ -22,7 +22,7 @@ function ProgressContent() {
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
           <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl" />
         </div>
-        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="relative max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
           <ProgressTab />
         </div>
       </div>

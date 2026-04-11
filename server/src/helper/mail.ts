@@ -34,31 +34,31 @@ logger.info(`[Mail] Templates path resolved to: ${TEMPLATES_PATH}`);
  * Email subject lines for each template type
  */
 export const EMAIL_SUBJECTS = {
-  'verification': 'Verify Your Email - yHealth',
-  'resend-verification': 'New Verification Link - yHealth',
-  'email-verified': 'Email Verified! - yHealth',
-  'password-reset': 'Reset Your Password - yHealth',
-  'password-changed': 'Password Changed - yHealth',
-  'password-reset-otp': 'Your Password Reset Code - yHealth',
-  'registration-otp': 'Your Verification Code - yHealth',
-  'security-alert': 'Security Alert - yHealth',
-  'welcome': 'Welcome to yHealth - Your AI Life Coach!',
-  'assessment-reminder': 'Complete Your Assessment - yHealth',
-  'integration-reminder': 'Connect Your Devices - yHealth',
-  'goal-set': 'Goal Set! - yHealth',
-  'onboarding-complete': "You're All Set! - yHealth",
-  'weekly-progress': 'Your Weekly Progress - yHealth',
-  'milestone-achieved': 'Milestone Achieved! - yHealth',
-  'streak-milestone': 'Streak Milestone! - yHealth',
-  're-engagement': 'We Miss You! - yHealth',
-  'task-reminder': 'Task Reminder - yHealth',
-  'contact-confirmation': 'We Received Your Message - yHealth',
-  'contact-admin-note': 'Update on Your Inquiry - yHealth',
-  'subscription-confirmation': 'You\'re In! Your yHealth Subscription is Active',
-  'subscription-invoice': 'Your yHealth Invoice is Ready',
+  'verification': 'Verify Your Email - Balencia',
+  'resend-verification': 'New Verification Link - Balencia',
+  'email-verified': 'Email Verified! - Balencia',
+  'password-reset': 'Reset Your Password - Balencia',
+  'password-changed': 'Password Changed - Balencia',
+  'password-reset-otp': 'Your Password Reset Code - Balencia',
+  'registration-otp': 'Your Verification Code - Balencia',
+  'security-alert': 'Security Alert - Balencia',
+  'welcome': 'Welcome to Balencia - Your AI Life Coach!',
+  'assessment-reminder': 'Complete Your Assessment - Balencia',
+  'integration-reminder': 'Connect Your Devices - Balencia',
+  'goal-set': 'Goal Set! - Balencia',
+  'onboarding-complete': "You're All Set! - Balencia",
+  'weekly-progress': 'Your Weekly Progress - Balencia',
+  'milestone-achieved': 'Milestone Achieved! - Balencia',
+  'streak-milestone': 'Streak Milestone! - Balencia',
+  're-engagement': 'We Miss You! - Balencia',
+  'task-reminder': 'Task Reminder - Balencia',
+  'contact-confirmation': 'We Received Your Message - Balencia',
+  'contact-admin-note': 'Update on Your Inquiry - Balencia',
+  'subscription-confirmation': 'You\'re In! Your Balencia Subscription is Active',
+  'subscription-invoice': 'Your Balencia Invoice is Ready',
   // Email engine templates
-  'coachingInsight': 'A Message from Your AI Coach - yHealth',
-  'digestSummary': 'Your Weekly Summary - yHealth',
+  'coachingInsight': 'A Message from Your AI Coach - Balencia',
+  'digestSummary': 'Your Weekly Summary - Balencia',
 } as const;
 
 export type EmailTemplateType = keyof typeof EMAIL_SUBJECTS;
@@ -151,7 +151,7 @@ export interface IMailHelper {
 }
 
 /**
- * Mail Helper - Centralized email sending utility for yHealth
+ * Mail Helper - Centralized email sending utility for Balencia
  * Uses EJS templates for rendering beautiful, responsive emails
  */
 class MailHelper {
@@ -323,7 +323,7 @@ class MailHelper {
     }
 
     try {
-      const { email, subject, template, html: providedHtml, text, data, fromName = 'yHealth', attachments } = options;
+      const { email, subject, template, html: providedHtml, text, data, fromName = 'Balencia', attachments } = options;
 
       if (!email || !subject) {
         throw new Error('Missing required email parameters: email or subject');
@@ -737,7 +737,7 @@ class MailHelper {
 
     return this.send({
       email,
-      subject: `${streakDays} Day Streak! - yHealth`,
+      subject: `${streakDays} Day Streak! - Balencia`,
       template: 'streakMilestone',
       data: { firstName, streakDays, dashboardUrl, nextMilestone, motivationalQuote, quoteAuthor },
     });
@@ -858,12 +858,12 @@ class MailHelper {
       <body>
         <div class="container">
           <div class="header">
-            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">yHealth Support</h1>
+            <h1 style="color: #FFFFFF; margin: 0; font-size: 24px;">Balencia Support</h1>
           </div>
           <div class="content">
             <p>Hello ${name},</p>
             <div class="message">${replyMessage.replace(/\n/g, '<br>')}</div>
-            ${adminName ? `<p style="margin-top: 20px; color: #6B7280; font-size: 14px;">Best regards,<br><strong>${adminName}</strong><br>yHealth Support Team</p>` : '<p style="margin-top: 20px; color: #6B7280; font-size: 14px;">Best regards,<br>yHealth Support Team</p>'}
+            ${adminName ? `<p style="margin-top: 20px; color: #6B7280; font-size: 14px;">Best regards,<br><strong>${adminName}</strong><br>Balencia Support Team</p>` : '<p style="margin-top: 20px; color: #6B7280; font-size: 14px;">Best regards,<br>Balencia Support Team</p>'}
             <div class="footer">
               <p>This is a reply to your inquiry: <strong>${originalSubject}</strong></p>
               ${adminEmail ? `<p>You can reply directly to this email or contact us at ${adminEmail}</p>` : ''}
@@ -878,7 +878,7 @@ class MailHelper {
       email,
       subject,
       html,
-      fromName: adminName || 'yHealth Support',
+      fromName: adminName || 'Balencia Support',
     });
   }
 
@@ -907,7 +907,7 @@ class MailHelper {
       email,
       subject: EMAIL_SUBJECTS['subscription-confirmation'],
       html,
-      fromName: 'yHealth',
+      fromName: 'Balencia',
     });
   }
 
@@ -925,7 +925,7 @@ class MailHelper {
       email,
       subject: EMAIL_SUBJECTS['subscription-invoice'],
       html,
-      fromName: 'yHealth',
+      fromName: 'Balencia',
     });
   }
 
@@ -949,7 +949,7 @@ class MailHelper {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="x-apple-disable-message-reformatting">
-  <title>Your subscription is active - yHealth</title>
+  <title>Your subscription is active - Balencia</title>
   <style>
     body, table, td { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
@@ -999,7 +999,7 @@ class MailHelper {
                       </tr>
                     </table>
                     <h1 style="margin:0 0 8px 0; font-size:24px; font-weight:700; color:#1f2937; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; text-align:center;">You're all set, ${firstName}!</h1>
-                    <p style="margin:0 0 28px 0; font-size:16px; line-height:26px; color:#4b5563; text-align:center;">Your yHealth subscription is now active.</p>
+                    <p style="margin:0 0 28px 0; font-size:16px; line-height:26px; color:#4b5563; text-align:center;">Your Balencia subscription is now active.</p>
                     <!-- Plan summary box -->
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f0fdf4; border-radius:12px; border:1px solid #a7f3d0;">
                       <tr>
@@ -1052,7 +1052,7 @@ class MailHelper {
           <!-- Footer -->
           <tr>
             <td align="center" style="padding:28px 24px;">
-              <p style="margin:0; font-size:12px; color:#9ca3af;">yHealth by Xyric Solutions · Your AI Life Coach</p>
+              <p style="margin:0; font-size:12px; color:#9ca3af;">Balencia by Xyric Solutions · Your AI Life Coach</p>
             </td>
           </tr>
         </table>
@@ -1082,7 +1082,7 @@ class MailHelper {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="x-apple-disable-message-reformatting">
-  <title>Your invoice - yHealth</title>
+  <title>Your invoice - Balencia</title>
   <style>
     body, table, td { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
@@ -1169,7 +1169,7 @@ class MailHelper {
           </tr>
           <tr>
             <td align="center" style="padding:28px 24px;">
-              <p style="margin:0; font-size:12px; color:#9ca3af;">yHealth by Xyric Solutions</p>
+              <p style="margin:0; font-size:12px; color:#9ca3af;">Balencia by Xyric Solutions</p>
             </td>
           </tr>
         </table>

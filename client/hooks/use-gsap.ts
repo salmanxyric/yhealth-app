@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useLayoutEffect, useCallback, type RefObject } from "react";
+import { useLayoutEffect, type RefObject } from "react";
 import { gsap, ScrollTrigger } from "@/lib/gsap-init";
 import { useReducedMotionSafe } from "./use-reduced-motion-safe";
 
@@ -63,7 +63,7 @@ export function useGSAPReveal(
   } = options;
 
   useGSAP(
-    (ctx) => {
+    (_ctx) => {
       if (!ref.current) return;
 
       const targets = childSelector

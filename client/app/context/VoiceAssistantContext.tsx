@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { detectBrowserLanguage, getAvailableLanguages, type LanguageConfig } from "@/lib/language-config";
 import type { VoiceGender } from "@/src/shared/services/tts.service";
 
-const DEFAULT_ASSISTANT_NAME = "YHealth Coach";
+const DEFAULT_ASSISTANT_NAME = "Balencia Coach";
 
 interface VoiceAssistantContextType {
   isOpen: boolean;

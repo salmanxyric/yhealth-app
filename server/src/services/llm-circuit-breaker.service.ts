@@ -1,19 +1,20 @@
 /**
  * @file LLM Circuit Breaker Service
- * @description Global circuit breaker for OpenAI/LLM API calls.
+ * @description Provider-aware circuit breaker for LLM API calls.
  *
- * When the OpenAI API returns 429 (rate limit / quota exceeded), this service
- * trips the circuit and prevents all further LLM calls for a cooldown period.
- * This avoids hammering a quota-exceeded API with thousands of doomed requests
- * from parallel jobs (proactive messaging, coaching profiles, daily analysis).
+ * When an LLM provider returns 429 (rate limit / quota exceeded), this service
+ * trips the circuit for that provider and tells ModelFactory to route subsequent
+ * calls to the next available provider. Only blocks ALL calls when every
+ * configured provider is rate-limited.
  *
  * States:
  *   CLOSED  → normal operation, calls allowed
- *   OPEN    → tripped by 429, all calls blocked for cooldown period
+ *   OPEN    → tripped by 429, blocks calls only if no fallback providers available
  *   HALF_OPEN → cooldown expired, allow ONE probe call to test if API is back
  */
 
 import { logger } from './logger.service.js';
+import { modelFactory } from './model-factory.service.js';
 
 type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
@@ -28,16 +29,42 @@ class LLMCircuitBreakerService {
   private maxCooldownMs = 60 * 60 * 1000;
   private currentCooldownMs = 5 * 60 * 1000;
 
+  // Hard safety limit: force reset after 2 hours regardless of failure count
+  // Prevents a single rate-limit event from killing messaging for days
+  private maxOpenDurationMs = 2 * 60 * 60 * 1000;
+
   /**
    * Check if an LLM call is allowed right now.
-   * Returns true if the call should proceed, false if circuit is open.
+   * If the failed provider is rate-limited but other providers are available,
+   * calls are still allowed (ModelFactory will route to the fallback).
    */
   isCallAllowed(): boolean {
     if (this.state === 'CLOSED') {
       return true;
     }
 
+    // If other providers are available, allow the call — ModelFactory will route
+    // to a non-rate-limited provider automatically
+    if (modelFactory.hasAvailableProviders()) {
+      return true;
+    }
+
     const elapsed = Date.now() - this.trippedAt;
+
+    // Hard safety reset: if circuit has been open longer than maxOpenDurationMs,
+    // force-close it to prevent permanent messaging outage
+    if (elapsed >= this.maxOpenDurationMs) {
+      logger.warn('[LLMCircuitBreaker] Hard safety reset — circuit open too long, force-closing', {
+        openDurationMs: elapsed,
+        maxOpenDurationMs: this.maxOpenDurationMs,
+        consecutiveFailures: this.consecutiveFailures,
+      });
+      this.state = 'CLOSED';
+      this.consecutiveFailures = 0;
+      this.probeInProgress = false;
+      this.currentCooldownMs = this.baseCooldownMs;
+      return true;
+    }
 
     if (elapsed >= this.currentCooldownMs) {
       // Cooldown expired — transition to HALF_OPEN, allow one probe call
@@ -76,6 +103,8 @@ class LLMCircuitBreakerService {
 
   /**
    * Record a rate limit / quota error. Trips (or re-trips) the circuit.
+   * Also notifies ModelFactory to blacklist the failing provider so that
+   * subsequent getModel() calls fall back to the next available provider.
    */
   recordRateLimitError(error?: unknown): void {
     this.consecutiveFailures++;
@@ -89,10 +118,18 @@ class LLMCircuitBreakerService {
       this.maxCooldownMs
     );
 
-    logger.warn('[LLMCircuitBreaker] Circuit OPEN — blocking all LLM calls', {
+    // Tell ModelFactory to blacklist the current provider for the cooldown duration
+    // so getModel() returns a model from the next available provider
+    modelFactory.markCurrentProviderRateLimited(this.currentCooldownMs);
+
+    const hasOtherProviders = modelFactory.hasAvailableProviders();
+
+    logger.warn(`[LLMCircuitBreaker] Circuit OPEN — ${hasOtherProviders ? 'falling back to other providers' : 'blocking all LLM calls'}`, {
       consecutiveFailures: this.consecutiveFailures,
       cooldownMs: this.currentCooldownMs,
       cooldownMinutes: Math.round(this.currentCooldownMs / 60000),
+      hasOtherProviders,
+      activeProvider: modelFactory.getActiveProvider(),
       error: error instanceof Error ? error.message : undefined,
     });
   }
@@ -114,6 +151,19 @@ class LLMCircuitBreakerService {
       );
     }
     return false;
+  }
+
+  /**
+   * Force-reset the circuit breaker to CLOSED state.
+   * Used by admin/health endpoints when manual intervention is needed.
+   */
+  forceReset(): void {
+    const previousState = this.state;
+    this.state = 'CLOSED';
+    this.consecutiveFailures = 0;
+    this.probeInProgress = false;
+    this.currentCooldownMs = this.baseCooldownMs;
+    logger.info('[LLMCircuitBreaker] Force reset by admin', { previousState });
   }
 
   /**

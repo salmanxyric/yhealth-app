@@ -1086,7 +1086,7 @@ export async function getUserHealthProfile(
     : null;
 
   // Determine if user has any data source (WHOOP integration OR fallback data)
-  const hasAnyHealthData = hasAnyData || !!(currentRecovery || currentSleep || todayStrainData);
+  const hasAnBalenciaData = hasAnyData || !!(currentRecovery || currentSleep || todayStrainData);
 
   // Return health profile with integration status info
   return {
@@ -1097,10 +1097,10 @@ export async function getUserHealthProfile(
     stress,
     // Include integration status for better UX
     _meta: {
-      hasIntegration: hasIntegration || hasAnyHealthData,
-      integrationStatus: integrationCheck.rows[0]?.status || (hasAnyHealthData ? 'active' : null),
+      hasIntegration: hasIntegration || hasAnBalenciaData,
+      integrationStatus: integrationCheck.rows[0]?.status || (hasAnBalenciaData ? 'active' : null),
       lastSyncAt: integrationCheck.rows[0]?.last_sync_at || null,
-      hasAnyData: hasAnyHealthData,
+      hasAnyData: hasAnBalenciaData,
       dataTypes,
     },
   };

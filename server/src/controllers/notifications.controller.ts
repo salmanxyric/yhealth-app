@@ -4,6 +4,7 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { query } from '../database/pg.js';
+import { notificationEngine } from '../services/notification-engine.service.js';
 
 // Types
 interface Notification {
@@ -270,6 +271,9 @@ const markAsRead = asyncHandler(async (req: AuthenticatedRequest, res: Response)
     { notification: transformNotification(result.rows[0]) },
     'Notification marked as read'
   );
+
+  // Emit updated counts via socket (fire-and-forget)
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Mark notification as unread
@@ -296,6 +300,8 @@ const markAsUnread = asyncHandler(async (req: AuthenticatedRequest, res: Respons
     { notification: transformNotification(result.rows[0]) },
     'Notification marked as unread'
   );
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Mark multiple notifications as read
@@ -327,6 +333,8 @@ const markMultipleAsRead = asyncHandler(async (req: AuthenticatedRequest, res: R
     { updatedCount: result.rows.length },
     `${result.rows.length} notifications marked as read`
   );
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Mark all notifications as read
@@ -361,6 +369,8 @@ const markAllAsRead = asyncHandler(async (req: AuthenticatedRequest, res: Respon
     { updatedCount: result.rows.length },
     `${result.rows.length} notifications marked as read`
   );
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Archive notification
@@ -387,6 +397,8 @@ const archiveNotification = asyncHandler(async (req: AuthenticatedRequest, res: 
     { notification: transformNotification(result.rows[0]) },
     'Notification archived'
   );
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Unarchive notification
@@ -413,6 +425,8 @@ const unarchiveNotification = asyncHandler(async (req: AuthenticatedRequest, res
     { notification: transformNotification(result.rows[0]) },
     'Notification unarchived'
   );
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Delete notification
@@ -432,6 +446,8 @@ const deleteNotification = asyncHandler(async (req: AuthenticatedRequest, res: R
   }
 
   ApiResponse.success(res, null, 'Notification deleted');
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Delete multiple notifications
@@ -462,6 +478,8 @@ const deleteMultipleNotifications = asyncHandler(async (req: AuthenticatedReques
     { deletedCount: result.rows.length },
     `${result.rows.length} notifications deleted`
   );
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Delete all read notifications
@@ -481,6 +499,8 @@ const deleteAllRead = asyncHandler(async (req: AuthenticatedRequest, res: Respon
     { deletedCount: result.rows.length },
     `${result.rows.length} read notifications deleted`
   );
+
+  notificationEngine.emitCountUpdate(userId).catch(() => {});
 });
 
 // Create notification (internal use / admin)
@@ -532,11 +552,29 @@ const createNotification = asyncHandler(async (req: AuthenticatedRequest, res: R
     ]
   );
 
+  const notification = result.rows[0];
+
   ApiResponse.success(
     res,
-    { notification: transformNotification(result.rows[0]) },
+    { notification: transformNotification(notification) },
     'Notification created successfully'
   );
+
+  // Emit real-time notification + updated counts (fire-and-forget)
+  if (notification) {
+    const { socketService } = await import('../services/socket.service.js');
+    socketService.emitToUser(notificationUserId, 'notification:new', {
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      priority: notification.priority,
+      icon: notification.icon,
+      actionUrl: notification.action_url,
+      createdAt: notification.created_at.toISOString(),
+    });
+    notificationEngine.emitCountUpdate(notificationUserId).catch(() => {});
+  }
 });
 
 // Get notification statistics

@@ -5,6 +5,7 @@
  */
 
 import { query } from '../database/pg.js';
+import { logger } from './logger.service.js';
 
 // ============================================
 // TYPES
@@ -987,6 +988,221 @@ class AIScoringService {
     }
 
     return computed;
+  }
+
+  /**
+   * Get score trend over N days (used by intelligence controller).
+   */
+  async getScoreTrend(
+    userId: string,
+    days: number
+  ): Promise<Array<{ date: string; totalScore: number; componentScores: ComponentScores }>> {
+    const result = await query<{
+      date: string;
+      total_score: number;
+      component_scores: Record<string, number>;
+    }>(
+      `SELECT date, total_score, component_scores
+       FROM daily_user_scores
+       WHERE user_id = $1
+         AND date >= CURRENT_DATE - $2::integer * INTERVAL '1 day'
+       ORDER BY date ASC`,
+      [userId, days]
+    );
+
+    return result.rows.map((r) => ({
+      date: r.date,
+      totalScore: parseFloat(r.total_score as unknown as string),
+      componentScores: normalizeComponentScores(
+        typeof r.component_scores === 'string'
+          ? JSON.parse(r.component_scores)
+          : r.component_scores
+      ),
+    }));
+  }
+
+  /**
+   * Calculate Life Score - a holistic metric measuring overall life improvement.
+   *
+   * Weight distribution:
+   *   - Health Score (daily score):     40%
+   *   - Life Goal Progress:            25%
+   *   - Intention Fulfillment (30d):   15%
+   *   - Consistency (14d check-ins):   10%
+   *   - Engagement (7d journal+mood):  10%
+   */
+  async calculateLifeScore(userId: string): Promise<{
+    totalScore: number;
+    components: {
+      healthScore: { score: number; weight: number };
+      lifeGoalProgress: { score: number; weight: number; activeGoalCount: number };
+      intentionFulfillment: { score: number; weight: number; rate: number };
+      consistency: { score: number; weight: number; checkinsLast14d: number };
+      engagement: { score: number; weight: number };
+    };
+  }> {
+    logger.info(`[LifeScore] Calculating life score for user ${userId}`);
+
+    // -------------------------------------------------------
+    // 1. Health Score (40%) — today's daily health score
+    // -------------------------------------------------------
+    let healthScore = 0;
+    try {
+      const todayResult = await query<{ total_score: number }>(
+        `SELECT total_score
+         FROM daily_user_scores
+         WHERE user_id = $1
+         ORDER BY date DESC
+         LIMIT 1`,
+        [userId]
+      );
+
+      if (todayResult.rows.length > 0) {
+        healthScore = parseFloat(todayResult.rows[0].total_score.toString());
+      } else {
+        // No cached score — compute live
+        const liveScore = await this.calculateDailyScore(userId, new Date());
+        healthScore = liveScore.totalScore;
+      }
+    } catch (err) {
+      logger.warn(`[LifeScore] Failed to get health score for user ${userId}`, { error: err instanceof Error ? err.message : String(err) });
+      healthScore = 0;
+    }
+
+    // -------------------------------------------------------
+    // 2. Life Goal Progress (25%) — average progress of active goals
+    // -------------------------------------------------------
+    let lifeGoalProgressScore = 0;
+    let activeGoalCount = 0;
+    try {
+      const goalsResult = await query<{ avg_progress: number | null; goal_count: string }>(
+        `SELECT
+           AVG(progress) as avg_progress,
+           COUNT(*) as goal_count
+         FROM life_goals
+         WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+
+      activeGoalCount = parseInt(goalsResult.rows[0]?.goal_count || '0', 10);
+      if (activeGoalCount > 0 && goalsResult.rows[0]?.avg_progress != null) {
+        // progress is stored as 0-100
+        lifeGoalProgressScore = Math.min(100, Math.max(0, goalsResult.rows[0].avg_progress));
+      }
+    } catch (err) {
+      logger.warn(`[LifeScore] Failed to get life goal progress for user ${userId}`, { error: err instanceof Error ? err.message : String(err) });
+    }
+
+    // -------------------------------------------------------
+    // 3. Intention Fulfillment (15%) — 30-day completion rate
+    // -------------------------------------------------------
+    let intentionFulfillmentScore = 0;
+    let intentionRate = 0;
+    try {
+      const intentionsResult = await query<{ total: string; fulfilled: string }>(
+        `SELECT
+           COUNT(*) as total,
+           COUNT(*) FILTER (WHERE is_fulfilled = true) as fulfilled
+         FROM daily_intentions
+         WHERE user_id = $1
+           AND created_at >= CURRENT_DATE - INTERVAL '30 days'`,
+        [userId]
+      );
+
+      const total = parseInt(intentionsResult.rows[0]?.total || '0', 10);
+      const fulfilled = parseInt(intentionsResult.rows[0]?.fulfilled || '0', 10);
+      if (total > 0) {
+        intentionRate = fulfilled / total;
+        intentionFulfillmentScore = intentionRate * 100;
+      }
+    } catch (err) {
+      logger.warn(`[LifeScore] Failed to get intention fulfillment for user ${userId}`, { error: err instanceof Error ? err.message : String(err) });
+    }
+
+    // -------------------------------------------------------
+    // 4. Consistency (10%) — life goal check-in frequency over 14 days
+    //    14 check-ins (1/day) = 100%
+    // -------------------------------------------------------
+    let consistencyScore = 0;
+    let checkinsLast14d = 0;
+    try {
+      const checkinsResult = await query<{ checkin_count: string }>(
+        `SELECT COUNT(*) as checkin_count
+         FROM life_goal_checkins
+         WHERE user_id = $1
+           AND created_at >= CURRENT_DATE - INTERVAL '14 days'`,
+        [userId]
+      );
+
+      checkinsLast14d = parseInt(checkinsResult.rows[0]?.checkin_count || '0', 10);
+      consistencyScore = Math.min(100, (checkinsLast14d / 14) * 100);
+    } catch (err) {
+      logger.warn(`[LifeScore] Failed to get consistency data for user ${userId}`, { error: err instanceof Error ? err.message : String(err) });
+    }
+
+    // -------------------------------------------------------
+    // 5. Engagement (10%) — journaling + mood tracking over 7 days
+    //    7+ total entries = 100%
+    // -------------------------------------------------------
+    let engagementScore = 0;
+    try {
+      const [journalResult, moodResult] = await Promise.all([
+        query<{ entry_count: string }>(
+          `SELECT COUNT(*) as entry_count
+           FROM journal_entries
+           WHERE user_id = $1
+             AND logged_at >= CURRENT_DATE - INTERVAL '7 days'`,
+          [userId]
+        ),
+        query<{ mood_count: string }>(
+          `SELECT COUNT(*) as mood_count
+           FROM mood_logs
+           WHERE user_id = $1
+             AND logged_at >= CURRENT_DATE - INTERVAL '7 days'`,
+          [userId]
+        ),
+      ]);
+
+      const journalCount = parseInt(journalResult.rows[0]?.entry_count || '0', 10);
+      const moodCount = parseInt(moodResult.rows[0]?.mood_count || '0', 10);
+      const totalEngagement = journalCount + moodCount;
+      engagementScore = Math.min(100, (totalEngagement / 7) * 100);
+    } catch (err) {
+      logger.warn(`[LifeScore] Failed to get engagement data for user ${userId}`, { error: err instanceof Error ? err.message : String(err) });
+    }
+
+    // -------------------------------------------------------
+    // Weighted total
+    // -------------------------------------------------------
+    const LIFE_SCORE_WEIGHTS = {
+      healthScore: 0.40,
+      lifeGoalProgress: 0.25,
+      intentionFulfillment: 0.15,
+      consistency: 0.10,
+      engagement: 0.10,
+    };
+
+    const totalScore =
+      healthScore * LIFE_SCORE_WEIGHTS.healthScore +
+      lifeGoalProgressScore * LIFE_SCORE_WEIGHTS.lifeGoalProgress +
+      intentionFulfillmentScore * LIFE_SCORE_WEIGHTS.intentionFulfillment +
+      consistencyScore * LIFE_SCORE_WEIGHTS.consistency +
+      engagementScore * LIFE_SCORE_WEIGHTS.engagement;
+
+    const result = {
+      totalScore: Math.round(totalScore * 100) / 100,
+      components: {
+        healthScore: { score: Math.round(healthScore * 100) / 100, weight: LIFE_SCORE_WEIGHTS.healthScore },
+        lifeGoalProgress: { score: Math.round(lifeGoalProgressScore * 100) / 100, weight: LIFE_SCORE_WEIGHTS.lifeGoalProgress, activeGoalCount },
+        intentionFulfillment: { score: Math.round(intentionFulfillmentScore * 100) / 100, weight: LIFE_SCORE_WEIGHTS.intentionFulfillment, rate: Math.round(intentionRate * 10000) / 10000 },
+        consistency: { score: Math.round(consistencyScore * 100) / 100, weight: LIFE_SCORE_WEIGHTS.consistency, checkinsLast14d },
+        engagement: { score: Math.round(engagementScore * 100) / 100, weight: LIFE_SCORE_WEIGHTS.engagement },
+      },
+    };
+
+    logger.info(`[LifeScore] User ${userId} life score: ${result.totalScore}`);
+
+    return result;
   }
 }
 

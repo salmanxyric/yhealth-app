@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Send } from "lucide-react";
+import { Send, MessageSquare } from "lucide-react";
 
 interface Question {
   id: string;
@@ -17,6 +16,14 @@ interface CheckInQuestionProps {
   question: Question;
   onRespond: (value: number | string, text?: string) => void;
 }
+
+/* ── Scale label colors by value (1-10) ── */
+const scaleColor = (v: number, max: number) => {
+  const ratio = v / max;
+  if (ratio <= 0.3) return { bg: "bg-emerald-500/20", text: "text-emerald-400", ring: "ring-emerald-500/40", activeBg: "bg-emerald-500", activeText: "text-white" };
+  if (ratio <= 0.6) return { bg: "bg-amber-500/20", text: "text-amber-400", ring: "ring-amber-500/40", activeBg: "bg-amber-500", activeText: "text-white" };
+  return { bg: "bg-rose-500/20", text: "text-rose-400", ring: "ring-rose-500/40", activeBg: "bg-rose-500", activeText: "text-white" };
+};
 
 export function CheckInQuestion({ question, onRespond }: CheckInQuestionProps) {
   const [selectedValue, setSelectedValue] = useState<number | string | null>(null);
@@ -32,36 +39,45 @@ export function CheckInQuestion({ question, onRespond }: CheckInQuestionProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
+      transition={{ duration: 0.35 }}
+      className="space-y-5"
     >
-      {/* Scale Question */}
+      {/* ── Scale Question ── */}
       {question.type === "scale" && question.scaleRange && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between text-sm text-slate-400 mb-4">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-slate-500 px-1">
             <span>{question.scaleRange.labels?.[0] || "Not at all"}</span>
             <span>{question.scaleRange.labels?.[1] || "Extremely"}</span>
           </div>
-          <div className="flex gap-2 justify-between">
+          <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
             {Array.from(
               { length: question.scaleRange.max - question.scaleRange.min + 1 },
               (_, i) => {
                 const value = question.scaleRange!.min + i;
                 const isSelected = selectedValue === value;
+                const colors = scaleColor(value, question.scaleRange!.max);
                 return (
                   <motion.button
                     key={value}
                     onClick={() => setSelectedValue(value)}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                    className={`flex-1 h-12 rounded-lg font-medium transition-all ${
+                    whileHover={{ scale: 1.08, y: -2 }}
+                    whileTap={{ scale: 0.92 }}
+                    className={`relative h-11 rounded-lg font-semibold text-sm transition-all duration-200 ${
                       isSelected
-                        ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30"
-                        : "bg-slate-700/50 text-slate-300 hover:bg-slate-700"
+                        ? `${colors.activeBg} ${colors.activeText} shadow-lg ring-2 ${colors.ring}`
+                        : `bg-white/[0.04] border border-white/[0.06] ${colors.text} hover:${colors.bg} hover:border-white/[0.12]`
                     }`}
                   >
                     {value}
+                    {isSelected && (
+                      <motion.div
+                        layoutId="scaleIndicator"
+                        className="absolute inset-0 rounded-lg bg-white/10"
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      />
+                    )}
                   </motion.button>
                 );
               }
@@ -70,33 +86,51 @@ export function CheckInQuestion({ question, onRespond }: CheckInQuestionProps) {
         </div>
       )}
 
-      {/* Frequency Question */}
+      {/* ── Frequency Question ── */}
       {question.type === "frequency" && question.options && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {question.options.map((option, index) => {
             const isSelected = selectedValue === option;
             return (
               <motion.button
                 key={index}
                 onClick={() => setSelectedValue(option)}
-                whileHover={{ scale: 1.02 }}
+                whileHover={{ x: 4 }}
                 whileTap={{ scale: 0.98 }}
-                className={`w-full p-4 rounded-lg text-left transition-all ${
+                className={`w-full flex items-center gap-3 p-3.5 rounded-xl text-left text-sm transition-all duration-200 ${
                   isSelected
-                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30"
-                    : "bg-slate-700/50 text-slate-300 hover:bg-slate-700"
+                    ? "bg-pink-500/15 text-pink-300 border border-pink-500/30 ring-1 ring-pink-500/20"
+                    : "bg-white/[0.03] text-slate-300 border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.1]"
                 }`}
               >
-                {option}
+                {/* Radio indicator */}
+                <div
+                  className={`flex-shrink-0 h-4 w-4 rounded-full border-2 transition-all duration-200 ${
+                    isSelected
+                      ? "border-pink-400 bg-pink-400"
+                      : "border-slate-600"
+                  }`}
+                >
+                  {isSelected && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="h-full w-full rounded-full flex items-center justify-center"
+                    >
+                      <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                    </motion.div>
+                  )}
+                </div>
+                <span className="font-medium">{option}</span>
               </motion.button>
             );
           })}
         </div>
       )}
 
-      {/* Text Question */}
+      {/* ── Text Question ── */}
       {question.type === "text" && (
-        <div className="space-y-4">
+        <div className="space-y-2">
           <textarea
             value={textInput}
             onChange={(e) => {
@@ -104,33 +138,46 @@ export function CheckInQuestion({ question, onRespond }: CheckInQuestionProps) {
               setSelectedValue(e.target.value);
             }}
             placeholder="Share your thoughts..."
-            className="w-full min-h-[100px] p-4 rounded-lg bg-slate-700/50 text-white placeholder-slate-400 border border-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none"
+            rows={4}
+            className="w-full p-4 rounded-xl bg-white/[0.03] text-white text-sm placeholder-slate-500 border border-white/[0.06] focus:border-pink-500/40 focus:outline-none focus:ring-2 focus:ring-pink-500/10 resize-none transition-colors"
           />
+          <div className="flex justify-end">
+            <span className="text-[10px] text-slate-600">
+              {textInput.length} / 500
+            </span>
+          </div>
         </div>
       )}
 
-      {/* Optional Text Input for All Types */}
+      {/* ── Optional context for scale / frequency ── */}
       {(question.type === "scale" || question.type === "frequency") && (
-        <div>
+        <div className="relative">
+          <MessageSquare className="absolute left-3.5 top-3.5 h-3.5 w-3.5 text-slate-600" />
           <textarea
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Add any additional context (optional)..."
-            className="w-full min-h-[80px] p-4 rounded-lg bg-slate-700/50 text-white placeholder-slate-400 border border-slate-600 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none"
+            placeholder="Add context (optional)..."
+            rows={2}
+            className="w-full pl-9 pr-4 py-3 rounded-xl bg-white/[0.02] text-white text-sm placeholder-slate-600 border border-white/[0.04] focus:border-pink-500/30 focus:outline-none focus:ring-1 focus:ring-pink-500/10 resize-none transition-colors"
           />
         </div>
       )}
 
-      {/* Submit Button */}
-      <Button
+      {/* ── Submit ── */}
+      <motion.button
         onClick={handleSubmit}
         disabled={selectedValue === null}
-        className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-500/30 transition-all duration-300"
+        whileHover={selectedValue !== null ? { scale: 1.01, y: -1 } : {}}
+        whileTap={selectedValue !== null ? { scale: 0.98 } : {}}
+        className={`w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-semibold transition-all duration-200 ${
+          selectedValue !== null
+            ? "bg-gradient-to-r from-pink-500 to-violet-500 text-white shadow-lg shadow-pink-500/20 hover:shadow-pink-500/30"
+            : "bg-white/[0.04] text-slate-600 cursor-not-allowed border border-white/[0.04]"
+        }`}
       >
-        <Send className="w-4 h-4 mr-2" />
+        <Send className="h-3.5 w-3.5" />
         Continue
-      </Button>
+      </motion.button>
     </motion.div>
   );
 }
-

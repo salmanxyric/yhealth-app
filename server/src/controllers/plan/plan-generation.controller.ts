@@ -21,8 +21,7 @@ import {
 import { notificationService } from '../../services/notification.service.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 import type { GeneratePlanInput } from '../../validators/plan.validator.js';
-import { ChatAnthropic } from '@langchain/anthropic';
-import { env } from '../../config/env.config.js';
+import { modelFactory } from '../../services/model-factory.service.js';
 import { embeddingQueueService } from '../../services/embedding-queue.service.js';
 import { JobPriorities } from '../../config/queue.config.js';
 import {
@@ -788,9 +787,8 @@ export const generateAITasks = asyncHandler(async (req: AuthenticatedRequest, re
   }
 
   // Use AI to generate tasks
-  const llm = new ChatAnthropic({
-    anthropicApiKey: env.anthropic.apiKey,
-    model: env.anthropic.model,
+  const llm = modelFactory.getModel({
+    tier: 'reasoning',
     temperature: 0.7,
   });
 

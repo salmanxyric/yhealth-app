@@ -24,9 +24,9 @@ updates:
       prefix: "chore(client)"
       include: "scope"
     reviewers:
-      - "yhealth-team/frontend-team"
+      - "balencia-team/frontend-team"
     assignees:
-      - "yhealth-team/frontend-team"
+      - "balencia-team/frontend-team"
     # Group related updates
     groups:
       react:
@@ -67,9 +67,9 @@ updates:
       prefix: "chore(server)"
       include: "scope"
     reviewers:
-      - "yhealth-team/backend-team"
+      - "balencia-team/backend-team"
     assignees:
-      - "yhealth-team/backend-team"
+      - "balencia-team/backend-team"
     # Group related updates
     groups:
       express:
@@ -123,7 +123,7 @@ updates:
       prefix: "ci"
       include: "scope"
     reviewers:
-      - "yhealth-team/devops-team"
+      - "balencia-team/devops-team"
 
   # ============================================
   # Docker (if using Dockerfile)

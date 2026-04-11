@@ -190,7 +190,8 @@ describe('HumanDetectionService', () => {
       const result = await humanDetectionService.detectHuman(dummyBuffer, 'image/jpeg', 'body_photo');
 
       expect(result.hasHuman).toBe(false);
-      expect(result.confidence).toBe(0.6);
+      // Empty response from all providers → confidence 0 for body_photo (requiresHuman=true)
+      expect(result.confidence).toBe(0);
     });
   });
 

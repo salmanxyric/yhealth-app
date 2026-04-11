@@ -28,41 +28,41 @@ const pressStats = [
 const pressReleases = [
   {
     date: "January 15, 2026",
-    title: "YHealth Launches AI-Powered Voice Health Coach",
-    excerpt: "YHealth introduces real-time voice conversations with an AI health coach, bringing personalized wellness guidance through natural voice interaction.",
+    title: "Balencia Launches AI-Powered Voice Health Coach",
+    excerpt: "Balencia introduces real-time voice conversations with an AI health coach, bringing personalized wellness guidance through natural voice interaction.",
     tag: "Product Launch",
   },
   {
     date: "December 5, 2025",
-    title: "YHealth Surpasses 50,000 Active Users",
+    title: "Balencia Surpasses 50,000 Active Users",
     excerpt: "The AI-powered health platform reaches a major milestone, demonstrating strong user engagement and retention across fitness, nutrition, and wellbeing features.",
     tag: "Milestone",
   },
   {
     date: "November 20, 2025",
-    title: "YHealth Partners with WHOOP for Deep Health Analytics",
-    excerpt: "New integration brings WHOOP's advanced recovery, strain, and sleep data directly into the YHealth AI coaching experience.",
+    title: "Balencia Partners with WHOOP for Deep Health Analytics",
+    excerpt: "New integration brings WHOOP's advanced recovery, strain, and sleep data directly into the Balencia AI coaching experience.",
     tag: "Partnership",
   },
   {
     date: "October 8, 2025",
-    title: "YHealth Introduces Mental Wellbeing Pillar",
+    title: "Balencia Introduces Mental Wellbeing Pillar",
     excerpt: "Comprehensive mental health features including mood tracking, stress detection, guided breathing, and AI-powered emotional check-ins launch on the platform.",
     tag: "Product Update",
   },
   {
     date: "September 1, 2025",
-    title: "YHealth Named Top Health Tech Startup to Watch",
-    excerpt: "Leading industry publications recognize YHealth's innovative approach to AI-driven personalized healthcare and wellness coaching.",
+    title: "Balencia Named Top Health Tech Startup to Watch",
+    excerpt: "Leading industry publications recognize Balencia's innovative approach to AI-driven personalized healthcare and wellness coaching.",
     tag: "Recognition",
   },
 ];
 
 const mediaFeatures = [
-  { name: "TechCrunch", quote: "YHealth is redefining what personalized health coaching looks like in the AI era." },
+  { name: "TechCrunch", quote: "Balencia is redefining what personalized health coaching looks like in the AI era." },
   { name: "Forbes Health", quote: "A comprehensive platform that bridges the gap between fitness tracking and actual health improvement." },
   { name: "Wired", quote: "The voice AI coach feature makes wellness guidance feel genuinely human and accessible." },
-  { name: "VentureBeat", quote: "YHealth's three-pillar approach to fitness, nutrition, and wellbeing sets a new standard for health apps." },
+  { name: "VentureBeat", quote: "Balencia's three-pillar approach to fitness, nutrition, and wellbeing sets a new standard for health apps." },
 ];
 
 const brandAssets = [
@@ -112,7 +112,7 @@ export default function PressPageContent() {
               transition={{ duration: 0.5, delay: 0.1 }}
               className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight"
             >
-              YHealth in the <span className="gradient-text">News</span>
+              Balencia in the <span className="gradient-text">News</span>
             </motion.h1>
 
             <motion.p
@@ -131,7 +131,7 @@ export default function PressPageContent() {
               transition={{ duration: 0.5, delay: 0.3 }}
             >
               <a
-                href="mailto:press@yhealth.app"
+                href="mailto:press@balencia.app"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 text-white font-semibold hover:from-emerald-600 hover:to-sky-600 transition-all glow-cyan"
               >
                 <Mail className="w-5 h-5" />
@@ -210,7 +210,7 @@ export default function PressPageContent() {
             <h2 className="text-2xl md:text-3xl font-bold mb-3">
               Press <span className="gradient-text">Releases</span>
             </h2>
-            <p className="text-muted-foreground">Latest news and announcements from YHealth</p>
+            <p className="text-muted-foreground">Latest news and announcements from Balencia</p>
           </motion.div>
 
           <div className="max-w-3xl mx-auto space-y-4">
@@ -296,15 +296,15 @@ export default function PressPageContent() {
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-sky-500 to-sky-600" />
             <h3 className="text-xl font-bold mb-2">Press Contact</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              For interviews, media inquiries, or additional information about YHealth
+              For interviews, media inquiries, or additional information about Balencia
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
-                href="mailto:press@yhealth.app"
+                href="mailto:press@balencia.app"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 text-white font-semibold text-sm hover:from-emerald-600 hover:to-sky-600 transition-all"
               >
                 <Mail className="w-4 h-4" />
-                press@yhealth.app
+                press@balencia.app
               </a>
               <Link
                 href="/contact"

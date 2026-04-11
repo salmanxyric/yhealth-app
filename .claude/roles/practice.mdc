@@ -1,0 +1,525 @@
+---
+alwaysApply: false
+---
+
+# Next.js Enterprise Engineering Skill
+Principal Full-Stack Architecture Enforcement
+
+This skill automatically applies **enterprise-grade engineering standards** when generating or modifying code in this project.
+
+Target stack:
+- Next.js (App Router)
+- React Server Components
+- TypeScript
+- Node.js , express js backend services
+- PostgreSQl Database,
+- OpenAi, Gemini , deepseek, ANTHROPIC 
+- API integrations
+
+All generated code must follow **scalable SaaS architecture standards used by senior engineers (15–20+ years experience).**
+
+---
+
+# Core Engineering Principles
+
+1. Never generate beginner-level patterns.
+2. Prefer **Server Components over Client Components**.
+3. Prevent unnecessary API calls.
+4. Enforce strong typing with TypeScript.
+5. Optimize performance and caching automatically.
+6. Maintain clean architecture separation.
+
+AI must **self-review output before returning code.**
+
+---
+
+# Rendering Strategy Automation
+
+Always choose the optimal rendering strategy automatically.
+
+### Default
+
+Server Components
+
+### Use SSR when
+
+- authentication required
+- personalized dashboard data
+- user-specific content
+
+### Use SSG when
+
+- landing pages
+- blog content
+- marketing pages
+- documentation
+
+### Use ISR when
+
+- semi dynamic CMS content
+
+Example:
+
+```
+
+export const revalidate = 3600
+
+```
+
+Never fetch dynamic data in static pages without ISR.
+
+---
+
+# Data Fetching Architecture
+
+Never fetch APIs directly inside UI components.
+
+Always use a **data layer abstraction.**
+
+Structure:
+
+```
+
+src
+├ app
+├ components
+├ services
+├ repositories
+├ lib
+├ hooks
+├ actions
+├ types
+├ utils
+
+```
+
+Example pattern:
+
+```
+
+repositories/
+user.repository.ts
+
+services/
+user.service.ts
+
+```
+
+Repositories handle database/API access.
+
+Services implement business logic.
+
+UI components only consume services.
+
+---
+
+# Promise & Async Handling
+
+All async operations must follow strict handling rules.
+
+Rules
+
+- Never leave unhandled promises
+- Always use try/catch
+- Run parallel requests with Promise.all
+- Avoid sequential awaits unless required
+- Always implement timeout or cancellation logic for long requests
+
+Correct pattern:
+
+```
+
+try {
+const [user, orders] = await Promise.all([
+userService.getUser(id),
+orderService.getOrders(id)
+])
+} catch (error) {
+logger.error("Failed to fetch user data", error)
+}
+
+```
+
+Never perform:
+
+```
+
+await fetch()
+await fetch()
+await fetch()
+
+```
+
+---
+
+# API Optimization Rules
+
+Prevent redundant API requests.
+
+Use caching and request deduplication.
+
+Preferred tools:
+
+- React Query
+- SWR
+- Next.js fetch caching
+
+Example:
+
+```
+
+fetch(url, {
+next: { revalidate: 300 }
+})
+
+```
+
+Rules
+
+- Never call APIs inside render loops
+- Implement debounce for search inputs (300–500ms)
+- Cache server responses
+- Use stale-while-revalidate patterns
+
+---
+
+# React Server Component Rules
+
+Default to **Server Components**.
+
+Use **Client Components only when required**, such as:
+
+- event handlers
+- browser APIs
+- local interactive state
+- third-party UI libraries
+
+Never add:
+
+```
+
+'use client'
+
+```
+
+unless strictly necessary.
+
+---
+
+# SSR Safety Rules
+
+Prevent hydration errors.
+
+When browser APIs are required:
+
+```
+
+typeof window !== "undefined"
+
+```
+
+For browser-only libraries:
+
+```
+
+dynamic(() => import("library"), { ssr: false })
+
+```
+
+Use mounted state for client hydration:
+
+```
+
+const [mounted, setMounted] = useState(false)
+
+useEffect(() => {
+setMounted(true)
+}, [])
+
+```
+
+---
+
+# Component Architecture
+
+Follow **Container / Presentational pattern.**
+
+Container
+
+- data fetching
+- business logic
+
+Presentational
+
+- UI only
+- no data fetching
+
+Rules
+
+- keep components small
+- max 200 lines per component
+- split logic into hooks
+
+---
+
+# Reusable Component Standards
+
+Reusable components must support composition.
+Max 500-600 line of code one file for easily manageable for future
+
+Use patterns:
+
+- forwardRef
+- compound components
+- polymorphic components
+
+Example:
+
+```
+
+<Button as="a" href="/dashboard" />
+```
+
+Export types alongside components.
+
+---
+
+# Custom Hooks Rules
+
+Each hook must follow:
+
+* single responsibility
+* cleanup in useEffect
+* return consistent object shape
+
+Example:
+
+```
+return {
+  data,
+  loading,
+  error
+}
+```
+
+Hooks must never cause memory leaks.
+
+---
+
+# State Management Strategy
+
+Hierarchy
+
+1. Server state → React Query
+2. UI global state → Context
+3. Complex global state → Zustand
+
+Rules
+
+* split contexts by concern
+* memoize context values
+* avoid large monolithic contexts
+
+Example:
+
+```
+UserContext
+ThemeContext
+UIContext
+```
+
+---
+
+# Performance Optimization
+
+Automatically enforce performance best practices.
+
+### Image optimization
+
+Always use:
+
+```
+next/image
+```
+
+Never raw `<img>`.
+
+### Code splitting
+
+Lazy load heavy components:
+
+```
+dynamic(() => import("./Dashboard"))
+```
+
+### Expensive calculations
+
+Memoize using:
+
+```
+useMemo
+```
+
+### Callback stability
+
+Use:
+
+```
+useCallback
+```
+
+when passing callbacks to children.
+
+---
+
+# Suspense & Streaming
+
+Use React Suspense for async UI.
+
+Example:
+
+```
+<Suspense fallback={<Loading />}>
+  <UserProfile />
+</Suspense>
+```
+
+Streaming must be preferred for slow data fetching.
+
+---
+
+# Security Enforcement
+
+All external input must be validated.
+
+Preferred validator:
+
+* Zod
+
+Example:
+
+```
+const schema = z.object({
+  email: z.string().email()
+})
+```
+
+Prevent
+
+* XSS
+* CSRF
+* injection attacks
+
+Always use:
+
+* httpOnly cookies
+* server-side validation
+* secure headers
+
+---
+
+# Error Handling Standards
+
+Every async operation must handle failure.
+
+Rules
+
+* create centralized error classes
+* return proper HTTP status codes
+* never leak internal errors to clients
+
+Example:
+
+```
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message)
+    this.status = status
+  }
+}
+```
+
+---
+
+# Logging & Observability
+
+Implement structured logging.
+
+Preferred integrations:
+
+* Sentry
+* OpenTelemetry
+
+Logs must include
+
+* request id
+* user id
+* error context
+* service name
+
+Never use console.log in production code.
+
+---
+
+# Testing Enforcement
+
+All business logic must be testable.
+
+Testing stack:
+
+* Jest
+* React Testing Library
+* Playwright
+
+Rules
+
+* test services
+* test hooks
+* test critical components
+* write integration tests for APIs
+
+---
+
+# Performance Budget Rules
+
+Generated code must respect:
+
+* minimal bundle size
+* minimal hydration
+* minimal client JavaScript
+
+Prefer server computation over client computation.
+
+---
+
+# AI Self Review Checklist
+
+Before returning code the AI must verify:
+
+✔ No unnecessary API calls
+✔ Correct rendering strategy
+✔ Proper async error handling
+✔ Strong TypeScript types
+✔ Clean architecture layers
+✔ No duplicated logic
+✔ Performance optimized
+✔ Security validation applied
+
+If any rule fails → automatically fix the implementation.
+
+---
+
+# Output Quality Standard
+
+All generated code must be:
+
+* production ready
+* scalable
+* readable
+* secure
+* optimized
+
+Avoid quick hacks or temporary solutions.
+
+Only generate **enterprise-level implementations**.
+

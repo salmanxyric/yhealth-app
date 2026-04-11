@@ -599,7 +599,7 @@ export async function registerWhoopWebhook(
 }
 
 /**
- * Normalize WHOOP recovery data to yHealth schema
+ * Normalize WHOOP recovery data to Balencia schema
  */
 export function normalizeRecoveryData(
   whoopData: WhoopRecoveryData,
@@ -635,7 +635,7 @@ export function normalizeRecoveryData(
 }
 
 /**
- * Normalize WHOOP sleep data to yHealth schema
+ * Normalize WHOOP sleep data to Balencia schema
  */
 export function normalizeSleepData(
   whoopData: WhoopSleepData,
@@ -694,7 +694,7 @@ export function normalizeSleepData(
 }
 
 /**
- * Normalize WHOOP workout data to yHealth schema
+ * Normalize WHOOP workout data to Balencia schema
  */
 export function normalizeWorkoutData(
   whoopData: WhoopWorkoutData,

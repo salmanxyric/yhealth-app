@@ -66,7 +66,7 @@ export function RealTimeHeartRateCard({
         >
           <Heart className="w-6 h-6 text-red-400/50 mb-4" />
         </motion.div>
-        <div className="w-52 h-52 rounded-full bg-slate-800/30 animate-pulse" />
+        <div className="w-28 h-28 sm:w-32 sm:h-32 md:w-36 md:h-36 lg:w-44 lg:h-44 rounded-full bg-slate-800/30 animate-pulse" />
         <p className="mt-2 text-slate-400 text-xs">Loading...</p>
       </motion.div>
     );
@@ -81,15 +81,15 @@ export function RealTimeHeartRateCard({
     >
       {/* Icon Header */}
       <motion.div
-        className="mb-4 opacity-90"
+        className="mb-1 sm:mb-2 opacity-90"
         animate={{ scale: data.current ? [1, 1.1, 1] : 1 }}
         transition={{ duration: data.current ? 60 / data.current : 1, repeat: Infinity }}
       >
-        <Heart className={`w-5 h-5 ${colors.text}`} fill="currentColor" />
+        <Heart className={`w-4 h-4 sm:w-5 sm:h-5 ${colors.text}`} fill="currentColor" />
       </motion.div>
 
-      {/* Circular Progress - matching lg size (208px) */}
-      <div className="relative w-52 h-52">
+      {/* Circular Progress - responsive sizing */}
+      <div className="relative w-28 h-28 sm:w-32 sm:h-32 md:w-36 md:h-36 lg:w-44 lg:h-44">
         {/* Background Circle */}
         <svg className="w-full h-full -rotate-90" viewBox={`0 0 ${CIRCLE_SIZE} ${CIRCLE_SIZE}`}>
           <circle
@@ -97,7 +97,7 @@ export function RealTimeHeartRateCard({
             cy={CIRCLE_SIZE / 2}
             r={RADIUS}
             stroke="rgba(239, 68, 68, 0.15)"
-            strokeWidth={STROKE_WIDTH}
+            strokeWidth={8}
             fill="url(#hr-bg-gradient)"
           />
           {/* Progress Circle */}
@@ -106,7 +106,7 @@ export function RealTimeHeartRateCard({
             cy={CIRCLE_SIZE / 2}
             r={RADIUS}
             stroke={colors.stroke}
-            strokeWidth={STROKE_WIDTH}
+            strokeWidth={8}
             fill="none"
             strokeLinecap="round"
             initial={{ strokeDasharray: CIRCUMFERENCE, strokeDashoffset: CIRCUMFERENCE }}
@@ -127,9 +127,9 @@ export function RealTimeHeartRateCard({
         </svg>
 
         {/* Center Content */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center px-1">
           <motion.span
-            className={`text-4xl font-bold ${colors.text} drop-shadow-2xl`}
+            className={`text-[16px] sm:text-[18px] md:text-xl lg:text-2xl font-bold ${colors.text} drop-shadow-2xl leading-tight`}
             style={{
               textShadow: `0 0 30px rgba(239, 68, 68, 0.5), 0 2px 4px rgba(0, 0, 0, 0.5)`,
               letterSpacing: '-0.02em',
@@ -139,10 +139,10 @@ export function RealTimeHeartRateCard({
           >
             {data.current || '--'}
           </motion.span>
-          <span className="text-base font-medium text-slate-300/80 mb-1">BPM</span>
-          <span className="text-base font-semibold text-red-400">HEART RATE</span>
+          <span className="text-[10px] sm:text-xs md:text-sm font-medium text-slate-300/80">BPM</span>
+          <span className="text-[10px] sm:text-xs md:text-sm font-semibold text-red-400 mt-0.5">HEART RATE</span>
           {data.resting && (
-            <span className="text-xs text-slate-400 mt-1">Resting: {data.resting} bpm</span>
+            <span className="text-[10px] sm:text-xs text-slate-400 mt-0.5 truncate max-w-full">Resting: {data.resting} bpm</span>
           )}
         </div>
       </div>

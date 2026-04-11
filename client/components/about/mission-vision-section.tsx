@@ -17,7 +17,7 @@ export function MissionVisionSection() {
       </div>
 
       <div className="container mx-auto px-4">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-8xl mx-auto">
           <div className="grid md:grid-cols-2 gap-12 lg:gap-16">
             {/* Mission */}
             <motion.div

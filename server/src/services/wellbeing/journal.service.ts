@@ -337,7 +337,43 @@ class JournalService {
       ]
     );
 
-    return this.mapRowToJournalEntry(result.rows[0]);
+    const entry = this.mapRowToJournalEntry(result.rows[0]);
+
+    // Fire-and-forget: extract lessons from journal entry (non-blocking)
+    this.triggerLessonExtraction(userId, entry.id, input.entryText).catch(() => {});
+
+    // Fire-and-forget: embed journal entry in life history timeline
+    import('../life-history-embedding.service.js').then(({ lifeHistoryEmbeddingService }) =>
+      lifeHistoryEmbeddingService.embedLifeEvent({
+        userId,
+        eventDate: new Date().toISOString().slice(0, 10),
+        entryType: 'journal',
+        category: 'wellbeing',
+        content: input.entryText,
+        sourceIds: [entry.id],
+      })
+    ).catch(() => {});
+
+    // Record for unified streak system
+    import('../streak.service.js').then(({ streakService }) =>
+      streakService.recordActivity(userId, 'journal', entry.id)
+    ).catch(() => {});
+
+    return entry;
+  }
+
+  /**
+   * Trigger async lesson extraction from journal entry text
+   * Uses dynamic import to avoid circular dependencies
+   */
+  private async triggerLessonExtraction(userId: string, entryId: string, entryText: string): Promise<void> {
+    const { lessonsLearnedService } = await import('./lessons-learned.service.js');
+    await lessonsLearnedService.extractLessonsFromJournal(userId, entryId, entryText);
+
+    // Fire-and-forget theme extraction
+    import('./theme-detection.service.js').then(({ themeDetectionService }) => {
+      themeDetectionService.extractThemesFromEntry(userId, entryId, entryText);
+    }).catch(() => {});
   }
 
   /**

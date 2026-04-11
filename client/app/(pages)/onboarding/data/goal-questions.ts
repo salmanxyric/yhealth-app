@@ -891,6 +891,8 @@ const goalQuestionMap: Record<GoalCategory, AssessmentQuestion[]> = {
   health_condition: healthConditionQuestions,
   habit_building: habitBuildingQuestions,
   overall_optimization: overallOptimizationQuestions,
+  nutrition: customGoalQuestions,
+  fitness: muscleBuildingQuestions,
   custom: customGoalQuestions,
 };
 
@@ -920,6 +922,8 @@ export function getAssessmentTitle(goalCategory: GoalCategory | null): string {
     health_condition: 'Health Management Assessment',
     habit_building: 'Habit Building Assessment',
     overall_optimization: 'Health Optimization Assessment',
+    nutrition: 'Nutrition Assessment',
+    fitness: 'Fitness Assessment',
     custom: 'Personal Health Assessment',
   };
 
@@ -938,6 +942,8 @@ export function getAssessmentSubtitle(goalCategory: GoalCategory | null): string
     health_condition: 'Share your health goals so we can support your journey safely',
     habit_building: 'Help us understand your patterns to build lasting healthy habits',
     overall_optimization: 'Give us a complete picture to optimize every aspect of your health',
+    nutrition: 'Tell us about your eating habits to create a personalized nutrition plan',
+    fitness: 'Share your fitness background to design your training program',
     custom: 'Answer a few questions to personalize your experience',
   };
 

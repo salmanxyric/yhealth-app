@@ -149,7 +149,7 @@ export function CycleAnalysis() {
 
   if (isLoading) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between">
           <Skeleton className="h-10 w-64" />
         </div>
@@ -169,17 +169,17 @@ export function CycleAnalysis() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
         </div>
-        <div className="rounded-xl bg-red-500/10 backdrop-blur-sm border border-red-500/20 p-6 transition-all duration-300">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-red-500/10 backdrop-blur-sm border border-red-500/20 p-4 sm:p-6 transition-all duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
               <div>
-                <p className="text-red-400 font-medium">Failed to load cycle data</p>
-                <p className="text-sm text-red-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-red-400 font-medium">Failed to load cycle data</p>
+                <p className="text-[13px] sm:text-[14px] text-red-300/70 mt-1">
                   {error.message || 'Unable to fetch cycle analysis. Please check your connection and try again.'}
                 </p>
               </div>
@@ -201,17 +201,17 @@ export function CycleAnalysis() {
 
   if (!data || !data.cycles || data.cycles.length === 0) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
         </div>
-        <div className="rounded-xl bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 p-6 transition-all duration-300">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 p-4 sm:p-6 transition-all duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
               <div>
-                <p className="text-blue-400 font-medium">No cycle data available</p>
-                <p className="text-sm text-blue-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No cycle data available</p>
+                <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                   No cycle data found for the selected date range. Make sure your WHOOP device is syncing data regularly.
                 </p>
               </div>
@@ -255,9 +255,9 @@ export function CycleAnalysis() {
     .sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime());
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Date Range Picker */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
       </div>
 
@@ -265,21 +265,21 @@ export function CycleAnalysis() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-6"
+        className="space-y-4 sm:space-y-6"
       >
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-purple-400" />
+        <h3 className="text-[16px] sm:text-[18px] font-semibold text-white flex items-center gap-2">
+          <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
           Physiological Cycles Analytics
         </h3>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Heart Rate Trends */}
-          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-6">
+          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-4 sm:p-6">
             <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
               <Heart className="w-4 h-4 text-blue-400" />
               Heart Rate Trends
             </h4>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="avgHRGradient" x1="0" y1="0" x2="0" y2="1">
@@ -333,12 +333,12 @@ export function CycleAnalysis() {
           </div>
 
           {/* Sleep Metrics */}
-          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-6">
+          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-4 sm:p-6">
             <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
               <Moon className="w-4 h-4 text-purple-400" />
               Sleep Metrics
             </h4>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
                 <XAxis 
@@ -404,12 +404,12 @@ export function CycleAnalysis() {
           </div>
 
           {/* Recovery & Strain */}
-          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-6">
+          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-4 sm:p-6">
             <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
               <Activity className="w-4 h-4 text-green-400" />
               Recovery & Strain
             </h4>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="recoveryGradient" x1="0" y1="0" x2="0" y2="1">
@@ -474,12 +474,12 @@ export function CycleAnalysis() {
           </div>
 
           {/* HRV & RHR */}
-          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-6">
+          <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-4 sm:p-6">
             <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
               <Heart className="w-4 h-4 text-cyan-400" />
               HRV & Resting Heart Rate
             </h4>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
                 <XAxis 

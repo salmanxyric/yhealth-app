@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 
 interface MacroCircularChartProps {
   value: number;
@@ -15,9 +15,33 @@ interface MacroCircularChartProps {
 }
 
 const sizeConfig = {
-  sm: { circle: 120, stroke: 8, fontSize: 'text-xl', labelSize: 'text-xs' },
-  md: { circle: 140, stroke: 10, fontSize: 'text-2xl', labelSize: 'text-sm' },
-  lg: { circle: 160, stroke: 12, fontSize: 'text-3xl', labelSize: 'text-base' },
+  sm: {
+    circle: 100,
+    stroke: 10,
+    trackStroke: 10,
+    valueFontSize: 'text-[17px]',
+    unitFontSize: 'text-[10px]',
+    labelFontSize: 'text-[11px]',
+    targetFontSize: 'text-[11px]',
+  },
+  md: {
+    circle: 120,
+    stroke: 12,
+    trackStroke: 12,
+    valueFontSize: 'text-[20px]',
+    unitFontSize: 'text-[11px]',
+    labelFontSize: 'text-xs',
+    targetFontSize: 'text-xs',
+  },
+  lg: {
+    circle: 150,
+    stroke: 14,
+    trackStroke: 14,
+    valueFontSize: 'text-[24px]',
+    unitFontSize: 'text-[12px]',
+    labelFontSize: 'text-[13px]',
+    targetFontSize: 'text-[13px]',
+  },
 };
 
 export function MacroCircularChart({
@@ -30,38 +54,44 @@ export function MacroCircularChart({
   size = 'md',
   className = '',
 }: MacroCircularChartProps) {
+  const instanceId = useId();
   const config = sizeConfig[size];
   const radius = (config.circle - config.stroke) / 2;
   const circumference = 2 * Math.PI * radius;
 
-  // Calculate progress (0-100)
   const progress = useMemo(() => {
     if (max > 0 && value > 0) {
-      return Math.min((value / max) * 100, 100);
+      return Math.min(value / max, 1);
     }
     return 0;
   }, [value, max]);
 
-  const strokeDashoffset = useMemo(() => {
-    return circumference - (progress / 100) * circumference;
-  }, [circumference, progress]);
+  const percentage = Math.round(progress * 100);
+  const displayValue = useMemo(() => Math.round(value).toLocaleString(), [value]);
 
-  const percentage = Math.round(progress);
+  // Arc length for filled portion
+  const dashOffset = circumference * (1 - progress);
 
-  // Format value display
-  const displayValue = useMemo(() => {
-    return Math.round(value).toLocaleString();
-  }, [value]);
+  // Generate a lighter tint of the primary color for the track
+  const trackColor = `${primaryColor}18`;
 
   return (
-    <div className={`relative flex flex-col items-center ${className}`}>
-      {/* Circular SVG */}
-      <div 
-        className="relative" 
+    <div className={`relative flex flex-col items-center gap-2.5 ${className}`}>
+      {/* Circular ring container */}
+      <div
+        className="relative group"
         style={{ width: config.circle, height: config.circle }}
         role="img"
-        aria-label={`${label}: ${displayValue} ${unit}`}
+        aria-label={`${label}: ${displayValue} ${unit} of ${max} ${unit} (${percentage}%)`}
       >
+        {/* Outer glow on hover */}
+        <div
+          className="absolute -inset-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          style={{
+            background: `radial-gradient(circle, ${primaryColor}15 0%, transparent 70%)`,
+          }}
+        />
+
         <svg
           className="transform -rotate-90"
           width={config.circle}
@@ -69,90 +99,86 @@ export function MacroCircularChart({
           viewBox={`0 0 ${config.circle} ${config.circle}`}
           aria-hidden="true"
         >
-          {/* Background circle */}
+          <defs>
+            {/* Gradient for the progress arc */}
+            <linearGradient id={`macro-grad-${instanceId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={primaryColor} />
+              <stop offset="50%" stopColor={secondaryColor} />
+              <stop offset="100%" stopColor={primaryColor} />
+            </linearGradient>
+
+            {/* Glow filter */}
+            <filter id={`glow-${instanceId}`} x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          {/* Background track — subtle ring */}
           <circle
             cx={config.circle / 2}
             cy={config.circle / 2}
             r={radius}
-            fill="rgba(255, 255, 255, 0.05)"
-            stroke="rgba(255, 255, 255, 0.1)"
-            strokeWidth={config.stroke}
+            fill="none"
+            stroke={trackColor}
+            strokeWidth={config.trackStroke}
+            strokeLinecap="round"
           />
 
-          {/* Progress circle */}
+          {/* Filled progress arc */}
           {progress > 0 && (
             <motion.circle
               cx={config.circle / 2}
               cy={config.circle / 2}
               r={radius}
               fill="none"
-              stroke={primaryColor}
+              stroke={`url(#macro-grad-${instanceId})`}
               strokeWidth={config.stroke}
               strokeLinecap="round"
-              strokeDasharray={circumference}
+              strokeDasharray={`${circumference} ${circumference}`}
               initial={{ strokeDashoffset: circumference }}
-              animate={{ strokeDashoffset }}
-              transition={{ duration: 1.5, ease: 'easeOut' }}
-              style={{
-                filter: `drop-shadow(0 0 8px ${primaryColor}40)`,
-              }}
+              animate={{ strokeDashoffset: dashOffset }}
+              transition={{ duration: 1.2, ease: [0.4, 0, 0.2, 1] }}
+              filter={`url(#glow-${instanceId})`}
             />
           )}
-
-          {/* Gradient definition for smooth color transition */}
-          <defs>
-            <linearGradient id={`gradient-${label}`} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor={primaryColor} stopOpacity="1" />
-              <stop offset="100%" stopColor={secondaryColor} stopOpacity="1" />
-            </linearGradient>
-          </defs>
         </svg>
 
         {/* Center content */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
+            initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
+            transition={{ delay: 0.2, type: 'spring', stiffness: 220, damping: 20 }}
             className="text-center"
           >
             <p
-              className={`${config.fontSize} font-bold text-white mb-0.5 drop-shadow-2xl`}
-              style={{ 
-                textShadow: `0 0 20px ${primaryColor}80, 0 2px 4px rgba(0, 0, 0, 0.5)`,
-                letterSpacing: '-0.02em',
+              className={`${config.valueFontSize} font-extrabold text-white leading-none tracking-tight`}
+              style={{
+                textShadow: `0 0 20px ${primaryColor}50`,
               }}
-              aria-hidden="true"
             >
               {displayValue}
             </p>
-            <p className={`${config.labelSize} font-medium text-slate-400 mb-1`} aria-hidden="true">
+            <p className={`${config.unitFontSize} font-medium text-slate-400 mt-0.5`}>
               {unit}
-            </p>
-            <p 
-              className={`${config.labelSize} font-semibold tracking-wider`} 
-              style={{ color: primaryColor }}
-              aria-hidden="true"
-            >
-              {label}
             </p>
           </motion.div>
         </div>
       </div>
 
-      {/* Percentage and target below circle */}
-      <div className="mt-3 text-center">
-        <p 
-          className="text-sm font-semibold mb-1"
+      {/* Label & target below */}
+      <div className="text-center space-y-0.5">
+        <p
+          className={`${config.labelFontSize} font-bold tracking-wide`}
           style={{ color: primaryColor }}
         >
-          {percentage}%
+          {label}
         </p>
-        <p className="text-xs text-slate-500">
+        <p className={`${config.targetFontSize} text-slate-500 tabular-nums`}>
           {Math.round(value)} / {max} {unit}
         </p>
       </div>
     </div>
   );
 }
-

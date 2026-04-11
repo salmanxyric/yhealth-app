@@ -10,7 +10,7 @@ const milestones = [
     quarter: "Q1",
     title: "Foundation",
     description:
-      "YHealth was founded with a vision to make personalized health coaching accessible to everyone through AI technology.",
+      "Balencia was founded with a vision to make personalized health coaching accessible to everyone through AI technology.",
     icon: Rocket,
     color: "from-cyan-400 to-cyan-600",
   },
@@ -66,7 +66,7 @@ export function OurJourneySection() {
       </div>
 
       <div className="container mx-auto px-4">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-8xl mx-auto">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}

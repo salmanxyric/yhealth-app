@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { motion, useInView } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Mic,
   Waves,
@@ -59,24 +59,24 @@ const scenarios = [
   },
   {
     icon: Brain,
-    emoji: "🌙",
-    context: "Before bed",
-    userSays: "I can't fall asleep. My mind won't stop.",
+    emoji: "💼",
+    context: "Career decision",
+    userSays: "I got a job offer but I'm not sure if I should leave...",
     coachSays:
-      "Your strain was high today. Let me walk you through a progressive relaxation — start by relaxing your jaw...",
-    tone: "Soothing",
+      "Big decisions deserve space. Let's map out your values — growth, stability, or flexibility? I'll help you see how each option aligns with your life goals.",
+    tone: "Thoughtful",
     toneColor: "text-purple-400 bg-purple-500/10",
     gradient: "from-purple-500 to-indigo-500",
     glowColor: "rgba(139, 92, 246, 0.2)",
   },
   {
     icon: Sparkles,
-    emoji: "💪",
-    context: "Post-workout",
-    userSays: "That was a great session! What should I eat?",
+    emoji: "🌅",
+    context: "Morning motivation",
+    userSays: "I just don't feel motivated today.",
     coachSays:
-      "You burned 420 cal. Have a protein-rich meal within 45 min — chicken with quinoa would be ideal for recovery.",
-    tone: "Energetic",
+      "That's okay. Here's one micro-task: write down one sentence about what you want this week. That's it. Small moves count — and I'll check in later.",
+    tone: "Encouraging",
     toneColor: "text-emerald-400 bg-emerald-500/10",
     gradient: "from-emerald-500 to-primary",
     glowColor: "rgba(16, 185, 129, 0.2)",
@@ -253,7 +253,7 @@ function CallTimer() {
   const min = Math.floor(seconds / 60);
   const sec = seconds % 60;
   return (
-    <span className="tabular-nums text-xs font-mono text-muted-foreground/60">
+    <span className="tabular-nums text-xs font-mono text-muted-foreground/80">
       {String(min).padStart(2, "0")}:{String(sec).padStart(2, "0")}
     </span>
   );
@@ -310,6 +310,27 @@ export function VoiceCoachSection() {
       );
     },
     centerRef,
+    []
+  );
+
+  // GSAP staggered benefit feature cards
+  useGSAP(
+    () => {
+      if (!sectionRef.current) return;
+      gsap.from(".vc-feature", {
+        y: 50,
+        opacity: 0,
+        scale: 0.96,
+        duration: 0.7,
+        stagger: 0.1,
+        ease: "power2.out",
+        scrollTrigger: {
+          trigger: ".vc-feature",
+          start: "top 78%",
+        },
+      });
+    },
+    sectionRef,
     []
   );
 
@@ -393,7 +414,7 @@ export function VoiceCoachSection() {
             return (
               <div
                 key={stat.label}
-                className="voice-stat flex items-center gap-3 px-5 py-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm"
+                className="voice-stat flex items-center gap-3 px-5 py-3 rounded-2xl border border-white/[0.12] bg-white/[0.07] backdrop-blur-sm"
               >
                 <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
                   <Icon className="w-4 h-4 text-primary" />
@@ -405,7 +426,7 @@ export function VoiceCoachSection() {
                       {stat.suffix}
                     </span>
                   </p>
-                  <p className="text-[10px] text-muted-foreground/50 font-medium">
+                  <p className="text-[10px] text-muted-foreground/80 font-medium">
                     {stat.label}
                   </p>
                 </div>
@@ -426,7 +447,7 @@ export function VoiceCoachSection() {
 
             <div className="relative rounded-3xl border border-white/[0.1] bg-background/95 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/30">
               {/* Top bar */}
-              <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06] bg-white/[0.02]">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.12] bg-white/[0.07]">
                 <div className="flex items-center gap-2.5">
                   <motion.div
                     className="w-2.5 h-2.5 rounded-full bg-emerald-500"
@@ -458,10 +479,10 @@ export function VoiceCoachSection() {
                 <GlowOrb />
 
                 {/* Waveform */}
-                <div className="w-full max-w-md rounded-2xl bg-white/[0.03] border border-white/[0.06] px-4 py-4 sm:py-5">
+                <div className="w-full max-w-md rounded-2xl bg-white/[0.07] border border-white/[0.12] px-4 py-4 sm:py-5">
                   <div className="flex items-center gap-3 mb-3">
                     <Volume2 className="w-4 h-4 text-primary/60 shrink-0" />
-                    <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">
+                    <span className="text-[10px] font-medium text-muted-foreground/80 uppercase tracking-wider">
                       Live audio
                     </span>
                     <motion.div
@@ -493,7 +514,7 @@ export function VoiceCoachSection() {
                       ease: "easeInOut",
                     }}
                   />
-                  <span className="text-sm font-medium text-muted-foreground/70">
+                  <span className="text-sm font-medium text-muted-foreground/90">
                     Continuously learning. Constantly evolving.
                   </span>
                 </div>
@@ -512,7 +533,7 @@ export function VoiceCoachSection() {
           <h3 className="text-2xl sm:text-3xl font-bold mb-3 tracking-tight">
             Your coach adapts to every moment
           </h3>
-          <p className="text-sm text-muted-foreground/70 max-w-lg mx-auto">
+          <p className="text-sm text-muted-foreground/90 max-w-lg mx-auto">
             Real scenarios. Real-time intelligence. See how your AI coach
             responds.
           </p>
@@ -527,7 +548,7 @@ export function VoiceCoachSection() {
             return (
               <motion.div
                 key={s.context}
-                className="scenario-card group relative rounded-3xl border border-white/[0.08] bg-white/[0.015] backdrop-blur-sm overflow-hidden transition-all duration-500 hover:border-white/15"
+                className="scenario-card group relative rounded-3xl border border-white/[0.12] bg-white/[0.07] backdrop-blur-sm overflow-hidden transition-all duration-500 hover:border-white/15"
                 whileHover={{
                   y: -4,
                   boxShadow: `0 0 60px -15px ${s.glowColor}, 0 0 0 1px rgba(255,255,255,0.1)`,
@@ -586,7 +607,7 @@ export function VoiceCoachSection() {
                   {/* Coach response */}
                   <div className="flex justify-start">
                     <div className="max-w-[90%] rounded-2xl rounded-tl-md bg-white/[0.04] border border-white/[0.08] px-4 py-2.5">
-                      <p className="text-sm text-foreground/70 leading-relaxed">
+                      <p className="text-sm text-foreground/85 leading-relaxed">
                         &ldquo;{s.coachSays}&rdquo;
                       </p>
                     </div>
@@ -612,7 +633,7 @@ export function VoiceCoachSection() {
             return (
               <div
                 key={item.label}
-                className="voice-benefit-card group flex items-start gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 hover:border-white/15 transition-all duration-300"
+                className="voice-benefit-card vc-feature group flex items-start gap-4 rounded-2xl border border-white/[0.12] bg-white/[0.07] p-5 hover:border-white/15 transition-all duration-300"
               >
                 <div
                   className={cn(
@@ -626,7 +647,7 @@ export function VoiceCoachSection() {
                   <h4 className="font-semibold text-sm text-foreground/90 mb-1">
                     {item.label}
                   </h4>
-                  <p className="text-xs text-muted-foreground/60 leading-relaxed">
+                  <p className="text-xs text-muted-foreground/80 leading-relaxed">
                     {item.desc}
                   </p>
                 </div>

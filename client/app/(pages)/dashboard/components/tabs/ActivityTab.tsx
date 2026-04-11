@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Activity,
   Dumbbell,
@@ -19,7 +19,6 @@ import {
   Flame,
   TrendingUp,
   BarChart3,
-  Loader2,
   AlertCircle,
   RotateCcw,
   Timer,
@@ -33,6 +32,7 @@ import {
   ArrowDown,
   Droplets,
   Footprints,
+  CalendarRange,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
 import {
@@ -148,6 +148,59 @@ const pillarFilterOptions = [
   { value: "wellbeing", label: "Wellbeing", color: "purple" },
 ];
 
+// Skeleton Loading Component
+function ActivitySkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Stats skeleton */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-28 rounded-2xl bg-white/[0.03] border border-white/[0.06] animate-pulse" />
+        ))}
+      </div>
+      {/* Date nav skeleton */}
+      <div className="h-12 rounded-xl bg-white/[0.03] animate-pulse" />
+      {/* Chart skeleton */}
+      <div className="h-48 rounded-2xl bg-white/[0.03] border border-white/[0.06] animate-pulse" />
+      {/* Grid skeleton */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] animate-pulse">
+          <div className="p-5 border-b border-white/[0.06]">
+            <div className="h-5 w-32 rounded bg-white/[0.06]" />
+          </div>
+          <div className="p-5 space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex gap-4">
+                <div className="w-12 h-12 rounded-xl bg-white/[0.06]" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-3/4 rounded bg-white/[0.06]" />
+                  <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] animate-pulse">
+          <div className="p-5 border-b border-white/[0.06]">
+            <div className="h-5 w-40 rounded bg-white/[0.06]" />
+          </div>
+          <div className="p-5 space-y-5">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex gap-4 items-center">
+                <div className="w-10 h-10 rounded-lg bg-white/[0.06]" />
+                <div className="flex-1">
+                  <div className="h-3 w-full rounded bg-white/[0.06] mb-2" />
+                  <div className="h-2 rounded-full bg-white/[0.04]" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Stats Card Component
 function StatsCard({
   icon,
@@ -173,7 +226,7 @@ function StatsCard({
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay, duration: 0.4, ease: "easeOut" }}
-      className={`relative p-5 rounded-2xl bg-gradient-to-br ${color} border border-white/10 overflow-hidden group cursor-pointer`}
+      className={`relative p-5 rounded-2xl bg-gradient-to-br ${color} border border-white/[0.06] overflow-hidden group cursor-pointer`}
     >
       {/* Animated background glow */}
       <motion.div
@@ -244,7 +297,7 @@ function CalendarDayCard({
       onClick={onClick}
       className={`relative text-center p-3 rounded-xl transition-all cursor-pointer ${
         day.isToday
-          ? "bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-2 border-green-500/40 shadow-lg shadow-green-500/10"
+          ? "bg-gradient-to-br from-sky-500/20 to-sky-600/20 border-2 border-sky-500/40 shadow-lg shadow-sky-500/10"
           : day.hasActivity
           ? "bg-white/5 hover:bg-white/10 border border-white/10"
           : "hover:bg-white/5 border border-transparent"
@@ -253,7 +306,7 @@ function CalendarDayCard({
       <p className="text-xs text-slate-500 mb-1 font-medium">{day.dayOfWeek}</p>
       <p
         className={`text-lg font-semibold mb-2 ${
-          day.isToday ? "text-green-400" : day.hasActivity ? "text-white" : "text-slate-500"
+          day.isToday ? "text-sky-400" : day.hasActivity ? "text-white" : "text-slate-500"
         }`}
       >
         {day.dayNumber}
@@ -269,7 +322,7 @@ function CalendarDayCard({
               animate={{ scale: 1 }}
               transition={{ delay: 0.05 * index + 0.05 * j }}
               className={`w-1.5 h-1.5 rounded-full ${
-                j < day.activities.completed ? "bg-green-500" : "bg-cyan-500"
+                j < day.activities.completed ? "bg-sky-500" : "bg-cyan-500"
               }`}
             />
           ))
@@ -292,7 +345,7 @@ function CalendarDayCard({
           <div
             className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
               day.activities.completionRate === 100
-                ? "bg-green-500 text-white"
+                ? "bg-sky-500 text-white"
                 : day.activities.completionRate >= 50
                 ? "bg-yellow-500 text-white"
                 : "bg-slate-600 text-slate-300"
@@ -365,7 +418,7 @@ function ActivityFeedItem({ activity, index }: { activity: ActivityLog; index: n
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h4 className="font-medium text-white group-hover:text-cyan-400 transition-colors">
+              <h4 className="font-medium text-white group-hover:text-sky-400 transition-colors">
                 {activity.title}
               </h4>
               <p className="text-sm text-slate-400 line-clamp-1">{activity.description}</p>
@@ -375,7 +428,7 @@ function ActivityFeedItem({ activity, index }: { activity: ActivityLog; index: n
               animate={{ scale: 1 }}
               transition={{ delay: 0.05 * index + 0.2, type: "spring" }}
             >
-              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-sky-400 flex-shrink-0" />
             </motion.div>
           </div>
 
@@ -497,11 +550,171 @@ function EmptyState({
   );
 }
 
+// Activity Trend Chart Component (SVG area chart)
+function ActivityTrendChart({ calendarDays }: { calendarDays: CalendarDay[] }) {
+  if (calendarDays.length === 0) return null;
+
+  const width = 700;
+  const height = 200;
+  const paddingX = 40;
+  const paddingY = 30;
+  const chartWidth = width - paddingX * 2;
+  const chartHeight = height - paddingY * 2;
+
+  const dataPoints = calendarDays.map((day) => day.activities.completed);
+  const maxVal = Math.max(...dataPoints, 1);
+
+  const points = dataPoints.map((val, i) => {
+    const x = paddingX + (i / Math.max(dataPoints.length - 1, 1)) * chartWidth;
+    const y = paddingY + chartHeight - (val / maxVal) * chartHeight;
+    return { x, y, val };
+  });
+
+  const linePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
+  const areaPoints = `${paddingX},${paddingY + chartHeight} ${linePoints} ${points[points.length - 1]?.x ?? paddingX + chartWidth},${paddingY + chartHeight}`;
+
+  const gradientId = "trendGradient";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.12 }}
+      className="rounded-2xl bg-[#0F1419] border border-white/[0.06] p-5"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-white flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-sky-400" />
+          Activity Trends
+        </h3>
+        <span className="text-xs text-slate-500">
+          {calendarDays.length} days
+        </span>
+      </div>
+
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-auto"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(14, 165, 233)" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="rgb(14, 165, 233)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Horizontal grid lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+          const y = paddingY + chartHeight - ratio * chartHeight;
+          return (
+            <g key={ratio}>
+              <line
+                x1={paddingX}
+                y1={y}
+                x2={paddingX + chartWidth}
+                y2={y}
+                stroke="rgba(255,255,255,0.06)"
+                strokeDasharray="4 4"
+              />
+              <text
+                x={paddingX - 8}
+                y={y + 4}
+                textAnchor="end"
+                fill="rgba(148,163,184,0.6)"
+                fontSize="10"
+              >
+                {Math.round(maxVal * ratio)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Day labels */}
+        {points.map((p, i) => (
+          <text
+            key={i}
+            x={p.x}
+            y={paddingY + chartHeight + 18}
+            textAnchor="middle"
+            fill="rgba(148,163,184,0.6)"
+            fontSize="10"
+          >
+            {calendarDays[i]?.dayOfWeek?.slice(0, 2) ?? ""}
+          </text>
+        ))}
+
+        {/* Area fill */}
+        <motion.polygon
+          points={areaPoints}
+          fill={`url(#${gradientId})`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.3 }}
+        />
+
+        {/* Line */}
+        <motion.polyline
+          points={linePoints}
+          fill="none"
+          stroke="rgb(14, 165, 233)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: 1 }}
+          transition={{ duration: 1.2, delay: 0.2, ease: "easeOut" }}
+        />
+
+        {/* Data point dots */}
+        {points.map((p, i) => (
+          <motion.circle
+            key={i}
+            cx={p.x}
+            cy={p.y}
+            r="4"
+            fill="#0F1419"
+            stroke="rgb(14, 165, 233)"
+            strokeWidth="2"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.4 + i * 0.08, type: "spring", stiffness: 300 }}
+          />
+        ))}
+
+        {/* Value labels on dots */}
+        {points.map((p, i) => (
+          p.val > 0 && (
+            <motion.text
+              key={`label-${i}`}
+              x={p.x}
+              y={p.y - 12}
+              textAnchor="middle"
+              fill="rgb(14, 165, 233)"
+              fontSize="11"
+              fontWeight="600"
+              initial={{ opacity: 0, y: p.y }}
+              animate={{ opacity: 1, y: p.y - 12 }}
+              transition={{ delay: 0.5 + i * 0.08 }}
+            >
+              {p.val}
+            </motion.text>
+          )
+        ))}
+      </svg>
+    </motion.div>
+  );
+}
+
 export function ActivityTab() {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<"day" | "week" | "month">("week");
+  const [viewMode, setViewMode] = useState<"day" | "week" | "month" | "custom">("week");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Custom date range state
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
   // Filter states
   const [activityFilter, setActivityFilter] = useState<string>("all");
@@ -515,6 +728,15 @@ export function ActivityTab() {
 
   // Check if filters are active
   const hasActiveFilters = activityFilter !== "all" || pillarFilter !== "all";
+
+  // Client-side filtered activities
+  const filteredActivities = useMemo(() => {
+    return recentActivities.filter((a) => {
+      if (activityFilter !== "all" && a.type !== activityFilter) return false;
+      if (pillarFilter !== "all" && a.pillar !== pillarFilter) return false;
+      return true;
+    });
+  }, [recentActivities, activityFilter, pillarFilter]);
 
   // Clear all filters
   const clearFilters = () => {
@@ -539,11 +761,18 @@ export function ActivityTab() {
       if (pillarFilter !== "all") filterParams.set("pillar", pillarFilter);
       const filterQuery = filterParams.toString() ? `&${filterParams.toString()}` : "";
 
+      // Determine period param: for custom mode, pass date range
+      const isCustomReady = viewMode === "custom" && customStart && customEnd;
+      const periodParam = viewMode === "custom" ? "custom" : viewMode;
+      const customDateQuery = isCustomReady
+        ? `&startDate=${customStart}&endDate=${customEnd}`
+        : "";
+
       // Fetch all data in parallel
       const [statsRes, activitiesRes, breakdownRes, calendarRes] = await Promise.all([
-        api.get<{ stats: ActivityStats }>(`/activity/stats?period=${viewMode}`),
-        api.get<{ activities: ActivityLog[] }>(`/activity/recent?limit=15${filterQuery}`),
-        api.get<{ breakdown: ActivityBreakdown[] }>(`/activity/breakdown?period=${viewMode}`),
+        api.get<{ stats: ActivityStats }>(`/activity/stats?period=${periodParam}${customDateQuery}`),
+        api.get<{ activities: ActivityLog[] }>(`/activity/recent?limit=15${filterQuery}${customDateQuery}`),
+        api.get<{ breakdown: ActivityBreakdown[] }>(`/activity/breakdown?period=${periodParam}${customDateQuery}`),
         api.get<{ days: CalendarDay[] }>(`/activity/calendar?week=${weekStr}`),
       ]);
 
@@ -561,11 +790,13 @@ export function ActivityTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDate, viewMode, activityFilter, pillarFilter]);
+  }, [selectedDate, viewMode, activityFilter, pillarFilter, customStart, customEnd]);
 
   useEffect(() => {
+    // For custom mode, only fetch when both dates are provided
+    if (viewMode === "custom" && (!customStart || !customEnd)) return;
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, viewMode, customStart, customEnd]);
 
   const navigateDate = (direction: "prev" | "next") => {
     const newDate = new Date(selectedDate);
@@ -573,13 +804,21 @@ export function ActivityTab() {
       newDate.setDate(newDate.getDate() + (direction === "next" ? 1 : -1));
     } else if (viewMode === "week") {
       newDate.setDate(newDate.getDate() + (direction === "next" ? 7 : -7));
-    } else {
+    } else if (viewMode === "month") {
       newDate.setMonth(newDate.getMonth() + (direction === "next" ? 1 : -1));
     }
     setSelectedDate(newDate);
   };
 
   const getDateRangeLabel = () => {
+    if (viewMode === "custom") {
+      if (customStart && customEnd) {
+        const start = new Date(customStart + "T00:00:00");
+        const end = new Date(customEnd + "T00:00:00");
+        return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+      }
+      return "Select date range";
+    }
     if (viewMode === "day") {
       return selectedDate.toLocaleDateString("en-US", {
         weekday: "long",
@@ -604,25 +843,9 @@ export function ActivityTab() {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
-  // Loading state
+  // Loading state - skeleton
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        >
-          <Loader2 className="w-10 h-10 text-green-500" />
-        </motion.div>
-        <motion.p
-          className="text-slate-400"
-          animate={{ opacity: [0.5, 1, 0.5] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        >
-          Loading your activity data...
-        </motion.p>
-      </div>
-    );
+    return <ActivitySkeleton />;
   }
 
   // Error state
@@ -652,14 +875,14 @@ export function ActivityTab() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Row */}
+      {/* 1. Stats Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
-          icon={<Activity className="w-5 h-5 text-green-400" />}
+          icon={<Activity className="w-5 h-5 text-amber-400" />}
           label="Activities This Week"
           value={stats?.activitiesThisPeriod || 0}
           change={stats?.activitiesChange}
-          color="from-green-500/10 to-emerald-500/10"
+          color="from-amber-500/10 to-sky-500/10"
           delay={0}
         />
         <StatsCard
@@ -672,11 +895,11 @@ export function ActivityTab() {
           delay={0.1}
         />
         <StatsCard
-          icon={<Timer className="w-5 h-5 text-cyan-400" />}
+          icon={<Timer className="w-5 h-5 text-sky-400" />}
           label="Active Time"
           value={formatDuration(stats?.activeTime || 0)}
           change={stats?.activeTimeChange}
-          color="from-cyan-500/10 to-blue-500/10"
+          color="from-sky-500/10 to-blue-500/10"
           delay={0.2}
         />
         <StatsCard
@@ -690,68 +913,127 @@ export function ActivityTab() {
         />
       </div>
 
-      {/* Date Navigation */}
+      {/* 2. Date Navigation + View Mode Toggle + Custom Date Range */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        className="flex flex-col gap-4"
       >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigateDate("prev")}
-            className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
-          >
-            <ChevronLeft className="w-5 h-5 text-slate-400" />
-          </button>
-          <motion.span
-            key={selectedDate.toISOString()}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-lg font-medium text-white min-w-[200px] text-center"
-          >
-            {getDateRangeLabel()}
-          </motion.span>
-          <button
-            onClick={() => navigateDate("next")}
-            className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
-          >
-            <ChevronRight className="w-5 h-5 text-slate-400" />
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {viewMode !== "custom" && (
+              <button
+                onClick={() => navigateDate("prev")}
+                className="p-2.5 rounded-xl bg-white/5 border border-white/[0.06] hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
+              >
+                <ChevronLeft className="w-5 h-5 text-slate-400" />
+              </button>
+            )}
+            <motion.span
+              key={viewMode === "custom" ? `custom-${customStart}-${customEnd}` : selectedDate.toISOString()}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-lg font-medium text-white min-w-[200px] text-center"
+            >
+              {getDateRangeLabel()}
+            </motion.span>
+            {viewMode !== "custom" && (
+              <button
+                onClick={() => navigateDate("next")}
+                className="p-2.5 rounded-xl bg-white/5 border border-white/[0.06] hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer"
+              >
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 p-1 rounded-xl bg-white/5 border border-white/[0.06]">
+            {(["day", "week", "month", "custom"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                  viewMode === mode
+                    ? "bg-gradient-to-r from-amber-600 to-sky-600 text-white shadow-lg shadow-amber-500/20"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                {mode === "custom" ? "Custom" : mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
-          {(["day", "week", "month"] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                viewMode === mode
-                  ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg shadow-green-500/25"
-                  : "text-slate-400 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              {mode.charAt(0).toUpperCase() + mode.slice(1)}
-            </button>
-          ))}
-        </div>
+        {/* Custom date range picker */}
+        {viewMode === "custom" && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl bg-[#0F1419] border border-white/[0.06]"
+          >
+            <CalendarRange className="w-5 h-5 text-amber-400 hidden sm:block" />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-1">
+              <div className="flex items-center gap-2">
+                <label htmlFor="custom-start" className="text-sm text-slate-400 whitespace-nowrap">
+                  From
+                </label>
+                <input
+                  id="custom-start"
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="px-3 py-2 rounded-lg bg-white/5 border border-white/[0.06] text-white text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 [color-scheme:dark]"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="custom-end" className="text-sm text-slate-400 whitespace-nowrap">
+                  To
+                </label>
+                <input
+                  id="custom-end"
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="px-3 py-2 rounded-lg bg-white/5 border border-white/[0.06] text-white text-sm focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 [color-scheme:dark]"
+                />
+              </div>
+              <button
+                onClick={fetchData}
+                disabled={!customStart || !customEnd}
+                className={cn(
+                  "px-5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer",
+                  customStart && customEnd
+                    ? "bg-gradient-to-r from-amber-600 to-sky-600 text-white shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30"
+                    : "bg-white/5 text-slate-500 cursor-not-allowed"
+                )}
+              >
+                Apply
+              </button>
+            </div>
+          </motion.div>
+        )}
       </motion.div>
 
-      {/* Week View Calendar */}
+      {/* 3. Activity Trend Chart */}
+      <ActivityTrendChart calendarDays={calendarDays} />
+
+      {/* 4. Week View Calendar */}
       {viewMode === "week" && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-5"
+          className="rounded-2xl bg-[#0F1419] border border-white/[0.06] p-5"
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-green-400" />
+              <Calendar className="w-5 h-5 text-sky-400" />
               Weekly Overview
             </h3>
             <motion.div
-              className="px-3 py-1 rounded-full bg-green-500/20 text-green-400 text-xs font-medium"
+              className="px-3 py-1 rounded-full bg-sky-500/20 text-sky-400 text-xs font-medium"
               animate={{ scale: [1, 1.05, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
@@ -768,7 +1050,6 @@ export function ActivityTab() {
                   day={day}
                   index={i}
                   onClick={() => {
-                    // Could navigate to day view or show day details
                     setSelectedDate(new Date(day.date));
                     setViewMode("day");
                   }}
@@ -796,17 +1077,18 @@ export function ActivityTab() {
         </motion.div>
       )}
 
+      {/* 5. 2-col grid: Recent Activities + Activity Breakdown */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Activity Feed */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 overflow-hidden"
+          className="rounded-2xl bg-[#0F1419] border border-white/[0.06] overflow-hidden"
         >
-          <div className="p-5 border-b border-white/10 flex items-center justify-between">
+          <div className="p-5 border-b border-white/[0.06] flex items-center justify-between">
             <h3 className="font-semibold text-white flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-green-400" />
+              <BarChart3 className="w-5 h-5 text-sky-400" />
               Recent Activities
             </h3>
 
@@ -817,14 +1099,14 @@ export function ActivityTab() {
                   className={cn(
                     "flex items-center gap-2 px-3 py-2 rounded-lg border transition-all cursor-pointer",
                     hasActiveFilters
-                      ? "bg-green-500/20 border-green-500/30 text-green-400"
-                      : "bg-white/5 border-white/10 hover:bg-white/10 text-slate-400"
+                      ? "bg-amber-500/20 border-amber-500/30 text-amber-400"
+                      : "bg-white/5 border-white/[0.06] hover:bg-white/10 text-slate-400"
                   )}
                 >
                   <Filter className="w-4 h-4" />
                   <span className="text-sm hidden sm:inline">
                     {hasActiveFilters
-                      ? `${activityFilter !== "all" ? activityFilterOptions.find((o) => o.value === activityFilter)?.label : ""}${activityFilter !== "all" && pillarFilter !== "all" ? " • " : ""}${pillarFilter !== "all" ? pillarFilterOptions.find((o) => o.value === pillarFilter)?.label : ""}`
+                      ? `${activityFilter !== "all" ? activityFilterOptions.find((o) => o.value === activityFilter)?.label : ""}${activityFilter !== "all" && pillarFilter !== "all" ? " \u2022 " : ""}${pillarFilter !== "all" ? pillarFilterOptions.find((o) => o.value === pillarFilter)?.label : ""}`
                       : "Filter"}
                   </span>
                   <ChevronDown className="w-4 h-4" />
@@ -840,7 +1122,7 @@ export function ActivityTab() {
                       onClick={() => setActivityFilter(option.value)}
                       className={cn(
                         "cursor-pointer flex items-center gap-2",
-                        activityFilter === option.value && "bg-green-500/20 text-green-400"
+                        activityFilter === option.value && "bg-amber-500/20 text-amber-400"
                       )}
                     >
                       <Icon className="w-4 h-4" />
@@ -857,7 +1139,7 @@ export function ActivityTab() {
                     onClick={() => setPillarFilter(option.value)}
                     className={cn(
                       "cursor-pointer",
-                      pillarFilter === option.value && "bg-green-500/20 text-green-400"
+                      pillarFilter === option.value && "bg-amber-500/20 text-amber-400"
                     )}
                   >
                     {option.label}
@@ -892,7 +1174,7 @@ export function ActivityTab() {
               {activityFilter !== "all" && (
                 <button
                   onClick={() => setActivityFilter("all")}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/20 text-green-400 text-xs cursor-pointer hover:bg-green-500/30 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs cursor-pointer hover:bg-amber-500/30 transition-colors"
                 >
                   {activityFilterOptions.find((o) => o.value === activityFilter)?.label}
                   <X className="w-3 h-3" />
@@ -917,9 +1199,9 @@ export function ActivityTab() {
           )}
 
           <div className="max-h-[400px] overflow-y-auto">
-            {recentActivities.length > 0 ? (
+            {filteredActivities.length > 0 ? (
               <div className="divide-y divide-white/5">
-                {recentActivities.map((activity, index) => (
+                {filteredActivities.map((activity, index) => (
                   <ActivityFeedItem key={activity.id} activity={activity} index={index} />
                 ))}
               </div>
@@ -944,11 +1226,11 @@ export function ActivityTab() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-5"
+          className="rounded-2xl bg-[#0F1419] border border-white/[0.06] p-5"
         >
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-semibold text-white flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-green-400" />
+              <TrendingUp className="w-5 h-5 text-sky-400" />
               Activity Breakdown
             </h3>
             <span className="text-xs text-slate-500 capitalize">{viewMode} view</span>
@@ -982,17 +1264,17 @@ export function ActivityTab() {
         </motion.div>
       </div>
 
-      {/* Streak Motivation Banner */}
+      {/* 6. Streak Motivation Banner */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-cyan-500/20 border border-white/10 p-6"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-600/20 to-sky-600/20 border border-white/[0.06] p-6"
       >
         {/* Animated background */}
         <div className="absolute inset-0 overflow-hidden">
           <motion.div
-            className="absolute w-96 h-96 rounded-full bg-green-500/10 blur-3xl"
+            className="absolute w-96 h-96 rounded-full bg-amber-500/10 blur-3xl"
             animate={{
               x: ["-50%", "100%"],
               y: ["-20%", "20%"],
@@ -1008,7 +1290,7 @@ export function ActivityTab() {
         <div className="relative z-10 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <motion.div
-              className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center"
+              className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-sky-500 flex items-center justify-center"
               animate={{ rotate: [0, 5, -5, 0] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
@@ -1025,7 +1307,7 @@ export function ActivityTab() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-medium shadow-lg shadow-green-500/25 flex items-center gap-2 cursor-pointer"
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-sky-500 text-white font-medium shadow-lg shadow-amber-500/25 flex items-center gap-2 cursor-pointer"
           >
             <Play className="w-4 h-4" />
             Log Activity

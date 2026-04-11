@@ -46,7 +46,7 @@ export function DashboardLayout({
             className
           )}
         >
-          <div className="mx-auto max-w-7xl">{children}</div>
+          <div className="mx-auto max-w-8xl">{children}</div>
         </main>
       </div>
     </div>

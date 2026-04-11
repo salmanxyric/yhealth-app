@@ -11,10 +11,12 @@ import { AssessmentStep } from "./steps/AssessmentStep";
 import { DeepAssessmentStep } from "./steps/DeepAssessmentStep";
 import { BodyImageUploadStep } from "./steps/BodyImageUploadStep";
 import { GoalSetupStep } from "./steps/GoalSetupStep";
+import { LifeGoalsStep } from "./steps/LifeGoalsStep";
 import { PreferencesStep } from "./steps/PreferencesStep";
 import { PlanGenerationStep } from "./steps/PlanGenerationStep";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { TOTAL_STEPS } from "@/src/features/onboarding/constants/steps";
 import { Loader2, Sparkles, ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -90,8 +92,10 @@ function OnboardingContent() {
       case 4:
         return <GoalSetupStep />;
       case 5:
-        return <PreferencesStep />;
+        return <LifeGoalsStep />;
       case 6:
+        return <PreferencesStep />;
+      case 7:
         return <PlanGenerationStep />;
       default:
         return <WelcomeStep />;
@@ -100,47 +104,55 @@ function OnboardingContent() {
 
   // Don't show progress on plan generation step or deep assessment (has its own header)
   const isDeepAssessment = currentStep === 2 && assessmentMode === "deep";
-  const showProgress = currentStep < 6 && !isDeepAssessment;
+  const showProgress = currentStep < 7 && !isDeepAssessment;
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header with Progress */}
       {showProgress && (
         <motion.header
-          className="sticky top-0 z-50 pt-4 pb-6 md:pt-6 md:pb-8 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/5"
+          className="sticky top-0 z-50 bg-[#02000f]/90 backdrop-blur-xl border-b border-white/10"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="max-w-5xl mx-auto px-4 sm:px-6">
-            {/* Back Button and Logo */}
+          <div className="max-w-[1286px] mx-auto px-3 sm:px-4 md:px-6">
+            {/* Top bar: Back | Logo | Steps counter */}
             <motion.div
-              className="relative mb-6 md:mb-8"
+              className="relative flex items-center justify-between py-3 sm:py-4 md:py-5"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              {/* Back Button */}
+              {/* Back Button — compact on mobile */}
               <Link
                 href="/"
-                className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all group"
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-white text-sm sm:text-base border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all group z-10"
               >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-                <span className="text-sm font-medium hidden sm:inline">Back</span>
+                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-0.5 transition-transform" />
+                <span className="font-medium">Back</span>
               </Link>
 
-              {/* Logo - Centered */}
-              <div className="text-center">
-                <div className="inline-flex items-center gap-2">
-                  <Image src="/logo1.png" alt="yHealth" width={32} height={32} className="object-contain" />
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 bg-clip-text text-transparent">
-                    yHealth
-                  </h1>
-                </div>
+              {/* Logo - Centered absolutely so it doesn't shift with button sizes */}
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-2.5">
+                <Image src="/logo1.png" alt="Balencia" width={32} height={32} className="object-contain sm:w-[38px] sm:h-[38px]" />
+                <span className="text-xl sm:text-2xl md:text-[28px] font-semibold text-white tracking-wide hidden sm:inline">
+                  Balencia
+                </span>
+              </div>
+
+              {/* Steps counter — hidden on small mobile, visible from sm+ */}
+              <div className="hidden sm:flex items-center gap-1 sm:gap-1.5 text-sm sm:text-base z-10">
+                <span className="text-white/40 font-medium">Steps:</span>
+                <span className="text-white font-medium">
+                  {currentStep + 1}/{TOTAL_STEPS}
+                </span>
               </div>
             </motion.div>
+          </div>
 
-            {/* Progress */}
+          {/* Stepper — below header line */}
+          <div className="max-w-[1286px] mx-auto px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 md:pb-6">
             <ProgressIndicator
               steps={ONBOARDING_STEPS}
               currentStep={currentStep}
@@ -168,16 +180,16 @@ function OnboardingContent() {
       {/* Footer */}
       {showProgress && (
         <motion.footer
-          className="py-6 text-center border-t border-white/5"
+          className="py-6 text-center"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6 }}
         >
-          <p className="text-sm text-slate-500">
+          <p className="text-sm sm:text-base md:text-lg text-white/80">
             Need help?{" "}
             <a
               href="#"
-              className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium"
+              className="text-sky-600 hover:text-sky-500 transition-colors font-medium"
             >
               Contact Support
             </a>

@@ -19,16 +19,26 @@ import { navigateToPage } from "@/src/shared/utils/navigation.helper";
 import { api } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import { ImageAnalysisModal } from "../modals/ImageAnalysisModal";
-import { X, Loader2, MicOff } from "lucide-react";
+import { analyzeResponse as analyzeResponseForGestures } from "@/lib/avatar/conversationDirector";
+import { X, Loader2, MicOff, Eye, EyeOff } from "lucide-react";
 import { preferencesService } from "@/src/shared/services/preferences.service";
 import { uploadService } from "@/src/shared/services/upload.service";
 import { ragChatService } from "@/src/shared/services/rag-chat.service";
 import { transcriptionService } from "@/src/shared/services/transcription.service";
 import { voiceCallService } from "@/src/shared/services/voice-call.service";
+import {
+  subscribeToVisionEvents,
+  emitVisionFrame,
+  startVisionSession,
+  stopVisionSession,
+  type VisionStateEvent,
+  type VisionCoachingEvent,
+} from "@/lib/socket-client";
 import type { Preferences } from "@/src/types";
 // Import extracted components
 import { VoiceAssistantHeader } from "../voice-assistant/VoiceAssistantHeader";
 import { InlineCameraPanel } from "../voice-assistant/InlineCameraPanel";
+import { VisionCoachingOverlay } from "../voice-assistant/VisionCoachingOverlay";
 import { AvatarLayer, type AvatarLayerHandle } from "@/components/avatar/AvatarLayer";
 import { VOICE_STATE_TO_AVATAR_STATE } from "@/lib/avatar/vrmMappings";
 import { ContextPanel } from "../voice-assistant/ContextPanel";
@@ -90,6 +100,13 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   const [countdown, setCountdown] = useState<number | null>(null);
   const [shouldAutoCapture, setShouldAutoCapture] = useState(false);
   const [shouldAutoAnalyze, setShouldAutoAnalyze] = useState(false);
+  // Vision coaching state
+  const [isVisionActive, setIsVisionActive] = useState(false);
+  const [visionState, setVisionState] = useState<VisionStateEvent | null>(null);
+  const [visionCoaching, setVisionCoaching] = useState<VisionCoachingEvent | null>(null);
+  const visionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const visionFrameIntervalMs = useRef(3000);
+  const visionCleanupRef = useRef<(() => void) | null>(null);
   const [imageDescription, setImageDescription] = useState<string>("");
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [isConversationActive, setIsConversationActive] = useState(false);
@@ -402,7 +419,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   const getAuthToken = useCallback(() => {
     if (typeof document === "undefined") return null;
     const value = `; ${document.cookie}`;
-    const parts = value.split("; yhealth_access_token=");
+    const parts = value.split("; balencia_access_token=");
     if (parts.length === 2) {
       return parts.pop()?.split(";").shift() || null;
     }
@@ -1026,6 +1043,20 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       return;
     }
 
+    // Analyze response text → queue timed gestures + emotions for the avatar
+    try {
+      const directives = analyzeResponseForGestures(cleanText);
+      for (const d of directives) {
+        const delayMs = d.delaySec * 1000;
+        setTimeout(() => {
+          avatarRef.current?.queueGesture(d.gesture);
+          avatarRef.current?.setEmotionFromBackend(d.emotion, d.intensity * 100);
+        }, delayMs);
+      }
+    } catch {
+      // Non-critical — avatar still works without directives
+    }
+
     // Try server-side TTS (ElevenLabs → Google Cloud TTS fallback chain)
     try {
       console.log("[VoiceAssistant] Attempting server TTS (ElevenLabs → Google Cloud)");
@@ -1433,6 +1464,119 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         inlineVideoRef.current.srcObject = null;
       }
     }
+  }, []);
+
+  // ============================================
+  // VISION COACHING
+  // ============================================
+
+  const captureAndSendFrame = useCallback(() => {
+    const video = inlineVideoRef.current;
+    const canvas = inlineCanvasRef.current;
+    if (!video || !canvas || video.readyState < 2) return;
+
+    // Downscale to 640x480 for efficient transmission
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, 640, 480);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+    const base64 = dataUrl.split(',')[1];
+    if (base64) {
+      emitVisionFrame(base64);
+    }
+  }, []);
+
+  const startVisionCoaching = useCallback(() => {
+    if (isVisionActive || !isCameraActive) return;
+
+    console.log('[VoiceAssistant] Starting vision coaching');
+    setIsVisionActive(true);
+
+    // Emit vision:start via Socket.IO
+    startVisionSession();
+
+    // Subscribe to vision events
+    const cleanup = subscribeToVisionEvents({
+      onState: (data) => {
+        setVisionState(data);
+      },
+      onCoaching: (data) => {
+        setVisionCoaching(data);
+        // Auto-clear coaching toast after 5s
+        setTimeout(() => setVisionCoaching(null), 5000);
+        // Optionally speak the coaching feedback
+        if (isTTSEnabledRef.current && speakResponseRef.current && data.severity === 'warning') {
+          speakResponseRef.current(data.message);
+        }
+      },
+      onThrottle: (data) => {
+        console.log('[VoiceAssistant] Vision throttled, new interval:', data.intervalMs);
+        visionFrameIntervalMs.current = data.intervalMs;
+        // Restart the interval with new timing
+        if (visionIntervalRef.current) {
+          clearInterval(visionIntervalRef.current);
+          visionIntervalRef.current = setInterval(captureAndSendFrame, data.intervalMs);
+        }
+      },
+      onError: (data) => {
+        console.error('[VoiceAssistant] Vision error:', data.message);
+        toast.error(`Vision: ${data.message}`);
+      },
+      onFood: (data) => {
+        toast.success(`Food detected: ${data.item}`, { duration: 4000 });
+      },
+    });
+    visionCleanupRef.current = cleanup;
+
+    // Start frame capture interval
+    visionIntervalRef.current = setInterval(captureAndSendFrame, visionFrameIntervalMs.current);
+  }, [isVisionActive, isCameraActive, captureAndSendFrame]);
+
+  const stopVisionCoaching = useCallback(() => {
+    if (!isVisionActive) return;
+
+    console.log('[VoiceAssistant] Stopping vision coaching');
+    setIsVisionActive(false);
+    setVisionState(null);
+    setVisionCoaching(null);
+    visionFrameIntervalMs.current = 3000;
+
+    // Clear frame capture interval
+    if (visionIntervalRef.current) {
+      clearInterval(visionIntervalRef.current);
+      visionIntervalRef.current = null;
+    }
+
+    // Unsubscribe from vision events
+    if (visionCleanupRef.current) {
+      visionCleanupRef.current();
+      visionCleanupRef.current = null;
+    }
+
+    // Emit vision:stop
+    stopVisionSession();
+  }, [isVisionActive]);
+
+  // Stop vision coaching when camera is deactivated
+  useEffect(() => {
+    if (!isCameraActive && isVisionActive) {
+      stopVisionCoaching();
+    }
+  }, [isCameraActive, isVisionActive, stopVisionCoaching]);
+
+  // Cleanup vision coaching on unmount
+  useEffect(() => {
+    return () => {
+      if (visionIntervalRef.current) {
+        clearInterval(visionIntervalRef.current);
+      }
+      if (visionCleanupRef.current) {
+        visionCleanupRef.current();
+      }
+    };
   }, []);
 
   const captureInlinePhoto = useCallback(() => {
@@ -1984,6 +2128,25 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       requestBody.language = baseLang; // Send base language code (e.g., "ur", "en")
     }
 
+    // Include current camera frame when camera is active (AI can see the user)
+    if (isCameraActive && inlineVideoRef.current && inlineCanvasRef.current) {
+      const video = inlineVideoRef.current;
+      const canvas = inlineCanvasRef.current;
+      if (video.readyState >= 2) {
+        canvas.width = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, 640, 480);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          const base64Data = dataUrl.split(',')[1];
+          if (base64Data) {
+            (requestBody as Record<string, unknown>).imageBase64 = base64Data;
+          }
+        }
+      }
+    }
+
     try {
       const response = await fetch(`${API_URL}/rag-chat/message/stream`, {
         method: "POST",
@@ -1999,6 +2162,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullResponse = "";
+      let doneHandled = false;
 
       if (!reader) {
         throw new Error("No response body available");
@@ -2047,6 +2211,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
                 }
             
             if (data.done) {
+                  doneHandled = true;
                   if (processingTimeoutRef.current) {
                     clearTimeout(processingTimeoutRef.current);
                     processingTimeoutRef.current = null;
@@ -2099,7 +2264,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         }
       }
 
-      if (fullResponse.trim()) {
+      if (fullResponse.trim() && !doneHandled) {
           if (processingTimeoutRef.current) {
             clearTimeout(processingTimeoutRef.current);
             processingTimeoutRef.current = null;
@@ -2163,7 +2328,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getAuthToken, speakResponse, detectMood, executeActionsAsync, sessionType, callId]);
+  }, [getAuthToken, speakResponse, detectMood, executeActionsAsync, sessionType, callId, isCameraActive]);
 
   useEffect(() => { startListeningRef.current = startListening; }, [startListening, useAssemblyAIFallback]);
   useEffect(() => { speakResponseRef.current = speakResponse; }, [speakResponse]);
@@ -2345,13 +2510,20 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
     }
     
     isTTSActiveRef.current = false;
+    isProcessingRef.current = false;
     currentUtteranceRef.current = null;
+
+    // Stop 3D avatar lip-sync
+    avatarRef.current?.stopSpeaking();
+
     setVoiceState("idle");
-    
+
     // Resume listening after stopping speech
-    if (isConversationActiveRef.current && !isProcessingRef.current) {
+    if (isConversationActiveRef.current) {
       setTimeout(() => {
-        startListening();
+        if (isConversationActiveRef.current && !isProcessingRef.current && !isTTSActiveRef.current) {
+          startListening();
+        }
       }, 300);
     }
   }, [startListening]);
@@ -2511,6 +2683,15 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         getInitials={getInitials}
         isCallActive={isCallActive}
         onEndCall={handleEndCall}
+        showCamera={showInlineCamera}
+        onToggleCamera={() => {
+          if (showInlineCamera) {
+            setShowInlineCamera(false);
+          } else {
+            setShowInlineCamera(true);
+            setInlineCameraMode("camera");
+          }
+        }}
       />
 
       {/* Emergency Button - Visible when not in a call */}
@@ -2576,6 +2757,29 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         </motion.div>
       )}
 
+      {/* Vision Coaching Toggle - show when camera is active */}
+      {isCameraActive && showInlineCamera && (
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => isVisionActive ? stopVisionCoaching() : startVisionCoaching()}
+          className={`absolute top-20 left-4 z-40 p-3 rounded-full shadow-xl border transition-all ${
+            isVisionActive
+              ? 'bg-gradient-to-r from-teal-600 to-cyan-600 border-teal-400/50 hover:border-teal-400'
+              : 'bg-gradient-to-r from-slate-700 to-slate-600 border-white/20 hover:border-white/40'
+          }`}
+          title={isVisionActive ? 'Stop Vision Coaching' : 'Start Vision Coaching'}
+        >
+          {isVisionActive ? (
+            <Eye className="w-5 h-5 text-white" />
+          ) : (
+            <EyeOff className="w-5 h-5 text-white/70" />
+          )}
+        </motion.button>
+      )}
+
       {/* Inline Camera - Top Right */}
       <InlineCameraPanel
         showInlineCamera={showInlineCamera}
@@ -2607,6 +2811,16 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         handleInlineFileChange={handleInlineFileChange}
       />
 
+      {/* Vision Coaching Overlay */}
+      {isVisionActive && (
+        <VisionCoachingOverlay
+          visionState={visionState}
+          coaching={visionCoaching}
+          isActive={isVisionActive}
+          onStop={stopVisionCoaching}
+        />
+      )}
+
       {/* Enhanced Network Background with geometric patterns */}
       <EnhancedNetworkBackground
         active={isConversationActive}
@@ -2617,7 +2831,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       <div className="absolute inset-0 z-[5] cursor-pointer" onClick={toggleConversation}>
         <AvatarLayer
           ref={avatarRef}
-          vrmUrl="/models/coach-avatar.vrm"
+          vrmUrl="/models/Char2.vrm"
           autoMapVoiceState
           className="w-full h-full"
         />

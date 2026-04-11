@@ -6,6 +6,8 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../services/logger.service.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { notificationService } from '../services/notification.service.js';
+import { goalDecompositionService } from '../services/goal-decomposition.service.js';
+import { autoProgressService } from '../services/auto-progress.service.js';
 import { embeddingQueueService } from '../services/embedding-queue.service.js';
 import { JobPriorities } from '../config/queue.config.js';
 import type {
@@ -942,8 +944,16 @@ export const updateGoal = asyncHandler(async (req: AuthenticatedRequest, res: Re
       previousProgress
     );
 
-    // Check if goal is completed
-    if (newProgress >= 100 && previousProgress < 100) {
+    // Auto-complete goal when progress reaches 100%
+    if (newProgress >= 100 && previousProgress < 100 && updatedGoal.status !== 'completed') {
+      await query(
+        'UPDATE user_goals SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        ['completed', goalId]
+      );
+      updatedGoal.status = 'completed';
+      logger.info('Goal auto-completed (progress 100%)', { userId, goalId });
+      await notificationService.goalCompleted(userId, goalId, updatedGoal.title);
+    } else if (newProgress >= 100 && previousProgress < 100) {
       await notificationService.goalCompleted(userId, goalId, updatedGoal.title);
     }
   }
@@ -1298,6 +1308,47 @@ function runSafetyChecks(goal: { category: GoalCategory; targetValue: number; du
   return { warnings, requiresDoctorConsult };
 }
 
+// ============================================
+// GOAL ACTIONS & AUTO-PROGRESS
+// ============================================
+
+export const getGoalActions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { goalId } = req.params;
+  let actions = await goalDecompositionService.getActionsWithDailyStatus(userId, goalId);
+
+  if (actions.length === 0) {
+    await goalDecompositionService.getOrCreateActionsForUserGoal(userId, goalId);
+    actions = await goalDecompositionService.getActionsWithDailyStatus(userId, goalId);
+    ApiResponse.success(res, { actions, generated: true });
+    return;
+  }
+
+  ApiResponse.success(res, { actions, generated: false });
+});
+
+export const toggleGoalAction = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { actionId } = req.params;
+  const completed = await goalDecompositionService.toggleActionCompletion(userId, actionId);
+
+  ApiResponse.success(res, { completed });
+});
+
+export const getGoalAutoProgress = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { goalId } = req.params;
+  const progress = await autoProgressService.calculateForUserGoal(userId, goalId);
+
+  ApiResponse.success(res, { progress });
+});
+
 export default {
   selectGoal,
   selectMode,
@@ -1314,4 +1365,7 @@ export default {
   updateGoal,
   deleteGoal,
   deleteGoals,
+  getGoalActions,
+  toggleGoalAction,
+  getGoalAutoProgress,
 };

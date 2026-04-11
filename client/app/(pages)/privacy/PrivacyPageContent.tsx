@@ -187,7 +187,7 @@ export default function PrivacyPageContent() {
               transition={{ duration: 0.5, delay: 0.2 }}
             >
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Your privacy is fundamental to our mission. This policy explains how YHealth collects,
+                Your privacy is fundamental to our mission. This policy explains how Balencia collects,
                 uses, and protects your personal and health information with full transparency.
               </p>
             </motion.div>
@@ -243,7 +243,7 @@ export default function PrivacyPageContent() {
         </div>
 
         <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto flex gap-10">
+          <div className="max-w-8xl mx-auto flex gap-10">
             {/* Table of Contents - Desktop Sidebar */}
             <motion.aside
               initial={{ opacity: 0, x: -30 }}
@@ -293,7 +293,7 @@ export default function PrivacyPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      Welcome to YHealth (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). YHealth is an AI-powered personal health and wellness
+                      Welcome to Balencia (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). Balencia is an AI-powered personal health and wellness
                       platform that helps you track fitness, nutrition, mental wellbeing, and overall health goals.
                       We are deeply committed to protecting your privacy and ensuring the security of your personal
                       and health-related information.
@@ -383,7 +383,7 @@ export default function PrivacyPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6">
                     <p className="text-muted-foreground mb-4 leading-relaxed">
-                      We use the information we collect to provide, maintain, and improve the YHealth Platform. Specifically:
+                      We use the information we collect to provide, maintain, and improve the Balencia Platform. Specifically:
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {[
@@ -427,7 +427,7 @@ export default function PrivacyPageContent() {
                       {[
                         { title: "Service Providers", desc: "Trusted vendors who help us operate the Platform (cloud hosting, payment processing, email delivery). They are contractually obligated to protect your data and use it only for the services they provide to us." },
                         { title: "Health Integrations", desc: "With your explicit consent, we share data with connected health services (e.g., Apple Health, Google Fit, WHOOP) to provide a unified health experience." },
-                        { title: "Legal Requirements", desc: "When required by law, court order, or governmental regulation, or to protect the rights, property, or safety of YHealth, our users, or the public." },
+                        { title: "Legal Requirements", desc: "When required by law, court order, or governmental regulation, or to protect the rights, property, or safety of Balencia, our users, or the public." },
                         { title: "Business Transfers", desc: "In connection with a merger, acquisition, or sale of assets, your information may be transferred. We will notify you before your data becomes subject to a different privacy policy." },
                         { title: "Aggregated Data", desc: "We may share anonymized, aggregated statistical data that cannot identify you personally for research, analytics, or industry reporting purposes." },
                       ].map((item) => (
@@ -510,7 +510,7 @@ export default function PrivacyPageContent() {
                     </div>
                     <p className="text-sm text-muted-foreground">
                       To exercise any of these rights, contact us at{" "}
-                      <a href="mailto:privacy@yhealth.app" className="text-primary hover:underline">privacy@yhealth.app</a>{" "}
+                      <a href="mailto:privacy@balencia.app" className="text-primary hover:underline">privacy@balencia.app</a>{" "}
                       or through your account settings. We will respond within 30 days.
                     </p>
                   </div>
@@ -558,7 +558,7 @@ export default function PrivacyPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      YHealth operates globally and may transfer your data to countries other than your country
+                      Balencia operates globally and may transfer your data to countries other than your country
                       of residence. When we transfer data internationally, we ensure adequate protection through:
                     </p>
                     <ul className="space-y-2">
@@ -588,14 +588,14 @@ export default function PrivacyPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      The YHealth Platform is not intended for children under the age of 16 (or the applicable age of digital consent
+                      The Balencia Platform is not intended for children under the age of 16 (or the applicable age of digital consent
                       in your jurisdiction). We do not knowingly collect personal information from children under 16.
                     </p>
                     <p className="text-muted-foreground leading-relaxed">
                       If we become aware that we have collected personal information from a child under 16 without
                       parental consent, we will take immediate steps to delete that information. If you believe
                       we may have collected data from a child under 16, please contact us at{" "}
-                      <a href="mailto:privacy@yhealth.app" className="text-primary hover:underline">privacy@yhealth.app</a>.
+                      <a href="mailto:privacy@balencia.app" className="text-primary hover:underline">privacy@balencia.app</a>.
                     </p>
                   </div>
                 </div>
@@ -644,14 +644,14 @@ export default function PrivacyPageContent() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">Data Protection Officer</h4>
-                        <p className="text-xs text-muted-foreground mb-1">Email: privacy@yhealth.app</p>
+                        <p className="text-xs text-muted-foreground mb-1">Email: privacy@balencia.app</p>
                         <p className="text-xs text-muted-foreground mb-1">Phone: +1 (555) 123-4567</p>
                         <p className="text-xs text-muted-foreground">Response time: Within 30 days</p>
                       </div>
                       <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">Mailing Address</h4>
                         <p className="text-xs text-muted-foreground">
-                          YHealth Inc.<br />
+                          Balencia Inc.<br />
                           Attn: Privacy Team<br />
                           123 Health Innovation Blvd<br />
                           San Francisco, CA 94105, USA

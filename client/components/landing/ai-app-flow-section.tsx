@@ -676,7 +676,7 @@ export function AIAppFlowSection() {
             className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6"
           >
             See{" "}
-            <span className="gradient-text-animated">yHealth in Action</span>
+            <span className="gradient-text-animated">Balencia in Action</span>
           </motion.h2>
 
           <motion.p

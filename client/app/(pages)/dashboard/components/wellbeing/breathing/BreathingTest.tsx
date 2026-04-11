@@ -33,7 +33,7 @@ interface BreathingPattern {
   exhale: number;
   holdAfterExhale?: number;
   cycles: number;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   color: string;
   gradient: string;
 }
@@ -43,7 +43,7 @@ interface DifficultyConfig {
   label: string;
   multiplier: number;
   color: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   description: string;
 }
 

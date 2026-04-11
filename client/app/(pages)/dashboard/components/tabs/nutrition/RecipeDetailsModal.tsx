@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,8 @@ import {
   ChefHat,
   Clock,
   Tag,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Recipe } from "@/src/shared/services";
 
@@ -34,19 +37,34 @@ export function RecipeDetailsModal({
   onEdit,
   onToggleFavorite,
 }: RecipeDetailsModalProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   if (!recipe) return null;
 
   const totalTime = (recipe.prepTimeMinutes || 0) + (recipe.cookTimeMinutes || 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
+      <DialogContent className={`max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700 transition-all duration-300 ${
+        isFullscreen ? "max-w-full w-[calc(100vw-2rem)] h-[calc(100vh-2rem)]" : "w-full sm:max-w-3xl"
+      }`}>
         <DialogHeader>
           <div className="flex items-start justify-between">
-            <DialogTitle className="text-2xl font-bold text-white pr-8">
+            <DialogTitle className="text-lg font-bold text-white pr-8">
               {recipe.name}
             </DialogTitle>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsFullscreen((f) => !f)}
+                className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors"
+                title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="w-5 h-5" />
+                ) : (
+                  <Maximize2 className="w-5 h-5" />
+                )}
+              </button>
               {onToggleFavorite && (
                 <button
                   onClick={() => onToggleFavorite(recipe.id)}
@@ -74,9 +92,9 @@ export function RecipeDetailsModal({
           </div>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Recipe Image */}
-          <div className="w-full h-64 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/10 flex items-center justify-center relative overflow-hidden">
+          <div className="w-full h-48 sm:h-64 rounded-xl bg-gradient-to-br from-emerald-500/20 to-green-500/10 flex items-center justify-center relative overflow-hidden">
             {recipe.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -105,60 +123,60 @@ export function RecipeDetailsModal({
           )}
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
             {recipe.caloriesPerServing && (
-              <div className="flex flex-col items-center p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-                <Flame className="w-6 h-6 text-orange-400 mb-2" />
-                <span className="text-2xl font-bold text-white">{recipe.caloriesPerServing}</span>
-                <span className="text-xs text-slate-400">Calories</span>
+              <div className="flex flex-col items-center p-3 sm:p-4 rounded-xl bg-slate-800/50 border border-slate-700">
+                <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400 mb-1.5 sm:mb-2" />
+                <span className="text-[15px] sm:text-lg font-bold text-white">{recipe.caloriesPerServing}</span>
+                <span className="text-[11px] sm:text-xs text-slate-400">Calories</span>
               </div>
             )}
             {totalTime > 0 && (
-              <div className="flex flex-col items-center p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-                <Timer className="w-6 h-6 text-blue-400 mb-2" />
-                <span className="text-2xl font-bold text-white">{totalTime}</span>
-                <span className="text-xs text-slate-400">Minutes</span>
+              <div className="flex flex-col items-center p-3 sm:p-4 rounded-xl bg-slate-800/50 border border-slate-700">
+                <Timer className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 mb-1.5 sm:mb-2" />
+                <span className="text-[15px] sm:text-lg font-bold text-white">{totalTime}</span>
+                <span className="text-[11px] sm:text-xs text-slate-400">Minutes</span>
               </div>
             )}
             {recipe.servings && (
-              <div className="flex flex-col items-center p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-                <Utensils className="w-6 h-6 text-emerald-400 mb-2" />
-                <span className="text-2xl font-bold text-white">{recipe.servings}</span>
-                <span className="text-xs text-slate-400">Servings</span>
+              <div className="flex flex-col items-center p-3 sm:p-4 rounded-xl bg-slate-800/50 border border-slate-700">
+                <Utensils className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 mb-1.5 sm:mb-2" />
+                <span className="text-[15px] sm:text-lg font-bold text-white">{recipe.servings}</span>
+                <span className="text-[11px] sm:text-xs text-slate-400">Servings</span>
               </div>
             )}
             {recipe.prepTimeMinutes && recipe.cookTimeMinutes && (
-              <div className="flex flex-col items-center p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-                <Clock className="w-6 h-6 text-purple-400 mb-2" />
-                <span className="text-lg font-bold text-white">
+              <div className="flex flex-col items-center p-3 sm:p-4 rounded-xl bg-slate-800/50 border border-slate-700">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400 mb-1.5 sm:mb-2" />
+                <span className="text-[15px] sm:text-lg font-bold text-white">
                   {recipe.prepTimeMinutes}/{recipe.cookTimeMinutes}
                 </span>
-                <span className="text-xs text-slate-400">Prep/Cook</span>
+                <span className="text-[11px] sm:text-xs text-slate-400">Prep/Cook</span>
               </div>
             )}
           </div>
 
           {/* Nutrition Info */}
           {(recipe.proteinGrams || recipe.carbsGrams || recipe.fatGrams) && (
-            <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700">
-              <h3 className="text-lg font-semibold text-white mb-3">Nutrition (per serving)</h3>
-              <div className="grid grid-cols-3 gap-4">
+            <div className="p-3 sm:p-4 rounded-xl bg-slate-800/50 border border-slate-700">
+              <h3 className="text-[15px] sm:text-lg font-semibold text-white mb-2 sm:mb-3">Nutrition (per serving)</h3>
+              <div className="grid grid-cols-3 gap-3 sm:gap-4">
                 {recipe.proteinGrams && (
                   <div>
-                    <span className="text-sm text-slate-400">Protein</span>
-                    <p className="text-xl font-bold text-white">{recipe.proteinGrams}g</p>
+                    <span className="text-[13px] sm:text-sm text-slate-400">Protein</span>
+                    <p className="text-[14px] sm:text-base font-bold text-white">{recipe.proteinGrams}g</p>
                   </div>
                 )}
                 {recipe.carbsGrams && (
                   <div>
-                    <span className="text-sm text-slate-400">Carbs</span>
-                    <p className="text-xl font-bold text-white">{recipe.carbsGrams}g</p>
+                    <span className="text-[13px] sm:text-sm text-slate-400">Carbs</span>
+                    <p className="text-[14px] sm:text-base font-bold text-white">{recipe.carbsGrams}g</p>
                   </div>
                 )}
                 {recipe.fatGrams && (
                   <div>
-                    <span className="text-sm text-slate-400">Fat</span>
-                    <p className="text-xl font-bold text-white">{recipe.fatGrams}g</p>
+                    <span className="text-[13px] sm:text-sm text-slate-400">Fat</span>
+                    <p className="text-[14px] sm:text-base font-bold text-white">{recipe.fatGrams}g</p>
                   </div>
                 )}
               </div>
@@ -168,15 +186,15 @@ export function RecipeDetailsModal({
           {/* Ingredients */}
           {recipe.ingredients && recipe.ingredients.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                <ChefHat className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-[15px] sm:text-lg font-semibold text-white mb-2 sm:mb-3 flex items-center gap-2">
+                <ChefHat className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
                 Ingredients
               </h3>
               <div className="space-y-2">
                 {recipe.ingredients.map((ingredient, index) => (
                   <div
                     key={index}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700"
+                    className="flex items-start gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg bg-slate-800/50 border border-slate-700"
                   >
                     <span className="text-emerald-400 font-semibold min-w-[24px]">
                       {index + 1}.
@@ -201,8 +219,8 @@ export function RecipeDetailsModal({
           {/* Instructions */}
           {recipe.instructions && recipe.instructions.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                <Timer className="w-5 h-5 text-blue-400" />
+              <h3 className="text-[15px] sm:text-lg font-semibold text-white mb-2 sm:mb-3 flex items-center gap-2">
+                <Timer className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
                 Instructions
               </h3>
               <div className="space-y-3">
@@ -211,7 +229,7 @@ export function RecipeDetailsModal({
                   .map((instruction) => (
                     <div
                       key={instruction.step}
-                      className="flex items-start gap-3 p-4 rounded-lg bg-slate-800/50 border border-slate-700"
+                      className="flex items-start gap-2 sm:gap-3 p-3 sm:p-4 rounded-lg bg-slate-800/50 border border-slate-700"
                     >
                       <span className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold text-sm flex-shrink-0">
                         {instruction.step}

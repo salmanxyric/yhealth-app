@@ -2,7 +2,7 @@
  * @file WHOOP Stress Intelligence Service
  * @description Calculates stress levels from physiological signals (HRV, HR, recovery)
  *
- * YHealth's Stress Monitor Intelligence Layer - interprets physiological signals
+ * Balencia's Stress Monitor Intelligence Layer - interprets physiological signals
  * to estimate real-time stress signals and long-term patterns.
  *
  * This service does NOT diagnose medical or mental health conditions.

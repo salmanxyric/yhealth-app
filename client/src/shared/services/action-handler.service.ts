@@ -60,7 +60,7 @@ function isValidAction(action: unknown): action is ActionCommand {
   const obj = action as Record<string, unknown>;
   return (
     typeof obj.type === 'string' &&
-    ['navigate', 'update', 'create', 'delete', 'open_modal'].includes(obj.type) &&
+    ['navigate', 'update', 'create', 'delete', 'open_modal', 'music_control'].includes(obj.type) &&
     typeof obj.target === 'string'
   );
 }
@@ -150,6 +150,14 @@ export async function executeAction(
           error: 'Modal handler not provided',
         };
       
+      case 'music_control':
+        window.dispatchEvent(new CustomEvent('music:command', { detail: action.params }));
+        return {
+          success: true,
+          action,
+          message: `Music: ${(action.params as Record<string, unknown>)?.command || 'control'}`,
+        };
+
       default:
         return {
           success: false,

@@ -3,8 +3,8 @@
  * @description Generates contextual wellbeing questions based on user history and patterns
  */
 
-import { ChatAnthropic } from '@langchain/anthropic';
-import { env } from '../config/env.config.js';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { modelFactory } from './model-factory.service.js';
 import { logger } from './logger.service.js';
 import { moodService } from './wellbeing/mood.service.js';
 import { stressService } from './stress.service.js';
@@ -12,6 +12,7 @@ import { journalService } from './wellbeing/journal.service.js';
 import { energyService } from './wellbeing/energy.service.js';
 import { workoutPlanService } from './workout-plan.service.js';
 import { query } from '../database/pg.js';
+import { parseLlmJson } from '../helper/llm-json-parser.js';
 
 // ============================================
 // TYPES
@@ -29,13 +30,13 @@ export interface WellbeingQuestion {
 // ============================================
 
 class WellbeingQuestionEngineService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'light',
       temperature: 0.7,
+      maxTokens: 2000,
     });
   }
 
@@ -912,16 +913,9 @@ Return JSON array:
       const response = await this.llm.invoke(prompt);
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
       
-      // Parse JSON
-      let questions: WellbeingQuestion[];
-      try {
-        const jsonMatch = content.match(/```(?:json)?\s*(\[[\s\S]*\])\s*```/) || content.match(/(\[[\s\S]*\])/);
-        if (jsonMatch) {
-          questions = JSON.parse(jsonMatch[1]);
-        } else {
-          questions = JSON.parse(content);
-        }
-      } catch (_parseError) {
+      // Parse JSON (handles markdown fences, truncated output, etc.)
+      const questions = parseLlmJson<WellbeingQuestion[]>(content);
+      if (!questions || !Array.isArray(questions)) {
         logger.warn('[WellbeingQuestionEngine] Failed to parse LLM response', { content: content.substring(0, 200) });
         return this.getFallbackQuestions(limit, userId);
       }

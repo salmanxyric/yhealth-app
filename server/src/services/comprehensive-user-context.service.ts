@@ -5,13 +5,16 @@
 
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
-import { getUserHealthProfile } from './whoop-analytics.service.js';
+import { getUserHealthProfile, getRecoveryTrends, getSleepTrends, getStrainTrends } from './whoop-analytics.service.js';
 import { wellbeingContextService } from './wellbeing-context.service.js';
 import { gamificationService } from './gamification.service.js';
 import { waterIntakeService } from './water-intake.service.js';
 import { aiScoringService } from './ai-scoring.service.js';
 import { cache } from './cache.service.js';
 import { dailyAnalysisService } from './daily-analysis.service.js';
+import { motivationTierService } from './motivation-tier.service.js';
+import type { MotivationTier } from '../../../shared/types/domain/wellbeing.js';
+import type { ActivityStatusContext, StatusPattern } from '../types/activity-status.types.js';
 
 // ============================================
 // TYPES
@@ -42,6 +45,44 @@ export interface WhoopContext {
   };
   needsSync?: boolean; // true if connected but no recent data
   syncHoursAgo?: number;
+
+  // 7-day averages
+  avg7d?: {
+    recovery: number | null;
+    hrv: number | null;
+    rhr: number | null;
+    sleepHours: number | null;
+    sleepQuality: number | null;
+    strain: number | null;
+  };
+  // 30-day baselines (personal averages for comparison)
+  baseline30d?: {
+    recovery: number | null;
+    hrv: number | null;
+    rhr: number | null;
+    sleepHours: number | null;
+    sleepQuality: number | null;
+    strain: number | null;
+  };
+  // Trend directions (last 3d vs prior 4d in 7d window)
+  trends?: {
+    recovery: 'improving' | 'stable' | 'declining' | null;
+    hrv: 'improving' | 'stable' | 'declining' | null;
+    rhr: 'improving' | 'stable' | 'declining' | null;
+    sleep: 'improving' | 'stable' | 'declining' | null;
+    strain: 'improving' | 'stable' | 'declining' | null;
+  };
+  // Sleep stage breakdown (last sleep)
+  sleepStages?: {
+    remPercent: number;
+    deepPercent: number;
+    lightPercent: number;
+  };
+  // Extra biometrics from recovery
+  spo2?: number;
+  skinTempCelsius?: number;
+  // Recovery/strain sustainability ratio (> 1 = sustainable, < 1 = overreaching)
+  recoveryStrainRatio?: number;
 }
 
 export interface LifestyleContext {
@@ -121,6 +162,26 @@ export interface GoalsContext {
     daysRemaining: number;
   }>;
   approachingDeadlines?: number; // goals with deadlines in next 7 days
+  // Life goals (non-health: financial, faith, relationships, career, etc.)
+  activeLifeGoals?: Array<{
+    id: string;
+    category: string;
+    title: string;
+    progress: number;
+    trackingMethod: string;
+    lastCheckinDate?: string;
+    lastMentionedAt?: string;
+    journalMentionCount: number;
+    avgSentiment?: number;
+    daysSinceLastActivity?: number;
+    milestoneCount?: number;
+    milestonesCompleted?: number;
+  }>;
+  lifeGoalCount?: number;
+  stalledLifeGoals?: number; // no activity in 7+ days
+  todayIntentions?: Array<{ text: string; fulfilled?: boolean; domain?: string }>;
+  intentionFulfillmentRate?: number;
+  motivationTier?: MotivationTier;
 }
 
 export interface BodyStatsContext {
@@ -244,6 +305,7 @@ export interface ComprehensiveUserContext {
   nutritionAnalysis: NutritionAnalysisContext;
   competitions: CompetitionContext;
   progressTrend: ProgressTrendContext;
+  activityStatus: ActivityStatusContext;
 }
 
 // ============================================
@@ -283,6 +345,7 @@ class ComprehensiveUserContextService {
     // Check cache first
     const cached = this.contextCache.get(userId);
     if (cached && cached.expiresAt > Date.now()) {
+      logger.debug('[ComprehensiveUserContext] Cache hit — skipping 16 queries', { userId: userId.slice(0, 8) });
       return cached.data;
     }
 
@@ -291,12 +354,13 @@ class ComprehensiveUserContextService {
       // 16 parallel queries would require 16+ connections simultaneously — with a pool of 20
       // and other concurrent requests, this causes "timeout exceeded" errors.
 
-      // Wave 1: Core health data (4 queries)
-      const [whoop, lifestyle, workouts, nutrition] = await Promise.all([
+      // Wave 1: Core health data (5 queries)
+      const [whoop, lifestyle, workouts, nutrition, activityStatus] = await Promise.all([
         this.getWhoopContext(userId),
         this.getLifestyleContext(userId),
         this.getWorkoutContext(userId),
         this.getNutritionContext(userId),
+        this.getActivityStatusContext(userId),
       ]);
 
       // Wave 2: Wellbeing + social (4 queries)
@@ -326,7 +390,7 @@ class ComprehensiveUserContextService {
       const result: ComprehensiveUserContext = {
         whoop, lifestyle, workouts, nutrition, wellbeing, chatHistory, goals, bodyStats,
         gamification, habits, mentalHealth, waterIntake, dailyScore, nutritionAnalysis,
-        competitions, progressTrend,
+        competitions, progressTrend, activityStatus,
       };
 
       // Cache the result
@@ -366,6 +430,7 @@ class ComprehensiveUserContextService {
         nutritionAnalysis: {},
         competitions: {},
         progressTrend: {},
+        activityStatus: { current: 'working', since: new Date().toISOString(), source: 'manual', recentHistory: [], patterns: [], activeOverrides: false, daysSinceLastWorkingStatus: 0 },
       };
     }
   }
@@ -393,6 +458,65 @@ class ComprehensiveUserContextService {
 
     return cache.getOrSet<CompactMessageContext>(cacheKey, async () => {
       try {
+        // Check which optional tables exist to avoid "relation does not exist" parse errors
+        const tableCheck = await query<{ tablename: string }>(
+          `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY($1)`,
+          [['whoop_data', 'gamification_profiles', 'daily_user_scores', 'water_targets', 'water_intake', 'nutrition_analysis']]
+        );
+        const existingTables = new Set(tableCheck.rows.map(r => r.tablename));
+
+        // Build CTEs conditionally — missing tables get NULL/empty stubs
+        const whoopCte = existingTables.has('whoop_data')
+          ? `whoop_latest AS (
+              SELECT
+                (recovery_data->'Score'->>'recovery_score')::numeric AS recovery_score,
+                CASE
+                  WHEN sleep_data->'Sleep'->>'total_in_bed_time_milli' IS NOT NULL
+                  THEN (sleep_data->'Sleep'->>'total_in_bed_time_milli')::numeric / 3600000
+                  ELSE NULL
+                END AS sleep_hours
+              FROM whoop_data
+              WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '48 hours'
+              ORDER BY created_at DESC
+              LIMIT 1
+            )`
+          : `whoop_latest AS (SELECT NULL::numeric AS recovery_score, NULL::numeric AS sleep_hours WHERE false)`;
+
+        const streakCte = existingTables.has('gamification_profiles')
+          ? `streak AS (
+              SELECT COALESCE(current_streak, 0) AS streak_days
+              FROM gamification_profiles WHERE user_id = $1
+            )`
+          : `streak AS (SELECT 0 AS streak_days WHERE false)`;
+
+        const scoreCte = existingTables.has('daily_user_scores')
+          ? `score AS (
+              SELECT total_score AS daily_score FROM daily_user_scores
+              WHERE user_id = $1 ORDER BY date DESC LIMIT 1
+            )`
+          : `score AS (SELECT NULL::numeric AS daily_score WHERE false)`;
+
+        const waterCte = existingTables.has('water_targets') && existingTables.has('water_intake')
+          ? `water AS (
+              SELECT
+                CASE WHEN wt.daily_target_ml > 0
+                  THEN ROUND((COALESCE(SUM(wi.amount_ml), 0) / wt.daily_target_ml * 100)::numeric)
+                  ELSE NULL
+                END AS water_pct
+              FROM water_targets wt
+              LEFT JOIN water_intake wi ON wi.user_id = wt.user_id AND wi.consumed_at::date = CURRENT_DATE
+              WHERE wt.user_id = $1
+              GROUP BY wt.daily_target_ml
+            )`
+          : `water AS (SELECT NULL::numeric AS water_pct WHERE false)`;
+
+        const nutritionCte = existingTables.has('nutrition_analysis')
+          ? `nutrition AS (
+              SELECT weekly_adherence_rate AS nutrition_adherence FROM nutrition_analysis
+              WHERE user_id = $1 ORDER BY analysis_date DESC LIMIT 1
+            )`
+          : `nutrition AS (SELECT NULL::numeric AS nutrition_adherence WHERE false)`;
+
         // Single query: recovery, sleep, streak, daily score, water%, nutrition adherence, user name, assistant name
         const result = await query<{
           recovery_score: number | null;
@@ -404,54 +528,15 @@ class ComprehensiveUserContextService {
           user_name: string;
           assistant_name: string;
         }>(`
-          WITH whoop_latest AS (
-            SELECT
-              (recovery_data->'Score'->>'recovery_score')::numeric AS recovery_score,
-              CASE
-                WHEN sleep_data->'Sleep'->>'total_in_bed_time_milli' IS NOT NULL
-                THEN (sleep_data->'Sleep'->>'total_in_bed_time_milli')::numeric / 3600000
-                ELSE NULL
-              END AS sleep_hours
-            FROM whoop_data
-            WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '48 hours'
-            ORDER BY created_at DESC
-            LIMIT 1
-          ),
-          streak AS (
-            SELECT COALESCE(current_streak, 0) AS streak_days
-            FROM gamification_profiles
-            WHERE user_id = $1
-          ),
-          score AS (
-            SELECT total_score AS daily_score
-            FROM daily_user_scores
-            WHERE user_id = $1
-            ORDER BY score_date DESC
-            LIMIT 1
-          ),
-          water AS (
-            SELECT
-              CASE WHEN wt.daily_target_ml > 0
-                THEN ROUND((COALESCE(SUM(wi.amount_ml), 0) / wt.daily_target_ml * 100)::numeric)
-                ELSE NULL
-              END AS water_pct
-            FROM water_targets wt
-            LEFT JOIN water_intake wi ON wi.user_id = wt.user_id
-              AND wi.consumed_at::date = CURRENT_DATE
-            WHERE wt.user_id = $1
-            GROUP BY wt.daily_target_ml
-          ),
-          nutrition AS (
-            SELECT weekly_adherence_rate AS nutrition_adherence
-            FROM nutrition_analysis
-            WHERE user_id = $1
-            ORDER BY analysis_date DESC
-            LIMIT 1
-          ),
+          WITH ${whoopCte},
+          ${streakCte},
+          ${scoreCte},
+          ${waterCte},
+          ${nutritionCte},
           user_info AS (
             SELECT
-              u.name AS user_name,
-              COALESCE(up.assistant_name, 'Coach') AS assistant_name
+              (u.first_name || ' ' || u.last_name) AS user_name,
+              COALESCE(up.voice_assistant_name, 'Coach') AS assistant_name
             FROM users u
             LEFT JOIN user_preferences up ON up.user_id = u.id
             WHERE u.id = $1
@@ -594,6 +679,113 @@ class ComprehensiveUserContextService {
           calories: whoopData.todayStrain.calories,
           timestamp: whoopData.todayStrain.timestamp,
         };
+      }
+
+      // Extract SPO2 and skin temp from recovery (already in whoopData)
+      if (whoopData.currentRecovery?.spo2) {
+        context.spo2 = whoopData.currentRecovery.spo2;
+      }
+      if (whoopData.currentRecovery?.skinTemp) {
+        context.skinTempCelsius = whoopData.currentRecovery.skinTemp;
+      }
+
+      // Fetch 30-day trends for baselines + compute 7d averages (only if connected and has data)
+      if (context.isConnected && !context.needsSync) {
+        try {
+          const [recovery30d, sleep30d, strain30d] = await Promise.all([
+            getRecoveryTrends(userId, 30),
+            getSleepTrends(userId, 30),
+            getStrainTrends(userId, 30),
+          ]);
+
+          const avgField = <T>(arr: T[], getter: (item: T) => number): number | null => {
+            const vals = arr.map(getter).filter(v => v > 0);
+            return vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+          };
+
+          // 30-day baselines
+          context.baseline30d = {
+            recovery: avgField(recovery30d, r => r.recovery_score),
+            hrv: avgField(recovery30d, r => r.hrv_rmssd_ms),
+            rhr: avgField(recovery30d, r => r.resting_heart_rate_bpm),
+            sleepHours: avgField(sleep30d, s => s.duration_minutes / 60),
+            sleepQuality: avgField(sleep30d, s => s.sleep_quality_score),
+            strain: avgField(strain30d, s => s.strain_score),
+          };
+
+          // 7d averages from last 7 entries of 30d data
+          const last7Recovery = recovery30d.slice(-7);
+          const last7Sleep = sleep30d.slice(-7);
+          const last7Strain = strain30d.slice(-7);
+          context.avg7d = {
+            recovery: avgField(last7Recovery, r => r.recovery_score),
+            hrv: avgField(last7Recovery, r => r.hrv_rmssd_ms),
+            rhr: avgField(last7Recovery, r => r.resting_heart_rate_bpm),
+            sleepHours: avgField(last7Sleep, s => s.duration_minutes / 60),
+            sleepQuality: avgField(last7Sleep, s => s.sleep_quality_score),
+            strain: avgField(last7Strain, s => s.strain_score),
+          };
+
+          // Trend direction: compare last 3d avg vs prior 4d avg in 7d window
+          const computeTrend = (
+            recent: number[],
+            older: number[],
+            lowerIsBetter = false,
+          ): 'improving' | 'stable' | 'declining' | null => {
+            const validRecent = recent.filter(v => v > 0);
+            const validOlder = older.filter(v => v > 0);
+            if (validRecent.length === 0 || validOlder.length === 0) return null;
+            const recentAvg = validRecent.reduce((a, b) => a + b, 0) / validRecent.length;
+            const olderAvg = validOlder.reduce((a, b) => a + b, 0) / validOlder.length;
+            const delta = ((recentAvg - olderAvg) / olderAvg) * 100;
+            if (Math.abs(delta) < 5) return 'stable';
+            const improving = lowerIsBetter ? delta < 0 : delta > 0;
+            return improving ? 'improving' : 'declining';
+          };
+
+          const recentR = last7Recovery.slice(-3);
+          const olderR = last7Recovery.slice(0, -3);
+          const recentS = last7Sleep.slice(-3);
+          const olderS = last7Sleep.slice(0, -3);
+          const recentSt = last7Strain.slice(-3);
+          const olderSt = last7Strain.slice(0, -3);
+
+          context.trends = {
+            recovery: computeTrend(recentR.map(r => r.recovery_score), olderR.map(r => r.recovery_score)),
+            hrv: computeTrend(recentR.map(r => r.hrv_rmssd_ms), olderR.map(r => r.hrv_rmssd_ms)),
+            rhr: computeTrend(recentR.map(r => r.resting_heart_rate_bpm), olderR.map(r => r.resting_heart_rate_bpm), true),
+            sleep: computeTrend(recentS.map(s => s.sleep_quality_score), olderS.map(s => s.sleep_quality_score)),
+            strain: computeTrend(recentSt.map(s => s.strain_score), olderSt.map(s => s.strain_score)),
+          };
+
+          // Sleep stage breakdown from last sleep entry
+          if (sleep30d.length > 0) {
+            const lastSleepEntry = sleep30d[sleep30d.length - 1];
+            const totalMin = lastSleepEntry.duration_minutes || 1;
+            const remMin = lastSleepEntry.rem_minutes || 0;
+            const deepMin = lastSleepEntry.deep_minutes || 0;
+            if (totalMin > 0 && (remMin > 0 || deepMin > 0)) {
+              const remPct = Math.round((remMin / totalMin) * 100);
+              const deepPct = Math.round((deepMin / totalMin) * 100);
+              context.sleepStages = {
+                remPercent: remPct,
+                deepPercent: deepPct,
+                lightPercent: Math.max(0, 100 - remPct - deepPct),
+              };
+            }
+          }
+
+          // Recovery-to-strain ratio: recovery% / strain normalized to 100-scale
+          if (context.avg7d?.recovery && context.avg7d?.strain && context.avg7d.strain > 0) {
+            const strainNormalized = (context.avg7d.strain / 21) * 100;
+            context.recoveryStrainRatio = Math.round((context.avg7d.recovery / strainNormalized) * 100) / 100;
+          }
+        } catch (err) {
+          logger.warn('[ComprehensiveUserContext] Error fetching 30d WHOOP trends (non-fatal)', {
+            userId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        }
       }
 
       return context;
@@ -739,8 +931,45 @@ class ComprehensiveUserContextService {
         const completed = context.recentWorkouts.filter((w) => w.status === 'completed').length;
         context.completionRate = Math.round((completed / context.recentWorkouts.length) * 100);
 
-        // Count missed workouts
+        // Count missed workouts from workout_logs
         context.missedWorkouts = context.recentWorkouts.filter((w) => w.status === 'missed').length;
+      }
+
+      // Also count past-due scheduled workouts that were never completed
+      // These live in workout_schedule_tasks (the calendar) and may still be 'pending'
+      const missedScheduleResult = await query<{ missed_count: string }>(
+        `SELECT COUNT(*)::text as missed_count
+         FROM workout_schedule_tasks
+         WHERE user_id = $1
+           AND scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
+           AND scheduled_date < CURRENT_DATE
+           AND status IN ('pending', 'missed')`,
+        [userId]
+      ).catch(() => ({ rows: [{ missed_count: '0' }] }));
+      const missedScheduleCount = parseInt(missedScheduleResult.rows[0]?.missed_count || '0', 10);
+
+      // Merge: total missed = workout_logs missed + past-due schedule tasks
+      context.missedWorkouts = (context.missedWorkouts || 0) + missedScheduleCount;
+
+      // Recalculate completion rate factoring in schedule tasks
+      if (missedScheduleCount > 0 || (context.recentWorkouts?.length || 0) > 0) {
+        const totalTasks = (context.recentWorkouts?.length || 0) + missedScheduleCount;
+        const completedTasks = context.recentWorkouts?.filter((w) => w.status === 'completed').length || 0;
+        context.completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      }
+
+      // If no workout_logs exist, estimate lastWorkoutDate from completed schedule tasks
+      if (!context.lastWorkoutDate) {
+        const lastCompletedSchedule = await query<{ last_date: Date }>(
+          `SELECT MAX(completed_at)::date as last_date
+           FROM workout_schedule_tasks
+           WHERE user_id = $1 AND status = 'completed'
+           AND scheduled_date >= CURRENT_DATE - INTERVAL '30 days'`,
+          [userId]
+        ).catch(() => ({ rows: [] as { last_date: Date }[] }));
+        if (lastCompletedSchedule.rows[0]?.last_date) {
+          context.lastWorkoutDate = new Date(lastCompletedSchedule.rows[0].last_date);
+        }
       }
 
       // Get active workout plans
@@ -987,6 +1216,98 @@ class ComprehensiveUserContextService {
         ).length;
       }
 
+      // Fetch life goals (non-health: financial, faith, relationships, etc.)
+      const [lifeGoalsResult, lastCheckins, intentionsResult, fulfillmentResult] = await Promise.all([
+        query<{
+          id: string; category: string; title: string; progress: number;
+          tracking_method: string; journal_mention_count: number;
+          avg_sentiment_when_mentioned: number | null; last_mentioned_at: Date | null;
+        }>(
+          `SELECT id, category, title, progress, tracking_method, journal_mention_count,
+                  avg_sentiment_when_mentioned, last_mentioned_at
+           FROM life_goals WHERE user_id = $1 AND status = 'active'
+           ORDER BY is_primary DESC, created_at DESC LIMIT 15`,
+          [userId]
+        ),
+        query<{ life_goal_id: string; max_date: string; milestone_count: string; milestones_completed: string }>(
+          `SELECT lg.id AS life_goal_id,
+                  MAX(c.checkin_date)::text AS max_date,
+                  COUNT(DISTINCT m.id)::text AS milestone_count,
+                  COUNT(DISTINCT m.id) FILTER (WHERE m.completed)::text AS milestones_completed
+           FROM life_goals lg
+           LEFT JOIN life_goal_checkins c ON c.life_goal_id = lg.id
+           LEFT JOIN life_goal_milestones m ON m.life_goal_id = lg.id
+           WHERE lg.user_id = $1 AND lg.status = 'active'
+           GROUP BY lg.id`,
+          [userId]
+        ),
+        query<{ intention_text: string; fulfilled: boolean | null; domain: string | null }>(
+          `SELECT intention_text, fulfilled, domain FROM daily_intentions
+           WHERE user_id = $1 AND intention_date = CURRENT_DATE ORDER BY sort_order ASC`,
+          [userId]
+        ),
+        query<{ total: string; fulfilled: string }>(
+          `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE fulfilled = true) AS fulfilled
+           FROM daily_intentions WHERE user_id = $1 AND intention_date >= CURRENT_DATE - 30`,
+          [userId]
+        ),
+      ]);
+
+      if (lifeGoalsResult.rows.length > 0) {
+        const checkinMap = new Map(lastCheckins.rows.map(r => [r.life_goal_id, r]));
+
+        context.activeLifeGoals = lifeGoalsResult.rows.map(row => {
+          const checkinData = checkinMap.get(row.id);
+          const lastCheckinDate = checkinData?.max_date || undefined;
+          const lastMentioned = row.last_mentioned_at ? row.last_mentioned_at.toISOString() : undefined;
+          const lastActivity = lastCheckinDate || lastMentioned;
+          const daysSinceLastActivity = lastActivity
+            ? Math.floor((now.getTime() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24))
+            : undefined;
+
+          return {
+            id: row.id,
+            category: row.category,
+            title: row.title,
+            progress: row.progress,
+            trackingMethod: row.tracking_method,
+            lastCheckinDate,
+            lastMentionedAt: lastMentioned,
+            journalMentionCount: row.journal_mention_count,
+            avgSentiment: row.avg_sentiment_when_mentioned ?? undefined,
+            daysSinceLastActivity,
+            milestoneCount: parseInt(checkinData?.milestone_count ?? '0', 10),
+            milestonesCompleted: parseInt(checkinData?.milestones_completed ?? '0', 10),
+          };
+        });
+
+        context.lifeGoalCount = lifeGoalsResult.rows.length;
+        context.stalledLifeGoals = context.activeLifeGoals.filter(
+          g => g.daysSinceLastActivity !== undefined && g.daysSinceLastActivity > 7
+        ).length;
+      }
+
+      if (intentionsResult.rows.length > 0) {
+        context.todayIntentions = intentionsResult.rows.map(r => ({
+          text: r.intention_text,
+          fulfilled: r.fulfilled ?? undefined,
+          domain: r.domain ?? undefined,
+        }));
+      }
+
+      const totalIntentions = parseInt(fulfillmentResult.rows[0]?.total ?? '0', 10);
+      if (totalIntentions > 0) {
+        const fulfilledIntentions = parseInt(fulfillmentResult.rows[0]?.fulfilled ?? '0', 10);
+        context.intentionFulfillmentRate = Math.round((fulfilledIntentions / totalIntentions) * 100);
+      }
+
+      // Fetch motivation tier (non-blocking -- defaults to 'medium' on error)
+      try {
+        context.motivationTier = await motivationTierService.getActiveTier(userId);
+      } catch {
+        // Non-fatal: motivation tier is informational for AI context
+      }
+
       return context;
     } catch (error) {
       logger.error('[ComprehensiveUserContext] Error getting goals context', {
@@ -1100,6 +1421,23 @@ class ComprehensiveUserContextService {
       const milestones = [7, 14, 30, 60, 90, 100, 150, 200, 365];
       const matchedMilestone = milestones.find(m => stats.currentStreak === m);
       context.streakMilestoneReached = matchedMilestone || null;
+
+      // Enrich with unified streak data (freezes, tier, quick-save actions)
+      try {
+        const { streakService } = await import('./streak.service.js');
+        const streakStatus = await streakService.getStreakStatus(userId);
+        context.currentStreak = streakStatus.currentStreak;
+        context.longestStreak = streakStatus.longestStreak;
+        context.streakAtRisk = streakStatus.atRisk;
+        // Add extended streak context for AI coach
+        (context as Record<string, unknown>).freezesAvailable = streakStatus.freezesAvailable;
+        (context as Record<string, unknown>).streakTier = streakStatus.tier?.name || null;
+        (context as Record<string, unknown>).quickSaveActions = streakStatus.atRisk
+          ? ['Log your mood (30 seconds)', 'Do a breathing exercise (2 minutes)', 'Log your water intake']
+          : [];
+      } catch {
+        // Unified streak not available yet — use basic data above
+      }
 
       return context;
     } catch (error) {
@@ -1545,32 +1883,111 @@ class ComprehensiveUserContextService {
     }
   }
 
+  async getActivityStatusContext(userId: string): Promise<ActivityStatusContext> {
+    try {
+      const [currentResult, historyResult, daysResult, overridesResult, patternsResult] = await Promise.all([
+        query<{ current_activity_status: string; activity_status_updated_at: string }>(
+          `SELECT current_activity_status, activity_status_updated_at FROM users WHERE id = $1`,
+          [userId]
+        ),
+        query<{ status_date: string; activity_status: string; mood: number | null }>(
+          `SELECT status_date::text, activity_status, mood
+           FROM activity_status_history
+           WHERE user_id = $1 AND status_date >= CURRENT_DATE - INTERVAL '7 days'
+           ORDER BY status_date DESC
+           LIMIT 7`,
+          [userId]
+        ),
+        query<{ days: string }>(
+          `SELECT COALESCE(CURRENT_DATE - MAX(status_date), 0)::text AS days
+           FROM activity_status_history
+           WHERE user_id = $1 AND activity_status IN ('working', 'excellent', 'good')`,
+          [userId]
+        ),
+        query<{ status_overrides: unknown }>(
+          `SELECT status_overrides FROM user_plans WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
+          [userId]
+        ),
+        query<{ status_patterns: StatusPattern[] }>(
+          `SELECT status_patterns FROM user_coaching_profiles WHERE user_id = $1`,
+          [userId]
+        ),
+      ]);
+
+      const user = currentResult.rows[0];
+
+      return {
+        current: (user?.current_activity_status ?? 'working') as ActivityStatusContext['current'],
+        since: user?.activity_status_updated_at ?? new Date().toISOString(),
+        source: 'manual',
+        recentHistory: historyResult.rows.map(r => ({
+          date: r.status_date,
+          status: r.activity_status as ActivityStatusContext['current'],
+          mood: r.mood ?? undefined,
+        })),
+        patterns: patternsResult.rows[0]?.status_patterns ?? [],
+        activeOverrides: overridesResult.rows[0]?.status_overrides != null,
+        daysSinceLastWorkingStatus: parseInt(daysResult.rows[0]?.days ?? '0', 10),
+      };
+    } catch (error) {
+      logger.error('[ComprehensiveContext] Failed to fetch activity status context', { userId, error });
+      return {
+        current: 'working',
+        since: new Date().toISOString(),
+        source: 'manual',
+        recentHistory: [],
+        patterns: [],
+        activeOverrides: false,
+        daysSinceLastWorkingStatus: 0,
+      };
+    }
+  }
+
   /**
    * Format comprehensive context for system prompt
    */
   formatContextForPrompt(context: ComprehensiveUserContext): string {
     const sections: string[] = [];
 
-    // WHOOP Data
+    // WHOOP Data (enriched with trends, baselines, sleep stages)
     if (context.whoop.isConnected) {
       sections.push('WHOOP Data:');
       if (context.whoop.lastSleep) {
-        sections.push(
-          `- Last Sleep: ${context.whoop.lastSleep.duration.toFixed(1)} hours (quality: ${context.whoop.lastSleep.quality}%, efficiency: ${context.whoop.lastSleep.efficiency}%) - ${context.whoop.lastSleep.hoursAgo.toFixed(1)} hours ago`
-        );
+        const s = context.whoop.lastSleep;
+        let sleepLine = `- Last Sleep: ${s.duration.toFixed(1)}h (quality: ${s.quality}%, efficiency: ${s.efficiency}%) - ${s.hoursAgo.toFixed(1)}h ago`;
+        if (context.whoop.sleepStages) {
+          sleepLine += ` | Stages: REM ${context.whoop.sleepStages.remPercent}%, Deep ${context.whoop.sleepStages.deepPercent}%, Light ${context.whoop.sleepStages.lightPercent}%`;
+        }
+        sections.push(sleepLine);
       }
       if (context.whoop.lastRecovery) {
-        sections.push(
-          `- Recovery: ${context.whoop.lastRecovery.score}% (HRV: ${context.whoop.lastRecovery.hrv}ms, RHR: ${context.whoop.lastRecovery.rhr} bpm) - ${context.whoop.lastRecovery.hoursAgo.toFixed(1)} hours ago`
-        );
+        const r = context.whoop.lastRecovery;
+        let recLine = `- Recovery: ${r.score}% (HRV: ${r.hrv}ms, RHR: ${r.rhr}bpm) - ${r.hoursAgo.toFixed(1)}h ago`;
+        if (context.whoop.spo2) recLine += ` | SPO2: ${context.whoop.spo2}%`;
+        if (context.whoop.skinTempCelsius) recLine += ` | Skin: ${context.whoop.skinTempCelsius}°C`;
+        sections.push(recLine);
       }
       if (context.whoop.todayStrain) {
-        sections.push(`- Today's Strain: ${context.whoop.todayStrain.score.toFixed(1)}/21`);
+        const st = context.whoop.todayStrain;
+        sections.push(`- Today's Strain: ${st.score.toFixed(1)}/21${st.calories ? ` (${st.calories} cal)` : ''}`);
+      }
+      // 7d averages + trends
+      if (context.whoop.avg7d) {
+        const a = context.whoop.avg7d;
+        const t = context.whoop.trends;
+        const arrow = (dir: string | null | undefined) => dir === 'improving' ? '↑' : dir === 'declining' ? '↓' : '→';
+        sections.push(`- 7d Avg → Recovery: ${a.recovery?.toFixed(0) ?? '?'}% ${arrow(t?.recovery)} | HRV: ${a.hrv?.toFixed(0) ?? '?'}ms ${arrow(t?.hrv)} | RHR: ${a.rhr?.toFixed(0) ?? '?'}bpm ${arrow(t?.rhr)} | Sleep: ${a.sleepHours?.toFixed(1) ?? '?'}h ${arrow(t?.sleep)} | Strain: ${a.strain?.toFixed(1) ?? '?'} ${arrow(t?.strain)}`);
+      }
+      // 30d baselines
+      if (context.whoop.baseline30d) {
+        const b = context.whoop.baseline30d;
+        sections.push(`- 30d Baseline → Recovery: ${b.recovery?.toFixed(0) ?? '?'}% | HRV: ${b.hrv?.toFixed(0) ?? '?'}ms | RHR: ${b.rhr?.toFixed(0) ?? '?'}bpm | Sleep: ${b.sleepHours?.toFixed(1) ?? '?'}h | Strain: ${b.strain?.toFixed(1) ?? '?'}`);
+      }
+      if (context.whoop.recoveryStrainRatio) {
+        sections.push(`- Recovery/Strain Ratio: ${context.whoop.recoveryStrainRatio} (${context.whoop.recoveryStrainRatio >= 1 ? 'sustainable' : 'overreaching'})`);
       }
       if (context.whoop.needsSync) {
-        sections.push(`- Status: Needs sync (last sync: ${context.whoop.syncHoursAgo?.toFixed(1)} hours ago)`);
-      } else if (context.whoop.lastSyncAt) {
-        sections.push(`- Status: Data synced ${context.whoop.syncHoursAgo?.toFixed(1)} hours ago`);
+        sections.push(`- Status: Needs sync (last sync: ${context.whoop.syncHoursAgo?.toFixed(1)}h ago)`);
       }
       sections.push('');
     }

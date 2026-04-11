@@ -311,6 +311,51 @@ const decisionTrees: DecisionTree[] = [
       };
     },
   },
+
+  // 11. STATUS_AWARENESS_RESPONSE — Activity status-based safety and ramp-up
+  {
+    id: 'STATUS_AWARENESS_RESPONSE',
+    evaluate({ snapshot, context }) {
+      const activityStatus = (context as { activityStatus?: { current: string; daysSinceLastWorkingStatus?: number } }).activityStatus;
+      const status = activityStatus?.current;
+      if (!status || ['working', 'excellent', 'good'].includes(status)) return null;
+
+      if ((status === 'sick' || status === 'injury') && (snapshot.workoutsScheduled ?? 0) > 0) {
+        return {
+          type: 'force_rest_day',
+          decisionTree: 'STATUS_AWARENESS_RESPONSE',
+          adjustments: {
+            skipWorkouts: true,
+            status,
+            reason: `User is ${status} — all workouts auto-skipped for safety`,
+          },
+          reasoning: `User has marked themselves as ${status}. Continuing planned workouts could worsen their condition. Auto-skipping all scheduled workouts and suggesting recovery-appropriate activities.`,
+          requiresUserApproval: false,
+          expiresInHours: 24,
+          priority: 'critical' as const,
+        };
+      }
+
+      const daysOff = activityStatus?.daysSinceLastWorkingStatus ?? 0;
+      if (status === 'working' && daysOff >= 3) {
+        return {
+          type: 'ramp_up_after_absence',
+          decisionTree: 'STATUS_AWARENESS_RESPONSE',
+          adjustments: {
+            intensityReduction: daysOff >= 7 ? 0.5 : 0.75,
+            rampUpDays: Math.min(Math.ceil(daysOff / 2), 5),
+            reason: `Returning after ${daysOff} days off — gradual ramp-up`,
+          },
+          reasoning: `User just returned to active status after ${daysOff} days. Suggesting ${daysOff >= 7 ? '50%' : '75%'} intensity for the first ${Math.min(Math.ceil(daysOff / 2), 5)} days.`,
+          requiresUserApproval: false,
+          expiresInHours: Math.min(Math.ceil(daysOff / 2), 5) * 24,
+          priority: 'high' as const,
+        };
+      }
+
+      return null;
+    },
+  },
 ];
 
 // ============================================

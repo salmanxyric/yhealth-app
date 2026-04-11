@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { api } from '@/lib/api-client';
+import { getSocket } from '@/lib/socket-client';
 
 interface WhoopStatus {
   isConnected: boolean;
@@ -41,7 +42,6 @@ export default function WhoopPageContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showInitialSkeleton, setShowInitialSkeleton] = useState(true);
   const router = useRouter();
-  const previousTabRef = useRef<string | null>(null);
   const isConnectedRef = useRef<boolean>(false);
 
   const { data: statusData, isLoading: isLoadingStatus, error: statusError, refetch: refetchStatus } = useFetch<WhoopStatus>(
@@ -60,16 +60,36 @@ export default function WhoopPageContent() {
     }
   }, [isLoadingStatus, statusData]);
 
-  // Refetch when user returns to tab (visibility change)
+  // Refetch status when user returns to tab (visibility change)
+  // Only the parent handles visibility — child components do NOT add their own listeners
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         refetchStatus();
+        // Notify children to refetch via single event
+        window.dispatchEvent(new CustomEvent('whoop-refresh-requested'));
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [refetchStatus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Listen for real-time sync events (auto-sync at 8am or manual refresh)
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleSynced = () => {
+      refetchStatus();
+      window.dispatchEvent(new CustomEvent('whoop-refresh-requested'));
+      toast.success('WHOOP data synced automatically');
+    };
+
+    socket.on('whoop-data-synced', handleSynced);
+    return () => { socket.off('whoop-data-synced', handleSynced); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Stabilize isConnected value to prevent components from unmounting
   // Once connected, keep the ref true even if status temporarily changes
@@ -83,30 +103,8 @@ export default function WhoopPageContent() {
     // Only set to false if explicitly disconnected AND we have confirmed status
   }, [statusData?.isConnected]);
 
-  // Dispatch events on mount - trigger fresh data fetches in child components
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('whoop-tab-changed', {
-      detail: { tab: activeTab }
-    }));
-    // Dispatch immediately - child components should handle it
-    window.dispatchEvent(new CustomEvent('whoop-page-opened'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount - activeTab is stable initial value
-
-  // Auto-refresh data when switching tabs
-  useEffect(() => {
-    // Skip if this is the same tab (not a change)
-    if (previousTabRef.current === activeTab) {
-      return;
-    }
-
-    // Trigger event for tab change
-    window.dispatchEvent(new CustomEvent('whoop-tab-changed', {
-      detail: { tab: activeTab }
-    }));
-
-    previousTabRef.current = activeTab;
-  }, [activeTab]);
+  // No mount events needed — child components use `immediate: true` in useFetch
+  // Tab changes unmount/remount child components via AnimatePresence, which triggers useFetch automatically
 
   // Handle refresh - sync data from WHOOP and refetch
   const handleRefresh = async () => {
@@ -122,12 +120,9 @@ export default function WhoopPageContent() {
         // Refetch status
         await refetchStatus();
 
-        // Dispatch event to notify child components to refetch
-        window.dispatchEvent(new CustomEvent('whoop-refresh-requested'));
-
-        // Wait a bit for sync to process, then refetch
+        // Wait for sync to process, then notify children to refetch
         setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('whoop-page-opened'));
+          window.dispatchEvent(new CustomEvent('whoop-refresh-requested'));
           toast.success('Data refreshed successfully');
         }, 2000);
       } else {
@@ -190,16 +185,16 @@ export default function WhoopPageContent() {
         <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="relative max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
           {/* Header */}
-          <div className="mb-8 flex items-start justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">
+          <div className="mb-4 sm:mb-8 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-[18px] sm:text-[20px] font-bold text-white mb-1 sm:mb-2">
                 <span className="bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   WHOOP Analytics
                 </span>
               </h1>
-              <p className="text-slate-400">
+              <p className="text-slate-400 text-[13px] sm:text-[14px]">
                 Comprehensive recovery, sleep, and strain insights
               </p>
             </div>
@@ -229,52 +224,52 @@ export default function WhoopPageContent() {
 
           {/* Connection Status Banner */}
           {isLoadingStatus ? (
-            <div className="mb-6 p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-              <Loader2 className="w-5 h-5 animate-spin text-purple-400 mr-2" />
-              <span className="text-slate-400">Loading connection status...</span>
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+              <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-purple-400 mr-2" />
+              <span className="text-slate-400 text-[13px] sm:text-[14px]">Loading connection status...</span>
             </div>
           ) : statusError ? (
-            <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-red-400" />
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 shrink-0" />
                 <div>
-                  <p className="text-red-400 font-medium">Failed to load connection status</p>
-                  <p className="text-sm text-red-300/70">{statusError.message || 'Unknown error'}</p>
+                  <p className="text-red-400 font-medium text-[14px]">Failed to load connection status</p>
+                  <p className="text-[13px] text-red-300/70">{statusError.message || 'Unknown error'}</p>
                 </div>
               </div>
               <Button
                 onClick={() => refetchStatus()}
                 variant="outline"
                 size="sm"
-                className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
+                className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 text-[13px]"
               >
                 Retry
               </Button>
             </div>
           ) : statusData && !statusData.isConnected && !statusData.hasCredentials ? (
-            <div className="mb-6 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-400" />
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 shrink-0" />
                 <div>
-                  <p className="text-yellow-400 font-medium">WHOOP OAuth not configured</p>
-                  <p className="text-sm text-yellow-300/70">Please add your WHOOP Client ID and Client Secret in settings to connect.</p>
+                  <p className="text-yellow-400 font-medium text-[14px]">WHOOP OAuth not configured</p>
+                  <p className="text-[13px] text-yellow-300/70">Please add your WHOOP Client ID and Client Secret in settings to connect.</p>
                 </div>
               </div>
               <Button
                 onClick={() => router.push('/settings?tab=integrations')}
-                className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/30"
+                className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/30 text-[13px] sm:text-[14px]"
               >
                 <Settings className="w-4 h-4 mr-2" />
                 View Settings
               </Button>
             </div>
           ) : statusData && !statusData.isConnected ? (
-            <div className="mb-6 p-4 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <XCircle className="w-5 h-5 text-orange-400" />
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl bg-orange-500/10 border border-orange-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 shrink-0" />
                 <div>
-                  <p className="text-orange-400 font-medium">WHOOP disconnected</p>
-                  <p className="text-sm text-orange-300/70">
+                  <p className="text-orange-400 font-medium text-[14px]">WHOOP disconnected</p>
+                  <p className="text-[13px] text-orange-300/70">
                     Status: {statusData.status === 'pending' ? 'Pending connection' : 'Disconnected'}
                     {statusData.lastSyncAt && (
                       <span className="ml-2">
@@ -290,7 +285,7 @@ export default function WhoopPageContent() {
                   disabled={isConnecting || !statusData.hasCredentials}
                   variant="outline"
                   size="sm"
-                  className="bg-purple-500/20 border-purple-500/30 text-purple-400 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-purple-500/20 border-purple-500/30 text-purple-400 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-[13px]"
                 >
                   {isConnecting ? (
                     <>
@@ -300,7 +295,7 @@ export default function WhoopPageContent() {
                   ) : (
                     <>
                       <Link2 className="w-4 h-4 mr-2" />
-                      Connect WHOOP
+                      Connect
                     </>
                   )}
                 </Button>
@@ -308,7 +303,7 @@ export default function WhoopPageContent() {
                   onClick={() => router.push('/settings?tab=integrations')}
                   variant="outline"
                   size="sm"
-                  className="bg-orange-500/10 border-orange-500/20 text-orange-400 hover:bg-orange-500/20"
+                  className="bg-orange-500/10 border-orange-500/20 text-orange-400 hover:bg-orange-500/20 text-[13px]"
                 >
                   <Settings className="w-4 h-4 mr-2" />
                   Manage
@@ -316,14 +311,14 @@ export default function WhoopPageContent() {
               </div>
             </div>
           ) : statusData && statusData.isConnected ? (
-            <div className="mb-6 p-4 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                <CheckCircle2 className="w-5 h-5 text-green-400" />
-                <div className="flex-1">
-                  <p className="text-green-400 font-medium">WHOOP connected</p>
-                  <div className="flex items-center gap-4 text-sm text-green-300/70 mt-1 flex-wrap">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl bg-green-500/10 border border-green-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-green-400 font-medium text-[14px]">WHOOP connected</p>
+                  <div className="flex items-center gap-2 sm:gap-4 text-[13px] text-green-300/70 mt-1 flex-wrap">
                     {statusData.email && (
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 truncate">
                         <span className="text-green-400">Email:</span> {statusData.email}
                       </span>
                     )}
@@ -354,17 +349,19 @@ export default function WhoopPageContent() {
                   disabled={isConnecting}
                   variant="outline"
                   size="sm"
-                  className="bg-purple-500/20 border-purple-500/30 text-purple-400 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-purple-500/20 border-purple-500/30 text-purple-400 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-[13px]"
                 >
                   {isConnecting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Reconnecting...
+                      <span className="hidden sm:inline">Reconnecting...</span>
+                      <span className="sm:hidden">...</span>
                     </>
                   ) : (
                     <>
                       <Link2 className="w-4 h-4 mr-2" />
-                      Reconnect WHOOP
+                      <span className="hidden sm:inline">Reconnect WHOOP</span>
+                      <span className="sm:hidden">Reconnect</span>
                     </>
                   )}
                 </Button>
@@ -372,7 +369,7 @@ export default function WhoopPageContent() {
                   onClick={() => router.push('/settings?tab=integrations')}
                   variant="outline"
                   size="sm"
-                  className="bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20"
+                  className="bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 text-[13px]"
                 >
                   <Settings className="w-4 h-4 mr-2" />
                   Manage
@@ -432,13 +429,12 @@ export default function WhoopPageContent() {
               <WhoopMetrics />
 
               {/* Tabs - Always show (components have own loading states) */}
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 sm:mt-8">
             {/* Beautiful Custom Tab List */}
-            <div className="relative mb-8">
-              <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-gradient-to-r from-white/5 via-white/5 to-white/5 border border-white/10 backdrop-blur-xl shadow-2xl shadow-purple-500/10 overflow-x-auto">
+            <div className="relative mb-4 sm:mb-8">
+              <div className="flex items-center gap-1 sm:gap-2 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-white/5 via-white/5 to-white/5 border border-white/10 backdrop-blur-xl shadow-2xl shadow-purple-500/10 overflow-x-auto scrollbar-hide">
                 {[
                   { id: 'overview', label: 'Overview', icon: TrendingUp, gradient: 'from-purple-500 via-pink-500 to-purple-500', color: 'text-purple-400' },
-                  // { id: 'recoveries', label: 'Recoveries', icon: Heart, gradient: 'from-green-500 via-emerald-500 to-green-500', color: 'text-green-400' },
                   { id: 'recovery', label: 'Recovery', icon: Heart, gradient: 'from-red-500 via-rose-500 to-red-500', color: 'text-red-400' },
                   { id: 'sleep', label: 'Sleep', icon: Moon, gradient: 'from-blue-500 via-cyan-500 to-blue-500', color: 'text-blue-400' },
                   { id: 'strain', label: 'Strain', icon: Activity, gradient: 'from-purple-500 via-violet-500 to-purple-500', color: 'text-purple-400' },
@@ -452,7 +448,7 @@ export default function WhoopPageContent() {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`
-                        relative flex items-center gap-2.5 px-5 py-3 rounded-xl font-semibold text-sm
+                        relative flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-[13px] sm:text-[14px]
                         transition-all duration-300 whitespace-nowrap cursor-pointer
                         ${isActive
                           ? 'text-white'
@@ -463,7 +459,7 @@ export default function WhoopPageContent() {
                       {isActive && (
                         <motion.div
                           layoutId="activeWhoopTab"
-                          className={`absolute inset-0 rounded-xl bg-gradient-to-r ${tab.gradient} opacity-90 shadow-lg shadow-purple-500/30`}
+                          className={`absolute inset-0 rounded-lg sm:rounded-xl bg-gradient-to-r ${tab.gradient} opacity-90 shadow-lg shadow-purple-500/30`}
                           transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                         />
                       )}
@@ -472,14 +468,14 @@ export default function WhoopPageContent() {
                         animate={isActive ? { scale: [1, 1.1, 1] } : {}}
                         transition={{ duration: 0.3 }}
                       >
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-white' : tab.color}`} />
+                        <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${isActive ? 'text-white' : tab.color}`} />
                       </motion.span>
                       <span className="relative z-10">{tab.label}</span>
                       {isActive && (
                         <motion.div
                           initial={{ scale: 0 }}
                           animate={{ scale: 1 }}
-                          className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white shadow-lg"
+                          className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white shadow-lg hidden sm:block"
                         />
                       )}
                     </button>
@@ -543,12 +539,12 @@ export default function WhoopPageContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
-              className="mt-8 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-8 md:p-12 text-center"
+              className="mt-4 sm:mt-8 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-5 sm:p-8 md:p-12 text-center"
             >
               <div className="max-w-lg mx-auto">
-                <Heart className="w-16 h-16 text-purple-400/60 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-white mb-2">Connect WHOOP to see your analytics</h2>
-                <p className="text-slate-400 text-sm mb-6">
+                <Heart className="w-12 h-12 sm:w-16 sm:h-16 text-purple-400/60 mx-auto mb-3 sm:mb-4" />
+                <h2 className="text-[16px] sm:text-[18px] font-semibold text-white mb-2">Connect WHOOP to see your analytics</h2>
+                <p className="text-slate-400 text-[13px] sm:text-[14px] mb-4 sm:mb-6">
                   Once connected, you&apos;ll see recovery scores, sleep analysis, strain patterns, and stress insights from your WHOOP device.
                 </p>
                 <div className="flex flex-wrap justify-center gap-3">

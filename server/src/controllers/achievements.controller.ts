@@ -716,6 +716,13 @@ const getAchievements = asyncHandler(async (req: AuthenticatedRequest, res: Resp
   const unlockedCount = allAchievements.filter((a) => a.unlocked).length;
   const totalXP = allAchievements.filter((a) => a.unlocked).reduce((sum, a) => sum + a.xpReward, 0);
 
+  // Sync XP to users table (fire-and-forget)
+  const computedLevel = Math.floor(totalXP / 500) + 1;
+  query(
+    'UPDATE users SET total_xp = $1, current_level = $2 WHERE id = $3 AND (total_xp IS DISTINCT FROM $1 OR current_level IS DISTINCT FROM $2)',
+    [totalXP, computedLevel, userId]
+  ).catch(() => {});
+
   // Category breakdown (use allAchievements for accurate counts)
   const categoryBreakdown = {
     streak: {
@@ -809,6 +816,12 @@ const getAchievementSummary = asyncHandler(async (req: AuthenticatedRequest, res
   const xpForNextLevel = level * 500;
   const xpProgress = totalXP - xpForCurrentLevel;
   const xpNeeded = xpForNextLevel - xpForCurrentLevel;
+
+  // Sync computed XP back to users table so gamification widget shows correct values
+  query(
+    'UPDATE users SET total_xp = $1, current_level = $2 WHERE id = $3 AND (total_xp IS DISTINCT FROM $1 OR current_level IS DISTINCT FROM $2)',
+    [totalXP, level, userId]
+  ).catch(() => {}); // fire-and-forget
 
   ApiResponse.success(
     res,

@@ -31,7 +31,12 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'goal_status') THEN
-    CREATE TYPE goal_status AS ENUM ('draft', 'active', 'paused', 'completed', 'abandoned');
+    CREATE TYPE goal_status AS ENUM ('draft', 'active', 'in_progress', 'paused', 'completed', 'abandoned');
+  END IF;
+
+  -- Add in_progress to existing goal_status enum if missing
+  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'in_progress' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'goal_status')) THEN
+    ALTER TYPE goal_status ADD VALUE IF NOT EXISTS 'in_progress' AFTER 'active';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'health_pillar') THEN
@@ -67,11 +72,15 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'auth_provider') THEN
-    CREATE TYPE auth_provider AS ENUM ('local', 'google', 'apple');
+    CREATE TYPE auth_provider AS ENUM ('local', 'google', 'apple', 'system');
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'activity_status') THEN
     CREATE TYPE activity_status AS ENUM ('working', 'sick', 'injury', 'rest', 'vacation', 'travel', 'stress', 'excellent', 'good', 'fair', 'poor');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'gender') THEN
+    CREATE TYPE gender AS ENUM ('male', 'female', 'non_binary', 'prefer_not_to_say');
   END IF;
 END $$;
 
@@ -80,6 +89,11 @@ END $$;
 -- ============================================
 DO $$
 BEGIN
+  -- gender
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'gender') THEN
+    ALTER TABLE users ADD COLUMN gender gender;
+  END IF;
+
   -- onboarding_status
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'onboarding_status') THEN
     ALTER TABLE users ADD COLUMN onboarding_status onboarding_status DEFAULT 'registered';
@@ -496,8 +510,15 @@ END $$;
 -- ============================================
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'activity_status_history' AND column_name = 'status') THEN
-    ALTER TABLE activity_status_history ADD COLUMN status activity_status;
+  -- Rename 'status' to 'activity_status' if old column name exists
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'activity_status_history' AND column_name = 'status')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'activity_status_history' AND column_name = 'activity_status') THEN
+    ALTER TABLE activity_status_history RENAME COLUMN status TO activity_status;
+  END IF;
+
+  -- Add activity_status column if neither exists
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'activity_status_history' AND column_name = 'activity_status') THEN
+    ALTER TABLE activity_status_history ADD COLUMN activity_status activity_status;
   END IF;
 END $$;
 
@@ -679,6 +700,22 @@ BEGIN
 END $$;
 
 -- ============================================
+-- 32b. JOURNAL ENTRIES — enhanced journaling columns
+-- ============================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'journal_entries' AND column_name = 'checkin_id') THEN
+    ALTER TABLE journal_entries ADD COLUMN checkin_id UUID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'journal_entries' AND column_name = 'journaling_mode') THEN
+    ALTER TABLE journal_entries ADD COLUMN journaling_mode VARCHAR(20) CHECK (journaling_mode IN ('quick_reflection', 'deep_dive', 'gratitude', 'life_perspective', 'free_write'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'journal_entries' AND column_name = 'ai_generated_prompt') THEN
+    ALTER TABLE journal_entries ADD COLUMN ai_generated_prompt BOOLEAN DEFAULT false;
+  END IF;
+END $$;
+
+-- ============================================
 -- 33. HABITS — tracking_type, specific_days columns
 -- ============================================
 DO $$
@@ -808,6 +845,302 @@ BEGIN
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_messages_view_once ON messages(is_view_once) WHERE is_view_once = true;
+
+-- ============================================
+-- 45. USER COMMITMENTS table (used by commitment-tracker & proactive-messaging)
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_commitments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  commitment_text TEXT NOT NULL,
+  category VARCHAR(30) NOT NULL,
+  extracted_action TEXT NOT NULL,
+  commitment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  follow_up_date DATE NOT NULL,
+  fulfilled BOOLEAN,
+  followed_up BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_uc_user_followup
+  ON user_commitments(user_id, follow_up_date)
+  WHERE followed_up = false;
+
+-- ============================================
+-- SECTION: user_coaching_profiles — additional columns + history table
+-- ============================================
+-- These were previously in ensureTable() runtime code, causing
+-- redundant DDL on every generateProfile() call. Moved here to run once at startup.
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_coaching_profiles') THEN
+    EXECUTE 'ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS stable_traits JSONB';
+    EXECUTE 'ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS recent_observations JSONB';
+    EXECUTE 'ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS profile_version INTEGER DEFAULT 1';
+    EXECUTE 'ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS stable_traits_updated_at TIMESTAMPTZ';
+    EXECUTE 'ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS personal_context JSONB DEFAULT ''{}''';
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS user_coaching_profile_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_version INTEGER NOT NULL,
+  profile_data JSONB NOT NULL,
+  stable_traits JSONB,
+  recent_observations JSONB,
+  generated_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_profile_history_user ON user_coaching_profile_history(user_id, profile_version DESC);
+
+-- 44. JOURNAL PATTERNS — category column for correlation/theme/behavioral
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'journal_patterns' AND column_name = 'category') THEN
+    ALTER TABLE journal_patterns ADD COLUMN category VARCHAR(20) DEFAULT 'correlation';
+  END IF;
+END $$;
+
+-- 45. JOURNAL INSIGHTS — themes column for auto-theme detection
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'journal_insights' AND column_name = 'themes') THEN
+    ALTER TABLE journal_insights ADD COLUMN themes TEXT[];
+  END IF;
+END $$;
+
+-- 46. daily_checkins — add missing columns for morning/evening check-in
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'checkin_type') THEN
+    ALTER TABLE daily_checkins ADD COLUMN checkin_type VARCHAR(20) DEFAULT 'morning';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'predicted_mood') THEN
+    ALTER TABLE daily_checkins ADD COLUMN predicted_mood INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'predicted_energy') THEN
+    ALTER TABLE daily_checkins ADD COLUMN predicted_energy INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'known_stressors') THEN
+    ALTER TABLE daily_checkins ADD COLUMN known_stressors TEXT[] DEFAULT '{}';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'day_rating') THEN
+    ALTER TABLE daily_checkins ADD COLUMN day_rating INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'went_well') THEN
+    ALTER TABLE daily_checkins ADD COLUMN went_well TEXT[] DEFAULT '{}';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'didnt_go_well') THEN
+    ALTER TABLE daily_checkins ADD COLUMN didnt_go_well TEXT[] DEFAULT '{}';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'evening_lessons') THEN
+    ALTER TABLE daily_checkins ADD COLUMN evening_lessons TEXT[] DEFAULT '{}';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_checkins' AND column_name = 'tomorrow_focus') THEN
+    ALTER TABLE daily_checkins ADD COLUMN tomorrow_focus TEXT;
+  END IF;
+END $$;
+
+-- Drop old unique constraint and recreate with checkin_type
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'daily_checkins'::regclass
+      AND contype = 'u'
+      AND array_length(conkey, 1) = 2
+  ) THEN
+    EXECUTE (
+      SELECT 'ALTER TABLE daily_checkins DROP CONSTRAINT ' || conname
+      FROM pg_constraint
+      WHERE conrelid = 'daily_checkins'::regclass
+        AND contype = 'u'
+        AND array_length(conkey, 1) = 2
+      LIMIT 1
+    );
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'daily_checkins'::regclass
+      AND contype = 'u'
+      AND array_length(conkey, 1) = 3
+  ) THEN
+    ALTER TABLE daily_checkins ADD CONSTRAINT daily_checkins_user_date_type_key UNIQUE(user_id, checkin_date, checkin_type);
+  END IF;
+END $$;
+
+-- ============================================
+-- Ensure enum values exist (ADD VALUE cannot run in anonymous code blocks)
+-- ============================================
+ALTER TYPE integration_provider ADD VALUE IF NOT EXISTS 'spotify';
+
+-- ============================================
+-- Life Goal Milestones & Check-ins (table 98)
+-- ============================================
+CREATE TABLE IF NOT EXISTS life_goal_milestones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    life_goal_id UUID NOT NULL REFERENCES life_goals(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    target_date DATE,
+    target_value FLOAT,
+    current_value FLOAT DEFAULT 0,
+    completed BOOLEAN DEFAULT false,
+    completed_at TIMESTAMPTZ,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_life_goal_milestones_goal ON life_goal_milestones(life_goal_id);
+CREATE INDEX IF NOT EXISTS idx_life_goal_milestones_user ON life_goal_milestones(user_id);
+
+CREATE TABLE IF NOT EXISTS life_goal_checkins (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    life_goal_id UUID NOT NULL REFERENCES life_goals(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    checkin_date DATE NOT NULL,
+    progress_value FLOAT,
+    note TEXT,
+    mood_about_goal INTEGER CHECK (mood_about_goal BETWEEN 1 AND 5),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(life_goal_id, checkin_date)
+);
+CREATE INDEX IF NOT EXISTS idx_life_goal_checkins_goal ON life_goal_checkins(life_goal_id);
+CREATE INDEX IF NOT EXISTS idx_life_goal_checkins_user_date ON life_goal_checkins(user_id, checkin_date DESC);
+
+-- ============================================
+-- User Motivation Profiles (table 99)
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_motivation_profiles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  declared_tier VARCHAR(10) NOT NULL DEFAULT 'medium',
+  computed_tier VARCHAR(10) NOT NULL DEFAULT 'medium',
+  active_tier VARCHAR(10) NOT NULL DEFAULT 'medium',
+  engagement_score DECIMAL(5,2) DEFAULT 50.0,
+  login_frequency_score DECIMAL(5,2) DEFAULT 50.0,
+  suggestion_accept_rate DECIMAL(5,2) DEFAULT 50.0,
+  task_completion_rate DECIMAL(5,2) DEFAULT 50.0,
+  session_depth_score DECIMAL(5,2) DEFAULT 50.0,
+  streak_consistency_score DECIMAL(5,2) DEFAULT 50.0,
+  last_computed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  tier_history JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_motivation_profiles_user ON user_motivation_profiles(user_id);
+
+-- Add motivation_level to life_goals if missing
+ALTER TABLE life_goals ADD COLUMN IF NOT EXISTS motivation_level VARCHAR(10);
+
+-- ============================================
+-- Goal Actions & Responses (table 100)
+-- ============================================
+CREATE TABLE IF NOT EXISTS goal_actions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  goal_id UUID NOT NULL REFERENCES life_goals(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action_type VARCHAR(30) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  pillar VARCHAR(20),
+  frequency VARCHAR(20),
+  is_ai_generated BOOLEAN DEFAULT true,
+  is_completed BOOLEAN DEFAULT false,
+  completed_at TIMESTAMPTZ,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_goal_actions_goal ON goal_actions(goal_id, is_completed);
+CREATE INDEX IF NOT EXISTS idx_goal_actions_user ON goal_actions(user_id);
+
+CREATE TABLE IF NOT EXISTS goal_action_responses (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  action_id UUID NOT NULL REFERENCES goal_actions(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  response_type VARCHAR(10) NOT NULL,
+  edited_title VARCHAR(255),
+  edited_description TEXT,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_goal_action_responses_user ON goal_action_responses(user_id, created_at DESC);
+
+-- ============================================
+-- Expand life_goals category constraint
+-- ============================================
+ALTER TABLE life_goals DROP CONSTRAINT IF EXISTS life_goals_category_check;
+ALTER TABLE life_goals ADD CONSTRAINT life_goals_category_check CHECK (category IN (
+    'spiritual', 'social', 'productivity', 'happiness',
+    'anxiety_management', 'creative', 'personal_growth',
+    'financial', 'faith', 'relationships', 'education',
+    'career', 'health_wellness', 'custom'
+));
+
+-- ============================================
+-- Proactive messages log table
+-- ============================================
+CREATE TABLE IF NOT EXISTS proactive_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_type VARCHAR(50) NOT NULL,
+  message_id UUID NOT NULL,
+  chat_id UUID NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT fk_proactive_msg_message FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+  CONSTRAINT fk_proactive_msg_chat FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_proactive_messages_user_type_date
+ON proactive_messages(user_id, message_type, created_at);
+
+-- ============================================
+-- 30. EMAIL ENGINE TABLES
+-- ============================================
+CREATE TABLE IF NOT EXISTS email_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  template VARCHAR(100) NOT NULL,
+  subject VARCHAR(500) NOT NULL,
+  recipient VARCHAR(320) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'queued',
+  provider VARCHAR(50) DEFAULT 'smtp',
+  message_id VARCHAR(255),
+  category VARCHAR(50) DEFAULT 'transactional',
+  metadata JSONB DEFAULT '{}',
+  attempts INTEGER DEFAULT 0,
+  last_error TEXT,
+  opened_at TIMESTAMPTZ,
+  clicked_at TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_logs_user_id ON email_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_status ON email_logs(status);
+CREATE INDEX IF NOT EXISTS idx_email_logs_template ON email_logs(template);
+CREATE INDEX IF NOT EXISTS idx_email_logs_category ON email_logs(category);
+CREATE INDEX IF NOT EXISTS idx_email_logs_created_at ON email_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_logs_message_id ON email_logs(message_id) WHERE message_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS email_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  category VARCHAR(50) NOT NULL,
+  enabled BOOLEAN DEFAULT true,
+  frequency VARCHAR(20) DEFAULT 'immediate',
+  unsubscribe_token VARCHAR(255) UNIQUE,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, category)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_preferences_user ON email_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_preferences_token ON email_preferences(unsubscribe_token) WHERE unsubscribe_token IS NOT NULL;
 
 -- ============================================
 -- MIGRATION COMPLETE

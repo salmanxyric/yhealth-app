@@ -47,7 +47,9 @@ function normalizeError(error: Error): ApiError {
         constraint,
         table: pgError.table,
       });
-      return ApiError.badRequest(`Invalid reference: ${detail || constraint}`);
+      return ApiError.badRequest(
+        env.isProduction ? 'Invalid reference provided' : `Invalid reference: ${detail || constraint}`
+      );
     }
 
     // Not null violation
@@ -71,7 +73,7 @@ function normalizeError(error: Error): ApiError {
         code: pgError.code
       });
       return ApiError.internal(
-        `Database table "${tableName}" does not exist. Please run migrations.`
+        env.isProduction ? 'A database error occurred' : `Database table "${tableName}" does not exist. Please run migrations.`
       );
     }
 

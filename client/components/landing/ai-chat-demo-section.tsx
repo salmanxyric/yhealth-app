@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import {
-  MessageCircle,
   Heart,
   Activity,
   Zap,
@@ -31,46 +30,41 @@ const script: {
 }[] = [
   {
     role: "user",
-    text: "I didn't sleep well and have a big meeting today.",
+    text: "I have a big presentation tomorrow and I can't focus.",
   },
   {
     role: "ai",
-    text: "That's tough. Let's keep today light — I've adjusted your plan to a 15-min walk and a short stretch. We can push intensity tomorrow when you're recovered.",
+    text: "I can see you're stressed. Let's break this down — first, a 5-minute breathing exercise. Then I'll help you outline 3 key talking points. You've got this.",
     tone: "supportive",
   },
-  { role: "user", text: "What about my run?" },
+  { role: "user", text: "What about my workout today?" },
   {
     role: "ai",
-    text: "Your body is asking for recovery. Skipping the run today will set you up better for the rest of the week. Trust the process.",
+    text: "Given your stress and tomorrow's presentation, let's swap the intense session for a 20-minute walk. Movement helps creativity, and you'll recover for Thursday's strength session.",
     tone: "calm",
   },
+  { role: "user", text: "I also haven't journaled in 3 days." },
   {
     role: "ai",
-    text: "When you're ready, we'll get that run in — and you'll feel stronger for it.",
+    text: "No guilt. Let's do a quick 2-minute voice journal right now — just tell me one thing you're grateful for and one thing you're worried about. I'll capture it.",
     tone: "energetic",
   },
-  { role: "user", text: "Can you suggest something light for lunch?" },
+  { role: "user", text: "My savings goal is behind this month." },
   {
     role: "ai",
-    text: "How about a salad with grilled chicken and a light vinaigrette? Both will keep you fueled without weighing you down before your meeting.",
+    text: "You're $180 short of your monthly target. I noticed you haven't reviewed your subscriptions in a while — want me to flag the ones you haven't used in 30+ days?",
     tone: "supportive",
   },
-  { role: "user", text: "Salad sounds good. My stress is pretty high today." },
+  { role: "user", text: "Yeah, that would be helpful." },
   {
     role: "ai",
-    text: "Noted. I've added a 5-minute breathing exercise after lunch. It'll reset your nervous system before the meeting.",
-    tone: "calm",
+    text: "Done — I found 3 subscriptions totaling $47/month you haven't touched. I've added them to your review list. Small wins compound.",
+    tone: "energetic",
   },
-  { role: "user", text: "Thanks. What's my strain looking like?" },
+  { role: "user", text: "You really do cover everything." },
   {
     role: "ai",
-    text: "Strain is at 8.2 — moderate. Given your sleep, staying in this range is ideal. We'll bump it up tomorrow if you're recovered.",
-    tone: "supportive",
-  },
-  { role: "user", text: "Appreciate it." },
-  {
-    role: "ai",
-    text: "Anytime. You're doing great by checking in. Good luck with the meeting — your coach has your back.",
+    text: "That's the idea. Fitness, finances, focus, journaling — it's all connected. Your life coach sees the whole picture so you don't have to juggle it alone.",
     tone: "supportive",
   },
 ];
@@ -114,7 +108,7 @@ const capabilities = [
   },
   {
     icon: TrendingUp,
-    label: "Biometric-synced",
+    label: "Cross-domain intelligence",
     color: "from-emerald-500/20 to-emerald-500/5",
     border: "border-emerald-500/20",
   },
@@ -130,7 +124,7 @@ function Typewriter({ text, onDone }: { text: string; onDone?: () => void }) {
 
   useEffect(() => {
     if (prefersReducedMotion) {
-      setDisplay(text);
+      setDisplay(text); // eslint-disable-line react-hooks/set-state-in-effect -- reduced motion fallback
       stableOnDone();
       return;
     }
@@ -176,7 +170,7 @@ function LiveMetric({
   value,
   unit,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
   unit?: string;
@@ -193,15 +187,15 @@ function LiveMetric({
   }, []);
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.07] border border-white/[0.12]">
       <Icon className="w-4 h-4 text-primary shrink-0" />
       <div className="flex items-baseline gap-1.5">
-        <span className="text-xs text-muted-foreground/60">{label}</span>
+        <span className="text-xs text-muted-foreground/80">{label}</span>
         <span className="text-sm font-bold tabular-nums">
           {Math.max(0, show)}
         </span>
         {unit && (
-          <span className="text-[10px] text-muted-foreground/40">{unit}</span>
+          <span className="text-[10px] text-muted-foreground/70">{unit}</span>
         )}
       </div>
     </div>
@@ -258,7 +252,7 @@ export function AIChatDemoSection() {
   const isLastMessage = (idx: number) => idx === visibleMessages.length - 1;
 
   useEffect(() => {
-    if (isInView && !hasStarted) setHasStarted(true);
+    if (isInView && !hasStarted) setHasStarted(true); // eslint-disable-line react-hooks/set-state-in-effect -- scroll trigger
   }, [isInView, hasStarted]);
 
   useEffect(() => {
@@ -273,7 +267,7 @@ export function AIChatDemoSection() {
   }, [messageIndex, typingDone, hasStarted]);
 
   useEffect(() => {
-    if (current?.role === "user") setTypingDone(true);
+    if (current?.role === "user") setTypingDone(true); // eslint-disable-line react-hooks/set-state-in-effect -- state machine
   }, [messageIndex, current?.role]);
 
   useEffect(() => {
@@ -283,7 +277,7 @@ export function AIChatDemoSection() {
 
     // Show typing indicator before AI messages
     if (nextMsg?.role === "ai") {
-      setShowTypingIndicator(true);
+      setShowTypingIndicator(true); // eslint-disable-line react-hooks/set-state-in-effect -- typing indicator
       const typingDelay = setTimeout(() => {
         setShowTypingIndicator(false);
         setTypingDone(false);
@@ -331,9 +325,9 @@ export function AIChatDemoSection() {
             </span>
           </h2>
           <p className="text-base sm:text-lg text-muted-foreground/80 max-w-2xl mx-auto leading-relaxed">
-            Real conversations. Emotional intelligence. Biometric-aware
-            responses. Watch a live conversation unfold between you and your
-            personal AI health coach.
+            Real conversations. Emotional intelligence. Cross-domain awareness.
+            Watch a live conversation unfold between you and your
+            personal AI life coach.
           </p>
         </GSAPScrollReveal>
 
@@ -379,7 +373,7 @@ export function AIChatDemoSection() {
 
               <div className="relative rounded-3xl border border-white/[0.12] bg-background/95 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/30">
                 {/* Status bar */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06] bg-white/[0.02]">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.12] bg-white/[0.07]">
                   <div className="flex items-center gap-3">
                     <div className="relative">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shadow-lg shadow-primary/20">
@@ -389,7 +383,7 @@ export function AIChatDemoSection() {
                       <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-background" />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm">YHealth AI Coach</p>
+                      <p className="font-semibold text-sm">Balencia AI Coach</p>
                       <div className="flex items-center gap-1.5">
                         <motion.div
                           className="w-1.5 h-1.5 rounded-full bg-emerald-400"
@@ -464,7 +458,7 @@ export function AIChatDemoSection() {
                             className={cn(
                               "max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-3 min-w-0",
                               isAiMsg
-                                ? "bg-white/[0.04] border border-white/[0.08] rounded-tl-md"
+                                ? "bg-white/[0.07] border border-white/[0.12] rounded-tl-md"
                                 : "bg-primary/15 border border-primary/20 rounded-tr-md"
                             )}
                           >
@@ -525,7 +519,7 @@ export function AIChatDemoSection() {
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shrink-0 shadow-md shadow-primary/20">
                           <Bot className="w-4 h-4 text-white" />
                         </div>
-                        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl rounded-tl-md">
+                        <div className="bg-white/[0.07] border border-white/[0.12] rounded-2xl rounded-tl-md">
                           <TypingIndicator />
                         </div>
                       </motion.div>
@@ -536,13 +530,13 @@ export function AIChatDemoSection() {
                 </div>
 
                 {/* Input bar */}
-                <div className="flex items-center gap-3 px-4 py-3 border-t border-white/[0.06] bg-white/[0.02]">
-                  <div className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-                    <span className="text-sm text-muted-foreground/40 select-none">
+                <div className="flex items-center gap-3 px-4 py-3 border-t border-white/[0.12] bg-white/[0.07]">
+                  <div className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.07] border border-white/[0.12]">
+                    <span className="text-sm text-muted-foreground/70 select-none">
                       Ask your coach anything...
                     </span>
                   </div>
-                  <button className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-muted-foreground/40">
+                  <button className="w-10 h-10 rounded-xl bg-white/[0.07] border border-white/[0.12] flex items-center justify-center text-muted-foreground/70">
                     <Mic className="w-4 h-4" />
                   </button>
                   <button className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary">
@@ -562,7 +556,7 @@ export function AIChatDemoSection() {
           delay={0.2}
           className="text-center mt-10 md:mt-14"
         >
-          <p className="text-xs text-muted-foreground/50 flex items-center justify-center gap-2">
+          <p className="text-xs text-muted-foreground/80 flex items-center justify-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             Powered by adaptive AI · Conversations are simulated for demo
           </p>

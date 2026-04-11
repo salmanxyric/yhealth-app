@@ -41,10 +41,10 @@ export interface Star {
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const INNER_RADIUS_FACTOR = 0.15;
 const OUTER_RADIUS_FACTOR = 0.45;
-const MIN_STAR_RADIUS = 3;
-const MAX_STAR_RADIUS = 12;
+const MIN_STAR_RADIUS = 5;
+const MAX_STAR_RADIUS = 18;
 
-const SENTIMENT_COLORS = {
+const _SENTIMENT_COLORS = {
   positive: { color: "#fbbf24", glow: "#fde68a" },
   neutral: { color: "#60a5fa", glow: "#93c5fd" },
   reflective: { color: "#a78bfa", glow: "#c4b5fd" },
@@ -150,7 +150,7 @@ export function polarToXY(
 
 /**
  * Compute star positions using golden angle spiral.
- * Entries should be sorted newest-first (index 0 = innermost).
+ * Entries should be sorted oldest-first (index 0 = innermost).
  */
 export function computeStarPositions(
   entryCount: number,
@@ -221,7 +221,7 @@ export function computeStarVisuals(entry: JournalEntry): StarVisuals {
   const twinkleSpeed = 0.5 + seededRandom2(entry.id) * 1.5;
 
   // DOM element size (px) — used by ObservatoryStarLayer
-  const domSize = clamp(16, 16 + Math.floor(wordCount / 3), 44);
+  const domSize = clamp(28, 28 + Math.floor(wordCount / 2), 64);
 
   return { radius, domSize, brightness, color, glowColor: glow, twinklePhase, twinkleSpeed };
 }
@@ -244,6 +244,16 @@ export function formatStarLabel(loggedAt: string): string {
 export function formatShortDate(loggedAt: string): string {
   const date = new Date(loggedAt);
   return `${date.getDate()} ${MONTH_NAMES[date.getMonth()]}`;
+}
+
+/** Format time as "9:30 AM" */
+export function formatTime(loggedAt: string): string {
+  const d = new Date(loggedAt);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 // ============================================
@@ -340,9 +350,9 @@ export function buildStars(
   canvasWidth: number,
   canvasHeight: number
 ): Star[] {
-  // Sort newest first (index 0 = closest to center)
+  // Sort oldest first (index 0 = closest to center, newest = outermost)
   const sorted = [...entries].sort(
-    (a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime()
+    (a, b) => new Date(a.loggedAt).getTime() - new Date(b.loggedAt).getTime()
   );
 
   const positions = computeStarPositions(

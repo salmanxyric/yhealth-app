@@ -167,13 +167,13 @@ export function WorkoutScheduleTasks({ workoutPlanId, onTaskClick, refreshKey }:
                   onTaskClick ? 'cursor-pointer hover:bg-white/5' : ''
                 } ${getStatusColor(task.status)}`}
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
                       {getStatusIcon(task.status)}
-                      <h4 className="font-medium text-white truncate">{task.name}</h4>
+                      <h4 className="font-medium text-sm sm:text-base text-white truncate">{task.name}</h4>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-slate-400">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-slate-400">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5" />
                         <span>{formatDate(task.scheduledDate)}</span>
@@ -192,16 +192,16 @@ export function WorkoutScheduleTasks({ workoutPlanId, onTaskClick, refreshKey }:
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <span
-                      className={`px-2 py-1 rounded-lg text-xs font-medium ${getIntensityColor(
+                      className={`px-2 py-1 rounded-lg text-[10px] sm:text-xs font-medium ${getIntensityColor(
                         task.intensity
                       )}`}
                     >
                       {task.intensity.toUpperCase()}
                     </span>
                     {task.rescheduleCount > 0 && (
-                      <span className="px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/20 text-blue-400">
+                      <span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-medium bg-blue-500/20 text-blue-400">
                         Rescheduled {task.rescheduleCount}x
                       </span>
                     )}

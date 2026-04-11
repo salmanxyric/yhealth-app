@@ -148,7 +148,7 @@ export interface MCQGenerationRequest {
   goal: GoalCategory;
   category?: MCQCategory;
   phase?: ConversationPhase;
-  previousAnswers?: { questionId: string; selectedOptions: string[] }[];
+  previousAnswers?: { questionId: string; questionText?: string; selectedOptions: string[] }[];
   extractedInsights?: ExtractedInsight[];
   language?: SupportedLanguage;
 }
@@ -189,6 +189,16 @@ export interface AICoachSession {
 
 class AICoachService {
   private visionClient: OpenAI | null = null;
+  private geminiApiKey: string | null = null;
+
+  /** Strip markdown code fences from AI responses (```json ... ```) */
+  private stripMarkdownFences(text: string): string {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('```')) {
+      return trimmed.replace(/^```(?:json|javascript|ts)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
+    return trimmed;
+  }
 
   /**
    * Determine if model requires max_completion_tokens instead of max_tokens
@@ -276,6 +286,13 @@ class AICoachService {
   }
 
   private initializeVisionClient(): void {
+    // Gemini as primary vision provider
+    if (env.gemini.apiKey) {
+      this.geminiApiKey = env.gemini.apiKey;
+      logger.info('[AICoach] Gemini vision available (primary)');
+    }
+
+    // OpenAI as fallback vision provider
     if (env.openai.apiKey) {
       try {
         this.visionClient = new OpenAI({
@@ -283,15 +300,167 @@ class AICoachService {
           timeout: 30000,
           maxRetries: 0,
         });
-        logger.info('[AICoach] Vision client initialized');
+        logger.info('[AICoach] OpenAI vision client initialized (fallback)');
       } catch (error) {
-        logger.warn('[AICoach] Failed to initialize Vision client', { error });
+        logger.warn('[AICoach] Failed to initialize OpenAI Vision client', { error });
       }
     }
   }
 
   isAvailable(): boolean {
-    return this.visionClient !== null;
+    return this.geminiApiKey !== null || this.visionClient !== null;
+  }
+
+  /**
+   * Call Gemini vision API directly via REST
+   */
+  private async callGeminiVision(
+    systemPrompt: string,
+    promptText: string,
+    imageDataUrl: string,
+    maxTokens: number,
+    jsonMode: boolean = false,
+  ): Promise<string> {
+    const VISION_MODELS = [env.gemini.model || 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+
+    // Extract base64 and mime from data URL or use as-is for http URLs
+    let inlineData: { mimeType: string; data: string } | undefined;
+
+    if (imageDataUrl.startsWith('data:')) {
+      const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) throw new Error('Invalid data URL format');
+      inlineData = { mimeType: match[1], data: match[2] };
+    } else {
+      // For http URLs, download and convert to base64
+      const imgResp = await fetch(imageDataUrl);
+      if (!imgResp.ok) throw new Error(`Failed to fetch image: ${imgResp.status}`);
+      const buf = Buffer.from(await imgResp.arrayBuffer());
+      const contentType = imgResp.headers.get('content-type') || 'image/jpeg';
+      inlineData = { mimeType: contentType, data: buf.toString('base64') };
+    }
+
+    const body = {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{
+        parts: [
+          { inlineData },
+          { text: promptText },
+        ],
+      }],
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature: 0.4,
+        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      },
+    };
+
+    // Try each Gemini model — fallback on 503/429
+    let lastError: Error | null = null;
+    for (const model of VISION_MODELS) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        if ((resp.status === 503 || resp.status === 429) && model !== VISION_MODELS[VISION_MODELS.length - 1]) {
+          logger.warn(`[AICoach] Gemini vision ${model} returned ${resp.status}, trying fallback`, { model, fallback: VISION_MODELS[VISION_MODELS.indexOf(model) + 1] });
+          lastError = new Error(`Gemini vision error (${resp.status}): ${errText}`);
+          continue;
+        }
+        throw new Error(`Gemini vision error (${resp.status}): ${errText}`);
+      }
+
+      // Success — proceed with this model's response
+      lastError = null;
+
+      const data = await resp.json() as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+          finishReason?: string;
+        }>;
+        promptFeedback?: { blockReason?: string };
+      };
+
+      // Check for safety blocks
+      if (data.promptFeedback?.blockReason) {
+        logger.warn('[AICoach] Gemini vision blocked by safety filter', { blockReason: data.promptFeedback.blockReason });
+        throw new Error(`Gemini vision blocked: ${data.promptFeedback.blockReason}`);
+      }
+
+      const candidate = data.candidates?.[0];
+      if (candidate?.finishReason === 'SAFETY') {
+        logger.warn('[AICoach] Gemini vision response blocked by safety', { finishReason: candidate.finishReason });
+        throw new Error('Gemini vision response blocked by safety filter');
+      }
+
+      // Try to extract text from all parts
+      const text = candidate?.content?.parts?.map(p => p.text || '').join('').trim();
+      if (!text) {
+        logger.warn('[AICoach] Gemini vision returned empty content', {
+          hasCandidates: !!data.candidates?.length,
+          finishReason: candidate?.finishReason,
+          responseKeys: Object.keys(data),
+        });
+        throw new Error('Gemini vision returned empty response');
+      }
+      return text;
+    }
+
+    // All Gemini models exhausted
+    throw lastError || new Error('All Gemini vision models failed');
+  }
+
+  /**
+   * Call Gemini text-only completion via REST API
+   */
+  private async callGeminiText(
+    systemPrompt: string,
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    maxTokens?: number,
+    temperature = 0.7,
+    jsonMode = false,
+  ): Promise<string> {
+    if (!this.geminiApiKey) throw new Error('Gemini API key not available');
+    const model = env.gemini.model || 'gemini-2.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
+
+    const contents = messages.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    const body = {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: {
+        ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
+        temperature,
+        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      },
+    };
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Gemini text error (${resp.status}): ${errText}`);
+    }
+
+    const data = await resp.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error('Gemini text returned empty response');
+    return text;
   }
 
   async validateHealthImage(
@@ -299,9 +468,9 @@ class AICoachService {
     mimeType: string,
     originalName: string
   ): Promise<ImageValidationResult> {
-    // If vision client is not available, default to accepting all images as valid
-    if (!this.visionClient) {
-      logger.warn('[AICoach] Vision client not available, defaulting to unknown image type');
+    // If no vision provider is available, default to accepting all images as valid
+    if (!this.geminiApiKey && !this.visionClient) {
+      logger.warn('[AICoach] No vision provider available, defaulting to unknown image type');
       return {
         isValid: true,
         imageType: 'unknown',
@@ -310,22 +479,10 @@ class AICoachService {
     }
 
     try {
-      // Convert buffer to base64 for OpenAI Vision API
       const base64Image = buffer.toString('base64');
       const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
-      // Use vision API to classify the image type
-      const model = env.openai.model || 'gpt-4o-mini';
-      const response = await this.visionClient.chat.completions.create({
-        model,
-        ...this.getTokenParameter(model, 200),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Analyze this image and classify it into ONE of these categories:
+      const classifyPrompt = `Analyze this image and classify it into ONE of these categories:
 - "nutrition_label": Photos of product Nutrition Facts panels, ingredient lists, food package labels, or nutrition information tables
 - "food_photo": Any food, meal, dish, ingredient, recipe, or nutrition-related image (burgers, salads, fruits, vegetables, cooked meals, raw ingredients, etc.)
 - "body_photo": Photos of people's bodies, physique, posture, or fitness progress
@@ -336,21 +493,35 @@ class AICoachService {
 
 IMPORTANT: If you see a Nutrition Facts panel, ingredient list, or food package label with printed nutrition data, classify it as "nutrition_label". If you see actual food items, ingredients, meals, or dishes, classify it as "food_photo".
 
-Respond with ONLY the category name in lowercase (e.g., "nutrition_label", "food_photo", "body_photo", etc.). No explanations, no JSON, just the category name.`,
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: dataUrl,
-                  detail: 'low', // Use low detail for faster classification
-                },
-              },
-            ],
-          },
-        ],
-      });
+Respond with ONLY the category name in lowercase (e.g., "nutrition_label", "food_photo", "body_photo", etc.). No explanations, no JSON, just the category name.`;
 
-      const classification = response.choices[0]?.message?.content?.trim().toLowerCase() || 'unknown';
+      let classificationText = '';
+
+      // Try Gemini first
+      if (this.geminiApiKey) {
+        try {
+          classificationText = await this.callGeminiVision('You classify images into health categories. Respond with ONLY the category name.', classifyPrompt, dataUrl, 100);
+        } catch (geminiError: any) {
+          logger.warn('[AICoach] Gemini classify failed, trying OpenAI', { error: geminiError?.message });
+        }
+      }
+
+      // Fallback to OpenAI
+      if (!classificationText && this.visionClient) {
+        try {
+          const model = env.openai.model || 'gpt-4o-mini';
+          const response = await this.visionClient.chat.completions.create({
+            model,
+            ...this.getTokenParameter(model, 200),
+            messages: [{ role: 'user', content: [{ type: 'text', text: classifyPrompt }, { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } }] }],
+          });
+          classificationText = response.choices[0]?.message?.content || '';
+        } catch (openaiError: any) {
+          logger.warn('[AICoach] OpenAI classify also failed', { error: openaiError?.message });
+        }
+      }
+
+      const classification = (classificationText || 'unknown').trim().toLowerCase();
       
       // Map classification to HealthImageType
       // Be very lenient with food detection - check for any food-related keywords
@@ -501,16 +672,15 @@ Respond with ONLY the category name in lowercase (e.g., "nutrition_label", "food
     userContext?: { goal?: GoalCategory; question?: string },
     mimeType?: string
   ): Promise<ImageAnalysisResult> {
-    if (!this.visionClient) {
-      logger.error('[AICoach] Vision client not initialized', { imageType, userId: userContext?.goal });
-      throw ApiError.internal('Vision API not available. Please check OpenAI API configuration.');
+    if (!this.geminiApiKey && !this.visionClient) {
+      logger.error('[AICoach] No vision provider available', { imageType });
+      throw ApiError.internal('Vision API not available. Please check API configuration.');
     }
 
-    const model = env.openai.model || 'gpt-4o-mini';
     logger.info('[AICoach] Starting image analysis', {
       imageType,
       hasQuestion: !!userContext?.question,
-      model,
+      provider: this.geminiApiKey ? 'gemini' : 'openai',
     });
 
     let imageContent: { type: 'image_url'; image_url: { url: string; detail: 'auto' | 'low' | 'high' } };
@@ -533,40 +703,41 @@ Respond with ONLY the category name in lowercase (e.g., "nutrition_label", "food
 
     const analysisPrompts: Record<HealthImageType, string> = {
       body_photo: `Analyze this body/physique/face photo for a comprehensive health, fitness, wellness, and nutrition coaching app. **FOCUS PRIMARILY ON THE PERSON IN THE IMAGE** - analyze their body, face, posture, and physical appearance in detail. Provide a detailed analysis including mood, fitness level, wellness indicators, body composition, and personalized recommendations.`,
-      food_photo: `Analyze this food/meal photo comprehensively for nutritional coaching. Identify all food items, ingredients, and dishes visible in the image.
+      food_photo: `You are an expert nutritionist analyzing a food photo. Identify the COMPLETE DISH first, then break down components.
 
-CRITICAL: Format your response with clear sections using markdown headers. Structure your response as follows:
+CRITICAL: Identify the DISH NAME first (e.g., "Chicken Biryani", "Pad Thai", "Caesar Salad", "Butter Chicken with Naan").
+Do NOT just list raw ingredients — name the actual prepared dish as a whole.
+For composite/mixed dishes (biryani, curry, stir-fry, pasta, bowl, wrap, sandwich), list the FULL DISH as the primary item with TOTAL macros for the entire dish.
+If there are separate side items (bread, drink, salad on the side), list those as additional items.
 
-**Foods Identified:**
-1. [Food Name] ([portion size]) - ~[calories] kcal
-2. [Food Name] ([portion size]) - ~[calories] kcal
-(Continue for all foods)
+Respond with ONLY valid JSON — no text before or after:
 
-**Estimated Calories:**
-[Total estimated calories] kcal
+{
+  "analysis": "**Foods Identified:**\\n1. Chicken Biryani (1 plate, ~450g) - ~650 kcal\\n2. Raita (1 bowl, ~100g) - ~60 kcal\\n\\n**Estimated Calories:** 710 kcal\\n\\n**Macronutrients:**\\nProtein: 38g | Carbs: 78g | Fat: 24g | Fiber: 4g\\n\\n**Recommendations:**\\n1. Good protein from chicken\\n2. Watch portion size of rice",
+  "items": [
+    {"name": "Chicken Biryani", "portion": "1 plate (~450g)", "calories": 650, "protein": 35, "carbs": 72, "fat": 22},
+    {"name": "Raita", "portion": "1 small bowl (~100g)", "calories": 60, "protein": 3, "carbs": 6, "fat": 2}
+  ],
+  "totalCalories": 710,
+  "totalProtein": 38,
+  "totalCarbs": 78,
+  "totalFat": 24,
+  "insights": [{"category": "wellness", "text": "Balanced meal with good protein", "confidence": 0.9}],
+  "recommendations": ["Good protein source", "Consider adding vegetables"],
+  "warnings": []
+}
 
-**Macronutrients:**
-Protein: [X]g
-Carbohydrates: [X]g
-Fats: [X]g
-Fiber: [X]g (if visible)
-
-**Key Micronutrients:**
-1. [Nutrient 1]
-2. [Nutrient 2]
-(Continue for key micronutrients)
-
-**Nutrition & Diet Recommendations:**
-1. [Recommendation 1]
-2. [Recommendation 2]
-(Continue for recommendations)
-
-IMPORTANT:
-- List EVERY food item you can see, even if partially visible
-- Provide portion sizes (e.g., "1 burger", "150g rice", "1 cup salad")
-- Estimate calories for each item based on standard nutritional values
-- Be specific with food names (e.g., "Grilled Chicken Breast" not just "chicken")
-- Include all visible ingredients and components`,
+ABSOLUTE RULES — DO NOT VIOLATE:
+1. EVERY item in "items" MUST have ALL 6 fields: name, portion, calories, protein, carbs, fat
+2. calories/protein/carbs/fat MUST be realistic NON-ZERO numbers estimated from USDA/standard nutrition databases
+3. NEVER return 0 for calories, protein, carbs, or fat — every food has macros
+4. Name the ACTUAL DISH (e.g., "Chicken Biryani" NOT "Chicken Drumsticks" + "Rice" separately; "Spaghetti Bolognese" NOT "Pasta" + "Meat Sauce")
+5. For mixed dishes, include ALL components (rice, meat, spices, oil, vegetables) in the dish's total macros
+6. Only list SEPARATE items if they are visually distinct dishes on the plate (e.g., a side salad, separate bread, a drink)
+7. Be specific with regional cuisine names (e.g., "Chicken Tikka Masala", "Pad Thai", "Jollof Rice", "Chicken Biryani" — not generic "rice with chicken")
+8. Estimate realistic portions (e.g., "1 plate (~450g)", "1 bowl (~300g)", "2 pieces (~200g)")
+9. totalCalories/totalProtein/totalCarbs/totalFat MUST equal the sum of all items
+10. The "analysis" field uses **bold** markdown headers as shown`,
       nutrition_label: `You are a nutrition label OCR specialist. Extract ALL nutrition data from this product label image.
 
 CRITICAL: Respond with ONLY a valid JSON object. No text before or after.
@@ -600,7 +771,7 @@ IMPORTANT:
       fitness_progress: `Analyze this fitness progress photo. Focus on the person's fitness level, body composition, and progress indicators.`,
       xray: `This appears to be a medical imaging scan. Acknowledge you see the image, strongly recommend consulting with a qualified radiologist/doctor, and provide general wellness tips.`,
       medical_report: `This appears to be a medical document/report. Acknowledge the document, note that you cannot provide medical interpretation, and suggest discussing results with their healthcare provider.`,
-      unknown: `Analyze this health-related image and provide relevant observations and suggestions. If this appears to be a food or meal image, analyze it for nutritional content, calories, and macronutrients.`,
+      unknown: `Analyze this health-related image. If this appears to be food or a meal, identify the COMPLETE DISH NAME first (e.g., "Chicken Biryani" not just "chicken" or "rice"), then respond with JSON containing an "items" array where EACH item has name, portion, calories (number), protein (number), carbs (number), fat (number) — ALL must be realistic non-zero values from standard nutrition databases. For mixed/composite dishes, list the whole dish as one item with combined macros. Include totalCalories, totalProtein, totalCarbs, totalFat as sums. Include an "analysis" field with markdown text. If it's not food, provide relevant health observations.`,
     };
 
     try {
@@ -633,54 +804,13 @@ IMPORTANT:
         // Override image detail to 'high' for better OCR accuracy
         imageContent.image_url.detail = 'high';
       } else if (isRecipeGeneration && userContext?.question) {
-        // Use custom recipe generation prompt with JSON output format
-        systemPrompt = 'You are an expert chef and nutritionist. Generate detailed, accurate recipes with precise measurements, cooking instructions, and nutritional information.';
-        maxTokens = 3000; // Higher token limit for detailed recipes
+        systemPrompt = 'You are an expert chef. Identify the dish in the image and generate a complete recipe as a JSON object. Respond with ONLY valid JSON — no markdown fences, no extra text.';
+        maxTokens = 4096;
 
-        // Enhance the recipe prompt to request JSON output
-        promptText = `${userContext.question}
+        promptText = `Identify this dish and generate a recipe. Return ONLY valid JSON:
+{"name":"...","description":"...","category":"breakfast|lunch|dinner|snack|dessert","cuisine":"...","servings":4,"difficulty":"easy|medium|hard","ingredients":[{"quantity":"2","unit":"cups","name":"rice"}],"instructions":[{"step":1,"description":"..."}],"nutrition":{"calories":450,"protein":35,"carbs":25,"fat":18,"fiber":4},"time":{"prep":15,"cook":30},"tags":["..."],"dietaryFlags":["..."]}
 
-CRITICAL: You MUST respond with a valid JSON object. Do not include any text before or after the JSON.
-
-Format your response EXACTLY as this JSON structure:
-{
-  "name": "Recipe Name",
-  "description": "A 2-3 sentence description of the dish",
-  "category": "breakfast|lunch|dinner|snack|dessert",
-  "cuisine": "Italian|Mexican|Asian|Chinese|Japanese|Indian|French|Mediterranean|American|Thai|Korean|Greek|Other",
-  "ingredients": [
-    {"quantity": "2", "unit": "lbs", "name": "chicken breast"},
-    {"quantity": "1", "unit": "tbsp", "name": "olive oil"}
-  ],
-  "instructions": [
-    {"step": 1, "description": "Preheat oven to 400°F (200°C)"},
-    {"step": 2, "description": "Season the chicken with salt and pepper"}
-  ],
-  "nutrition": {
-    "calories": 450,
-    "protein": 35,
-    "carbs": 25,
-    "fat": 18,
-    "fiber": 4
-  },
-  "time": {
-    "prep": 15,
-    "cook": 30
-  },
-  "servings": 4,
-  "difficulty": "easy|medium|hard",
-  "tags": ["High-Protein", "Quick", "Healthy"],
-  "dietaryFlags": ["gluten-free", "dairy-free", "high-protein", "low-carb", "keto", "vegetarian", "vegan"]
-}
-
-IMPORTANT RULES:
-1. Analyze the image carefully and identify the dish
-2. Provide REALISTIC nutritional values based on ingredients
-3. Include ALL visible ingredients with proper quantities
-4. Write DETAILED step-by-step instructions
-5. Estimate accurate prep and cook times
-6. Only include applicable dietary flags
-7. The response must be ONLY valid JSON - no markdown, no extra text`;
+Rules: identify all visible ingredients, provide realistic nutrition, write clear step-by-step instructions, estimate accurate times. ONLY JSON output.`;
       } else if (userContext?.question && userContext.question.length > 50) {
         // Use custom question as prompt if substantial
         systemPrompt = 'You are an expert AI health, fitness, wellness, and nutrition coach providing comprehensive image analysis.';
@@ -725,58 +855,68 @@ IMPORTANT: The analysis text MUST follow the exact structure with ## headers as 
         promptLength: promptText.length,
       });
 
-      try {
-        response = await this.visionClient.chat.completions.create({
-          model,
-          ...this.getTokenParameter(model, maxTokens),
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-            {
-              role: 'user',
-              content: [
-                imageContent,
-                {
-                  type: 'text',
-                  text: promptText,
-                },
-              ],
-            },
-          ],
-        });
-      } catch (apiError: any) {
-        logger.error('[AICoach] Vision API call failed', {
-          imageType,
-          error: apiError?.message || 'Unknown error',
-          errorType: apiError?.type,
-          errorCode: apiError?.code,
-          status: apiError?.status,
-        });
+      // Get the image data URL for Gemini
+      const imageDataUrl = imageContent.image_url.url;
+      let content = '';
 
-        if (apiError?.status === 429) {
-          throw ApiError.internal('Image analysis service is temporarily rate-limited. Please try again in a few moments.');
-        } else if (apiError?.status === 401 || apiError?.status === 403) {
-          throw ApiError.internal('Image analysis service authentication failed. Please contact support.');
-        } else if (apiError?.status === 400) {
-          throw ApiError.badRequest('Invalid image format or size. Please ensure the image is a valid JPEG, PNG, WebP, or HEIC file under 10MB.');
-        } else if (apiError?.message?.includes('quota') || apiError?.message?.includes('billing')) {
-          throw ApiError.internal('Image analysis service quota exceeded. Please try again later.');
-        } else {
-          throw ApiError.internal(`Image analysis failed: ${apiError?.message || 'Unknown error'}. Please try again or contact support if the issue persists.`);
+      // Try Gemini first (primary), then OpenAI (fallback)
+      if (this.geminiApiKey) {
+        try {
+          logger.info('[AICoach] Trying Gemini vision (primary)', { imageType });
+          content = await this.callGeminiVision(systemPrompt, promptText, imageDataUrl, maxTokens, !!isRecipeGeneration);
+          logger.info('[AICoach] Gemini vision succeeded', { imageType, contentLength: content.length, jsonMode: isRecipeGeneration });
+        } catch (geminiError: any) {
+          logger.warn('[AICoach] Gemini vision failed, trying OpenAI fallback', {
+            imageType,
+            error: geminiError?.message,
+          });
         }
       }
 
-      if (!response || !response.choices || response.choices.length === 0) {
-        logger.error('[AICoach] Vision API returned empty response', { imageType });
-        throw ApiError.internal('Image analysis service returned an empty response. Please try again.');
+      // Fallback to OpenAI if Gemini failed or unavailable
+      if (!content && this.visionClient) {
+        try {
+          const openaiModel = env.openai.model || 'gpt-4o-mini';
+          response = await this.visionClient.chat.completions.create({
+            model: openaiModel,
+            ...this.getTokenParameter(openaiModel, maxTokens),
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt,
+              },
+              {
+                role: 'user',
+                content: [
+                  imageContent,
+                  {
+                    type: 'text',
+                    text: promptText,
+                  },
+                ],
+              },
+            ],
+          });
+          content = response?.choices?.[0]?.message?.content || '';
+        } catch (apiError: any) {
+          logger.error('[AICoach] OpenAI Vision API also failed', {
+            imageType,
+            error: apiError?.message || 'Unknown error',
+            status: apiError?.status,
+          });
+
+          if (apiError?.status === 429 || apiError?.message?.includes('quota') || apiError?.message?.includes('billing')) {
+            throw ApiError.internal('Image analysis service is temporarily rate-limited. Please try again in a few moments.');
+          } else if (apiError?.status === 400) {
+            throw ApiError.badRequest('Invalid image format or size. Please ensure the image is a valid JPEG, PNG, WebP, or HEIC file under 10MB.');
+          } else {
+            throw ApiError.internal(`Image analysis failed: ${apiError?.message || 'Unknown error'}. Please try again.`);
+          }
+        }
       }
 
-      const content = response.choices[0]?.message?.content || '';
-      
       if (!content || content.trim().length === 0) {
-        logger.error('[AICoach] Vision API returned empty content', { imageType });
+        logger.error('[AICoach] All vision providers returned empty content', { imageType });
         throw ApiError.internal('Image analysis service returned no content. Please try again.');
       }
 
@@ -786,7 +926,8 @@ IMPORTANT: The analysis text MUST follow the exact structure with ## headers as 
         hasJson: content.includes('{'),
       });
 
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const cleanContent = this.stripMarkdownFences(content);
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
 
       if (jsonMatch) {
         let result;
@@ -799,20 +940,47 @@ IMPORTANT: The analysis text MUST follow the exact structure with ## headers as 
             isRecipeData: !!(result.name || result.ingredients),
           });
         } catch (parseError) {
-          logger.error('[AICoach] Failed to parse JSON from response', {
+          // Attempt to repair truncated JSON before giving up
+          logger.warn('[AICoach] JSON parse failed, attempting repair', {
             imageType,
-            error: parseError instanceof Error ? parseError.message : 'Unknown parse error',
-            contentPreview: content.substring(0, 500),
+            error: parseError instanceof Error ? parseError.message : 'Unknown',
           });
-          const fallbackAnalysis = content.substring(0, 2000);
-          return {
-            isHealthRelated: true,
-            imageType,
-            analysis: fallbackAnalysis || 'Analysis completed, but response format was unexpected. Please try again if you need structured analysis.',
-            insights: [],
-            recommendations: [],
-            warnings: ['Response parsing failed. Analysis may be incomplete.'],
-          };
+
+          try {
+            let repaired = jsonMatch[0];
+            // Remove trailing incomplete key-value (e.g. `"name": "salt (divided`)
+            repaired = repaired.replace(/,\s*"[^"]*":\s*"[^"]*$/, '');
+            repaired = repaired.replace(/,\s*"[^"]*":\s*$/, '');
+            repaired = repaired.replace(/,\s*$/, '');
+            // Close unclosed strings
+            const quotes = (repaired.match(/"/g) || []).length;
+            if (quotes % 2 !== 0) repaired += '"';
+            // Close unclosed brackets/braces
+            const openBraces = (repaired.match(/\{/g) || []).length;
+            const closeBraces = (repaired.match(/\}/g) || []).length;
+            const openBrackets = (repaired.match(/\[/g) || []).length;
+            const closeBrackets = (repaired.match(/\]/g) || []).length;
+            for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += ']';
+            for (let i = 0; i < openBraces - closeBraces; i++) repaired += '}';
+            result = JSON.parse(repaired);
+            logger.info('[AICoach] Successfully repaired truncated JSON', { imageType });
+            if (!result.warnings) result.warnings = [];
+            result.warnings.push('Some data may be incomplete due to response length limits.');
+          } catch {
+            logger.error('[AICoach] JSON repair also failed', {
+              imageType,
+              contentPreview: content.substring(0, 300),
+            });
+            const fallbackAnalysis = content.substring(0, 2000);
+            return {
+              isHealthRelated: true,
+              imageType,
+              analysis: fallbackAnalysis || 'Analysis completed, but response format was unexpected.',
+              insights: [],
+              recommendations: [],
+              warnings: ['Response parsing failed. Analysis may be incomplete.'],
+            };
+          }
         }
 
         // Check if this is nutrition label data (has nutrients object at root level)
@@ -855,6 +1023,23 @@ IMPORTANT: The analysis text MUST follow the exact structure with ## headers as 
             insights: [],
             recommendations: [],
             warnings: [],
+          };
+        }
+
+        // For food analysis with items array, include the full JSON so client can parse items
+        if (result.items && Array.isArray(result.items) && result.items.length > 0) {
+          logger.info('[AICoach] Food analysis with items array', {
+            imageType,
+            itemCount: result.items.length,
+            totalCalories: result.totalCalories,
+          });
+          return {
+            isHealthRelated: true,
+            imageType: imageType === 'unknown' ? 'food_photo' as HealthImageType : imageType,
+            analysis: JSON.stringify(result), // Return full JSON so client can extract items + analysis text
+            insights: result.insights || [],
+            recommendations: result.recommendations || [],
+            warnings: result.warnings || [],
           };
         }
 
@@ -1320,7 +1505,7 @@ Generate 1-3 SMART goals that are:
 
 Respond with ONLY a valid JSON object. Each goal should have:
 - "title": A clear, specific goal title (e.g., "Lose 10 pounds in 3 months")
-- "description": A detailed description explaining the goal, why it matters, and how to achieve it
+- "description": A concise description (2-3 sentences max) explaining the goal and how to achieve it
 - "targetValue": A numeric target value (e.g., 10 for "lose 10 pounds")
 - "targetUnit": The unit of measurement (e.g., "pounds", "hours", "days per week")
 - "timeline": An object with "durationWeeks" (number of weeks to achieve the goal, typically 4-16 weeks)
@@ -1362,49 +1547,69 @@ IMPORTANT:
 - Duration should be realistic (typically 4-16 weeks for most goals).
 - For sleep goals, targetUnit might be "hours" and targetValue might be hours of sleep.
 - For weight goals, use "pounds" or "kg" as targetUnit.
-- For habit goals, targetUnit might be "days per week" or "times per week".`;
+- For habit goals, targetUnit might be "days per week" or "times per week".
+- Keep descriptions and motivations SHORT (2-3 sentences each). Do not write paragraphs.
+- Limit milestones to 2-3 per goal maximum.`;
 
-      const model = 'gpt-4o';
-      const response = await this.visionClient.chat.completions.create({
-        model,
-        ...this.getTokenParameter(model, 2000),
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert health and wellness coach specializing in creating personalized SMART goals. Always respond with valid JSON only.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      });
+      let content = '';
+      const goalSystemPrompt = 'You are an expert health and wellness coach specializing in creating personalized SMART goals. Always respond with valid JSON only.';
 
-      const content = response.choices[0]?.message?.content || '';
-      
+      // Try Gemini first
+      if (this.geminiApiKey) {
+        try {
+          content = await this.callGeminiText(goalSystemPrompt, [{ role: 'user', content: prompt }], undefined, 0.4, true);
+        } catch (geminiError: any) {
+          logger.warn('[AICoach] Gemini goal generation failed, trying OpenAI', { error: geminiError?.message });
+        }
+      }
+
+      // Fallback to OpenAI
+      if (!content && this.visionClient) {
+        try {
+          const model = env.openai.model || 'gpt-4o-mini';
+          const response = await this.visionClient.chat.completions.create({
+            model,
+            ...this.getTokenParameter(model, 4096),
+            ...this.getResponseFormatParameter(model),
+            messages: [
+              { role: 'system', content: goalSystemPrompt },
+              { role: 'user', content: prompt },
+            ],
+          });
+          content = response.choices[0]?.message?.content || '';
+        } catch (openaiError: any) {
+          logger.warn('[AICoach] OpenAI goal generation also failed', { error: openaiError?.message });
+        }
+      }
+
       if (!content || content.trim().length === 0) {
-        logger.error('[AICoach] Empty response from OpenAI for goal generation');
+        logger.error('[AICoach] All providers failed for goal generation');
         throw ApiError.internal('Failed to generate goals. Please try again.');
       }
 
-      // Parse JSON response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        logger.error('[AICoach] No JSON found in goal generation response', {
-          contentPreview: content.substring(0, 200),
-        });
-        throw ApiError.internal('Invalid response format from goal generation service.');
-      }
-
+      // Strip markdown fences and parse JSON
+      const cleanContent = this.stripMarkdownFences(content);
       let result: GenerateGoalsResponse;
       try {
-        result = JSON.parse(jsonMatch[0]);
-      } catch (parseError) {
-        logger.error('[AICoach] Failed to parse goal generation response', {
-          error: parseError instanceof Error ? parseError.message : 'Unknown parse error',
-          contentPreview: content.substring(0, 500),
-        });
-        throw ApiError.internal('Failed to parse goal generation response. Please try again.');
+        result = JSON.parse(cleanContent);
+      } catch {
+        // Fallback: extract JSON object from text
+        const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          logger.error('[AICoach] No JSON found in goal generation response', {
+            contentPreview: content.substring(0, 200),
+          });
+          throw ApiError.internal('Invalid response format from goal generation service.');
+        }
+        try {
+          result = JSON.parse(jsonMatch[0]);
+        } catch (innerError) {
+          logger.error('[AICoach] Failed to parse goal generation response', {
+            error: innerError instanceof Error ? innerError.message : 'Unknown parse error',
+            contentPreview: content.substring(0, 500),
+          });
+          throw ApiError.internal('Failed to parse goal generation response. Please try again.');
+        }
       }
 
       // Validate response structure
@@ -1776,15 +1981,29 @@ IMPORTANT:
       health_condition: 'managing a health condition',
       habit_building: 'building healthy habits',
       overall_optimization: 'overall health optimization',
-      custom: 'personalized health goals',
+      // Life goal categories
+      financial: 'financial goals and money management',
+      faith: 'faith, spiritual practice, and religious goals',
+      relationships: 'improving relationships — family, friends, or partner',
+      education: 'education, learning, and personal study goals',
+      career: 'career development and professional growth',
+      health_wellness: 'general health and wellness improvements',
+      spiritual: 'spiritual growth and mindfulness',
+      social: 'social connections and community building',
+      productivity: 'productivity and time management',
+      happiness: 'happiness and life satisfaction',
+      anxiety_management: 'managing anxiety and building resilience',
+      creative: 'creative pursuits and artistic goals',
+      personal_growth: 'personal growth and self-improvement',
+      custom: 'personalized goals',
     };
     const goalDesc = goalDescriptions[goal] || goalDescriptions.custom;
 
     const languageInstruction = language === 'ur'
       ? 'CRITICAL: Respond in Urdu (اردو) using Urdu script. Sound like a real Urdu-speaking friend.'
-      : 'Respond in English. Sound like a friendly, casual health coach.';
+      : 'Respond in English. Sound like a friendly, casual life coach.';
 
-    const systemPrompt = `You are a health and fitness assessment coach. You are conducting a brief onboarding assessment about ${goalDesc}.
+    const systemPrompt = `You are a life coaching assessment specialist. You are conducting a brief onboarding assessment about ${goalDesc}.
 
 ${languageInstruction}
 
@@ -1810,26 +2029,39 @@ Guidelines:
     }));
 
     try {
-      if (!this.visionClient) {
-        throw new Error('OpenAI client not initialized');
+      let responseText = '';
+
+      // Try Gemini first
+      if (this.geminiApiKey) {
+        try {
+          const allMessages = [
+            ...recentHistory,
+            { role: 'user' as const, content: message },
+          ];
+          responseText = await this.callGeminiText(systemPrompt, allMessages, 200, 0.7);
+        } catch (geminiError: any) {
+          logger.warn('[AICoach] Gemini assessment failed, trying OpenAI', { error: geminiError?.message });
+        }
       }
 
-      const model = env.openai.model || 'gpt-5-mini';
-      const completion = await this.visionClient.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...recentHistory,
-          { role: 'user', content: message },
-        ],
-        ...this.getTemperatureParameter(model, 0.7),
-        ...this.getTokenParameter(model, 200),
-      });
-
-      const responseText = completion.choices[0]?.message?.content?.trim();
+      // Fallback to OpenAI
+      if (!responseText && this.visionClient) {
+        const model = env.openai.model || 'gpt-4o-mini';
+        const completion = await this.visionClient.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...recentHistory,
+            { role: 'user', content: message },
+          ],
+          ...this.getTemperatureParameter(model, 0.7),
+          ...this.getTokenParameter(model, 200),
+        });
+        responseText = completion.choices[0]?.message?.content?.trim() || '';
+      }
 
       if (!responseText) {
-        throw new Error('Empty response from AI');
+        throw new Error('Empty response from all AI providers');
       }
 
       // Extract basic insights from the user's message
@@ -2124,67 +2356,148 @@ Guidelines:
       // Generate question ID
       const questionId = crypto.randomUUID();
 
-      // Get OpenAI client with optimized timeout for MCQ generation
-      if (!this.visionClient) {
-        this.visionClient = new OpenAI({
-          apiKey: env.openai.apiKey,
-          timeout: 15000, // 15 second timeout for faster MCQ generation
-          maxRetries: 0, // No retries for speed
-        });
+      // Rich goal descriptions with context for better question generation
+      const goalContextMap: Record<string, { name: string; description: string; keyTopics: string[] }> = {
+        weight_loss: {
+          name: 'Weight Loss',
+          description: 'User wants to lose weight and reduce body fat',
+          keyTopics: ['current diet habits', 'exercise frequency', 'eating triggers', 'portion control', 'meal timing', 'hydration', 'past diet attempts'],
+        },
+        muscle_building: {
+          name: 'Muscle Building',
+          description: 'User wants to build muscle mass and increase strength',
+          keyTopics: ['training experience', 'workout preference', 'protein intake', 'recovery habits', 'gym access', 'supplement use', 'training schedule'],
+        },
+        sleep_improvement: {
+          name: 'Sleep Improvement',
+          description: 'User wants to improve sleep quality and duration',
+          keyTopics: ['sleep challenges', 'sleep duration', 'bedtime routine', 'screen habits', 'caffeine intake', 'stress impact on sleep', 'sleep schedule'],
+        },
+        stress_wellness: {
+          name: 'Stress Management & Wellness',
+          description: 'User wants to reduce stress and improve mental wellbeing',
+          keyTopics: ['stress triggers', 'coping mechanisms', 'mindfulness experience', 'stress impact on life', 'anxiety frequency', 'relaxation preferences', 'work-life balance'],
+        },
+        energy_productivity: {
+          name: 'Energy & Productivity',
+          description: 'User wants to boost energy levels and daily productivity',
+          keyTopics: ['energy patterns', 'work hours', 'afternoon crashes', 'morning routine', 'hydration', 'sleep quality', 'break habits'],
+        },
+        event_training: {
+          name: 'Event Training',
+          description: 'User is training for a specific athletic event or competition',
+          keyTopics: ['event type', 'event timeline', 'fitness level', 'training frequency', 'past events', 'nutrition strategy', 'recovery routine'],
+        },
+        health_condition: {
+          name: 'Health Condition Management',
+          description: 'User wants to manage a health condition through lifestyle changes',
+          keyTopics: ['condition type', 'daily impact', 'medical supervision', 'medications', 'exercise capacity', 'dietary restrictions', 'health concerns'],
+        },
+        habit_building: {
+          name: 'Habit Building',
+          description: 'User wants to build healthy habits and stick to them',
+          keyTopics: ['target habit', 'past attempts', 'barriers', 'preferred time', 'accountability preference', 'time commitment', 'motivation style'],
+        },
+        overall_optimization: {
+          name: 'Overall Health Optimization',
+          description: 'User wants to improve overall health across fitness, nutrition, sleep, and mental wellness',
+          keyTopics: ['weakest health area', 'health priority', 'readiness for change', 'exercise frequency', 'eating habits', 'stress level', 'sleep quality'],
+        },
+        custom: {
+          name: 'Custom Health Goals',
+          description: 'User has personalized health goals',
+          keyTopics: ['primary goal', 'desired changes', 'current challenges', 'exercise habits', 'stress level', 'sleep quality', 'hydration'],
+        },
+      };
+
+      const goalContext = goalContextMap[goal] || goalContextMap.custom;
+
+      // Build context with ALL previous Q&A to prevent repeating questions
+      let previousQAContext = '';
+      if (previousAnswers.length > 0) {
+        const qaList = previousAnswers.map((a, i) =>
+          `Q${i + 1}: "${a.questionText || a.questionId}" → Answer: ${a.selectedOptions.join(', ')}`
+        ).join('\n');
+        previousQAContext = `\nPreviously asked questions (DO NOT repeat or rephrase ANY of these):\n${qaList}`;
       }
 
-      // Build minimal context (only last 2 answers for speed)
-      const recentAnswers = previousAnswers.slice(-2);
-      const contextStr = recentAnswers.length > 0
-        ? `Previous: ${recentAnswers.map(a => a.selectedOptions[0]).join(', ')}`
-        : '';
+      // Include extracted insights for smarter follow-up questions
+      let insightsContext = '';
+      if (request.extractedInsights && request.extractedInsights.length > 0) {
+        const insightsList = request.extractedInsights
+          .slice(-5) // Last 5 insights for context
+          .map(i => `- ${i.category}: ${i.text} (confidence: ${i.confidence})`)
+          .join('\n');
+        insightsContext = `\nInsights gathered so far:\n${insightsList}`;
+      }
 
-      // Simplified goal descriptions
-      const goalDescMap: Record<string, string> = {
-        weight_loss: 'weight loss',
-        muscle_building: 'muscle building',
-        sleep_improvement: 'sleep improvement',
-        stress_wellness: 'stress management',
-        energy_productivity: 'energy & productivity',
-        event_training: 'event training',
-        health_condition: 'health condition',
-        habit_building: 'habit building',
-        overall_optimization: 'health optimization',
-        custom: 'health goals',
+      // Determine which topic to focus on next (avoid already-covered topics)
+      const coveredTopics = previousAnswers.map(a => a.questionText?.toLowerCase() || '').join(' ');
+      const remainingTopics = goalContext.keyTopics.filter(
+        topic => !coveredTopics.includes(topic.split(' ')[0])
+      );
+      const suggestedTopic = remainingTopics.length > 0 ? remainingTopics[0] : goalContext.keyTopics[previousAnswers.length % goalContext.keyTopics.length];
+
+      // Phase-aware topic guidance
+      const phaseTopics: Record<string, string> = {
+        opening: 'motivation, current habits, lifestyle basics',
+        exploration: 'specific challenges, preferences, schedule, experience level',
+        deep_dive: 'detailed preferences, constraints, medical considerations, past attempts',
       };
-      const goalDesc = goalDescMap[goal] || 'health goals';
+      const topicHint = phaseTopics[phase] || phaseTopics.opening;
 
-      // Simplified, concise prompt
-      const systemPrompt = `Generate ONE MCQ question about ${goalDesc}. ${contextStr ? `Context: ${contextStr}` : ''} Return JSON: {"question": "text", "options": [{"text": "opt1", "insightValue": "val1"}, ...]}`;
-      const userPrompt = language === 'ur' ? `Urdu question about ${goalDesc}` : `Question about ${goalDesc}`;
+      const mcqSystemPrompt = `You are an expert health assessment coach specializing in ${goalContext.name}.
+The user's goal: ${goalContext.description}.
+
+Your task: Generate ONE highly relevant MCQ question for their ${goalContext.name} assessment.
+
+Phase: ${phase} (focus areas: ${topicHint}).
+Suggested next topic: ${suggestedTopic}.
+${previousQAContext}
+${insightsContext}
+
+Return ONLY valid JSON: {"question": "text", "options": [{"text": "opt1", "insightValue": "val1"}, {"text": "opt2", "insightValue": "val2"}, {"text": "opt3", "insightValue": "val3"}, {"text": "opt4", "insightValue": "val4"}]}
+
+Rules:
+- Question MUST be specifically about ${goalContext.name} — not generic health
+- Question must be unique — never repeat or rephrase previous questions
+- Exactly 4 meaningful options that reveal actionable insights about the user
+- insightValue: snake_case key summarizing the option (e.g., "high_stress", "no_exercise")
+- ${language === 'ur' ? 'Generate question and options in Urdu language' : 'Generate in English'}`;
+
+      const userPrompt = `Generate assessment question ${previousAnswers.length + 1} of 7 specifically about ${goalContext.name}. Focus on: ${suggestedTopic}.`;
 
       try {
-        const model = env.openai.model || 'gpt-5-mini';
-        
-        // Optimized: Single request, lower token limit for speed
-        // MCQ questions are short (~150 tokens), so we use minimal tokens
-        // For reasoning models (gpt-5-mini), we pass 50 which becomes 200 after 4x multiplication
-        // For non-reasoning models, we pass 200 directly
-        const tokenLimit = this.isReasoningModel(model) ? 50 : 200;
-        const completion = await this.visionClient.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          ...this.getTemperatureParameter(model, 0.7),
-          ...this.getTokenParameter(model, tokenLimit),
-          ...this.getResponseFormatParameter(model),
-        });
+        let content: string | null = null;
 
-        const content = completion.choices[0]?.message?.content || null;
+        // Try Gemini first
+        if (this.geminiApiKey) {
+          try {
+            content = await this.callGeminiText(mcqSystemPrompt, [{ role: 'user', content: userPrompt }], 500, 0.4, true);
+          } catch (geminiError: any) {
+            logger.warn('[AICoach] Gemini MCQ generation failed, trying OpenAI', { error: geminiError?.message });
+          }
+        }
+
+        // Fallback to OpenAI
+        if (!content && this.visionClient) {
+          const model = env.openai.model || 'gpt-4o-mini';
+          const tokenLimit = this.isReasoningModel(model) ? 200 : 500;
+          const completion = await this.visionClient.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: mcqSystemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            ...this.getTemperatureParameter(model, 0.7),
+            ...this.getTokenParameter(model, tokenLimit),
+            ...this.getResponseFormatParameter(model),
+          });
+          content = completion.choices[0]?.message?.content || null;
+        }
 
         if (!content || content.trim().length === 0) {
-          logger.warn('[AICoach] Empty response from AI, using fallback', {
-            model,
-            finishReason: completion.choices[0]?.finish_reason,
-          });
-          // Use fallback immediately instead of throwing
+          logger.warn('[AICoach] Empty response from all providers, using fallback');
           return this.generateFallbackMCQQuestion(goal, phase, language, questionId, previousAnswers);
         }
 
@@ -2194,17 +2507,18 @@ Guidelines:
           options?: Array<{ text: string; insightValue?: string }>;
         }
         
+        const cleanContent = this.stripMarkdownFences(content);
+
         let parsed: ParsedResponse;
         try {
-          parsed = JSON.parse(content) as ParsedResponse;
+          parsed = JSON.parse(cleanContent) as ParsedResponse;
         } catch (parseError) {
-          // If direct parse fails, try to extract JSON from markdown or text
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          // If direct parse fails, try to extract JSON from text
+          const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             parsed = JSON.parse(jsonMatch[0]) as ParsedResponse;
           } else {
             logger.warn('[AICoach] Failed to parse JSON from response', {
-              model,
               contentPreview: content.substring(0, 200),
               error: parseError instanceof Error ? parseError.message : 'Unknown parse error',
             });
@@ -2291,275 +2605,127 @@ Guidelines:
     phase: ConversationPhase,
     language: SupportedLanguage,
     questionId: string,
-    previousAnswers: { questionId: string; selectedOptions: string[] }[] = []
+    previousAnswers: { questionId: string; questionText?: string; selectedOptions: string[] }[] = []
   ): MCQGenerationResponse {
-    const goalQuestions: Record<string, Record<string, { question: string; options: string[] }>> = {
-      weight_loss: {
-        opening: {
-          question: language === 'ur' 
-            ? 'آپ کا وزن کم کرنے کا بنیادی مقصد کیا ہے؟'
-            : 'What is your primary motivation for weight loss?',
-          options: language === 'ur'
-            ? ['صحت بہتر بنانا', 'بہتر لگنا', 'طاقت بڑھانا', 'طبی وجوہات']
-            : ['Improve health', 'Look better', 'Increase energy', 'Medical reasons'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ کتنی بار ورزش کرتے ہیں؟'
-            : 'How often do you currently exercise?',
-          options: language === 'ur'
-            ? ['کبھی نہیں', 'ہفتے میں 1-2 بار', 'ہفتے میں 3-4 بار', 'روزانہ']
-            : ['Never', '1-2 times per week', '3-4 times per week', 'Daily'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کی غذا میں سب سے بڑی چیلنج کیا ہے؟'
-            : 'What is your biggest nutrition challenge?',
-          options: language === 'ur'
-            ? ['پورشن کنٹرول', 'صحت مند کھانا', 'میٹھا کھانا', 'وقت نہیں ملتا']
-            : ['Portion control', 'Eating healthy', 'Sweet cravings', 'No time'],
-        },
-      },
-      muscle_building: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کتنے عرصے سے ورزش کر رہے ہیں؟'
-            : 'How long have you been working out?',
-          options: language === 'ur'
-            ? ['ابھی شروع کیا', '1-3 ماہ', '3-6 ماہ', '6 ماہ سے زیادہ']
-            : ['Just starting', '1-3 months', '3-6 months', 'More than 6 months'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ کس قسم کی ورزش پسند کرتے ہیں؟'
-            : 'What type of exercise do you prefer?',
-          options: language === 'ur'
-            ? ['ویٹ لفٹنگ', 'کارڈیو', 'یوگا', 'مکس']
-            : ['Weight lifting', 'Cardio', 'Yoga', 'Mixed'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کتنے دن ہفتے میں ورزش کر سکتے ہیں؟'
-            : 'How many days per week can you commit to workouts?',
-          options: language === 'ur'
-            ? ['2-3 دن', '4-5 دن', '6 دن', 'روزانہ']
-            : ['2-3 days', '4-5 days', '6 days', 'Daily'],
-        },
-      },
-      sleep_improvement: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کی نیند کی سب سے بڑی مشکل کیا ہے؟'
-            : 'What is your biggest sleep challenge?',
-          options: language === 'ur'
-            ? ['سونا مشکل', 'رات کو جاگنا', 'جلدی اٹھنا', 'تھکاوٹ']
-            : ['Trouble falling asleep', 'Waking up at night', 'Waking up too early', 'Feeling tired'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ عام طور پر کتنے گھنٹے سوتے ہیں؟'
-            : 'How many hours of sleep do you typically get?',
-          options: language === 'ur'
-            ? ['4 گھنٹے سے کم', '4-6 گھنٹے', '6-8 گھنٹے', '8+ گھنٹے']
-            : ['Less than 4 hours', '4-6 hours', '6-8 hours', '8+ hours'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کا سونے کا معمول کیا ہے؟'
-            : 'What is your bedtime routine?',
-          options: language === 'ur'
-            ? ['باقاعدہ', 'کبھی کبھار', 'بے ترتیب', 'کوئی نہیں']
-            : ['Consistent', 'Sometimes', 'Irregular', 'None'],
-        },
-      },
-      stress_wellness: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کا تناؤ کب سب سے زیادہ ہوتا ہے؟'
-            : 'When do you feel most stressed?',
-          options: language === 'ur'
-            ? ['صبح', 'دوپہر', 'شام', 'رات']
-            : ['Morning', 'Afternoon', 'Evening', 'Night'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ تناؤ کو کیسے مینج کرتے ہیں؟'
-            : 'How do you currently manage stress?',
-          options: language === 'ur'
-            ? ['ورزش', 'مراقبہ', 'دوستوں سے بات', 'کچھ نہیں']
-            : ['Exercise', 'Meditation', 'Talking to friends', 'Nothing'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'تناؤ آپ کی روزمرہ زندگی کو کس طرح متاثر کرتا ہے؟'
-            : 'How does stress affect your daily life?',
-          options: language === 'ur'
-            ? ['بہت زیادہ', 'کچھ حد تک', 'کم', 'بہت کم']
-            : ['Very much', 'Somewhat', 'A little', 'Not much'],
-        },
-      },
-      energy_productivity: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کی توانائی کا لیول دن میں کب سب سے زیادہ ہوتا ہے؟'
-            : 'When is your energy level highest during the day?',
-          options: language === 'ur'
-            ? ['صبح', 'دوپہر', 'شام', 'رات']
-            : ['Morning', 'Afternoon', 'Evening', 'Night'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ کتنے گھنٹے کام کرتے ہیں؟'
-            : 'How many hours do you work per day?',
-          options: language === 'ur'
-            ? ['4-6 گھنٹے', '6-8 گھنٹے', '8-10 گھنٹے', '10+ گھنٹے']
-            : ['4-6 hours', '6-8 hours', '8-10 hours', '10+ hours'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کی توانائی کو کیا متاثر کرتا ہے؟'
-            : 'What affects your energy levels most?',
-          options: language === 'ur'
-            ? ['نیند', 'خوراک', 'ورزش', 'تناؤ']
-            : ['Sleep', 'Nutrition', 'Exercise', 'Stress'],
-        },
-      },
-      event_training: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کس قسم کے ایونٹ کے لیے ٹریننگ کر رہے ہیں؟'
-            : 'What type of event are you training for?',
-          options: language === 'ur'
-            ? ['ماراتھن', 'ٹرائیتھلون', 'ویٹ لفٹنگ', 'دوسرا']
-            : ['Marathon', 'Triathlon', 'Weightlifting', 'Other'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'ایونٹ کب ہے؟'
-            : 'When is the event?',
-          options: language === 'ur'
-            ? ['1 ماہ میں', '3 ماہ میں', '6 ماہ میں', 'ایک سال میں']
-            : ['In 1 month', 'In 3 months', 'In 6 months', 'In 1 year'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کا موجودہ فٹنس لیول کیا ہے؟'
-            : 'What is your current fitness level?',
-          options: language === 'ur'
-            ? ['ابتدائی', 'درمیانی', 'اعلیٰ', 'پیشہ ورانہ']
-            : ['Beginner', 'Intermediate', 'Advanced', 'Elite'],
-        },
-      },
-      health_condition: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کس قسم کی صحت کی حالت کا انتظام کر رہے ہیں؟'
-            : 'What type of health condition are you managing?',
-          options: language === 'ur'
-            ? ['ذیابیطس', 'بلڈ پریشر', 'جوڑوں کا درد', 'دوسری']
-            : ['Diabetes', 'Blood pressure', 'Joint pain', 'Other'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ کی صحت کی حالت آپ کی روزمرہ زندگی کو کس طرح متاثر کرتی ہے؟'
-            : 'How does your health condition affect your daily life?',
-          options: language === 'ur'
-            ? ['بہت زیادہ', 'کچھ حد تک', 'کم', 'بہت کم']
-            : ['Very much', 'Somewhat', 'A little', 'Not much'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کیا تبدیلیاں کرنا چاہتے ہیں؟'
-            : 'What changes would you like to make?',
-          options: language === 'ur'
-            ? ['خوراک', 'ورزش', 'نیند', 'سب کچھ']
-            : ['Nutrition', 'Exercise', 'Sleep', 'Everything'],
-        },
-      },
-      habit_building: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کون سا عادت بنانا چاہتے ہیں؟'
-            : 'What habit would you like to build?',
-          options: language === 'ur'
-            ? ['روزانہ ورزش', 'صحت مند کھانا', 'بہتر نیند', 'دوسری']
-            : ['Daily exercise', 'Healthy eating', 'Better sleep', 'Other'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ نے پہلے کبھی یہ عادت بنانے کی کوشش کی ہے؟'
-            : 'Have you tried building this habit before?',
-          options: language === 'ur'
-            ? ['ہاں، کامیاب', 'ہاں، ناکام', 'نہیں', 'کبھی کبھار']
-            : ['Yes, successful', 'Yes, failed', 'No', 'Sometimes'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کو کیا رکاوٹیں آتی ہیں؟'
-            : 'What barriers do you face?',
-          options: language === 'ur'
-            ? ['وقت نہیں', 'حوصلہ نہیں', 'علم نہیں', 'دوسری']
-            : ['No time', 'No motivation', 'No knowledge', 'Other'],
-        },
-      },
-      overall_optimization: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کی صحت کا کون سا پہلو سب سے زیادہ بہتری چاہتا ہے؟'
-            : 'Which aspect of your health needs the most improvement?',
-          options: language === 'ur'
-            ? ['فٹنس', 'خوراک', 'نیند', 'ذہنی صحت']
-            : ['Fitness', 'Nutrition', 'Sleep', 'Mental health'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ اپنی صحت کو کس طرح ترجیح دیتے ہیں؟'
-            : 'How do you prioritize your health?',
-          options: language === 'ur'
-            ? ['بہت زیادہ', 'کچھ حد تک', 'کم', 'بہت کم']
-            : ['Very much', 'Somewhat', 'A little', 'Not much'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کیا تبدیلیاں کرنے کے لیے تیار ہیں؟'
-            : 'What changes are you ready to make?',
-          options: language === 'ur'
-            ? ['چھوٹی تبدیلیاں', 'درمیانی تبدیلیاں', 'بڑی تبدیلیاں', 'سب کچھ']
-            : ['Small changes', 'Moderate changes', 'Big changes', 'Everything'],
-        },
-      },
-      custom: {
-        opening: {
-          question: language === 'ur'
-            ? 'آپ کا صحت کا بنیادی مقصد کیا ہے؟'
-            : 'What is your primary health goal?',
-          options: language === 'ur'
-            ? ['بہتر محسوس کرنا', 'زیادہ فعال ہونا', 'بہتر کھانا', 'بہتر سونا']
-            : ['Feel better', 'Be more active', 'Eat better', 'Sleep better'],
-        },
-        exploration: {
-          question: language === 'ur'
-            ? 'آپ کیا تبدیلیاں کرنا چاہتے ہیں؟'
-            : 'What changes would you like to make?',
-          options: language === 'ur'
-            ? ['خوراک', 'ورزش', 'نیند', 'سب کچھ']
-            : ['Nutrition', 'Exercise', 'Sleep', 'Everything'],
-        },
-        deep_dive: {
-          question: language === 'ur'
-            ? 'آپ کیا چیلنجز کا سامنا کر رہے ہیں؟'
-            : 'What challenges are you facing?',
-          options: language === 'ur'
-            ? ['وقت نہیں', 'حوصلہ نہیں', 'علم نہیں', 'دوسری']
-            : ['No time', 'No motivation', 'No knowledge', 'Other'],
-        },
-      },
+    // 7+ questions per goal for full assessment coverage
+    const goalQuestions: Record<string, { question: string; options: string[] }[]> = {
+      weight_loss: [
+        { question: language === 'ur' ? 'آپ کا وزن کم کرنے کا بنیادی مقصد کیا ہے؟' : 'What is your primary motivation for weight loss?', options: language === 'ur' ? ['صحت بہتر بنانا', 'بہتر لگنا', 'طاقت بڑھانا', 'طبی وجوہات'] : ['Improve health', 'Look better', 'Increase energy', 'Medical reasons'] },
+        { question: language === 'ur' ? 'آپ کتنی بار ورزش کرتے ہیں؟' : 'How often do you currently exercise?', options: language === 'ur' ? ['کبھی نہیں', 'ہفتے میں 1-2 بار', 'ہفتے میں 3-4 بار', 'روزانہ'] : ['Never', '1-2 times per week', '3-4 times per week', 'Daily'] },
+        { question: language === 'ur' ? 'آپ کی غذا میں سب سے بڑی چیلنج کیا ہے؟' : 'What is your biggest nutrition challenge?', options: language === 'ur' ? ['پورشن کنٹرول', 'صحت مند کھانا', 'میٹھا کھانا', 'وقت نہیں ملتا'] : ['Portion control', 'Eating healthy', 'Sweet cravings', 'No time'] },
+        { question: language === 'ur' ? 'آپ روزانہ کتنا پانی پیتے ہیں؟' : 'How much water do you drink daily?', options: language === 'ur' ? ['2 گلاس سے کم', '2-4 گلاس', '5-8 گلاس', '8+ گلاس'] : ['Less than 2 glasses', '2-4 glasses', '5-8 glasses', '8+ glasses'] },
+        { question: language === 'ur' ? 'آپ عام طور پر کتنے گھنٹے سوتے ہیں؟' : 'How many hours of sleep do you typically get?', options: language === 'ur' ? ['4 گھنٹے سے کم', '4-6 گھنٹے', '6-8 گھنٹے', '8+ گھنٹے'] : ['Less than 4 hours', '4-6 hours', '6-8 hours', '8+ hours'] },
+        { question: language === 'ur' ? 'آپ کا تناؤ کی سطح کیا ہے؟' : 'How would you rate your stress level?', options: language === 'ur' ? ['بہت کم', 'کم', 'درمیانی', 'زیادہ'] : ['Very low', 'Low', 'Moderate', 'High'] },
+        { question: language === 'ur' ? 'آپ کے پسندیدہ کھانے کی قسم کیا ہے؟' : 'What type of food do you eat most often?', options: language === 'ur' ? ['گھر کا کھانا', 'فاسٹ فوڈ', 'ملاجلا', 'باہر کا کھانا'] : ['Home cooked', 'Fast food', 'Mixed', 'Restaurant food'] },
+        { question: language === 'ur' ? 'آپ نے پہلے کبھی ڈائیٹ پلان فالو کیا ہے؟' : 'Have you followed a diet plan before?', options: language === 'ur' ? ['ہاں، کامیاب', 'ہاں، ناکام', 'نہیں', 'ابھی کر رہا ہوں'] : ['Yes, successfully', 'Yes, unsuccessful', 'Never', 'Currently on one'] },
+      ],
+      muscle_building: [
+        { question: language === 'ur' ? 'آپ کتنے عرصے سے ورزش کر رہے ہیں؟' : 'How long have you been working out?', options: language === 'ur' ? ['ابھی شروع کیا', '1-3 ماہ', '3-6 ماہ', '6 ماہ سے زیادہ'] : ['Just starting', '1-3 months', '3-6 months', 'More than 6 months'] },
+        { question: language === 'ur' ? 'آپ کس قسم کی ورزش پسند کرتے ہیں؟' : 'What type of exercise do you prefer?', options: language === 'ur' ? ['ویٹ لفٹنگ', 'کارڈیو', 'یوگا', 'مکس'] : ['Weight lifting', 'Cardio', 'Yoga', 'Mixed'] },
+        { question: language === 'ur' ? 'آپ کتنے دن ہفتے میں ورزش کر سکتے ہیں؟' : 'How many days per week can you commit to workouts?', options: language === 'ur' ? ['2-3 دن', '4-5 دن', '6 دن', 'روزانہ'] : ['2-3 days', '4-5 days', '6 days', 'Daily'] },
+        { question: language === 'ur' ? 'آپ کا موجودہ پروٹین انٹیک کیا ہے؟' : 'How would you describe your current protein intake?', options: language === 'ur' ? ['بہت کم', 'کم', 'کافی', 'زیادہ'] : ['Very low', 'Low', 'Adequate', 'High'] },
+        { question: language === 'ur' ? 'کیا آپ کو جم تک رسائی ہے؟' : 'Do you have access to a gym?', options: language === 'ur' ? ['ہاں، مکمل جم', 'گھر میں بنیادی سامان', 'صرف جسمانی وزن', 'نہیں'] : ['Yes, full gym', 'Home basic equipment', 'Bodyweight only', 'No equipment'] },
+        { question: language === 'ur' ? 'آپ کا سب سے بڑا چیلنج کیا ہے؟' : 'What is your biggest challenge with building muscle?', options: language === 'ur' ? ['وقت نہیں', 'غذائیت', 'حوصلہ', 'علم نہیں'] : ['No time', 'Nutrition', 'Motivation', 'Lack of knowledge'] },
+        { question: language === 'ur' ? 'آپ کتنے گھنٹے سوتے ہیں؟' : 'How many hours of sleep do you get per night?', options: language === 'ur' ? ['4 سے کم', '4-6 گھنٹے', '6-8 گھنٹے', '8+ گھنٹے'] : ['Less than 4', '4-6 hours', '6-8 hours', '8+ hours'] },
+        { question: language === 'ur' ? 'کیا آپ کوئی سپلیمنٹس لیتے ہیں؟' : 'Do you currently take any supplements?', options: language === 'ur' ? ['پروٹین پاؤڈر', 'کریٹین', 'متعدد', 'کوئی نہیں'] : ['Protein powder', 'Creatine', 'Multiple supplements', 'None'] },
+      ],
+      sleep_improvement: [
+        { question: language === 'ur' ? 'آپ کی نیند کی سب سے بڑی مشکل کیا ہے؟' : 'What is your biggest sleep challenge?', options: language === 'ur' ? ['سونا مشکل', 'رات کو جاگنا', 'جلدی اٹھنا', 'تھکاوٹ'] : ['Trouble falling asleep', 'Waking up at night', 'Waking up too early', 'Feeling tired'] },
+        { question: language === 'ur' ? 'آپ عام طور پر کتنے گھنٹے سوتے ہیں؟' : 'How many hours of sleep do you typically get?', options: language === 'ur' ? ['4 گھنٹے سے کم', '4-6 گھنٹے', '6-8 گھنٹے', '8+ گھنٹے'] : ['Less than 4 hours', '4-6 hours', '6-8 hours', '8+ hours'] },
+        { question: language === 'ur' ? 'آپ کا سونے کا معمول کیا ہے؟' : 'What is your bedtime routine?', options: language === 'ur' ? ['باقاعدہ', 'کبھی کبھار', 'بے ترتیب', 'کوئی نہیں'] : ['Consistent', 'Sometimes', 'Irregular', 'None'] },
+        { question: language === 'ur' ? 'کیا آپ سونے سے پہلے اسکرین استعمال کرتے ہیں؟' : 'Do you use screens before bed?', options: language === 'ur' ? ['ہمیشہ', 'اکثر', 'کبھی کبھار', 'کبھی نہیں'] : ['Always', 'Often', 'Sometimes', 'Never'] },
+        { question: language === 'ur' ? 'آپ کا کیفین کا استعمال کیا ہے؟' : 'How much caffeine do you consume daily?', options: language === 'ur' ? ['کوئی نہیں', '1-2 کپ', '3-4 کپ', '5+ کپ'] : ['None', '1-2 cups', '3-4 cups', '5+ cups'] },
+        { question: language === 'ur' ? 'آپ کا تناؤ نیند کو کتنا متاثر کرتا ہے؟' : 'How much does stress affect your sleep?', options: language === 'ur' ? ['بہت زیادہ', 'کچھ حد تک', 'تھوڑا', 'بالکل نہیں'] : ['Very much', 'Somewhat', 'A little', 'Not at all'] },
+        { question: language === 'ur' ? 'آپ عام طور پر کتنے بجے سوتے ہیں؟' : 'What time do you usually go to bed?', options: language === 'ur' ? ['9 بجے سے پہلے', '9-11 بجے', '11-1 بجے', '1 بجے کے بعد'] : ['Before 9 PM', '9-11 PM', '11 PM-1 AM', 'After 1 AM'] },
+        { question: language === 'ur' ? 'کیا آپ سونے سے پہلے ورزش کرتے ہیں؟' : 'Do you exercise close to bedtime?', options: language === 'ur' ? ['ہاں، 2 گھنٹے پہلے', 'ہاں، 4 گھنٹے پہلے', 'صبح/دوپہر', 'ورزش نہیں کرتا'] : ['Yes, within 2 hours', 'Yes, within 4 hours', 'Morning/afternoon', 'I don\'t exercise'] },
+      ],
+      stress_wellness: [
+        { question: language === 'ur' ? 'آپ کا تناؤ کب سب سے زیادہ ہوتا ہے؟' : 'When do you feel most stressed?', options: language === 'ur' ? ['صبح', 'دوپہر', 'شام', 'رات'] : ['Morning', 'Afternoon', 'Evening', 'Night'] },
+        { question: language === 'ur' ? 'آپ تناؤ کو کیسے مینج کرتے ہیں؟' : 'How do you currently manage stress?', options: language === 'ur' ? ['ورزش', 'مراقبہ', 'دوستوں سے بات', 'کچھ نہیں'] : ['Exercise', 'Meditation', 'Talking to friends', 'Nothing'] },
+        { question: language === 'ur' ? 'تناؤ آپ کی روزمرہ زندگی کو کس طرح متاثر کرتا ہے؟' : 'How does stress affect your daily life?', options: language === 'ur' ? ['بہت زیادہ', 'کچھ حد تک', 'کم', 'بہت کم'] : ['Very much', 'Somewhat', 'A little', 'Not much'] },
+        { question: language === 'ur' ? 'آپ کے تناؤ کی بنیادی وجہ کیا ہے؟' : 'What is the main source of your stress?', options: language === 'ur' ? ['کام', 'رشتے', 'مالی', 'صحت'] : ['Work', 'Relationships', 'Financial', 'Health'] },
+        { question: language === 'ur' ? 'کیا آپ نے کبھی مراقبہ یا مائنڈفلنیس کی مشق کی ہے؟' : 'Have you ever practiced meditation or mindfulness?', options: language === 'ur' ? ['باقاعدگی سے', 'کبھی کبھار', 'ایک بار', 'کبھی نہیں'] : ['Regularly', 'Occasionally', 'Tried once', 'Never'] },
+        { question: language === 'ur' ? 'تناؤ آپ کی نیند کو کتنا متاثر کرتا ہے؟' : 'How much does stress affect your sleep quality?', options: language === 'ur' ? ['بہت زیادہ', 'کچھ حد تک', 'تھوڑا', 'بالکل نہیں'] : ['Severely', 'Moderately', 'Slightly', 'Not at all'] },
+        { question: language === 'ur' ? 'آپ کتنی بار بے چینی محسوس کرتے ہیں؟' : 'How often do you feel anxious or overwhelmed?', options: language === 'ur' ? ['روزانہ', 'ہفتے میں کئی بار', 'ہفتے میں ایک بار', 'شاذ و نادر'] : ['Daily', 'Several times a week', 'Once a week', 'Rarely'] },
+        { question: language === 'ur' ? 'آپ کو ذہنی سکون کے لیے کیا چاہیے؟' : 'What would help you feel more at peace?', options: language === 'ur' ? ['بہتر نیند', 'ورزش', 'سماجی تعلقات', 'فارغ وقت'] : ['Better sleep', 'Exercise routine', 'Social connections', 'More free time'] },
+      ],
+      energy_productivity: [
+        { question: language === 'ur' ? 'آپ کی توانائی کا لیول دن میں کب سب سے زیادہ ہوتا ہے؟' : 'When is your energy level highest during the day?', options: language === 'ur' ? ['صبح', 'دوپہر', 'شام', 'رات'] : ['Morning', 'Afternoon', 'Evening', 'Night'] },
+        { question: language === 'ur' ? 'آپ کتنے گھنٹے کام کرتے ہیں؟' : 'How many hours do you work per day?', options: language === 'ur' ? ['4-6 گھنٹے', '6-8 گھنٹے', '8-10 گھنٹے', '10+ گھنٹے'] : ['4-6 hours', '6-8 hours', '8-10 hours', '10+ hours'] },
+        { question: language === 'ur' ? 'آپ کی توانائی کو کیا متاثر کرتا ہے؟' : 'What affects your energy levels most?', options: language === 'ur' ? ['نیند', 'خوراک', 'ورزش', 'تناؤ'] : ['Sleep', 'Nutrition', 'Exercise', 'Stress'] },
+        { question: language === 'ur' ? 'آپ دوپہر کو کتنا تھکا ہوا محسوس کرتے ہیں؟' : 'How often do you experience an afternoon energy crash?', options: language === 'ur' ? ['روزانہ', 'اکثر', 'کبھی کبھار', 'کبھی نہیں'] : ['Every day', 'Most days', 'Sometimes', 'Rarely'] },
+        { question: language === 'ur' ? 'آپ کی صبح کی عادت کیا ہے؟' : 'What does your morning routine look like?', options: language === 'ur' ? ['ورزش + ناشتا', 'صرف ناشتا', 'صرف چائے/کافی', 'کوئی معمول نہیں'] : ['Exercise + breakfast', 'Just breakfast', 'Just coffee/tea', 'No routine'] },
+        { question: language === 'ur' ? 'آپ دن میں کتنا پانی پیتے ہیں؟' : 'How much water do you drink during the day?', options: language === 'ur' ? ['2 گلاس سے کم', '2-4 گلاس', '5-8 گلاس', '8+ گلاس'] : ['Less than 2 glasses', '2-4 glasses', '5-8 glasses', '8+ glasses'] },
+        { question: language === 'ur' ? 'آپ کتنے گھنٹے سوتے ہیں؟' : 'How many hours of sleep do you get?', options: language === 'ur' ? ['4 سے کم', '4-6 گھنٹے', '6-8 گھنٹے', '8+ گھنٹے'] : ['Less than 4', '4-6 hours', '6-8 hours', '8+ hours'] },
+        { question: language === 'ur' ? 'آپ کام کے دوران کتنے وقفے لیتے ہیں؟' : 'How often do you take breaks during work?', options: language === 'ur' ? ['ہر 30 منٹ', 'ہر گھنٹے', 'ہر 2+ گھنٹے', 'شاذ و نادر'] : ['Every 30 minutes', 'Every hour', 'Every 2+ hours', 'Rarely'] },
+      ],
+      event_training: [
+        { question: language === 'ur' ? 'آپ کس قسم کے ایونٹ کے لیے ٹریننگ کر رہے ہیں؟' : 'What type of event are you training for?', options: language === 'ur' ? ['ماراتھن', 'ٹرائیتھلون', 'ویٹ لفٹنگ', 'دوسرا'] : ['Marathon', 'Triathlon', 'Weightlifting', 'Other'] },
+        { question: language === 'ur' ? 'ایونٹ کب ہے؟' : 'When is the event?', options: language === 'ur' ? ['1 ماہ میں', '3 ماہ میں', '6 ماہ میں', 'ایک سال میں'] : ['In 1 month', 'In 3 months', 'In 6 months', 'In 1 year'] },
+        { question: language === 'ur' ? 'آپ کا موجودہ فٹنس لیول کیا ہے؟' : 'What is your current fitness level?', options: language === 'ur' ? ['ابتدائی', 'درمیانی', 'اعلیٰ', 'پیشہ ورانہ'] : ['Beginner', 'Intermediate', 'Advanced', 'Elite'] },
+        { question: language === 'ur' ? 'آپ ہفتے میں کتنے دن ٹریننگ کرتے ہیں؟' : 'How many days per week do you currently train?', options: language === 'ur' ? ['1-2 دن', '3-4 دن', '5-6 دن', 'روزانہ'] : ['1-2 days', '3-4 days', '5-6 days', 'Every day'] },
+        { question: language === 'ur' ? 'کیا آپ نے پہلے کوئی ایونٹ مکمل کیا ہے؟' : 'Have you completed a similar event before?', options: language === 'ur' ? ['ہاں، کئی بار', 'ہاں، ایک بار', 'نہیں، پہلی بار', 'اسی طرح کا'] : ['Yes, multiple times', 'Yes, once', 'No, first time', 'Similar events'] },
+        { question: language === 'ur' ? 'آپ کی غذائیت کی حکمت عملی کیا ہے؟' : 'What is your nutrition strategy for training?', options: language === 'ur' ? ['منصوبہ بند', 'کچھ حد تک', 'کوئی نہیں', 'مدد چاہیے'] : ['Structured plan', 'Somewhat planned', 'No plan', 'Need help'] },
+        { question: language === 'ur' ? 'آپ کی سب سے بڑی فکر کیا ہے؟' : 'What is your biggest concern about the event?', options: language === 'ur' ? ['ناکامی', 'چوٹ', 'وقت کم', 'تجربہ نہیں'] : ['Not finishing', 'Injury', 'Not enough time', 'Lack of experience'] },
+        { question: language === 'ur' ? 'آپ کی ریکوری کی عادت کیا ہے؟' : 'What does your recovery routine look like?', options: language === 'ur' ? ['اسٹریچنگ + نیند', 'صرف آرام', 'کوئی معمول نہیں', 'مکمل ریکوری'] : ['Stretching + sleep', 'Just rest', 'No routine', 'Full recovery protocol'] },
+      ],
+      health_condition: [
+        { question: language === 'ur' ? 'آپ کس قسم کی صحت کی حالت کا انتظام کر رہے ہیں؟' : 'What type of health condition are you managing?', options: language === 'ur' ? ['ذیابیطس', 'بلڈ پریشر', 'جوڑوں کا درد', 'دوسری'] : ['Diabetes', 'Blood pressure', 'Joint pain', 'Other'] },
+        { question: language === 'ur' ? 'آپ کی صحت کی حالت آپ کی روزمرہ زندگی کو کس طرح متاثر کرتی ہے؟' : 'How does your health condition affect your daily life?', options: language === 'ur' ? ['بہت زیادہ', 'کچھ حد تک', 'کم', 'بہت کم'] : ['Very much', 'Somewhat', 'A little', 'Not much'] },
+        { question: language === 'ur' ? 'آپ کیا تبدیلیاں کرنا چاہتے ہیں؟' : 'What changes would you like to make?', options: language === 'ur' ? ['خوراک', 'ورزش', 'نیند', 'سب کچھ'] : ['Nutrition', 'Exercise', 'Sleep', 'Everything'] },
+        { question: language === 'ur' ? 'کیا آپ ڈاکٹر کی نگرانی میں ہیں؟' : 'Are you under medical supervision?', options: language === 'ur' ? ['ہاں، باقاعدہ', 'ہاں، کبھی کبھار', 'نہیں', 'جلد ملاقات ہے'] : ['Yes, regularly', 'Yes, occasionally', 'No', 'Have an upcoming visit'] },
+        { question: language === 'ur' ? 'کیا آپ کوئی دوائی لیتے ہیں؟' : 'Are you currently taking any medications?', options: language === 'ur' ? ['ہاں، روزانہ', 'ہاں، ضرورت کے مطابق', 'نہیں', 'صرف سپلیمنٹس'] : ['Yes, daily', 'Yes, as needed', 'No', 'Only supplements'] },
+        { question: language === 'ur' ? 'آپ کی ورزش کی صلاحیت کیا ہے؟' : 'What is your exercise capacity given your condition?', options: language === 'ur' ? ['مکمل ورزش', 'ہلکی ورزش', 'بہت محدود', 'یقین نہیں'] : ['Full exercise', 'Light exercise', 'Very limited', 'Not sure'] },
+        { question: language === 'ur' ? 'آپ کی خوراک میں کوئی پابندیاں ہیں؟' : 'Do you have any dietary restrictions due to your condition?', options: language === 'ur' ? ['ہاں، سخت', 'ہاں، کچھ', 'نہیں', 'یقین نہیں'] : ['Yes, strict', 'Yes, some', 'No', 'Not sure'] },
+        { question: language === 'ur' ? 'آپ کا سب سے بڑا خدشہ کیا ہے؟' : 'What is your biggest health concern right now?', options: language === 'ur' ? ['بگڑنا', 'دوائی کے اثرات', 'روزمرہ زندگی', 'مستقبل'] : ['Getting worse', 'Medication side effects', 'Daily limitations', 'Future outlook'] },
+      ],
+      habit_building: [
+        { question: language === 'ur' ? 'آپ کون سا عادت بنانا چاہتے ہیں؟' : 'What habit would you like to build?', options: language === 'ur' ? ['روزانہ ورزش', 'صحت مند کھانا', 'بہتر نیند', 'دوسری'] : ['Daily exercise', 'Healthy eating', 'Better sleep', 'Other'] },
+        { question: language === 'ur' ? 'آپ نے پہلے کبھی یہ عادت بنانے کی کوشش کی ہے؟' : 'Have you tried building this habit before?', options: language === 'ur' ? ['ہاں، کامیاب', 'ہاں، ناکام', 'نہیں', 'کبھی کبھار'] : ['Yes, successful', 'Yes, failed', 'No', 'Sometimes'] },
+        { question: language === 'ur' ? 'آپ کو کیا رکاوٹیں آتی ہیں؟' : 'What barriers do you face?', options: language === 'ur' ? ['وقت نہیں', 'حوصلہ نہیں', 'علم نہیں', 'دوسری'] : ['No time', 'No motivation', 'No knowledge', 'Other'] },
+        { question: language === 'ur' ? 'آپ کس وقت عادت پر عمل کرنا چاہتے ہیں؟' : 'When would you prefer to practice this habit?', options: language === 'ur' ? ['صبح', 'دوپہر', 'شام', 'لچکدار'] : ['Morning', 'Afternoon', 'Evening', 'Flexible'] },
+        { question: language === 'ur' ? 'آپ کو جوابدہی کس طرح پسند ہے؟' : 'How do you prefer to stay accountable?', options: language === 'ur' ? ['ایپ ریمائنڈرز', 'دوست/ساتھی', 'خود', 'کوچ'] : ['App reminders', 'Friend/partner', 'Self-motivated', 'Coach'] },
+        { question: language === 'ur' ? 'آپ کتنا وقت دے سکتے ہیں؟' : 'How much time can you dedicate daily to this habit?', options: language === 'ur' ? ['10 منٹ', '15-30 منٹ', '30-60 منٹ', '1+ گھنٹہ'] : ['10 minutes', '15-30 minutes', '30-60 minutes', '1+ hours'] },
+        { question: language === 'ur' ? 'آپ کی سب سے کامیاب عادت کیا رہی ہے؟' : 'What has been your most successful habit in the past?', options: language === 'ur' ? ['ورزش', 'صحت مند کھانا', 'پڑھنا', 'کوئی نہیں'] : ['Exercise routine', 'Healthy eating', 'Reading', 'None yet'] },
+        { question: language === 'ur' ? 'آپ کا حوصلہ کیسے بڑھتا ہے؟' : 'What motivates you most to keep going?', options: language === 'ur' ? ['نتائج دیکھنا', 'اچھا محسوس کرنا', 'مقابلہ', 'سپورٹ سسٹم'] : ['Seeing results', 'Feeling good', 'Competition', 'Support system'] },
+      ],
+      overall_optimization: [
+        { question: language === 'ur' ? 'آپ کی صحت کا کون سا پہلو سب سے زیادہ بہتری چاہتا ہے؟' : 'Which aspect of your health needs the most improvement?', options: language === 'ur' ? ['فٹنس', 'خوراک', 'نیند', 'ذہنی صحت'] : ['Fitness', 'Nutrition', 'Sleep', 'Mental health'] },
+        { question: language === 'ur' ? 'آپ اپنی صحت کو کس طرح ترجیح دیتے ہیں؟' : 'How do you prioritize your health?', options: language === 'ur' ? ['بہت زیادہ', 'کچھ حد تک', 'کم', 'بہت کم'] : ['Very much', 'Somewhat', 'A little', 'Not much'] },
+        { question: language === 'ur' ? 'آپ کیا تبدیلیاں کرنے کے لیے تیار ہیں؟' : 'What changes are you ready to make?', options: language === 'ur' ? ['چھوٹی تبدیلیاں', 'درمیانی تبدیلیاں', 'بڑی تبدیلیاں', 'سب کچھ'] : ['Small changes', 'Moderate changes', 'Big changes', 'Everything'] },
+        { question: language === 'ur' ? 'آپ کتنی بار ورزش کرتے ہیں؟' : 'How often do you currently exercise?', options: language === 'ur' ? ['کبھی نہیں', 'ہفتے میں 1-2 بار', 'ہفتے میں 3-4 بار', 'روزانہ'] : ['Never', '1-2 times per week', '3-4 times per week', 'Daily'] },
+        { question: language === 'ur' ? 'آپ کی غذائی عادات کیسی ہیں؟' : 'How would you describe your eating habits?', options: language === 'ur' ? ['بہت اچھی', 'ٹھیک ہیں', 'بہتری چاہیے', 'بہت خراب'] : ['Very good', 'Decent', 'Needs improvement', 'Poor'] },
+        { question: language === 'ur' ? 'آپ کا تناؤ کا لیول کیا ہے؟' : 'How would you rate your current stress level?', options: language === 'ur' ? ['بہت کم', 'کم', 'درمیانی', 'زیادہ'] : ['Very low', 'Low', 'Moderate', 'High'] },
+        { question: language === 'ur' ? 'آپ کتنے گھنٹے سوتے ہیں؟' : 'How many hours of sleep do you get per night?', options: language === 'ur' ? ['4 سے کم', '4-6 گھنٹے', '6-8 گھنٹے', '8+ گھنٹے'] : ['Less than 4', '4-6 hours', '6-8 hours', '8+ hours'] },
+        { question: language === 'ur' ? 'آپ کو کس قسم کی مدد چاہیے؟' : 'What kind of support do you need most?', options: language === 'ur' ? ['منصوبہ بندی', 'حوصلہ افزائی', 'ٹریکنگ', 'تعلیم'] : ['Planning', 'Motivation', 'Tracking', 'Education'] },
+      ],
+      custom: [
+        { question: language === 'ur' ? 'آپ کا صحت کا بنیادی مقصد کیا ہے؟' : 'What is your primary health goal?', options: language === 'ur' ? ['بہتر محسوس کرنا', 'زیادہ فعال ہونا', 'بہتر کھانا', 'بہتر سونا'] : ['Feel better', 'Be more active', 'Eat better', 'Sleep better'] },
+        { question: language === 'ur' ? 'آپ کیا تبدیلیاں کرنا چاہتے ہیں؟' : 'What changes would you like to make?', options: language === 'ur' ? ['خوراک', 'ورزش', 'نیند', 'سب کچھ'] : ['Nutrition', 'Exercise', 'Sleep', 'Everything'] },
+        { question: language === 'ur' ? 'آپ کیا چیلنجز کا سامنا کر رہے ہیں؟' : 'What challenges are you facing?', options: language === 'ur' ? ['وقت نہیں', 'حوصلہ نہیں', 'علم نہیں', 'دوسری'] : ['No time', 'No motivation', 'No knowledge', 'Other'] },
+        { question: language === 'ur' ? 'آپ کتنی بار ورزش کرتے ہیں؟' : 'How often do you currently exercise?', options: language === 'ur' ? ['کبھی نہیں', 'ہفتے میں 1-2 بار', 'ہفتے میں 3-4 بار', 'روزانہ'] : ['Never', '1-2 times per week', '3-4 times per week', 'Daily'] },
+        { question: language === 'ur' ? 'آپ کا تناؤ کا لیول کیا ہے؟' : 'How would you rate your stress level?', options: language === 'ur' ? ['بہت کم', 'کم', 'درمیانی', 'زیادہ'] : ['Very low', 'Low', 'Moderate', 'High'] },
+        { question: language === 'ur' ? 'آپ کتنے گھنٹے سوتے ہیں؟' : 'How many hours of sleep do you get?', options: language === 'ur' ? ['4 سے کم', '4-6 گھنٹے', '6-8 گھنٹے', '8+ گھنٹے'] : ['Less than 4', '4-6 hours', '6-8 hours', '8+ hours'] },
+        { question: language === 'ur' ? 'آپ کتنا پانی پیتے ہیں؟' : 'How much water do you drink daily?', options: language === 'ur' ? ['2 گلاس سے کم', '2-4 گلاس', '5-8 گلاس', '8+ گلاس'] : ['Less than 2 glasses', '2-4 glasses', '5-8 glasses', '8+ glasses'] },
+        { question: language === 'ur' ? 'آپ اپنے مقصد کے لیے کتنے پرعزم ہیں؟' : 'How committed are you to achieving your goal?', options: language === 'ur' ? ['بہت زیادہ', 'کافی حد تک', 'کچھ حد تک', 'یقین نہیں'] : ['Very committed', 'Fairly committed', 'Somewhat', 'Not sure'] },
+      ],
     };
 
-    const goalQuestionSet = goalQuestions[goal] || goalQuestions.custom;
-    const phaseQuestion = goalQuestionSet[phase] || goalQuestionSet.opening;
+    const questionPool = goalQuestions[goal] || goalQuestions.custom;
 
-    const options: MCQOption[] = phaseQuestion.options.map((opt, idx) => ({
+    // Deduplicate: skip questions already asked
+    const askedQuestions = new Set(
+      previousAnswers.map(a => a.questionText?.toLowerCase().trim()).filter(Boolean)
+    );
+
+    const unusedQuestion = questionPool.find(
+      q => !askedQuestions.has(q.question.toLowerCase().trim())
+    );
+
+    // Use first unused question, or last in pool as final fallback
+    const selectedQuestion = unusedQuestion || questionPool[questionPool.length - 1];
+
+    const options: MCQOption[] = selectedQuestion.options.map((opt, idx) => ({
       id: `opt-${idx + 1}`,
       text: opt,
       insightValue: opt.toLowerCase().replace(/\s+/g, '_'),
@@ -2575,7 +2741,7 @@ Guidelines:
     return {
       question: {
         id: questionId,
-        question: phaseQuestion.question,
+        question: selectedQuestion.question,
         options,
       },
       phase,

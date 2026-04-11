@@ -68,6 +68,7 @@ import {
 import { DashboardLayout } from "@/components/layout";
 import { useAuth } from "@/app/context/AuthContext";
 import { api } from "@/lib/api-client";
+import { initSocket, subscribeToNotificationEvents, type NotificationEvent } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, format, isToday, isYesterday } from "date-fns";
 import toast from "react-hot-toast";
@@ -109,7 +110,7 @@ interface NotificationStats {
 // Notification type icons and colors
 const NOTIFICATION_CONFIG: Record<
   string,
-  { icon: React.ElementType; color: string; bg: string; gradient: string }
+  { icon: React.ComponentType<{ className?: string }>; color: string; bg: string; gradient: string }
 > = {
   achievement: {
     icon: Trophy,
@@ -270,7 +271,7 @@ function EmptyState({
   type: string;
   searchQuery: string;
 }) {
-  const messages: Record<string, { title: string; description: string; icon: React.ElementType }> = {
+  const messages: Record<string, { title: string; description: string; icon: React.ComponentType<{ className?: string }> }> = {
     all: {
       title: "No notifications yet",
       description:
@@ -565,7 +566,7 @@ function StatsCard({
 }: {
   label: string;
   value: number;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   gradient: string;
   isActive?: boolean;
   onClick?: () => void;
@@ -698,6 +699,52 @@ export default function NotificationsPageContent() {
       fetchNotifications(false, currentPage);
     }
   }, [user, currentPage, fetchNotifications]);
+
+  // Real-time socket updates
+  useEffect(() => {
+    if (!user) return;
+
+    const socket = initSocket();
+    if (!socket) return;
+
+    const unsubscribe = subscribeToNotificationEvents({
+      onNew: (data: NotificationEvent) => {
+        // If on page 1 and not in archived tab, prepend the new notification
+        if (currentPage === 1 && activeTab !== "archived") {
+          const newNotification: Notification = {
+            id: data.id,
+            type: data.type,
+            title: data.title,
+            message: data.message,
+            priority: (data.priority as Notification["priority"]) || "normal",
+            icon: data.icon,
+            actionUrl: data.actionUrl,
+            isRead: false,
+            isArchived: false,
+            createdAt: data.createdAt,
+            updatedAt: data.createdAt,
+          };
+          setNotifications((prev) => [newNotification, ...prev]);
+          setTotal((prev) => prev + 1);
+        }
+        // Update stats
+        setStats((prev) =>
+          prev
+            ? { ...prev, total: prev.total + 1, unread: prev.unread + 1 }
+            : prev
+        );
+      },
+      onCount: (data) => {
+        setStats((prev) =>
+          prev ? { ...prev, unread: data.unreadCount } : prev
+        );
+      },
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, currentPage, activeTab]);
 
   // Filtered notifications (backend handles most filtering, only client-side search)
   const filteredNotifications = useMemo(() => {
@@ -930,7 +977,7 @@ export default function NotificationsPageContent() {
           <div className="absolute bottom-0 right-1/3 w-[300px] h-[300px] bg-gradient-to-br from-purple-500/8 to-pink-500/8 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative container mx-auto px-4 py-8 max-w-7xl">
+        <div className="relative container mx-auto px-4 py-8 max-w-8xl">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}

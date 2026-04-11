@@ -12,8 +12,19 @@ import { messageService, type MessageWithRelations } from '../services/message.s
 import { createUploadMiddleware } from '../middlewares/upload.middleware.js';
 import { socketService } from '../services/socket.service.js';
 import { ragChatbotService } from '../services/rag-chatbot.service.js';
+import { tenorService } from '../services/tenor.service.js';
 import { query } from '../database/pg.js';
 import { logger } from '../services/logger.service.js';
+
+/** Extract [GIF:search_term] marker from AI response and return { text, gifQuery } */
+function extractGifMarker(text: string): { text: string; gifQuery: string | null } {
+  const match = text.match(/\[GIF:([^\]]+)\]\s*$/);
+  if (!match) return { text, gifQuery: null };
+  return {
+    text: text.replace(match[0], '').trim(),
+    gifQuery: match[1].trim(),
+  };
+}
 
 const AI_COACH_USER_ID = process.env.AI_COACH_USER_ID || '00000000-0000-0000-0000-000000000001';
 
@@ -115,38 +126,122 @@ export const sendMessage = asyncHandler(
       senderId: userId,
     });
 
-    // If this is a text message to AI coach chat, trigger AI response
+    // If this is a text message to AI coach chat, trigger AI response via LangGraph
+    // This enables: proactive message replies → AI processes with tools → auto-logs data
     if (content && contentType === 'text') {
       const isAIChat = await isAICoachChat(chatId, userId);
       if (isAIChat) {
-        // Trigger AI response asynchronously (don't block the response)
+        // Trigger AI response asynchronously (don't block the user's message delivery)
         setImmediate(async () => {
           try {
+            // Show typing indicator while AI processes
+            socketService.emitToChat(chatId, 'typing', {
+              chatId,
+              userId: AI_COACH_USER_ID,
+            });
+
             // Generate AI response using RAG chatbot service
-            // The service will handle conversation creation/continuity internally
+            // LangGraph has full tool access (mealManager, workoutManager, moodManager, etc.)
+            // The auto-extraction system prompt instructs the AI to:
+            // 1. Scan user message for loggable data (meals, mood, workouts, etc.)
+            // 2. Call tools to log data automatically
+            // 3. Provide coaching insights about the logged data
             const aiResponse = await ragChatbotService.chat({
               userId,
               message: content,
               conversationId: undefined, // Let RAG service manage conversations
             });
 
+            // Stop typing indicator
+            socketService.emitToChat(chatId, 'stopTyping', {
+              chatId,
+              userId: AI_COACH_USER_ID,
+            });
+
             // Send AI response back to the chat
             if (aiResponse.response) {
+              // Fetch AI coach display name for proper rendering
+              let firstName = 'AI';
+              let lastName = 'Coach';
+              try {
+                const coachUser = await query<{ first_name: string; last_name: string }>(
+                  `SELECT first_name, last_name FROM users WHERE id = $1`,
+                  [AI_COACH_USER_ID]
+                );
+                if (coachUser.rows[0]) {
+                  firstName = coachUser.rows[0].first_name;
+                  lastName = coachUser.rows[0].last_name;
+                }
+              } catch { /* use defaults */ }
+
+              const senderInfo = {
+                id: AI_COACH_USER_ID,
+                firstName,
+                lastName,
+                avatar: '/default-voice-assistant-avatar.svg',
+              };
+
+              // Check for GIF marker in AI response
+              const { text: cleanText, gifQuery } = extractGifMarker(aiResponse.response);
+
               const aiMessage = await messageService.sendMessage({
                 chatId,
                 senderId: AI_COACH_USER_ID,
-                content: aiResponse.response,
+                content: cleanText,
                 contentType: 'text',
               });
 
-              // Emit socket event for AI response
-              socketService.emitToChat(chatId, 'newMessage', {
+              const messagePayload = {
                 chatId,
-                message: transformMessage(aiMessage),
+                message: {
+                  ...transformMessage(aiMessage),
+                  sender: senderInfo,
+                },
                 senderId: AI_COACH_USER_ID,
-              });
+              };
+
+              // Emit socket event with full sender info for proper UI rendering
+              socketService.emitToChat(chatId, 'newMessage', messagePayload);
+              socketService.emitToUser(userId, 'newMessage', messagePayload);
+
+              // If AI included a GIF marker, search and send it as a follow-up message
+              if (gifQuery) {
+                try {
+                  const gifUrl = await tenorService.searchGif(gifQuery);
+                  if (gifUrl) {
+                    const gifMessage = await messageService.sendMessage({
+                      chatId,
+                      senderId: AI_COACH_USER_ID,
+                      content: '',
+                      contentType: 'gif',
+                      mediaUrl: gifUrl,
+                    });
+
+                    const gifPayload = {
+                      chatId,
+                      message: {
+                        ...transformMessage(gifMessage),
+                        sender: senderInfo,
+                      },
+                      senderId: AI_COACH_USER_ID,
+                    };
+                    socketService.emitToChat(chatId, 'newMessage', gifPayload);
+                    socketService.emitToUser(userId, 'newMessage', gifPayload);
+                  }
+                } catch (gifError) {
+                  logger.warn('[MessageController] Failed to send AI GIF', {
+                    gifQuery,
+                    error: gifError instanceof Error ? gifError.message : 'Unknown',
+                  });
+                }
+              }
             }
           } catch (error) {
+            // Stop typing on error
+            socketService.emitToChat(chatId, 'stopTyping', {
+              chatId,
+              userId: AI_COACH_USER_ID,
+            });
             logger.error('[MessageController] Error generating AI response', {
               chatId,
               userId,

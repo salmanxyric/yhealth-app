@@ -29,7 +29,7 @@ export function MacroOverview({ macros, activePlan, onAddMeal }: MacroOverviewPr
               </div>
               <span className="text-emerald-400 text-sm font-medium">AI Nutrition Plan</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">Today&apos;s Nutrition</h2>
+            <h2 className="text-base sm:text-lg font-bold text-white mb-1">Today&apos;s Nutrition</h2>
             <p className="text-slate-400 text-sm truncate">
               {activePlan ? activePlan.name : "No active plan - create one to track macros"}
             </p>

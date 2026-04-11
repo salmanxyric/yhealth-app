@@ -1,0 +1,682 @@
+---
+alwaysApply: false
+---
+# Frontend UI Design Skill
+Modern SaaS Interface Engineering Standard
+
+This skill automatically applies **production-grade UI/UX design and animation 
+standards** when generating or modifying frontend code in this project.
+
+Target stack:
+- Next.js (App Router)
+- React + TypeScript
+- Tailwind CSS
+- Framer Motion
+- GSAP (ScrollTrigger)
+- CSS Custom Properties
+
+All generated UI must follow **senior-level design engineering standards 
+with strong visual identity, scroll animations, and responsive layout.**
+
+---
+
+# Core Design Principles
+
+1. Never generate generic or "AI slop" aesthetics.
+2. Always commit to a bold, intentional visual direction.
+3. Prefer dark themes with vibrant accent colors.
+4. Every section must have a scroll-triggered reveal animation.
+5. Typography must use a strong display font + clean body font pairing.
+6. Never use Arial, Inter, Roboto, or system-ui as primary fonts.
+7. All spacing, colors, and radii must use CSS custom properties.
+
+AI must **self-review visual output before returning code.**
+
+---
+
+# Color System
+
+Always define a full design token system using CSS variables.
+
+Required tokens:
+
+```css
+:root {
+  --bg:         #05050a;
+  --surface:    #0d0d18;
+  --border:     rgba(255,255,255,0.07);
+  --accent:     #6c63ff;
+  --accent-2:   #ff6b9d;
+  --accent-3:   #00d4aa;
+  --text:       #f0eeff;
+  --muted:      rgba(240,238,255,0.45);
+  --glass:      rgba(255,255,255,0.04);
+  --glow:       rgba(108,99,255,0.3);
+}
+```
+
+Never hardcode hex values inside component styles.
+Always reference design tokens.
+
+---
+
+# Typography System
+
+Always pair a display font with a body font.
+
+Preferred pairings:
+
+- Syne (display) + DM Sans (body)
+- Cabinet Grotesk (display) + Satoshi (body)
+- Clash Display (display) + General Sans (body)
+
+Rules:
+
+- Display font → headings, logos, stats, labels
+- Body font → paragraphs, captions, UI text
+- Font scale must use `clamp()` for fluid responsive sizing
+- Letter spacing: tight on headings (`-0.03em`), wide on labels (`0.12em`)
+- Line height: `1.04–1.1` for headings, `1.7–1.8` for body
+
+Example:
+
+```css
+h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(2.8rem, 7vw, 6.5rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+}
+```
+
+---
+
+# Layout Architecture
+
+Every page must follow this section order for SaaS landing pages:
+
+1. Sticky Navigation Bar
+2. Hero — headline + subtext + CTA buttons + UI mockup
+3. Marquee ticker — scrolling keyword strip
+4. Features Grid — 6 cards, 3-column
+5. Stats Bar — 4 key metrics
+6. How It Works — steps + visual panel
+7. Pricing — 3 tiers, middle card featured
+8. Testimonials — 3 cards grid
+9. CTA Strip — full-width banner
+10. Footer — 4-column with links
+
+Never skip or reorder sections without explicit instruction.
+
+---
+
+# Scroll Animation Rules
+
+Every section and card must have a scroll-triggered entrance animation.
+
+Required animation classes:
+
+```css
+.reveal        → fade up (opacity 0→1, translateY 40px→0)
+.reveal-left   → slide from left (translateX -40px→0)
+.reveal-right  → slide from right (translateX 40px→0)
+```
+
+All reveals must use:
+
+- `IntersectionObserver` with `threshold: 0.12`
+- `rootMargin: '0px 0px -60px 0px'`
+- Cubic-bezier easing: `cubic-bezier(0.16, 1, 0.3, 1)`
+- Duration: `0.8s`
+- Staggered delay on grid children: `transition-delay: N * 0.07s`
+
+Example:
+
+```js
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible')
+      observer.unobserve(e.target)
+    }
+  })
+}, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' })
+```
+
+Never use CSS-only scroll animations without JS observer fallback.
+
+---
+Here's the updated color system section — add/replace this in your `.mdc` file:
+
+---
+
+```markdown
+---
+# Color System
+
+Primary brand colors are **Emerald 600** and **Sky 600** on a dark base.
+All UI must be built around this two-tone accent identity.
+
+Test size:
+heading in dashbaord page 18px-20px max
+Text 14px max
+
+Design tokens:
+
+```css
+:root {
+  /* ── Base ── */
+  --bg:           #030712;        /* near-black, slightly cool */
+  --surface:      #0a0f1a;        /* dark navy surface */
+  --surface-2:    #0f172a;        /* elevated card surface */
+  --border:       rgba(255,255,255,0.07);
+  --border-hover: rgba(6,182,212,0.3);
+
+  /* ── Brand Accents (core identity) ── */
+  --emerald:      #059669;        /* Emerald 600 — primary CTA, icons */
+  --emerald-light:#34d399;        /* Emerald 400 — glow, highlights */
+  --emerald-glow: rgba(5,150,105,0.3);
+
+  --sky:          #0284c7;        /* Sky 600 — secondary accent, links */
+  --sky-light:    #38bdf8;        /* Sky 400 — hover states, gradients */
+  --sky-glow:     rgba(2,132,199,0.3);
+
+  /* ── Gradient (used on CTAs, badges, borders) ── */
+  --gradient:     linear-gradient(135deg, var(--emerald), var(--sky));
+  --gradient-glow:linear-gradient(135deg, var(--emerald-light), var(--sky-light));
+
+  /* ── Text ── */
+  --text:         #f0f9ff;        /* sky-50, warm white */
+  --muted:        rgba(186,230,253,0.5); /* sky-200 at 50% */
+
+  /* ── Glass ── */
+  --glass:        rgba(2,132,199,0.04);  /* sky-tinted glass */
+  --glass-hover:  rgba(5,150,105,0.06); /* emerald-tinted on hover */
+}
+```
+
+Color usage rules:
+
+- **Emerald 600** → primary CTA buttons, active states, success indicators,
+  feature card top-border accents, stat highlights
+- **Sky 600** → links, secondary buttons, info badges, chart fills,
+  gradient second stop, hover ring color
+- **Gradient** (`emerald → sky`) → hero headline gradient text, 
+  featured pricing card border, primary button background, logo text
+- **Never** use purple, violet, coral, or pink — 
+  those conflict with the emerald/sky identity
+- **Dark base** must always be `#030712` or `#0a0f1a` — 
+  never pure black (`#000000`) or warm charcoal
+
+---
+
+# Ambient Blob Colors
+
+Blobs must match the brand palette.
+
+```css
+.blob-1 {
+  background: var(--emerald);    /* Emerald 600 */
+  opacity: 0.12;
+}
+.blob-2 {
+  background: var(--sky);        /* Sky 600 */
+  opacity: 0.14;
+}
+.blob-3 {
+  background: var(--emerald-light);
+  opacity: 0.07;
+}
+```
+
+---
+
+# Button Standards (updated for brand colors)
+
+Primary button — emerald-to-sky gradient:
+
+```css
+.btn-primary {
+  background: linear-gradient(135deg, var(--emerald), var(--sky));
+  border: none;
+  border-radius: 100px;
+  color: #fff;
+  box-shadow: 0 0 40px var(--emerald-glow);
+  transition: transform 0.25s, box-shadow 0.25s;
+}
+.btn-primary:hover {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 8px 50px var(--sky-glow), 0 0 30px var(--emerald-glow);
+}
+```
+
+Ghost button — sky-tinted border:
+
+```css
+.btn-ghost {
+  background: var(--glass);
+  border: 1px solid rgba(2,132,199,0.25);
+  backdrop-filter: blur(10px);
+  border-radius: 100px;
+  color: var(--text);
+}
+.btn-ghost:hover {
+  border-color: var(--sky-light);
+  background: rgba(2,132,199,0.08);
+  transform: translateY(-3px);
+}
+```
+
+---
+
+# Card Accent Variants (updated)
+
+Each card in a 3-column grid gets a rotating accent:
+
+```css
+/* Card 1, 4 → Emerald */
+.feat-card:nth-child(3n+1)::after {
+  background: linear-gradient(90deg, var(--emerald), var(--emerald-light));
+}
+
+/* Card 2, 5 → Sky */
+.feat-card:nth-child(3n+2)::after {
+  background: linear-gradient(90deg, var(--sky), var(--sky-light));
+}
+
+/* Card 3, 6 → Emerald → Sky gradient */
+.feat-card:nth-child(3n+3)::after {
+  background: var(--gradient);
+}
+```
+
+---
+
+# Glow & Shadow System
+
+All glow effects must use brand colors only.
+
+```css
+/* Emerald glow — success, primary actions */
+box-shadow: 0 0 40px var(--emerald-glow);
+
+/* Sky glow — info, secondary elements */
+box-shadow: 0 0 40px var(--sky-glow);
+
+/* Combined deep shadow for elevated cards */
+box-shadow:
+  0 40px 120px rgba(0,0,0,0.6),
+  0 0 60px rgba(5,150,105,0.08),
+  0 0 80px rgba(2,132,199,0.06);
+```
+
+---
+
+# Featured Pricing Card (updated)
+
+```css
+.price-card.featured {
+  border-color: rgba(5,150,105,0.5);     /* emerald border */
+  background: rgba(5,150,105,0.07);
+  box-shadow:
+    0 0 60px rgba(5,150,105,0.15),
+    0 0 40px rgba(2,132,199,0.1),
+    0 40px 80px rgba(0,0,0,0.4);
+}
+
+.featured-badge {
+  background: linear-gradient(135deg, var(--emerald), var(--sky));
+}
+```
+
+---
+
+# Custom Cursor (updated)
+
+```css
+#cursor      { background: var(--emerald); }
+#cursor-ring { border-color: rgba(2,132,199,0.5); }
+```
+
+---
+
+# Scrollbar (updated)
+
+```css
+::-webkit-scrollbar-thumb { background: var(--emerald); }
+```
+
+# Parallax Rules
+
+Background blobs and hero visuals must respond to scroll.
+
+Rules:
+
+- Blob 1: moves at `scrollY * 0.15` (downward)
+- Blob 2: moves at `scrollY * -0.10` (upward)
+- Blob 3: moves at `scrollY * 0.08` (downward, slower)
+- Always use `will-change: transform` on parallax elements
+- Never apply parallax to text content
+
+Example:
+
+```js
+window.addEventListener('scroll', () => {
+  const sy = window.scrollY
+  blob1.style.transform = `translateY(${sy * 0.15}px)`
+  blob2.style.transform = `translateY(${-sy * 0.10}px)`
+})
+```
+
+---
+
+# Ambient Background System
+
+Every page must include atmospheric depth elements.
+
+Required layers:
+
+1. **Base background** — solid dark color via `--bg`
+2. **Ambient blobs** — 3 radial blobs, `filter: blur(120px)`, 
+   `opacity: 0.12–0.18`, with `blobFloat` keyframe animation
+3. **Grain overlay** — SVG fractal noise, `opacity: 0.4`, 
+   `position: fixed`, `pointer-events: none`
+4. **Surface cards** — glassmorphism with `backdrop-filter: blur(16px)` 
+   and `background: var(--glass)`
+
+Blob float keyframe:
+
+```css
+@keyframes blobFloat {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(30px, 20px) scale(1.08); }
+}
+```
+
+Animation duration: `8s ease-in-out infinite alternate`
+Each blob must have a different `animation-delay`.
+
+---
+
+# Card Design Standards
+
+All cards must follow glassmorphism pattern.
+
+Required styles:
+
+```css
+.card {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 16–20px;
+  backdrop-filter: blur(16px);
+  transition: transform 0.3s, border-color 0.3s, background 0.3s;
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(108, 99, 255, 0.3);
+  background: rgba(108, 99, 255, 0.06);
+}
+```
+
+Feature cards must have a colored top border accent:
+
+```css
+.card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+```
+
+Each card in a grid gets a unique accent color variant.
+
+---
+
+# Button Standards
+
+Two button types required on every page.
+
+Primary button:
+
+```css
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border: none;
+  border-radius: 100px;
+  box-shadow: 0 0 40px var(--glow);
+  transition: transform 0.25s, box-shadow 0.25s;
+}
+.btn-primary:hover {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 8px 50px rgba(108, 99, 255, 0.5);
+}
+```
+
+Ghost button:
+
+```css
+.btn-ghost {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  border-radius: 100px;
+  transition: border-color 0.25s, background 0.25s, transform 0.25s;
+}
+.btn-ghost:hover {
+  border-color: var(--accent);
+  background: rgba(108, 99, 255, 0.1);
+  transform: translateY(-3px);
+}
+```
+
+Never use square corners on CTA buttons.
+
+---
+
+# Navigation Rules
+
+Sticky nav must:
+
+- Start at `background: rgba(5,5,10,0.6)` with `backdrop-filter: blur(20px)`
+- Transition to `rgba(5,5,10,0.9)` when `scrollY > 60`
+- Contain: logo (gradient text) + nav links + CTA button + hamburger
+- Hide nav links and CTA below `768px`, show hamburger
+- Use `border-bottom: 1px solid var(--border)` always
+
+---
+
+# Counter Animation Rules
+
+Stat numbers must animate from 0 to final value on scroll entry.
+
+Rules:
+
+- Use `IntersectionObserver` at `threshold: 0.4`
+- Easing: `1 - Math.pow(1 - progress, 4)` (ease-out-quart)
+- Duration: `1800–2000ms`
+- Format output correctly (K+, %, $M, ★)
+- Only trigger once per page load
+
+---
+
+# Marquee Strip Rules
+
+Required between Hero and Features sections.
+
+Rules:
+
+- Infinite horizontal scroll using CSS `@keyframes marquee`
+- Content duplicated for seamless loop
+- Speed: `20s linear infinite`
+- Separator: `✦` symbol in accent color
+- Text: uppercase, letter-spacing `0.15em`, `var(--muted)` color
+
+```css
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+```
+
+---
+
+# Custom Cursor Rules
+
+Implement a dual-layer custom cursor on desktop viewports.
+
+Required elements:
+
+- `#cursor` — 12px filled dot, `var(--accent)` color, `mix-blend-mode: screen`
+- `#cursor-ring` — 36px outlined ring, lagging behind cursor at `0.12` lerp speed
+
+On hover over interactive elements:
+
+- Dot expands to `20px`
+- Ring expands to `56px`, opacity `0.5`
+
+Always set `cursor: none` on `body`.
+Never show custom cursor on touch devices.
+
+---
+
+# Responsive Breakpoint System
+
+Three breakpoints only. No exceptions.
+
+| Breakpoint | Width     | Layout behavior                          |
+|------------|-----------|------------------------------------------|
+| Desktop    | ≥ 1280px  | Full layout, 3-column grids              |
+| Tablet     | 768–1279px| 2-column grids, condensed spacing        |
+| Mobile     | < 768px   | Single column, hamburger nav, stacked CTA|
+
+Grid collapse rules:
+
+```css
+/* Desktop */
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .grid-3 { grid-template-columns: 1fr; }
+}
+```
+
+Never use fixed pixel widths on layout containers.
+
+---
+
+# Hero Section Rules
+
+Hero must include:
+
+- Eyebrow badge — pill shape, glass bg, pulsing dot indicator
+- H1 headline — gradient text span on key phrase
+- Subtext paragraph — max 520px width, `var(--muted)` color
+- Two CTA buttons — primary + ghost, centered, flex-wrap
+- Dashboard UI mockup — card with fake metrics, bar chart, 
+  activity feed, `box-shadow: 0 40px 120px rgba(0,0,0,0.6)`
+
+All hero elements must have staggered `animation: fadeUp` on load:
+
+```css
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+```
+
+Delays: `0.2s → 0.4s → 0.6s → 0.8s → 1.0s`
+
+---
+
+# Pricing Section Rules
+
+Three-tier pricing grid required.
+
+Featured (middle) card must:
+
+- Have `border-color: rgba(108,99,255,0.5)`
+- Have `background: rgba(108,99,255,0.08)`
+- Have `box-shadow: 0 0 60px rgba(108,99,255,0.15)`
+- Show a "Most Popular" badge — gradient pill, top-right position
+- CTA button uses gradient background (not ghost)
+
+All cards hover: `translateY(-8px)`
+
+---
+
+# Scrollbar Styling
+
+Always style the scrollbar:
+
+```css
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+```
+
+---
+
+# Output Format Rules
+
+All UI output must be:
+
+- Single self-contained HTML file OR modular Next.js components
+- Embedded CSS using custom properties
+- Vanilla JS for scroll logic (no jQuery)
+- Google Fonts loaded via `<link>` preconnect
+- Zero external CSS frameworks (Tailwind optional only if project uses it)
+- All animations GPU-accelerated (`transform`, `opacity` only — never `top/left`)
+
+---
+
+# AI Self-Review Checklist
+
+Before returning any UI code the AI must verify:
+
+✔ Design tokens defined for all colors
+✔ Scroll reveal applied to every section
+✔ Parallax on background blobs
+✔ Counter animation on stats
+✔ Custom cursor implemented
+✔ Marquee strip present
+✔ All three breakpoints handled
+✔ No hardcoded hex values in components
+✔ Fonts loaded via Google Fonts preconnect
+✔ All hover states defined
+✔ No `top/left` used for animations
+✔ Featured pricing card correctly styled
+✔ Hero dashboard mockup included
+
+If any rule fails → automatically fix before returning output.
+
+---
+
+# Output Quality Standard
+
+All generated UI must be:
+
+- Visually striking and memorable
+- Production-ready and responsive
+- Cohesive with a clear aesthetic identity
+- Performant (GPU-only animations, no layout thrash)
+- Accessible (sufficient contrast, focus states, semantic HTML)
+
+Never generate generic, templated, or cookie-cutter UI.
+Every output must look like it was designed by a senior product designer
+and engineered by a principal frontend engineer.
+```
+
+---
+
+Save this as a `.mdc` rule file (e.g. `ui-design.mdc`) in your `.cursor/rules/` folder and it will auto-apply to every UI generation task — just like your Next.js engineering skill does.

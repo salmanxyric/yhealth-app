@@ -48,8 +48,7 @@ import { RecipeDetailsModal } from "./nutrition/RecipeDetailsModal";
 import { TodayTab, PlansTab, RecipesTab } from "./nutrition/tabs";
 import { MealHistoryTab } from "./nutrition/MealHistoryTab";
 import { PRESET_FOODS, FOOD_CATEGORY_ICONS, getFoodIcon } from "./nutrition/constants";
-import { CircularMetricCard } from "./overview/widgets/CircularMetricCard";
-import type { HealthMetric } from "./overview/widgets/CircularHealthMetric";
+import { MacroCircularChart } from "./nutrition/MacroCircularChart";
 
 // ============================================
 // TYPES
@@ -177,15 +176,44 @@ function transformApiMealToClient(meal: MealLog): ClientMeal {
   const minutes = eatenAt.getMinutes().toString().padStart(2, '0');
   const time = `${hours}:${minutes}`;
 
+  // Use meal-level macros first, then sum from food items as fallback
+  const foods: MealFood[] = meal.foods || [];
+  let protein = meal.proteinGrams || 0;
+  let carbs = meal.carbsGrams || 0;
+  let fat = meal.fatGrams || 0;
+  const calories = meal.calories || 0;
+
+  // If meal-level macros are zero but food items have macros, sum from items
+  if (protein === 0 && carbs === 0 && fat === 0 && foods.length > 0) {
+    const itemTotals = foods.reduce(
+      (acc, item) => ({
+        protein: acc.protein + (item.protein || 0),
+        carbs: acc.carbs + (item.carbs || 0),
+        fat: acc.fat + (item.fat || 0),
+      }),
+      { protein: 0, carbs: 0, fat: 0 }
+    );
+    protein = itemTotals.protein;
+    carbs = itemTotals.carbs;
+    fat = itemTotals.fat;
+  }
+
+  // Last resort: estimate macros from calories if everything is still zero
+  if (protein === 0 && carbs === 0 && fat === 0 && calories > 0) {
+    protein = Math.round((calories * 0.30) / 4);
+    carbs = Math.round((calories * 0.40) / 4);
+    fat = Math.round((calories * 0.30) / 9);
+  }
+
   return {
     id: meal.id,
     name: meal.mealName || meal.mealType,
     time,
-    calories: meal.calories || 0,
-    protein: meal.proteinGrams || 0,
-    carbs: meal.carbsGrams || 0,
-    fat: meal.fatGrams || 0,
-    items: meal.foods || [],
+    calories,
+    protein,
+    carbs,
+    fat,
+    items: foods,
     completed: true,
     icon: mealTypeToIcon[meal.mealType] || "snack",
     mealType: meal.mealType,
@@ -529,7 +557,10 @@ export function NutritionTab() {
   const fetchMeals = useCallback(async () => {
     setMealsLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Use LOCAL date (not UTC) — prevents timezone mismatch where evening meals
+      // fall on the next UTC day and disappear from "today" view
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const response = await nutritionService.getMeals({ date: today });
       if (response.success && response.data?.meals) {
         const clientMeals = response.data.meals.map(transformApiMealToClient);
@@ -635,9 +666,13 @@ export function NutritionTab() {
         setMeals((prev) => [...prev, newMeal].sort((a, b) => a.time.localeCompare(b.time)));
         setShowCreateMealModal(false);
         resetMealForm();
+        toast.success("Meal logged successfully!");
+      } else {
+        toast.error("Failed to save meal. Server returned an error.");
       }
     } catch (error) {
       console.error("Failed to create meal:", error);
+      toast.error("Failed to save meal. Please try again.");
     } finally {
       setMealsSaving(false);
     }
@@ -817,47 +852,50 @@ export function NutritionTab() {
         const timestamp = Date.now();
         const randomId = Math.random().toString(36).substring(2, 9);
 
+        // Parse food items with robust field extraction
+        const parsedItems = (meal.foods || []).map((food: unknown, idx: number) => {
+          const f = (typeof food === 'object' && food !== null ? food : { name: String(food) }) as Record<string, unknown>;
+          const foodName = String(f.name || f.food || f.item || 'Food item');
+          const foodPortion = String(f.portion || f.serving || f.amount || '1 serving');
+
+          let calories = Number(f.calories || f.kcal || 0);
+          let protein = Number(f.protein || f.proteinGrams || f.proteinG || 0);
+          let carbs = Number(f.carbs || f.carbohydrates || f.carbsGrams || f.carbG || 0);
+          let fat = Number(f.fat || f.fatGrams || f.fatG || f.totalFat || 0);
+
+          // Fallback to preset foods if AI returned zero nutrition
+          if (calories === 0 && protein === 0 && carbs === 0 && fat === 0) {
+            const presetFood = findFoodNutrition(foodName);
+            if (presetFood) {
+              calories = presetFood.calories || 0;
+              protein = presetFood.protein || 0;
+              carbs = presetFood.carbs || 0;
+              fat = presetFood.fat || 0;
+            }
+          }
+
+          return {
+            id: `ai-${timestamp}-${randomId}-${idx}`,
+            name: foodName,
+            calories,
+            protein,
+            carbs,
+            fat,
+            portion: foodPortion,
+            eaten: true,
+          };
+        });
+
         // Auto-fill the form with AI-generated data
         setMealFormData((prev) => ({
           ...prev,
           name: meal.mealName || prev.name || "AI Generated Meal",
-          items: (meal.foods || []).map((food, idx) => {
-            const foodObj = typeof food === 'object' && food !== null ? food : { name: String(food) };
-            const foodName = (foodObj as { name?: string }).name || 'Food item';
-            const foodPortion = (foodObj as { portion?: string }).portion || '1 serving';
-            
-            // Get nutrition values from food object or try to find in preset foods
-            let calories = (foodObj as { calories?: number }).calories || 0;
-            let protein = (foodObj as { protein?: number }).protein || 0;
-            let carbs = (foodObj as { carbs?: number }).carbs || 0;
-            let fat = (foodObj as { fat?: number }).fat || 0;
-            
-            // If nutrition values are missing, try to find them in preset foods
-            if (calories === 0 && protein === 0 && carbs === 0 && fat === 0) {
-              const presetFood = findFoodNutrition(foodName);
-              if (presetFood) {
-                calories = presetFood.calories || 0;
-                protein = presetFood.protein || 0;
-                carbs = presetFood.carbs || 0;
-                fat = presetFood.fat || 0;
-                // Use preset portion if available
-                if (!foodPortion || foodPortion === '1 serving') {
-                  // Keep the original portion or use preset
-                }
-              }
-            }
-            
-            return {
-              id: `ai-${timestamp}-${randomId}-${idx}`,
-              name: foodName,
-              calories,
-              protein,
-              carbs,
-              fat,
-              portion: foodPortion,
-              eaten: true, // Mark AI-generated items as eaten by default
-            };
-          }),
+          items: parsedItems,
+          // Set total meal nutrition from AI response (if provided)
+          calories: meal.calories || parsedItems.reduce((s: number, i: { calories: number }) => s + i.calories, 0) || undefined,
+          proteinGrams: meal.proteinGrams || parsedItems.reduce((s: number, i: { protein: number }) => s + i.protein, 0) || undefined,
+          carbsGrams: meal.carbsGrams || parsedItems.reduce((s: number, i: { carbs: number }) => s + i.carbs, 0) || undefined,
+          fatGrams: meal.fatGrams || parsedItems.reduce((s: number, i: { fat: number }) => s + i.fat, 0) || undefined,
         }));
 
         // Clear the AI description after successful generation
@@ -867,6 +905,10 @@ export function NutritionTab() {
         if (response.data.preparationTips) {
           setAiTips(response.data.preparationTips);
         }
+
+        toast.success(`Generated: ${meal.mealName || "AI Meal"} — Click Log Meal to save`);
+      } else {
+        setAiMealError("AI returned empty response. Please try again with more detail.");
       }
     } catch (error) {
       console.error("Failed to generate meal with AI:", error);
@@ -1514,42 +1556,60 @@ export function NutritionTab() {
         analysis,
       };
 
-      // Try multiple patterns to extract foods
+      // PRIORITY: Try to parse structured JSON with items array first
+      // This handles the new Gemini response format with per-food macros
+      const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
+            result.foodsIdentified = parsed.items.map((item: { name?: string; food?: string; portion?: string; quantity?: string; calories?: number; protein?: number; carbs?: number; carbohydrates?: number; fat?: number; fats?: number }, idx: number) => ({
+              name: (item.name || item.food || `Food ${idx + 1}`).replace(/\*\*/g, ''),
+              portion: item.portion || item.quantity || "1 serving",
+              calories: typeof item.calories === 'number' ? item.calories : undefined,
+              protein: typeof item.protein === 'number' ? item.protein : undefined,
+              carbs: typeof item.carbs === 'number' ? item.carbs : (typeof item.carbohydrates === 'number' ? item.carbohydrates : undefined),
+              fat: typeof item.fat === 'number' ? item.fat : (typeof item.fats === 'number' ? item.fats : undefined),
+            }));
+
+            // Extract totals from the JSON
+            if (typeof parsed.totalCalories === 'number') result.caloriesEstimate = `${parsed.totalCalories} kcal`;
+            if (typeof parsed.totalProtein === 'number') result.macronutrients.protein = parsed.totalProtein;
+            if (typeof parsed.totalCarbs === 'number') result.macronutrients.carbs = parsed.totalCarbs;
+            if (typeof parsed.totalFat === 'number') result.macronutrients.fats = parsed.totalFat;
+            if (typeof parsed.totalFiber === 'number') result.macronutrients.fiber = parsed.totalFiber;
+
+            // Use the inner analysis text for display if available
+            if (parsed.analysis) {
+              result.analysis = parsed.analysis;
+            }
+
+            // Extract recommendations
+            if (parsed.recommendations && Array.isArray(parsed.recommendations)) {
+              result.nutritionSuggestions = parsed.recommendations;
+            }
+
+            return result;
+          }
+        } catch {
+          // JSON parse failed, fall through to text parsing
+        }
+      }
+
+      // Fallback: Try markdown text patterns
       // Pattern 1: **Foods Identified:** section
       let foodsMatch = analysis.match(/\*\*Foods Identified:\*\*\s*\n((?:.+\n?)+?)(?=\n\n|\*\*|$)/i);
-      
+
       // Pattern 2: "Food items:" or "Items:" or "Foods:"
       if (!foodsMatch) {
         foodsMatch = analysis.match(/(?:Foods?|Items?)(?:\s+Identified)?:\s*\n((?:.+\n?)+?)(?=\n\n|\*\*|$)/i);
       }
-      
+
       // Pattern 3: Look for numbered list of foods
       if (!foodsMatch) {
         const numberedListMatch = analysis.match(/(?:\d+\.\s*.+\n?)+/);
         if (numberedListMatch) {
           foodsMatch = numberedListMatch;
-        }
-      }
-      
-      // Pattern 4: Look for JSON in the response
-      if (!foodsMatch) {
-        const jsonMatch = analysis.match(/\{[\s\S]*"items?"?[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            const parsed = JSON.parse(jsonMatch[0]);
-            if (parsed.items && Array.isArray(parsed.items)) {
-              result.foodsIdentified = parsed.items.map((item: { name?: string; food?: string; portion?: string; quantity?: string; calories?: number; protein?: number; carbs?: number; carbohydrates?: number; fat?: number; fats?: number }, idx: number) => ({
-                name: item.name || item.food || `Food ${idx + 1}`,
-                portion: item.portion || item.quantity || "1 serving",
-                calories: item.calories || undefined,
-                protein: item.protein || undefined,
-                carbs: item.carbs || item.carbohydrates || undefined,
-                fat: item.fat || item.fats || undefined,
-              }));
-            }
-          } catch (e) {
-            console.warn("Failed to parse JSON from analysis:", e);
-          }
         }
       }
 
@@ -1689,25 +1749,37 @@ export function NutritionTab() {
       // Calculate individual food macros if we have totals
       const totalFoods = analysis.foodsIdentified.length;
       
-      // Use preset values if available, otherwise calculate from totals, otherwise use 0
-      let calories = food.calories;
-      let protein = food.protein;
-      let carbs = food.carbs;
-      let fat = food.fat;
-      
-      if (!calories && !protein && !carbs && !fat) {
-        // Try preset food first
+      // Use AI values first, then preset food, then estimate from totals
+      let calories = food.calories ?? undefined;
+      let protein = food.protein ?? undefined;
+      let carbs = food.carbs ?? undefined;
+      let fat = food.fat ?? undefined;
+
+      const hasMacros = (protein !== undefined && protein > 0) ||
+                        (carbs !== undefined && carbs > 0) ||
+                        (fat !== undefined && fat > 0);
+
+      // If macros are missing, try preset food or estimate from totals
+      if (!hasMacros) {
         if (presetFood) {
-          calories = presetFood.calories || 0;
+          calories = calories ?? (presetFood.calories || 0);
           protein = presetFood.protein || 0;
           carbs = presetFood.carbs || 0;
           fat = presetFood.fat || 0;
-        } else if (totalFoods > 0 && analysis.macronutrients) {
-          // Fallback to dividing totals
-          calories = Math.round((analysis.macronutrients.protein * 4 + analysis.macronutrients.carbs * 4 + analysis.macronutrients.fats * 9) / totalFoods);
+        } else if (totalFoods > 0 && analysis.macronutrients &&
+                   (analysis.macronutrients.protein > 0 || analysis.macronutrients.carbs > 0 || analysis.macronutrients.fats > 0)) {
+          // Distribute total macros proportionally across food items
           protein = Math.round(analysis.macronutrients.protein / totalFoods);
           carbs = Math.round(analysis.macronutrients.carbs / totalFoods);
           fat = Math.round(analysis.macronutrients.fats / totalFoods);
+          if (!calories) {
+            calories = Math.round((protein * 4 + carbs * 4 + fat * 9));
+          }
+        } else if (calories && calories > 0) {
+          // Last resort: estimate macros from calories using typical meal ratios (30/40/30)
+          protein = Math.round((calories * 0.30) / 4);
+          carbs = Math.round((calories * 0.40) / 4);
+          fat = Math.round((calories * 0.30) / 9);
         }
       }
       
@@ -1969,99 +2041,164 @@ export function NutritionTab() {
   // Parse recipe analysis to extract structured recipe data
   const parseRecipeAnalysis = useCallback((analysis: string) => {
     try {
-      console.log("[RecipeAnalysis] Parsing analysis text:", analysis.substring(0, 1000));
-      
+      // Strip markdown code fences before any parsing
+      let cleaned = analysis
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .trim();
+
+      console.log("[RecipeAnalysis] Parsing analysis text:", cleaned.substring(0, 1000));
+
       const recipeData: Partial<typeof recipeFormData> = {};
 
+      // Detect if the content is primarily JSON (starts with { after cleanup)
+      const isJsonContent = cleaned.trimStart().startsWith('{');
+
       // First, try to extract JSON if the response contains JSON
-      const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          const jsonData = JSON.parse(jsonMatch[0]);
-          console.log("[RecipeAnalysis] Found JSON data:", jsonData);
+          // Sanitize common AI JSON issues before parsing
+          const sanitizedJson = jsonMatch[0]
+            .replace(/,\s*([}\]])/g, '$1')  // trailing commas
+            .replace(/'/g, '"')              // single quotes to double
+            .replace(/(\w+)\s*:/g, (_, key) => `"${key}":`) // unquoted keys (rough)
+            .replace(/""/g, '"');            // double-doubled quotes
 
-          // Map JSON fields to recipe data
-          if (jsonData.name || jsonData.recipeName) {
-            recipeData.name = jsonData.name || jsonData.recipeName;
+          let jsonData: Record<string, unknown>;
+          try {
+            jsonData = JSON.parse(sanitizedJson);
+          } catch {
+            // If sanitized parse fails, try original
+            jsonData = JSON.parse(jsonMatch[0]);
           }
-          if (jsonData.description) {
-            recipeData.description = jsonData.description;
-          }
-          // Handle category (from new JSON format)
-          if (jsonData.category) {
-            const validCategories = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert', 'other'];
-            const category = jsonData.category.toLowerCase();
-            if (validCategories.includes(category)) {
-              recipeData.category = category;
+          console.log("[RecipeAnalysis] Found JSON data:", JSON.stringify(jsonData).substring(0, 500));
+
+          // Helper to find value by multiple possible keys (case-insensitive)
+          const findVal = (...keys: string[]): unknown => {
+            for (const key of keys) {
+              const found = Object.entries(jsonData).find(([k]) => k.toLowerCase().replace(/[_\s]/g, '') === key.toLowerCase().replace(/[_\s]/g, ''));
+              if (found && found[1] !== null && found[1] !== undefined && found[1] !== '') return found[1];
             }
+            return undefined;
+          };
+
+          // Name — check many variations
+          const name = findVal('name', 'recipeName', 'recipe_name', 'title', 'dish', 'dishName', 'dish_name', 'recipe');
+          if (name && typeof name === 'string') recipeData.name = name.trim();
+
+          // Description
+          const desc = findVal('description', 'about', 'summary', 'intro');
+          if (desc && typeof desc === 'string') recipeData.description = desc.trim();
+
+          // Category
+          const cat = findVal('category', 'mealType', 'meal_type', 'type', 'course');
+          if (cat && typeof cat === 'string') {
+            const validCategories = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert', 'other'];
+            const lower = cat.toLowerCase();
+            if (validCategories.includes(lower)) recipeData.category = lower;
           }
-          // Handle cuisine (from new JSON format)
-          if (jsonData.cuisine) {
-            recipeData.cuisine = jsonData.cuisine;
-          }
-          if (jsonData.ingredients && Array.isArray(jsonData.ingredients)) {
-            recipeData.ingredients = jsonData.ingredients.map((ing: string | { quantity?: string | number; unit?: string; name: string; notes?: string }) => {
+
+          // Cuisine
+          const cuisine = findVal('cuisine', 'cuisineType', 'cuisine_type', 'origin');
+          if (cuisine && typeof cuisine === 'string') recipeData.cuisine = cuisine.trim();
+
+          // Ingredients — handle array of strings or objects
+          const ings = findVal('ingredients', 'ingredientList', 'ingredient_list');
+          if (Array.isArray(ings) && ings.length > 0) {
+            recipeData.ingredients = ings.map((ing: unknown) => {
               if (typeof ing === 'string') {
-                const match = ing.match(/^([\d./]+)\s+(\w+)\s+(.+)$/) || ing.match(/^([\d./]+)\s+(.+)$/);
+                const m = ing.match(/^([\d./\s½¼¾⅓⅔]+)\s+(\w+)\s+(.+)$/) || ing.match(/^([\d./]+)\s+(.+)$/);
+                return { quantity: m ? m[1].trim() : "", unit: m?.[3] ? m[2] : "", name: m ? (m[3] || m[2] || ing) : ing, notes: "" };
+              }
+              if (typeof ing === 'object' && ing !== null) {
+                const obj = ing as Record<string, unknown>;
                 return {
-                  quantity: match ? match[1] : "",
-                  unit: match && match[2] ? match[2] : "",
-                  name: match ? (match[3] || match[2] || ing) : ing,
-                  notes: "",
+                  quantity: String(obj.quantity || obj.amount || obj.qty || ""),
+                  unit: String(obj.unit || obj.measure || ""),
+                  name: String(obj.name || obj.ingredient || obj.item || ""),
+                  notes: String(obj.notes || obj.note || ""),
                 };
               }
-              return {
-                quantity: String(ing.quantity || ""),
-                unit: ing.unit || "",
-                name: ing.name || "",
-                notes: ing.notes || "",
-              };
-            }).filter((ing: { name: string }) => ing.name.length > 0);
+              return { quantity: "", unit: "", name: String(ing), notes: "" };
+            }).filter((i: { name: string }) => i.name.length > 0);
           }
-          if (jsonData.instructions && Array.isArray(jsonData.instructions)) {
-            recipeData.instructions = jsonData.instructions.map((inst: string | { description?: string; step?: number; text?: string }, idx: number) => ({
-              step: typeof inst === 'object' && inst.step ? inst.step : idx + 1,
-              description: typeof inst === 'string' ? inst : (inst.description || inst.text || ""),
-            })).filter((inst: { description: string }) => inst.description.length > 0);
-          }
-          // Handle nutrition (both nested and flat formats)
-          if (jsonData.nutrition) {
-            const nutrition = jsonData.nutrition;
-            if (nutrition.calories !== undefined) recipeData.caloriesPerServing = parseInt(String(nutrition.calories));
-            if (nutrition.protein !== undefined) recipeData.proteinGrams = parseFloat(String(nutrition.protein));
-            if (nutrition.carbs !== undefined || nutrition.carbohydrates !== undefined) {
-              recipeData.carbsGrams = parseFloat(String(nutrition.carbs || nutrition.carbohydrates));
-            }
-            if (nutrition.fat !== undefined) recipeData.fatGrams = parseFloat(String(nutrition.fat));
-            if (nutrition.fiber !== undefined) recipeData.fiberGrams = parseFloat(String(nutrition.fiber));
-          }
-          // Handle time (both nested and flat formats)
-          if (jsonData.time) {
-            const time = jsonData.time;
-            if (time.prep !== undefined || time.prepTime !== undefined) {
-              recipeData.prepTimeMinutes = parseInt(String(time.prep || time.prepTime));
-            }
-            if (time.cook !== undefined || time.cookTime !== undefined) {
-              recipeData.cookTimeMinutes = parseInt(String(time.cook || time.cookTime));
-            }
-          }
-          // Also check for flat time fields
-          if (jsonData.prepTime !== undefined) recipeData.prepTimeMinutes = parseInt(String(jsonData.prepTime));
-          if (jsonData.cookTime !== undefined) recipeData.cookTimeMinutes = parseInt(String(jsonData.cookTime));
-          if (jsonData.prepTimeMinutes !== undefined) recipeData.prepTimeMinutes = parseInt(String(jsonData.prepTimeMinutes));
-          if (jsonData.cookTimeMinutes !== undefined) recipeData.cookTimeMinutes = parseInt(String(jsonData.cookTimeMinutes));
 
-          if (jsonData.servings !== undefined) recipeData.servings = parseInt(String(jsonData.servings));
-          if (jsonData.difficulty) {
-            const diff = jsonData.difficulty.toLowerCase();
-            recipeData.difficulty = diff === 'beginner' ? 'easy' : diff === 'intermediate' ? 'medium' : diff === 'advanced' ? 'hard' : diff;
+          // Instructions — handle array of strings or objects
+          const insts = findVal('instructions', 'steps', 'directions', 'method', 'procedure');
+          if (Array.isArray(insts) && insts.length > 0) {
+            recipeData.instructions = insts.map((inst: unknown, idx: number) => {
+              if (typeof inst === 'string') return { step: idx + 1, description: inst.replace(/^\d+[\.\)]\s*/, '').trim() };
+              if (typeof inst === 'object' && inst !== null) {
+                const obj = inst as Record<string, unknown>;
+                return {
+                  step: Number(obj.step || obj.number || idx + 1),
+                  description: String(obj.description || obj.text || obj.instruction || obj.step_description || ""),
+                };
+              }
+              return { step: idx + 1, description: String(inst) };
+            }).filter((i: { description: string }) => i.description.length > 0);
           }
-          if (jsonData.tags && Array.isArray(jsonData.tags)) {
-            recipeData.tags = jsonData.tags.map((tag: string) => tag.trim()).filter(Boolean);
+
+          // Nutrition — handle nested object or flat fields
+          const nutrition = findVal('nutrition', 'nutritionPerServing', 'nutrition_per_serving', 'nutritionalInfo', 'macros');
+          if (nutrition && typeof nutrition === 'object' && !Array.isArray(nutrition)) {
+            const n = nutrition as Record<string, unknown>;
+            const cal = n.calories ?? n.caloriesPerServing ?? n.kcal;
+            const protein = n.protein ?? n.proteinGrams ?? n.proteinG;
+            const carbs = n.carbs ?? n.carbohydrates ?? n.carbsGrams ?? n.carbG;
+            const fat = n.fat ?? n.fatGrams ?? n.fatG ?? n.totalFat;
+            const fiber = n.fiber ?? n.fiberGrams ?? n.fiberG;
+            if (cal !== undefined) recipeData.caloriesPerServing = parseInt(String(cal));
+            if (protein !== undefined) recipeData.proteinGrams = parseFloat(String(protein));
+            if (carbs !== undefined) recipeData.carbsGrams = parseFloat(String(carbs));
+            if (fat !== undefined) recipeData.fatGrams = parseFloat(String(fat));
+            if (fiber !== undefined) recipeData.fiberGrams = parseFloat(String(fiber));
           }
-          if (jsonData.dietaryFlags && Array.isArray(jsonData.dietaryFlags)) {
-            recipeData.dietaryFlags = jsonData.dietaryFlags.map((flag: string) => flag.toLowerCase().trim()).filter(Boolean);
+          // Also check flat nutrition fields
+          const flatCal = findVal('calories', 'caloriesPerServing', 'kcal');
+          if (flatCal !== undefined && !recipeData.caloriesPerServing) recipeData.caloriesPerServing = parseInt(String(flatCal));
+          const flatProt = findVal('protein', 'proteinGrams');
+          if (flatProt !== undefined && !recipeData.proteinGrams) recipeData.proteinGrams = parseFloat(String(flatProt));
+          const flatCarbs = findVal('carbs', 'carbohydrates', 'carbsGrams');
+          if (flatCarbs !== undefined && !recipeData.carbsGrams) recipeData.carbsGrams = parseFloat(String(flatCarbs));
+          const flatFat = findVal('fat', 'fatGrams', 'totalFat');
+          if (flatFat !== undefined && !recipeData.fatGrams) recipeData.fatGrams = parseFloat(String(flatFat));
+          const flatFiber = findVal('fiber', 'fiberGrams');
+          if (flatFiber !== undefined && !recipeData.fiberGrams) recipeData.fiberGrams = parseFloat(String(flatFiber));
+
+          // Time — handle nested or flat
+          const time = findVal('time', 'cookingTime', 'timing');
+          if (time && typeof time === 'object' && !Array.isArray(time)) {
+            const t = time as Record<string, unknown>;
+            const prep = t.prep ?? t.prepTime ?? t.preparation;
+            const cook = t.cook ?? t.cookTime ?? t.cooking;
+            if (prep !== undefined) recipeData.prepTimeMinutes = parseInt(String(prep));
+            if (cook !== undefined) recipeData.cookTimeMinutes = parseInt(String(cook));
           }
+          const flatPrep = findVal('prepTime', 'prepTimeMinutes', 'prep_time', 'preparationTime');
+          if (flatPrep !== undefined && !recipeData.prepTimeMinutes) recipeData.prepTimeMinutes = parseInt(String(flatPrep));
+          const flatCook = findVal('cookTime', 'cookTimeMinutes', 'cook_time', 'cookingTime');
+          if (flatCook !== undefined && !recipeData.cookTimeMinutes) recipeData.cookTimeMinutes = parseInt(String(flatCook));
+
+          // Servings
+          const servings = findVal('servings', 'serves', 'yield', 'portions');
+          if (servings !== undefined) recipeData.servings = parseInt(String(servings));
+
+          // Difficulty
+          const diff = findVal('difficulty', 'level', 'difficultyLevel');
+          if (diff && typeof diff === 'string') {
+            const d = diff.toLowerCase();
+            recipeData.difficulty = d === 'beginner' ? 'easy' : d === 'intermediate' ? 'medium' : d === 'advanced' ? 'hard' : d;
+          }
+
+          // Tags
+          const tags = findVal('tags', 'labels', 'keywords');
+          if (Array.isArray(tags)) recipeData.tags = tags.map((t: unknown) => String(t).trim()).filter(Boolean);
+
+          // Dietary flags
+          const flags = findVal('dietaryFlags', 'dietary_flags', 'dietaryInfo', 'dietary', 'dietaryRestrictions');
+          if (Array.isArray(flags)) recipeData.dietaryFlags = flags.map((f: unknown) => String(f).toLowerCase().trim()).filter(Boolean);
 
           // Log what was parsed
           const parsedFields = Object.keys(recipeData).filter(key => {
@@ -2078,7 +2215,63 @@ export function NutritionTab() {
             return recipeData;
           }
         } catch (jsonError) {
-          console.warn("[RecipeAnalysis] JSON parsing failed, falling back to markdown:", jsonError);
+          // Attempt to repair truncated JSON before falling back
+          console.warn("[RecipeAnalysis] JSON parse failed, attempting repair...");
+          try {
+            let repaired = jsonMatch[0];
+            // Remove trailing incomplete field
+            repaired = repaired.replace(/,\s*"[^"]*":\s*"[^"]*$/, '');
+            repaired = repaired.replace(/,\s*"[^"]*":\s*$/, '');
+            repaired = repaired.replace(/,\s*$/, '');
+            // Close unclosed strings
+            if ((repaired.match(/"/g) || []).length % 2 !== 0) repaired += '"';
+            // Close unclosed brackets
+            const ob = (repaired.match(/\[/g) || []).length - (repaired.match(/\]/g) || []).length;
+            for (let i = 0; i < ob; i++) repaired += ']';
+            const oc = (repaired.match(/\{/g) || []).length - (repaired.match(/\}/g) || []).length;
+            for (let i = 0; i < oc; i++) repaired += '}';
+            const repairedData = JSON.parse(repaired);
+            console.log("[RecipeAnalysis] Repaired truncated JSON successfully");
+            // Re-run the field extraction on repaired data
+            const rName = repairedData.name || repairedData.recipeName || repairedData.title;
+            if (rName) recipeData.name = String(rName);
+            if (repairedData.description) recipeData.description = String(repairedData.description);
+            if (repairedData.category) recipeData.category = String(repairedData.category).toLowerCase();
+            if (repairedData.cuisine) recipeData.cuisine = String(repairedData.cuisine);
+            if (Array.isArray(repairedData.ingredients)) {
+              recipeData.ingredients = repairedData.ingredients.filter((i: unknown) => i && typeof i === 'object').map((i: Record<string, unknown>) => ({
+                quantity: String(i.quantity || ""), unit: String(i.unit || ""), name: String(i.name || ""), notes: "",
+              })).filter((i: { name: string }) => i.name.length > 0);
+            }
+            if (Array.isArray(repairedData.instructions)) {
+              recipeData.instructions = repairedData.instructions.filter((i: unknown) => i).map((i: unknown, idx: number) => ({
+                step: idx + 1, description: typeof i === 'string' ? i : String((i as Record<string, unknown>).description || ""),
+              })).filter((i: { description: string }) => i.description.length > 0);
+            }
+            if (repairedData.nutrition) {
+              const n = repairedData.nutrition;
+              if (n.calories) recipeData.caloriesPerServing = parseInt(String(n.calories));
+              if (n.protein) recipeData.proteinGrams = parseFloat(String(n.protein));
+              if (n.carbs) recipeData.carbsGrams = parseFloat(String(n.carbs));
+              if (n.fat) recipeData.fatGrams = parseFloat(String(n.fat));
+              if (n.fiber) recipeData.fiberGrams = parseFloat(String(n.fiber));
+            }
+            if (repairedData.time) {
+              if (repairedData.time.prep) recipeData.prepTimeMinutes = parseInt(String(repairedData.time.prep));
+              if (repairedData.time.cook) recipeData.cookTimeMinutes = parseInt(String(repairedData.time.cook));
+            }
+            if (repairedData.servings) recipeData.servings = parseInt(String(repairedData.servings));
+            if (repairedData.difficulty) recipeData.difficulty = String(repairedData.difficulty).toLowerCase();
+            if (recipeData.name) return recipeData;
+          } catch (repairError) {
+            console.warn("[RecipeAnalysis] Repair also failed, falling back to markdown:", repairError);
+          }
+
+          // If content was JSON-like, don't try text parsing — it'll just grab '{'
+          if (isJsonContent) {
+            console.warn("[RecipeAnalysis] Content was JSON but could not be parsed. Returning partial data.");
+            return Object.keys(recipeData).length > 0 ? recipeData : null;
+          }
         }
       }
 
@@ -2095,7 +2288,7 @@ export function NutritionTab() {
         /^(.+?)\n/i, // First line if it's short and doesn't contain special chars
       ];
       for (const pattern of namePatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match && match[1]?.trim()) {
           const name = match[1].trim().replace(/\*\*/g, '').replace(/^#+\s*/, '');
           if (name.length > 0 && name.length < 200) {
@@ -2108,11 +2301,15 @@ export function NutritionTab() {
       
       // If no name found, try to extract from first line or title
       if (!recipeData.name) {
-        const lines = analysis.split('\n').filter(line => line.trim());
-        for (const line of lines.slice(0, 3)) {
-          const cleanLine = line.trim().replace(/\*\*/g, '').replace(/^#+\s*/, '');
-          if (cleanLine.length > 3 && cleanLine.length < 100 && 
-              !cleanLine.toLowerCase().includes('recipe') &&
+        const lines = cleaned.split('\n').filter(line => line.trim());
+        for (const line of lines.slice(0, 5)) {
+          const cleanLine = line.trim().replace(/\*\*/g, '').replace(/^#+\s*/, '').replace(/```\w*/g, '').trim();
+          if (cleanLine.length > 3 && cleanLine.length < 100 &&
+              !cleanLine.startsWith('{') &&
+              !cleanLine.startsWith('[') &&
+              !cleanLine.startsWith('```') &&
+              !cleanLine.toLowerCase().includes('json') &&
+              !cleanLine.toLowerCase().includes('recipe name') &&
               !cleanLine.toLowerCase().includes('ingredient') &&
               !cleanLine.toLowerCase().includes('instruction')) {
             recipeData.name = cleanLine;
@@ -2129,7 +2326,7 @@ export function NutritionTab() {
         /About.*?:\s*\n((?:.+\n?)+?)(?=\n\n|\*\*|Ingredients|Instructions|$)/i,
       ];
       for (const pattern of descPatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match && match[1]?.trim()) {
           recipeData.description = match[1].trim().substring(0, 500); // Limit length
           break;
@@ -2144,7 +2341,7 @@ export function NutritionTab() {
         /Ingredients?.*?:\s*\n((?:.+\n?)+?)(?=\n\n|Instructions|Steps|Nutrition|$)/i,
       ];
       for (const pattern of ingredientsPatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match && match[1]?.trim()) {
           const ingredientsText = match[1];
           const ingredientLines = ingredientsText.split('\n')
@@ -2207,7 +2404,7 @@ export function NutritionTab() {
         /Steps?:\s*\n((?:.+\n?)+?)(?=\n\n|\*\*Nutrition|\*\*Time|\*\*Tags|Nutrition:|Time:|$)/i,
       ];
       for (const pattern of instructionsPatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match && match[1]?.trim()) {
           const instructionsText = match[1];
           const instructionLines = instructionsText.split('\n')
@@ -2244,7 +2441,7 @@ export function NutritionTab() {
         /Calories.*?Protein.*?Carbs.*?Fat/i,
       ];
       for (const pattern of nutritionPatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match) {
           const nutritionText = match[1] || analysis;
           const caloriesMatch = nutritionText.match(/Calories?[:\s]+(\d+)/i) || 
@@ -2271,7 +2468,7 @@ export function NutritionTab() {
         /Prep.*?Cook/i,
       ];
       for (const pattern of timePatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match) {
           const timeText = match[1] || analysis;
           const prepMatch = timeText.match(/Prep.*?(\d+)/i) || analysis.match(/Prep.*?(\d+)/i);
@@ -2303,7 +2500,7 @@ export function NutritionTab() {
         /Tags?[:\s]+([^\n]+)/i,
       ];
       for (const pattern of tagsPatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match && match[1]?.trim()) {
           const tagsText = match[1];
           // Handle both comma-separated and line-separated tags
@@ -2327,7 +2524,7 @@ export function NutritionTab() {
         /Dietary Flags?[:\s]+([^\n]+)/i,
       ];
       for (const pattern of dietaryFlagsPatterns) {
-        const match = analysis.match(pattern);
+        const match = cleaned.match(pattern);
         if (match && match[1]?.trim()) {
           const flagsText = match[1];
           // Handle both comma-separated and line-separated flags
@@ -2625,77 +2822,88 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
 
   return (
     <div className="space-y-4 sm:space-y-6 overflow-x-hidden">
-      {/* Header with Macro Overview */}
+      {/* Header with Macro Overview - Modern Glass Design */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-500/20 via-green-500/10 to-transparent border border-emerald-500/20 p-4 sm:p-6"
+        className="relative overflow-hidden rounded-2xl border border-white/[0.08] p-4 sm:p-6"
+        style={{
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 78, 59, 0.12) 50%, rgba(15, 23, 42, 0.95) 100%)',
+          backdropFilter: 'blur(24px)',
+        }}
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        {/* Ambient glow effects */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/8 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-500/6 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/4 pointer-events-none" />
 
         <div className="relative z-10">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-2 rounded-xl bg-emerald-500/20 shrink-0">
-                  <Utensils className="w-5 h-5 text-emerald-400" />
-                </div>
-                <span className="text-emerald-400 text-sm font-medium">AI Nutrition Plan</span>
+          {/* Top row - Title & CTA */}
+          <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 shrink-0">
+                <Utensils className="w-5 h-5 text-emerald-400" />
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">Today&apos;s Nutrition</h2>
-              <p className="text-slate-400 text-sm truncate">
-                {activePlan ? activePlan.name : "No active plan - create one to track macros"}
-              </p>
+              <div className="min-w-0">
+                <h2 className="text-[15px] sm:text-[17px] font-bold text-white tracking-tight">Today&apos;s Nutrition</h2>
+                <p className="text-slate-400 text-[12px] sm:text-[13px] truncate mt-0.5">
+                  {activePlan ? activePlan.name : "No active plan — create one to track macros"}
+                </p>
+              </div>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  resetMealForm();
-                  setEditingMeal(null);
-                  setShowCreateMealModal(true);
-                }}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-emerald-500 text-white font-medium text-sm hover:bg-emerald-600 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden xs:inline">Add</span> Meal
-              </motion.button>
-            </div>
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                resetMealForm();
+                setEditingMeal(null);
+                setShowCreateMealModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-emerald-500 text-white font-semibold text-[13px] hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add</span> Meal
+            </motion.button>
           </div>
 
-          {/* Macro Progress Rings - Circular Charts */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-            {Object.entries(macros).map(([key, value]) => {
-              // Map macro keys to HealthMetric types with specific colors
-              const metricTypeMap: Record<string, 'calories' | 'protein' | 'carbs' | 'fat'> = {
-                calories: 'calories',
-                protein: 'protein',
-                carbs: 'carbs',
-                fat: 'fat',
+          {/* Macro Progress Rings - Modern Filled Arcs */}
+          <div className="grid grid-cols-4 gap-2 sm:gap-6">
+            {Object.entries(macros).map(([key, macroValue]) => {
+              const colorMap: Record<string, { primary: string; secondary: string }> = {
+                calories: { primary: '#f97316', secondary: '#ef4444' },
+                protein: { primary: '#ec4899', secondary: '#f43f5e' },
+                carbs: { primary: '#f59e0b', secondary: '#eab308' },
+                fat: { primary: '#a855f7', secondary: '#8b5cf6' },
               };
-              
-              const metricType = metricTypeMap[key] || 'nutrition';
-              
-              // Create HealthMetric object
-              const metric: HealthMetric = {
-                type: metricType,
-                value: value.current,
-                max: value.target,
-                unit: value.unit,
-                label: key.charAt(0).toUpperCase() + key.slice(1),
-                subtitle: `${Math.round(value.current)} / ${value.target} ${value.unit}`,
-              };
-              
+              const colors = colorMap[key] || { primary: '#10b981', secondary: '#059669' };
+
               return (
                 <motion.div
                   key={key}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.3, delay: Object.keys(macros).indexOf(key) * 0.1 }}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: Object.keys(macros).indexOf(key) * 0.1 }}
                   className="flex justify-center"
                 >
-                  <CircularMetricCard metric={metric} size="md" />
+                  <MacroCircularChart
+                    value={macroValue.current}
+                    max={macroValue.target}
+                    label={key.charAt(0).toUpperCase() + key.slice(1)}
+                    unit={macroValue.unit}
+                    primaryColor={colors.primary}
+                    secondaryColor={colors.secondary}
+                    size="sm"
+                    className="sm:hidden"
+                  />
+                  <MacroCircularChart
+                    value={macroValue.current}
+                    max={macroValue.target}
+                    label={key.charAt(0).toUpperCase() + key.slice(1)}
+                    unit={macroValue.unit}
+                    primaryColor={colors.primary}
+                    secondaryColor={colors.secondary}
+                    size="md"
+                    className="hidden sm:flex"
+                  />
                 </motion.div>
               );
             })}
@@ -2703,28 +2911,37 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
         </div>
       </motion.div>
 
-      {/* View Toggle */}
-      <div className="flex flex-wrap gap-2 p-1 rounded-xl bg-slate-800/50 border border-slate-700/50 w-fit">
-        {[
-          { id: "today", label: "Today", icon: Utensils },
-          { id: "plan", label: "Plans", icon: Clock },
-          { id: "recipes", label: "Recipes", icon: Salad },
-          { id: "history", label: "History", icon: Calendar },
-          { id: "analytics", label: "Analytics", icon: BarChart3 },
-        ].map((view) => (
-          <button
-            key={view.id}
-            onClick={() => setActiveView(view.id as typeof activeView)}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-              activeView === view.id
-                ? "bg-emerald-500 text-white"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <view.icon className="w-4 h-4" />
-            {view.label}
-          </button>
-        ))}
+      {/* Modern Tab Navigation */}
+      <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
+        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-sm w-max">
+          {[
+            { id: "today", label: "Today", icon: Utensils },
+            { id: "plan", label: "Plans", icon: Clock },
+            { id: "recipes", label: "Recipes", icon: Salad },
+            { id: "history", label: "History", icon: Calendar },
+            { id: "analytics", label: "Analytics", icon: BarChart3 },
+          ].map((view) => (
+            <button
+              key={view.id}
+              onClick={() => setActiveView(view.id as typeof activeView)}
+              className={`relative flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[13px] sm:text-sm font-medium transition-all whitespace-nowrap ${
+                activeView === view.id
+                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <view.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              {view.label}
+              {activeView === view.id && (
+                <motion.div
+                  layoutId="activeNutritionTab"
+                  className="absolute inset-0 rounded-lg bg-emerald-500/10 border border-emerald-500/20 -z-10"
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -2874,9 +3091,9 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl"
             >
-              <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-6">
+              <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-4 sm:p-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">{editingMeal ? "Edit Meal" : "Log New Meal"}</h2>
+                  <h2 className="text-[15px] sm:text-base font-bold text-white">{editingMeal ? "Edit Meal" : "Log New Meal"}</h2>
                   <button
                     onClick={() => setShowCreateMealModal(false)}
                     className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
@@ -2886,7 +3103,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 </div>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 {/* Meal Name */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Meal Name</label>
@@ -2900,9 +3117,9 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 </div>
 
                 {/* Time & Icon */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Time</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Time</label>
                     <div className="relative">
                       <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
                     <input
@@ -2914,7 +3131,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Meal Type</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Meal Type</label>
                     <div className="flex gap-2">
                       {mealIconsList.map((item) => (
                         <button
@@ -3591,9 +3808,9 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl"
             >
-              <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-6">
+              <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-4 sm:p-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">{editingPlan ? "Edit Diet Plan" : "Create Diet Plan"}</h2>
+                  <h2 className="text-[15px] sm:text-base font-bold text-white">{editingPlan ? "Edit Diet Plan" : "Create Diet Plan"}</h2>
                   <button
                     onClick={() => setShowCreatePlanModal(false)}
                     className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
@@ -3603,7 +3820,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 </div>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 {/* Plan Name */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Plan Name</label>
@@ -3630,22 +3847,22 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
 
                 {/* Diet Type */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Diet Type</label>
+                  <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-2">Diet Type</label>
                   <div className="grid grid-cols-2 gap-2">
                     {dietTypes.map((type) => (
                       <button
                         key={type.id}
                         onClick={() => setPlanFormData((prev) => ({ ...prev, type: type.id }))}
-                        className={`p-3 rounded-xl border text-left transition-colors ${
+                        className={`p-2.5 sm:p-3 rounded-xl border text-left transition-colors ${
                           planFormData.type === type.id
                             ? "border-emerald-500 bg-emerald-500/20"
                             : "border-slate-700 bg-slate-800 hover:border-slate-600"
                         }`}
                       >
-                        <p className={`text-sm font-medium ${planFormData.type === type.id ? "text-emerald-400" : "text-white"}`}>
+                        <p className={`text-[13px] sm:text-sm font-medium ${planFormData.type === type.id ? "text-emerald-400" : "text-white"}`}>
                           {type.label}
                         </p>
-                        <p className="text-xs text-slate-500">{type.description}</p>
+                        <p className="text-[11px] sm:text-xs text-slate-500">{type.description}</p>
                       </button>
                     ))}
                   </div>
@@ -3786,7 +4003,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-md bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl p-6"
             >
-              <h2 className="text-xl font-bold text-white mb-6">
+              <h2 className="text-base font-bold text-white mb-6">
                 {editingShoppingItem ? "Edit Item" : "Add Shopping Item"}
               </h2>
 
@@ -3899,7 +4116,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 <div className="p-2 rounded-xl bg-violet-500/20">
                   <Wand2 className="w-5 h-5 text-violet-400" />
                 </div>
-                <h2 className="text-xl font-bold text-white">Generate with AI</h2>
+                <h2 className="text-base font-bold text-white">Generate with AI</h2>
               </div>
 
               <div className="space-y-4">
@@ -3976,7 +4193,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                     <ShoppingCart className="w-5 h-5 text-emerald-400" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-white">Shopping List</h2>
+                    <h2 className="text-base font-bold text-white">Shopping List</h2>
                     <div className="flex items-center gap-3">
                       <p className="text-sm text-slate-400">{shoppingItems.length} items total</p>
                       {totalCalories > 0 && (
@@ -4177,9 +4394,9 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
               className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl"
             >
               {/* Modal Header */}
-              <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-6">
+              <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-4 sm:p-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">
+                  <h2 className="text-[15px] sm:text-base font-bold text-white">
                     {editingRecipe ? "Edit Recipe" : "Create New Recipe"}
                   </h2>
                   <button
@@ -4195,7 +4412,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 </div>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 {/* Image Capture/Upload for Recipe Analysis */}
                 <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 p-4">
                   <div className="flex items-center gap-2 mb-3">
@@ -4406,9 +4623,9 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 </div>
 
                 {/* Basic Info */}
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Recipe Name *</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Recipe Name *</label>
                     <input
                       type="text"
                       value={recipeFormData.name}
@@ -4419,7 +4636,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Description</label>
                     <textarea
                       value={recipeFormData.description}
                       onChange={(e) => setRecipeFormData((prev) => ({ ...prev, description: e.target.value }))}
@@ -4430,7 +4647,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Category</label>
                     <select
                       value={recipeFormData.category}
                       onChange={(e) => setRecipeFormData((prev) => ({ ...prev, category: e.target.value }))}
@@ -4446,7 +4663,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Cuisine</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Cuisine</label>
                     <input
                       type="text"
                       value={recipeFormData.cuisine}
@@ -4458,46 +4675,46 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 </div>
 
                 {/* Time & Servings */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Prep Time (min)</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Prep (min)</label>
                     <input
                       type="number"
                       value={recipeFormData.prepTimeMinutes || ""}
                       onChange={(e) => setRecipeFormData((prev) => ({ ...prev, prepTimeMinutes: parseInt(e.target.value) || 0 }))}
                       placeholder="15"
                       min="0"
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-[13px] sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Cook Time (min)</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Cook (min)</label>
                     <input
                       type="number"
                       value={recipeFormData.cookTimeMinutes || ""}
                       onChange={(e) => setRecipeFormData((prev) => ({ ...prev, cookTimeMinutes: parseInt(e.target.value) || 0 }))}
                       placeholder="30"
                       min="0"
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-[13px] sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Servings</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Servings</label>
                     <input
                       type="number"
                       value={recipeFormData.servings}
                       onChange={(e) => setRecipeFormData((prev) => ({ ...prev, servings: parseInt(e.target.value) || 1 }))}
                       min="1"
                       max="50"
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-[13px] sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Difficulty</label>
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Difficulty</label>
                     <select
                       value={recipeFormData.difficulty}
                       onChange={(e) => setRecipeFormData((prev) => ({ ...prev, difficulty: e.target.value }))}
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-[13px] sm:text-sm"
                     >
                       <option value="easy">Easy</option>
                       <option value="medium">Medium</option>
@@ -4508,8 +4725,8 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
 
                 {/* Nutrition per Serving */}
                 <div>
-                  <h4 className="text-sm font-medium text-slate-300 mb-3">Nutrition per Serving</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                  <h4 className="text-[13px] sm:text-sm font-medium text-slate-300 mb-3">Nutrition per Serving</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-4">
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Calories</label>
                       <input
@@ -4825,13 +5042,13 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl p-6"
+              className="w-full max-w-sm bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl p-5 sm:p-6"
             >
-              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-red-400" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
               </div>
-              <h3 className="text-xl font-bold text-white text-center mb-2">Delete Item?</h3>
-              <p className="text-slate-400 text-center text-sm mb-6">
+              <h3 className="text-[15px] sm:text-base font-bold text-white text-center mb-2">Delete Item?</h3>
+              <p className="text-slate-400 text-center text-[13px] sm:text-sm mb-4 sm:mb-6">
                 This action cannot be undone.
               </p>
               <div className="flex gap-3">

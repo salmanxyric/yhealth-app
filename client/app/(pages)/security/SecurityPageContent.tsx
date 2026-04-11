@@ -155,7 +155,7 @@ export default function SecurityPageContent() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={heroInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5, delay: 0.15 }}>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold leading-tight">
                 Security at
-                <span className="block gradient-text-animated">YHealth</span>
+                <span className="block gradient-text-animated">Balencia</span>
               </h1>
             </motion.div>
 
@@ -209,7 +209,7 @@ export default function SecurityPageContent() {
         </div>
 
         <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto flex gap-10">
+          <div className="max-w-8xl mx-auto flex gap-10">
             {/* TOC */}
             <motion.aside initial={{ opacity: 0, x: -30 }} animate={contentInView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.5 }} className="hidden lg:block w-64 flex-shrink-0">
               <div className="sticky top-24 glass-card rounded-2xl p-5">
@@ -236,7 +236,7 @@ export default function SecurityPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      At YHealth, security is not an afterthought—it&apos;s built into every layer of our platform. As a health and wellness platform handling sensitive personal and health data, we maintain enterprise-grade security controls that meet and exceed industry standards.
+                      At Balencia, security is not an afterthought—it&apos;s built into every layer of our platform. As a health and wellness platform handling sensitive personal and health data, we maintain enterprise-grade security controls that meet and exceed industry standards.
                     </p>
                     <p className="text-muted-foreground leading-relaxed">
                       Our security program is led by a dedicated security team and follows the defense-in-depth principle, implementing multiple layers of security controls across infrastructure, application, data, and operational domains.
@@ -245,7 +245,7 @@ export default function SecurityPageContent() {
                       <Shield className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
                       <p className="text-sm text-muted-foreground">
                         <span className="text-foreground font-medium">Security-First Culture: </span>
-                        Every engineer at YHealth receives security training and follows secure development practices. Security reviews are mandatory for all code changes.
+                        Every engineer at Balencia receives security training and follows secure development practices. Security reviews are mandatory for all code changes.
                       </p>
                     </div>
                   </div>
@@ -259,7 +259,7 @@ export default function SecurityPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      YHealth is hosted on enterprise-grade cloud infrastructure with multiple layers of physical and logical security:
+                      Balencia is hosted on enterprise-grade cloud infrastructure with multiple layers of physical and logical security:
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {[
@@ -490,13 +490,13 @@ export default function SecurityPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      We value the security research community and welcome responsible disclosure of vulnerabilities. Our bug bounty program rewards researchers who help us keep YHealth secure.
+                      We value the security research community and welcome responsible disclosure of vulnerabilities. Our bug bounty program rewards researchers who help us keep Balencia secure.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-pink-500/5 border border-pink-500/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">How to Report</h4>
                         <ul className="space-y-2">
-                          <li className="flex items-start gap-2"><ChevronRight className="w-3.5 h-3.5 text-pink-400 flex-shrink-0 mt-0.5" /><span className="text-xs text-muted-foreground">Email: security@yhealth.app</span></li>
+                          <li className="flex items-start gap-2"><ChevronRight className="w-3.5 h-3.5 text-pink-400 flex-shrink-0 mt-0.5" /><span className="text-xs text-muted-foreground">Email: security@balencia.app</span></li>
                           <li className="flex items-start gap-2"><ChevronRight className="w-3.5 h-3.5 text-pink-400 flex-shrink-0 mt-0.5" /><span className="text-xs text-muted-foreground">PGP key available for encrypted submissions</span></li>
                           <li className="flex items-start gap-2"><ChevronRight className="w-3.5 h-3.5 text-pink-400 flex-shrink-0 mt-0.5" /><span className="text-xs text-muted-foreground">Include detailed reproduction steps</span></li>
                           <li className="flex items-start gap-2"><ChevronRight className="w-3.5 h-3.5 text-pink-400 flex-shrink-0 mt-0.5" /><span className="text-xs text-muted-foreground">Allow 48 hours for initial response</span></li>
@@ -526,9 +526,9 @@ export default function SecurityPageContent() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">Security Team</h4>
-                        <p className="text-xs text-muted-foreground mb-1">General: security@yhealth.app</p>
-                        <p className="text-xs text-muted-foreground mb-1">Vulnerabilities: security@yhealth.app</p>
-                        <p className="text-xs text-muted-foreground">Compliance: compliance@yhealth.app</p>
+                        <p className="text-xs text-muted-foreground mb-1">General: security@balencia.app</p>
+                        <p className="text-xs text-muted-foreground mb-1">Vulnerabilities: security@balencia.app</p>
+                        <p className="text-xs text-muted-foreground">Compliance: compliance@balencia.app</p>
                       </div>
                       <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">Response Times</h4>
@@ -566,7 +566,7 @@ export default function SecurityPageContent() {
                 <h3 className="text-2xl font-bold mb-2">Found a Security Issue?</h3>
                 <p className="text-muted-foreground mb-6 max-w-lg mx-auto">We appreciate responsible disclosure and will reward valid vulnerability reports through our bug bounty program.</p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <a href="mailto:security@yhealth.app" className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-gradient-to-r from-primary to-purple-500 text-white font-semibold hover:opacity-90 transition-opacity">
+                  <a href="mailto:security@balencia.app" className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-gradient-to-r from-primary to-purple-500 text-white font-semibold hover:opacity-90 transition-opacity">
                     Report Vulnerability <ArrowRight className="w-4 h-4" />
                   </a>
                   <Link href="/contact" className="inline-flex items-center gap-2 px-8 py-3 rounded-xl glass border border-white/10 text-foreground font-semibold hover:border-primary/30 transition-all">

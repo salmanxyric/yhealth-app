@@ -223,6 +223,17 @@ class EmbeddingQueueService {
   }
 
   /**
+   * Check if the async queue is available (Redis configured and queue initialized).
+   * Used by chat services to decide between queued vs fire-and-forget embedding.
+   */
+  isAvailable(): boolean {
+    if (!this.isInitialized) {
+      this.initialize();
+    }
+    return !!this.queue;
+  }
+
+  /**
    * Get queue statistics
    */
   async getQueueStats(): Promise<QueueStats> {

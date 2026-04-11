@@ -345,13 +345,17 @@ export const completeActivity = asyncHandler(async (req: AuthenticatedRequest, r
 
   if (!activity) throw ApiError.notFound('Activity not found in plan');
 
-  const targetDate = scheduledDate ? new Date(scheduledDate) : new Date();
-  targetDate.setHours(0, 0, 0, 0);
+  // Use YYYY-MM-DD string directly for DATE column comparison (avoids timezone shift)
+  const targetDateStr = scheduledDate
+    ? (typeof scheduledDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)
+        ? scheduledDate
+        : new Date(scheduledDate).toISOString().split('T')[0])
+    : new Date().toISOString().split('T')[0];
 
   // Upsert activity log as completed
   const existingLogResult = await query<ActivityLogRow>(
-    'SELECT * FROM activity_logs WHERE plan_id = $1 AND activity_id = $2 AND scheduled_date = $3',
-    [planId, activityId, targetDate]
+    'SELECT * FROM activity_logs WHERE plan_id = $1 AND activity_id = $2 AND scheduled_date = $3::date',
+    [planId, activityId, targetDateStr]
   );
 
   let activityLog: ActivityLogRow;
@@ -381,7 +385,7 @@ export const completeActivity = asyncHandler(async (req: AuthenticatedRequest, r
         userId,
         planId,
         activityId,
-        targetDate,
+        targetDateStr,
         completedAt,
         activity.targetValue || null,
         notes || null,
@@ -514,8 +518,12 @@ export const uncompleteActivity = asyncHandler(async (req: AuthenticatedRequest,
   if (planResult.rows.length === 0) throw ApiError.notFound('Plan not found');
 
   const plan = planResult.rows[0];
-  const targetDate = scheduledDate ? new Date(scheduledDate) : new Date();
-  targetDate.setHours(0, 0, 0, 0);
+  // Use YYYY-MM-DD string directly for DATE column comparison (avoids timezone shift)
+  const targetDateStr = scheduledDate
+    ? (typeof scheduledDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)
+        ? scheduledDate
+        : new Date(scheduledDate).toISOString().split('T')[0])
+    : new Date().toISOString().split('T')[0];
 
   // Update activity log to pending
   const updateResult = await query<ActivityLogRow>(
@@ -523,9 +531,9 @@ export const uncompleteActivity = asyncHandler(async (req: AuthenticatedRequest,
       status = 'pending',
       completed_at = NULL,
       updated_at = CURRENT_TIMESTAMP
-    WHERE plan_id = $1 AND activity_id = $2 AND scheduled_date = $3
+    WHERE plan_id = $1 AND activity_id = $2 AND scheduled_date = $3::date
     RETURNING *`,
-    [planId, activityId, targetDate]
+    [planId, activityId, targetDateStr]
   );
 
   if (updateResult.rows.length === 0) {

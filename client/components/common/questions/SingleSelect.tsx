@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ChevronRight, Check } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SingleSelectProps } from "./types";
 
@@ -164,7 +164,7 @@ function ListOption({
   );
 }
 
-// Grid layout option
+// Grid layout option — horizontal card (icon left, text right)
 function GridOption({
   id,
   option,
@@ -187,44 +187,39 @@ function GridOption({
       onClick={() => !disabled && onChange(option.value)}
       disabled={disabled}
       className={cn(
-        "flex flex-col items-center gap-2 p-4 rounded-xl",
-        "transition-all duration-200 border text-center",
+        "relative flex items-center gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl sm:rounded-2xl",
+        "transition-all duration-200 border text-left",
         isSelected
-          ? "bg-blue-500/20 border-blue-500/50"
-          : "bg-white/5 border-white/10 hover:bg-white/10",
+          ? "border-teal-500/60 bg-gradient-to-br from-teal-500/20 via-emerald-500/10 to-transparent"
+          : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20",
         disabled && "opacity-50 cursor-not-allowed"
       )}
-      whileHover={!disabled ? { scale: 1.02 } : {}}
+      whileHover={!disabled ? { y: -2 } : {}}
       whileTap={!disabled ? { scale: 0.98 } : {}}
     >
       {option.icon && (
         <div className={cn(
-          "p-2 rounded-lg",
-          isSelected ? "bg-blue-500/20 text-blue-400" : "bg-white/10 text-slate-400"
+          "shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center",
+          isSelected ? "bg-teal-500/20 text-teal-400" : "bg-white/10 text-slate-400"
         )}>
           {option.icon}
         </div>
       )}
-      <span
-        className={cn(
-          "font-medium text-sm",
-          isSelected ? "text-white" : "text-slate-300"
-        )}
-      >
-        {option.label}
-      </span>
-      {option.description && (
-        <span className="text-xs text-slate-500">{option.description}</span>
-      )}
-      {isSelected && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="absolute top-2 right-2 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center"
+      <div className="min-w-0">
+        <span
+          className={cn(
+            "font-medium text-sm sm:text-base block",
+            isSelected ? "text-white" : "text-slate-200"
+          )}
         >
-          <Check className="w-3 h-3 text-white" />
-        </motion.div>
-      )}
+          {option.label}
+        </span>
+        {option.description && (
+          <span className="text-xs sm:text-sm text-slate-500 mt-0.5 block">
+            {option.description}
+          </span>
+        )}
+      </div>
     </motion.button>
   );
 }

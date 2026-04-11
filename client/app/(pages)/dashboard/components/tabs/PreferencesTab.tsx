@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Sliders,
   Bell,
@@ -211,11 +211,6 @@ export function PreferencesTab() {
       if (response.success && response.data?.preferences) {
         const localPrefs = apiToLocal(response.data.preferences);
         setPreferences(localPrefs);
-        
-        // Sync language with VoiceAssistantContext
-        if (localPrefs.display.language) {
-          setSelectedLanguage(localPrefs.display.language);
-        }
       }
     } catch (err) {
       console.error("Failed to fetch preferences:", err);
@@ -223,22 +218,25 @@ export function PreferencesTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [setSelectedLanguage]);
+  }, []);
 
+  // Fetch once on mount
   useEffect(() => {
     fetchPreferences();
   }, [fetchPreferences]);
 
-  // Sync language from context when preferences load
+  // Sync language from preferences → context (one-way, only on preferences load)
+  const langSyncedRef = useRef(false);
   useEffect(() => {
-    if (preferences.display.language && preferences.display.language !== selectedLanguage) {
+    if (!langSyncedRef.current && preferences.display.language) {
       setSelectedLanguage(preferences.display.language);
+      langSyncedRef.current = true;
     }
-  }, [preferences.display.language, selectedLanguage, setSelectedLanguage]);
+  }, [preferences.display.language, setSelectedLanguage]);
 
-  // Sync language to preferences when context changes
+  // Sync language from context → preferences when user changes it externally
   useEffect(() => {
-    if (selectedLanguage && preferences.display.language !== selectedLanguage) {
+    if (langSyncedRef.current && selectedLanguage && preferences.display.language !== selectedLanguage) {
       setPreferences(prev => ({
         ...prev,
         display: { ...prev.display, language: selectedLanguage },
@@ -308,8 +306,102 @@ export function PreferencesTab() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-pink-500 animate-spin" />
+      <div className="space-y-6 animate-pulse">
+        {/* Header skeleton */}
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h-6 w-40 bg-white/10 rounded-lg" />
+            <div className="h-4 w-56 bg-white/5 rounded-lg mt-2" />
+          </div>
+          <div className="h-10 w-32 bg-white/10 rounded-xl" />
+        </div>
+
+        {/* Cards grid skeleton */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Coaching Style card */}
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-5 h-5 bg-white/10 rounded" />
+              <div className="h-5 w-28 bg-white/10 rounded-lg" />
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                  <div className="h-4 w-24 bg-white/10 rounded" />
+                  <div className="h-3 w-44 bg-white/5 rounded mt-2" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Coaching Intensity card */}
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-5 h-5 bg-white/10 rounded" />
+              <div className="h-5 w-36 bg-white/10 rounded-lg" />
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                  <div className="h-4 w-20 bg-white/10 rounded" />
+                  <div className="h-3 w-40 bg-white/5 rounded mt-2" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Communication Channel card */}
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-5 h-5 bg-white/10 rounded" />
+              <div className="h-5 w-44 bg-white/10 rounded-lg" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                  <div className="w-4 h-4 bg-white/10 rounded mx-auto mb-2" />
+                  <div className="h-3 w-12 bg-white/10 rounded mx-auto" />
+                </div>
+              ))}
+            </div>
+            <div className="mt-4">
+              <div className="h-3 w-28 bg-white/5 rounded mb-2" />
+              <div className="flex gap-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex-1 h-10 bg-white/5 rounded-lg" />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Notifications card */}
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-5 h-5 bg-white/10 rounded" />
+              <div className="h-5 w-28 bg-white/10 rounded-lg" />
+            </div>
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                  <div>
+                    <div className="h-4 w-32 bg-white/10 rounded" />
+                    <div className="h-3 w-48 bg-white/5 rounded mt-1" />
+                  </div>
+                  <div className="w-12 h-6 bg-white/10 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Display & Language card */}
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-5 h-5 bg-white/10 rounded" />
+              <div className="h-5 w-36 bg-white/10 rounded-lg" />
+            </div>
+            <div className="h-12 w-full bg-white/5 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }

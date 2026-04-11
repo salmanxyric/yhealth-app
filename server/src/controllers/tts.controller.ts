@@ -10,7 +10,7 @@ import type { AuthenticatedRequest } from '../types/index.js';
 /**
  * TTS Controller
  * Handles text-to-speech with fallback chain:
- * ElevenLabs → Google Cloud TTS (Chirp 3 HD) → client browser TTS
+ * Google Cloud TTS (Chirp 3 HD) → ElevenLabs → client browser TTS
  */
 class TTSController extends BaseController {
   constructor() {
@@ -34,7 +34,31 @@ class TTSController extends BaseController {
       throw ApiError.badRequest('Text is required and cannot be empty');
     }
 
-    // Try ElevenLabs first
+    // Try Google Cloud TTS first (Chirp 3 HD)
+    if (googleCloudTTSService.isAvailable()) {
+      try {
+        const audioBuffer = await googleCloudTTSService.textToSpeech(text, {
+          voiceGender: voiceGender || 'female',
+          languageCode: languageCode || 'en-US',
+        });
+
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Disposition', 'inline; filename="speech.mp3"');
+        res.setHeader('Content-Length', audioBuffer.length.toString());
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.setHeader('X-TTS-Provider', 'google-cloud');
+
+        res.send(audioBuffer);
+        return;
+      } catch (error) {
+        logger.warn('[TTS] Google Cloud TTS failed, falling back to ElevenLabs', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Fall through to ElevenLabs
+      }
+    }
+
+    // Fallback: ElevenLabs
     if (elevenlabsService.isAvailable()) {
       try {
         if (stream) {
@@ -81,31 +105,7 @@ class TTSController extends BaseController {
           return;
         }
       } catch (error) {
-        logger.warn('[TTS] ElevenLabs failed, falling back to Google Cloud TTS', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Fall through to Google Cloud TTS
-      }
-    }
-
-    // Fallback: Google Cloud TTS (Chirp 3 HD)
-    if (googleCloudTTSService.isAvailable()) {
-      try {
-        const audioBuffer = await googleCloudTTSService.textToSpeech(text, {
-          voiceGender: voiceGender || 'female',
-          languageCode: languageCode || 'en-US',
-        });
-
-        res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Content-Disposition', 'inline; filename="speech.mp3"');
-        res.setHeader('Content-Length', audioBuffer.length.toString());
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        res.setHeader('X-TTS-Provider', 'google-cloud');
-
-        res.send(audioBuffer);
-        return;
-      } catch (error) {
-        logger.warn('[TTS] Google Cloud TTS failed', {
+        logger.warn('[TTS] ElevenLabs failed', {
           error: error instanceof Error ? error.message : String(error),
         });
         // Fall through to error
@@ -128,15 +128,15 @@ class TTSController extends BaseController {
     const anyAvailable = elevenLabsAvailable || googleCloudAvailable;
 
     const providers: Array<{ name: string; available: boolean }> = [
-      { name: 'elevenlabs', available: elevenLabsAvailable },
       { name: 'google-cloud', available: googleCloudAvailable },
+      { name: 'elevenlabs', available: elevenLabsAvailable },
       { name: 'browser', available: true },
     ];
 
     // Determine active provider (first available in chain)
     let activeProvider = 'browser';
-    if (elevenLabsAvailable) activeProvider = 'elevenlabs';
-    else if (googleCloudAvailable) activeProvider = 'google-cloud';
+    if (googleCloudAvailable) activeProvider = 'google-cloud';
+    else if (elevenLabsAvailable) activeProvider = 'elevenlabs';
 
     this.success(res, {
       available: anyAvailable,

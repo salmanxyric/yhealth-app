@@ -16,6 +16,7 @@ import { reminderSchedulerService } from '../services/reminder-scheduler.service
 import { embeddingQueueService } from '../services/embedding-queue.service.js';
 import { proactiveMessagingService } from '../services/proactive-messaging.service.js';
 import { JobPriorities } from '../config/queue.config.js';
+import { cache } from '../services/cache.service.js';
 
 const router = Router();
 
@@ -301,10 +302,10 @@ Create a balanced, practical, and sustainable plan.`;
           planData.description || description,
           goalCategory,
           planData.dailyCalories || dailyCalories || null,
-          planData.proteinGrams || null,
-          planData.carbsGrams || null,
-          planData.fatGrams || null,
-          planData.fiberGrams || null,
+          planData.proteinGrams ?? null,
+          planData.carbsGrams ?? null,
+          planData.fatGrams ?? null,
+          planData.fiberGrams ?? null,
           JSON.stringify(dietaryPreferences),
           JSON.stringify(allergies),
           JSON.stringify([]),
@@ -363,38 +364,23 @@ router.post(
       throw ApiError.serviceUnavailable('AI generation is not available. No AI providers configured.');
     }
 
-    const systemPrompt = `You are a nutrition expert. Create a meal based on the user's description. Always respond with valid JSON.
+    const systemPrompt = `Nutrition expert. Return ONLY valid JSON.`;
 
-Respond ONLY with a JSON object in this exact format (no markdown, no code blocks):
-{
-  "mealName": "Meal name",
-  "description": "Brief description",
-  "calories": 500,
-  "proteinGrams": 30,
-  "carbsGrams": 50,
-  "fatGrams": 15,
-  "fiberGrams": 8,
-  "foods": [
-    {"name": "Food item", "calories": 200, "protein": 15, "carbs": 20, "fat": 5, "portion": "1 cup"}
-  ],
-  "preparationTips": "Quick tips for preparation"
-}
+    const constraints = [
+      targetCalories ? `~${targetCalories} cal` : '',
+      dietaryPreferences.length > 0 ? dietaryPreferences.join(', ') : '',
+    ].filter(Boolean).join('. ');
 
-Consider:
-- Meal type: ${mealType}
-- Target calories: ${targetCalories || 'appropriate for meal type'}
-- Dietary preferences: ${dietaryPreferences.length > 0 ? dietaryPreferences.join(', ') : 'none specified'}
-
-Create a balanced, nutritious meal.`;
-
-    const userPrompt = `Create a ${mealType} meal for: "${description}"`;
+    const userPrompt = `${mealType}: "${description}"${constraints ? ` (${constraints})` : ''}
+JSON: {"mealName":"","description":"","calories":0,"proteinGrams":0,"carbsGrams":0,"fatGrams":0,"fiberGrams":0,"foods":[{"name":"","calories":0,"protein":0,"carbs":0,"fat":0,"portion":""}],"preparationTips":""}`;
 
     try {
       const response = await aiProviderService.generateCompletion({
         systemPrompt,
         userPrompt,
-        maxTokens: 1000,
-        temperature: 0.7,
+        maxTokens: 1024,
+        temperature: 0.4,
+        jsonMode: true,
       });
 
       // Parse AI response
@@ -416,10 +402,34 @@ Create a balanced, nutritious meal.`;
         if (jsonMatch) {
           jsonStr = jsonMatch[1].trim();
         }
+        // Extract JSON object if surrounded by extra text
+        const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          jsonStr = objMatch[0];
+        }
         mealData = JSON.parse(jsonStr);
-      } catch {
-        logger.warn('[Diet Plans] Failed to parse AI meal response', { userId, response: response.content });
-        throw ApiError.internal('Failed to parse AI response');
+      } catch (parseErr) {
+        // Attempt to salvage truncated JSON by closing open structures
+        try {
+          let salvaged = response.content.trim();
+          const objMatch2 = salvaged.match(/\{[\s\S]*/);
+          if (objMatch2) {
+            salvaged = objMatch2[0];
+            // Remove trailing incomplete value (cut-off string/number)
+            salvaged = salvaged.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"{}[\]]*$/, '');
+            // Close any open arrays and objects
+            const openBraces = (salvaged.match(/\{/g) || []).length - (salvaged.match(/\}/g) || []).length;
+            const openBrackets = (salvaged.match(/\[/g) || []).length - (salvaged.match(/\]/g) || []).length;
+            salvaged += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+            mealData = JSON.parse(salvaged);
+            logger.info('[Diet Plans] Salvaged truncated AI meal response', { userId });
+          } else {
+            throw parseErr;
+          }
+        } catch {
+          logger.warn('[Diet Plans] Failed to parse AI meal response', { userId, response: response.content });
+          throw ApiError.internal('Failed to generate meal. Please try again.');
+        }
       }
 
       // Return the generated meal data WITHOUT saving to database
@@ -434,11 +444,11 @@ Create a balanced, nutritious meal.`;
             mealType,
             mealName: mealData.mealName || 'AI Generated Meal',
             description: mealData.description || description,
-            calories: mealData.calories || null,
-            proteinGrams: mealData.proteinGrams || null,
-            carbsGrams: mealData.carbsGrams || null,
-            fatGrams: mealData.fatGrams || null,
-            fiberGrams: mealData.fiberGrams || null,
+            calories: mealData.calories ?? null,
+            proteinGrams: mealData.proteinGrams ?? null,
+            carbsGrams: mealData.carbsGrams ?? null,
+            fatGrams: mealData.fatGrams ?? null,
+            fiberGrams: mealData.fiberGrams ?? null,
             foods: mealData.foods || [],
           },
           preparationTips: mealData.preparationTips || '',
@@ -472,51 +482,23 @@ router.post(
       throw ApiError.serviceUnavailable('AI generation is not available. No AI providers configured.');
     }
 
-    const systemPrompt = `You are a professional chef and nutritionist. Create a detailed recipe based on the user's description. Always respond with valid JSON.
+    const systemPrompt = `Chef & nutritionist. Return ONLY valid JSON.`;
 
-Respond ONLY with a JSON object in this exact format (no markdown, no code blocks):
-{
-  "name": "Recipe name",
-  "description": "Brief description of the dish",
-  "category": "${category}",
-  "cuisine": "Italian/Mexican/Asian/etc",
-  "servings": ${servings},
-  "caloriesPerServing": 350,
-  "proteinGrams": 25,
-  "carbsGrams": 30,
-  "fatGrams": 15,
-  "fiberGrams": 5,
-  "prepTimeMinutes": 15,
-  "cookTimeMinutes": 30,
-  "difficulty": "${difficulty}",
-  "ingredients": [
-    {"name": "Ingredient", "quantity": "2", "unit": "cups", "notes": "optional notes"}
-  ],
-  "instructions": [
-    {"step": 1, "description": "Step description"},
-    {"step": 2, "description": "Step description"}
-  ],
-  "tags": ["healthy", "quick", "high-protein"],
-  "dietaryFlags": ["vegetarian", "gluten-free"],
-  "tips": "Chef's tips for best results"
-}
+    const recipeConstraints = [
+      `${category}, ${difficulty}, ${servings} servings`,
+      dietaryPreferences.length > 0 ? dietaryPreferences.join(', ') : '',
+    ].filter(Boolean).join('. ');
 
-Consider:
-- Category: ${category}
-- Difficulty: ${difficulty}
-- Servings: ${servings}
-- Dietary preferences: ${dietaryPreferences.length > 0 ? dietaryPreferences.join(', ') : 'none specified'}
-
-Create a delicious, practical recipe with clear instructions.`;
-
-    const userPrompt = `Create a recipe for: "${description}"`;
+    const userPrompt = `Recipe: "${description}" (${recipeConstraints})
+JSON: {"name":"","description":"","category":"${category}","cuisine":"","servings":${servings},"caloriesPerServing":0,"proteinGrams":0,"carbsGrams":0,"fatGrams":0,"fiberGrams":0,"prepTimeMinutes":0,"cookTimeMinutes":0,"difficulty":"${difficulty}","ingredients":[{"name":"","quantity":"","unit":"","notes":""}],"instructions":[{"step":1,"description":""}],"tags":[],"dietaryFlags":[],"tips":""}`;
 
     try {
       const response = await aiProviderService.generateCompletion({
         systemPrompt,
         userPrompt,
-        maxTokens: 2000,
-        temperature: 0.7,
+        maxTokens: 1500,
+        temperature: 0.5,
+        jsonMode: true,
       });
 
       // Parse AI response
@@ -572,11 +554,11 @@ Create a delicious, practical recipe with clear instructions.`;
           recipeData.category || category,
           recipeData.cuisine || null,
           recipeData.servings || servings,
-          recipeData.caloriesPerServing || null,
-          recipeData.proteinGrams || null,
-          recipeData.carbsGrams || null,
-          recipeData.fatGrams || null,
-          recipeData.fiberGrams || null,
+          recipeData.caloriesPerServing ?? null,
+          recipeData.proteinGrams ?? null,
+          recipeData.carbsGrams ?? null,
+          recipeData.fatGrams ?? null,
+          recipeData.fiberGrams ?? null,
           JSON.stringify(recipeData.ingredients || []),
           JSON.stringify(recipeData.instructions || []),
           recipeData.prepTimeMinutes || null,
@@ -702,10 +684,10 @@ router.post(
         description || null,
         goalCategory,
         dailyCalories || null,
-        proteinGrams || null,
-        carbsGrams || null,
-        fatGrams || null,
-        fiberGrams || null,
+        proteinGrams ?? null,
+        carbsGrams ?? null,
+        fatGrams ?? null,
+        fiberGrams ?? null,
         JSON.stringify(dietaryPreferences),
         JSON.stringify(allergies),
         JSON.stringify(excludedFoods),
@@ -1067,18 +1049,24 @@ router.get(
     const userId = req.user!.userId;
     const { date, startDate, endDate } = req.query;
 
+    // Get user timezone for accurate date filtering
+    const userTz = req.query.tz as string || 'UTC';
+    // Sanitize timezone string to prevent SQL injection (allow only valid tz format)
+    const safeTz = /^[A-Za-z_/+-]+$/.test(userTz) ? userTz : 'UTC';
+
     let sqlQuery = `SELECT * FROM meal_logs WHERE user_id = $1`;
     const params: (string | number | boolean | null | Date | object)[] = [userId];
 
     if (date) {
-      sqlQuery += ` AND DATE(eaten_at) = $2`;
+      // Use timezone-aware date comparison: convert eaten_at to user's timezone before extracting DATE
+      sqlQuery += ` AND DATE(eaten_at AT TIME ZONE 'UTC' AT TIME ZONE '${safeTz}') = $2`;
       params.push(date);
     } else if (startDate && endDate) {
-      sqlQuery += ` AND DATE(eaten_at) >= $2 AND DATE(eaten_at) <= $3`;
+      sqlQuery += ` AND DATE(eaten_at AT TIME ZONE 'UTC' AT TIME ZONE '${safeTz}') >= $2 AND DATE(eaten_at AT TIME ZONE 'UTC' AT TIME ZONE '${safeTz}') <= $3`;
       params.push(startDate, endDate);
     } else {
-      // Default to today
-      sqlQuery += ` AND DATE(eaten_at) = CURRENT_DATE`;
+      // Default to today in user's timezone
+      sqlQuery += ` AND DATE(eaten_at AT TIME ZONE 'UTC' AT TIME ZONE '${safeTz}') = CURRENT_DATE`;
     }
 
     sqlQuery += ` ORDER BY eaten_at ASC`;
@@ -1137,6 +1125,32 @@ router.post(
       throw ApiError.badRequest('Meal type is required');
     }
 
+    // Deduplication: check for same meal name within ±5 minutes of eaten_at
+    const targetTime = eatenAt ? new Date(eatenAt) : new Date();
+    if (mealName) {
+      const existing = await dbQuery<{ id: string }>(
+        `SELECT id FROM meal_logs
+         WHERE user_id = $1
+           AND LOWER(TRIM(meal_name)) = LOWER(TRIM($2))
+           AND eaten_at BETWEEN ($3::timestamp - INTERVAL '5 minutes') AND ($3::timestamp + INTERVAL '5 minutes')
+         LIMIT 1`,
+        [userId, mealName, targetTime]
+      );
+      if (existing.rows.length > 0) {
+        logger.info('[Diet Plans] Duplicate meal blocked', { userId, mealName, eatenAt: targetTime.toISOString() });
+        // Return the existing meal instead of creating a duplicate
+        const existingMeal = await dbQuery<MealLogRow>(
+          `SELECT * FROM meal_logs WHERE id = $1`, [existing.rows[0].id]
+        );
+        res.status(200).json({
+          success: true,
+          data: { meal: transformMealLog(existingMeal.rows[0]) },
+          duplicate: true,
+        });
+        return;
+      }
+    }
+
     const result = await dbQuery<MealLogRow>(
       `INSERT INTO meal_logs (
         user_id, diet_plan_id, meal_type, meal_name, description,
@@ -1150,11 +1164,11 @@ router.post(
         mealType,
         mealName || null,
         description || null,
-        calories || null,
-        proteinGrams || null,
-        carbsGrams || null,
-        fatGrams || null,
-        fiberGrams || null,
+        calories ?? null,
+        proteinGrams ?? null,
+        carbsGrams ?? null,
+        fatGrams ?? null,
+        fiberGrams ?? null,
         JSON.stringify(foods),
         photoUrl || null,
         // Parse eatenAt - expect ISO string with timezone (from toISOString())
@@ -1170,6 +1184,9 @@ router.post(
     const meal = result.rows[0];
     logger.info('[Diet Plans] Logged meal', { userId, mealId: meal.id, mealType });
 
+    // Invalidate dashboard health metrics cache so calories/nutrition update immediately
+    cache.deleteByPattern(`^enhanced-health-metrics:${userId}:`);
+
     // Enqueue embedding for meal log (async, non-blocking)
     await embeddingQueueService.enqueueEmbedding({
       userId,
@@ -1183,6 +1200,11 @@ router.post(
     proactiveMessagingService.checkAndSendMealAlignmentFeedback(userId, {
       mealType, mealName, calories, proteinGrams, carbsGrams, fatGrams, fiberGrams, foods,
     }).catch(err => logger.warn('[Diet Plans] Meal alignment check failed', { userId, error: (err as Error).message }));
+
+    // Record for unified streak system
+    import('../services/streak.service.js').then(({ streakService }) =>
+      streakService.recordActivity(userId, 'meal_log', meal.id)
+    ).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -1267,6 +1289,8 @@ router.patch(
 
     logger.info('[Diet Plans] Updated meal log', { userId, mealId: id });
 
+    cache.deleteByPattern(`^enhanced-health-metrics:${userId}:`);
+
     res.json({
       success: true,
       data: { meal: transformMealLog(result.rows[0]) },
@@ -1303,6 +1327,8 @@ router.delete(
     }
 
     logger.info('[Diet Plans] Deleted meal log', { userId, mealId: id });
+
+    cache.deleteByPattern(`^enhanced-health-metrics:${userId}:`);
 
     res.json({
       success: true,
@@ -1525,11 +1551,11 @@ router.post(
         category,
         cuisine || null,
         servings,
-        caloriesPerServing || null,
-        proteinGrams || null,
-        carbsGrams || null,
-        fatGrams || null,
-        fiberGrams || null,
+        caloriesPerServing ?? null,
+        proteinGrams ?? null,
+        carbsGrams ?? null,
+        fatGrams ?? null,
+        fiberGrams ?? null,
         JSON.stringify(ingredients),
         JSON.stringify(instructions),
         prepTimeMinutes || null,

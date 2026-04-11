@@ -147,7 +147,7 @@ export function AdminSidebar() {
             animate={{ opacity: 1 }}
             className="flex items-center gap-2"
           >
-            <Image src="/logo1.png" alt="yHealth" width={32} height={32} className="object-contain" />
+            <Image src="/logo1.png" alt="Balencia" width={32} height={32} className="object-contain" />
             <div>
               <h2 className="text-sm font-semibold">Admin Panel</h2>
               <p className="text-xs text-muted-foreground">Control Center</p>
@@ -160,7 +160,7 @@ export function AdminSidebar() {
             animate={{ opacity: 1 }}
             className="mx-auto"
           >
-            <Image src="/logo1.png" alt="yHealth" width={32} height={32} className="object-contain" />
+            <Image src="/logo1.png" alt="Balencia" width={32} height={32} className="object-contain" />
           </motion.div>
         )}
         <Button
@@ -239,7 +239,7 @@ export function AdminSidebar() {
         {!isCollapsed ? (
           <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={user?.avatarUrl || undefined} />
+              <AvatarImage src={user?.avatarUrl || '/avatar.jpg'} />
               <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-sky-500 text-white">
                 {getInitials()}
               </AvatarFallback>
@@ -257,7 +257,7 @@ export function AdminSidebar() {
               <TooltipTrigger asChild>
                 <div className="flex justify-center">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={user?.avatarUrl || undefined} />
+                    <AvatarImage src={user?.avatarUrl || '/avatar.jpg'} />
                     <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-sky-500 text-white">
                       {getInitials()}
                     </AvatarFallback>

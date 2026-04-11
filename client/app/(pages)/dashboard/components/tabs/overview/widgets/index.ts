@@ -17,3 +17,8 @@ export { HeartRateWidget } from './HeartRateWidget';
 export { AnalyticsWidget } from './AnalyticsWidget';
 export { SleepWidget } from './SleepWidget';
 
+// Overview redesign widgets
+export { ExplorerCard } from './ExplorerCard';
+export { HeartRateCard } from './HeartRateCard';
+export { HealthScoreCard } from './HealthScoreCard';
+export { WaterDetailCard } from './WaterDetailCard';

@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return <Fallback error={this.state.error} resetError={this.reset} />;
     }
 
-    return this.props.children;
+    return <>{this.props.children}</>;
   }
 }
 

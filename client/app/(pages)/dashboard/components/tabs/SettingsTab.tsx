@@ -312,7 +312,7 @@ export function SettingsTab() {
                 <div>
                   <p className="font-medium text-white">Replay Product Tour</p>
                   <p className="text-sm text-slate-400">
-                    Take a guided walkthrough of yHealth features
+                    Take a guided walkthrough of Balencia features
                   </p>
                 </div>
                 <Sparkles className="w-5 h-5 text-cyan-400" />

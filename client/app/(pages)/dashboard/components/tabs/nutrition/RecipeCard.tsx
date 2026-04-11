@@ -103,7 +103,7 @@ export function RecipeCard({
         )}
         {recipe.difficulty && (
           <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-sm">
-            <span className={`text-[10px] font-medium ${
+            <span className={`text-[13px] font-medium ${
               recipe.difficulty === 'easy' ? 'text-green-400' :
               recipe.difficulty === 'hard' ? 'text-red-400' : 'text-amber-400'
             }`}>
@@ -147,13 +147,13 @@ export function RecipeCard({
           {recipe.tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-medium"
+              className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[13px] font-medium"
             >
               {tag}
             </span>
           ))}
           {recipe.tags.length > 3 && (
-            <span className="px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 text-[10px] font-medium">
+            <span className="px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 text-[13px] font-medium">
               +{recipe.tags.length - 3}
             </span>
           )}

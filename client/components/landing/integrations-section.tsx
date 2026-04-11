@@ -326,9 +326,9 @@ function CentralHub({ activeIndex }: { activeIndex: number }) {
             className="flex items-center gap-2"
           >
             <span className="text-xs font-bold uppercase tracking-widest text-primary">
-              YHealth Hub
+              Balencia Hub
             </span>
-            <ArrowRight className="w-3 h-3 text-muted-foreground/40" />
+            <ArrowRight className="w-3 h-3 text-muted-foreground/70" />
             <span
               className="text-xs font-semibold"
               style={{ color: integration.accent }}
@@ -361,8 +361,8 @@ function IntegrationCard({
       className={cn(
         "integration-card group relative rounded-2xl border overflow-hidden cursor-pointer transition-all duration-500",
         isActive
-          ? "border-white/20 bg-white/[0.04]"
-          : "border-white/[0.06] bg-white/[0.015] hover:border-white/15"
+          ? "border-white/20 bg-white/[0.07]"
+          : "border-white/[0.12] bg-white/[0.07] hover:border-white/15"
       )}
       onClick={onClick}
       whileHover={{
@@ -427,7 +427,7 @@ function IntegrationCard({
                 }}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground/60 mb-2.5 line-clamp-1">
+            <p className="text-[11px] text-muted-foreground/80 mb-2.5 line-clamp-1">
               {integration.desc}
             </p>
 
@@ -443,7 +443,7 @@ function IntegrationCard({
               >
                 {integration.dataType}
               </span>
-              <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+              <span className="text-[10px] text-muted-foreground/70 tabular-nums">
                 {integration.dataPoints} pts
               </span>
             </div>
@@ -547,7 +547,7 @@ export function IntegrationsSection() {
             Integrations
           </div>
           <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.1]">
-            Your health data,{" "}
+            Your life data,{" "}
             <span className="bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
               unified
             </span>
@@ -569,12 +569,12 @@ export function IntegrationsSection() {
           {hubStats.map((stat) => (
             <div
               key={stat.label}
-              className="hub-stat flex items-center gap-2 px-4 py-2 rounded-xl border border-white/[0.06] bg-white/[0.02]"
+              className="hub-stat flex items-center gap-2 px-4 py-2 rounded-xl border border-white/[0.12] bg-white/[0.07]"
             >
               <span className="text-base sm:text-lg font-black text-primary tabular-nums">
                 {stat.display}
               </span>
-              <span className="text-xs text-muted-foreground/50 font-medium">
+              <span className="text-xs text-muted-foreground/80 font-medium">
                 {stat.label}
               </span>
             </div>

@@ -8,7 +8,7 @@ export const TOUR_STEPS: TourStepConfig[] = [
   {
     id: "welcome",
     type: "fullscreen",
-    title: "Welcome to yHealth, {firstName}!",
+    title: "Welcome to Balencia, {firstName}!",
     description:
       "Your AI-powered health companion is ready. Let me show you around your personalized dashboard — it only takes about 2 minutes.",
     icon: "Sparkles",

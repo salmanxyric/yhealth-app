@@ -37,14 +37,14 @@ interface HelpCategory {
 
 const faqItems = [
   {
-    question: "How does YHealth track my fitness progress?",
+    question: "How does Balencia track my fitness progress?",
     answer:
-      "YHealth uses AI to analyze your workout data, activity levels, and health metrics from connected devices to provide personalized insights and track your progress over time.",
+      "Balencia uses AI to analyze your workout data, activity levels, and health metrics from connected devices to provide personalized insights and track your progress over time.",
   },
   {
     question: "Can I connect my wearable device?",
     answer:
-      "Yes! YHealth integrates with popular wearables including WHOOP, Apple Watch, Fitbit, and Garmin. Connect your device in Settings > Integrations.",
+      "Yes! Balencia integrates with popular wearables including WHOOP, Apple Watch, Fitbit, and Garmin. Connect your device in Settings > Integrations.",
   },
   {
     question: "How does the AI health coach work?",

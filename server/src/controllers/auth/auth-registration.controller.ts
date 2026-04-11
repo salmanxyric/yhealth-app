@@ -173,7 +173,7 @@ export const verifyRegistration = asyncHandler(
     // Send welcome notification
     await notificationService.welcomeUser(user.id, user.firstName);
 
-    // Add user to YHealth Community group (non-blocking)
+    // Add user to Balencia Community group (non-blocking)
     chatService.addUserToCommunityGroup(user.id).catch((error) => {
       logger.warn('Failed to add user to community group (non-blocking)', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -379,7 +379,7 @@ export const socialAuth = asyncHandler(
       // Send welcome notification
       await notificationService.welcomeUser(user.id, user.firstName);
 
-      // Add user to YHealth Community group (non-blocking)
+      // Add user to Balencia Community group (non-blocking)
       chatService.addUserToCommunityGroup(user.id).catch((error) => {
         logger.warn('Failed to add user to community group (non-blocking)', {
           error: error instanceof Error ? error.message : 'Unknown error',

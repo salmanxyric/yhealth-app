@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { api } from '@/lib/api-client';
 import {
   LineChart,
@@ -97,7 +97,7 @@ function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string
   useEffect(() => {
     const duration = 1200;
     const steps = 40;
-    const increment = value / steps;
+    const _increment = value / steps;
     let current = 0;
     let step = 0;
 
@@ -151,7 +151,7 @@ function PremiumMetricCard({
   borderColor,
   delay = 0,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   value: string | number;
   label: string;
@@ -221,7 +221,7 @@ function PremiumMetricCard({
         </div>
 
         <motion.p
-          className="text-3xl font-bold text-white mb-1"
+          className="text-lg font-bold text-white mb-1"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: delay + 0.1 }}
@@ -247,7 +247,7 @@ function PremiumChartCard({
 }: {
   children: React.ReactNode;
   title: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   delay?: number;
 }) {
@@ -290,7 +290,7 @@ export function AnalyticsTab() {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
 
   const fetchAnalytics = useCallback(async (showRefreshing = false) => {
     try {
@@ -324,18 +324,6 @@ export function AnalyticsTab() {
     fetchAnalytics();
   }, [fetchAnalytics]);
 
-  // Auto-refresh every 2 minutes
-  useEffect(() => {
-    refreshIntervalRef.current = setInterval(() => {
-      fetchAnalytics(true);
-    }, 2 * 60 * 1000);
-
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-    };
-  }, [fetchAnalytics]);
 
   const handleManualRefresh = () => {
     fetchAnalytics(true);
@@ -403,8 +391,8 @@ export function AnalyticsTab() {
         className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
       >
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-emerald-400" />
+          <h2 className="text-[16px] sm:text-[18px] font-bold text-white flex items-center gap-2">
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
             Analytics Dashboard
           </h2>
           <p className="text-slate-400 text-sm flex items-center gap-2 mt-1">
@@ -444,7 +432,7 @@ export function AnalyticsTab() {
       </motion.div>
 
       {/* Performance Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <PremiumMetricCard
           icon={Activity}
           iconColor="text-emerald-400"
@@ -487,7 +475,7 @@ export function AnalyticsTab() {
           borderColor="border-orange-500/30"
           delay={0.3}
         />
-      </div>
+      </div> */}
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -93,19 +93,19 @@ export function DietPlanCard({
       <div className="grid grid-cols-2 gap-3">
         <div className="p-3 rounded-xl bg-white/5">
           <p className="text-xs text-slate-500 mb-1">Calories</p>
-          <p className="text-lg font-bold text-orange-400">{plan.targetCalories}</p>
+          <p className="text-base font-semibold text-orange-400">{plan.targetCalories}</p>
         </div>
         <div className="p-3 rounded-xl bg-white/5">
           <p className="text-xs text-slate-500 mb-1">Protein</p>
-          <p className="text-lg font-bold text-red-400">{plan.targetProtein}g</p>
+          <p className="text-base font-semibold text-red-400">{plan.targetProtein}g</p>
         </div>
         <div className="p-3 rounded-xl bg-white/5">
           <p className="text-xs text-slate-500 mb-1">Carbs</p>
-          <p className="text-lg font-bold text-amber-400">{plan.targetCarbs}g</p>
+          <p className="text-base font-semibold text-amber-400">{plan.targetCarbs}g</p>
         </div>
         <div className="p-3 rounded-xl bg-white/5">
           <p className="text-xs text-slate-500 mb-1">Fat</p>
-          <p className="text-lg font-bold text-purple-400">{plan.targetFat}g</p>
+          <p className="text-base font-semibold text-purple-400">{plan.targetFat}g</p>
         </div>
       </div>
 

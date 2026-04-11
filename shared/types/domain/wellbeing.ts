@@ -7,7 +7,42 @@
 // MOOD TYPES
 // ============================================
 
-export type MoodEmoji = '😊' | '😐' | '😟' | '😡' | '😰' | '😴';
+export type MoodEmoji =
+  | '😊' | '😐' | '😟' | '😡' | '😰' | '😴'  // Legacy (😴, 😡 kept for backward compat)
+  | '😌' | '😎' | '🎯' | '🤩' | '🤔' | '😨' | '😤'; // Expanded 9-state model
+
+export type EmotionalState =
+  | 'calm'
+  | 'confident'
+  | 'focused'
+  | 'neutral'
+  | 'distracted'
+  | 'euphoric'
+  | 'anxious'
+  | 'frustrated'
+  | 'fearful';
+
+export type EmotionalValence = 'positive' | 'neutral' | 'negative';
+
+export interface EmotionalStateConfig {
+  emoji: MoodEmoji;
+  label: string;
+  color: string;
+  state: EmotionalState;
+  valence: EmotionalValence;
+}
+
+export type TriggerCategory =
+  | 'work'
+  | 'exercise'
+  | 'social'
+  | 'food'
+  | 'sleep'
+  | 'meditation'
+  | 'conflict'
+  | 'news'
+  | 'weather'
+  | 'other';
 
 export type EmotionTag =
   | 'grateful'
@@ -40,6 +75,10 @@ export interface MoodLog {
   emotionTags: EmotionTag[];
   contextNote?: string;
   mode: WellbeingMode;
+  // Mood arc / transition tracking
+  transitionTrigger?: string;
+  triggerCategory?: TriggerCategory;
+  previousMoodLogId?: string;
   loggedAt: string; // ISO timestamp
   createdAt: string;
   updatedAt: string;
@@ -70,7 +109,8 @@ export type JournalingMode =
   | 'deep_dive'
   | 'gratitude'
   | 'life_perspective'
-  | 'free_write';
+  | 'free_write'
+  | 'voice_conversation';
 
 export type TranscriptionStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -125,16 +165,33 @@ export type CheckinTag =
   | 'anxious'
   | 'grateful';
 
+export type CheckinType = 'morning' | 'evening';
+
 export interface DailyCheckin {
   id: string;
   userId: string;
   checkinDate: string; // ISO date
+  checkinType: CheckinType;
   moodScore?: number; // 1-10
   energyScore?: number; // 1-10
   sleepQuality?: number; // 1-5
   stressScore?: number; // 1-10
   tags: CheckinTag[];
   daySummary?: string;
+  // Morning-specific: predictions
+  predictedMood?: number; // 1-10
+  predictedEnergy?: number; // 1-10
+  knownStressors?: string[];
+  // Evening-specific: review
+  dayRating?: number; // 1-10
+  wentWell?: string[];
+  didntGoWell?: string[];
+  eveningLessons?: string[];
+  tomorrowFocus?: string;
+  // Screen time
+  screenTimeMinutes?: number;
+  screenTimeSource?: 'manual' | 'device';
+  // Cross-references
   moodLogId?: string;
   energyLogId?: string;
   stressLogId?: string;
@@ -145,12 +202,36 @@ export interface DailyCheckin {
 }
 
 export interface CreateDailyCheckinInput {
+  checkinType?: CheckinType;
   moodScore?: number;
   energyScore?: number;
   sleepQuality?: number;
   stressScore?: number;
   tags?: CheckinTag[];
   daySummary?: string;
+  // Morning-specific
+  predictedMood?: number;
+  predictedEnergy?: number;
+  knownStressors?: string[];
+  // Evening-specific
+  dayRating?: number;
+  wentWell?: string[];
+  didntGoWell?: string[];
+  eveningLessons?: string[];
+  tomorrowFocus?: string;
+  // Screen time
+  screenTimeMinutes?: number;
+  screenTimeSource?: 'manual' | 'device';
+}
+
+export interface DayComparison {
+  date: string;
+  morning?: DailyCheckin;
+  evening?: DailyCheckin;
+  moodDelta?: number; // actual - predicted
+  energyDelta?: number;
+  intentionsFulfilled: number;
+  intentionsTotal: number;
 }
 
 // ============================================
@@ -165,6 +246,12 @@ export type LifeGoalCategory =
   | 'anxiety_management'
   | 'creative'
   | 'personal_growth'
+  | 'financial'
+  | 'faith'
+  | 'relationships'
+  | 'education'
+  | 'career'
+  | 'health_wellness'
   | 'custom';
 
 export type LifeGoalTrackingMethod = 'daily_checkin' | 'journal_mentions' | 'manual' | 'hybrid';
@@ -212,6 +299,8 @@ export interface DailyIntention {
   checkinId?: string;
   fulfilled?: boolean;
   reflection?: string;
+  sortOrder: number;
+  domain?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -225,6 +314,84 @@ export interface JournalGoalLink {
   relevantExcerpt?: string;
   sentimentScore?: number;
   createdAt: string;
+}
+
+// ============================================
+// LIFE GOAL MILESTONES & CHECK-INS
+// ============================================
+
+export interface LifeGoalMilestone {
+  id: string;
+  lifeGoalId: string;
+  userId: string;
+  title: string;
+  description?: string;
+  targetDate?: string;
+  targetValue?: number;
+  currentValue: number;
+  completed: boolean;
+  completedAt?: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLifeGoalMilestoneInput {
+  title: string;
+  description?: string;
+  targetDate?: string;
+  targetValue?: number;
+  sortOrder?: number;
+}
+
+export interface LifeGoalCheckin {
+  id: string;
+  lifeGoalId: string;
+  userId: string;
+  checkinDate: string;
+  progressValue?: number;
+  note?: string;
+  moodAboutGoal?: number; // 1-5
+  createdAt: string;
+}
+
+export interface CreateLifeGoalCheckinInput {
+  progressValue?: number;
+  note?: string;
+  moodAboutGoal?: number;
+}
+
+export interface LifeGoalDashboard {
+  goal: LifeGoal;
+  milestones: LifeGoalMilestone[];
+  recentCheckins: LifeGoalCheckin[];
+  checkinStreak: number;
+  lastCheckinDate?: string;
+  journalLinks: JournalGoalLink[];
+}
+
+// ============================================
+// MOTIVATION TIER TYPES
+// ============================================
+
+export type MotivationTier = 'low' | 'medium' | 'high';
+
+export interface UserMotivationProfile {
+  id: string;
+  userId: string;
+  declaredTier: MotivationTier;
+  computedTier: MotivationTier;
+  activeTier: MotivationTier;
+  engagementScore: number;
+  loginFrequencyScore: number;
+  suggestionAcceptRate: number;
+  taskCompletionRate: number;
+  sessionDepthScore: number;
+  streakConsistencyScore: number;
+  lastComputedAt: string;
+  tierHistory: Array<{ tier: MotivationTier; date: string; reason: string }>;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================
@@ -269,6 +436,59 @@ export interface JournalPattern {
   computedAt: string;
   isActive: boolean;
   dismissedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================
+// LESSONS LEARNED TYPES
+// ============================================
+
+export type LessonDomain =
+  | 'health'
+  | 'work'
+  | 'relationships'
+  | 'personal'
+  | 'spiritual'
+  | 'productivity'
+  | 'other';
+
+export type LessonSource = 'ai_extracted' | 'user_entered' | 'evening_review';
+
+export interface LessonLearned {
+  id: string;
+  userId: string;
+  journalEntryId?: string;
+  checkinId?: string;
+  lessonText: string;
+  domain: LessonDomain;
+  source: LessonSource;
+  isConfirmed: boolean;
+  isDismissed: boolean;
+  mentionCount: number;
+  lastRemindedAt?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================
+// BEHAVIORAL PATTERN TYPES
+// ============================================
+
+export type PatternSeverity = 'info' | 'warning' | 'alert';
+
+export interface BehavioralPattern {
+  id: string;
+  userId: string;
+  patternKey: string;
+  patternDescription: string;
+  detectionData: Record<string, unknown>;
+  severity: PatternSeverity;
+  firstDetectedAt: string;
+  lastDetectedAt: string;
+  isActive: boolean;
+  acknowledgedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -439,7 +659,8 @@ export interface MindfulnessPractice {
 // BREATHING TEST TYPES
 // ============================================
 
-export type BreathingTestType = 'breath_hold' | 'box_breathing' | '4-7-8' | 'relaxation' | 'custom';
+export type BreathingTestType = 'breath_hold' | 'box_breathing' | '4-7-8' | 'relaxation' | 'custom'
+  | 'wim_hof' | 'alternate_nostril' | 'coherent' | 'energising';
 
 export type LungCapacityEstimate = 'poor' | 'fair' | 'good' | 'excellent';
 
@@ -501,3 +722,153 @@ export interface CreateBreathingTestInput {
   startedAt: string;
 }
 
+// ============================================
+// VOICE JOURNAL SESSION TYPES
+// ============================================
+
+export type VoiceJournalStatus = 'active' | 'summarizing' | 'review' | 'completed' | 'abandoned';
+
+export interface VoiceJournalTranscriptEntry {
+  role: 'user' | 'ai';
+  text: string;
+  timestamp: string;
+  audioDurationMs?: number;
+}
+
+export interface VoiceJournalSession {
+  id: string;
+  userId: string;
+  status: VoiceJournalStatus;
+  exchangeCount: number;
+  transcript: VoiceJournalTranscriptEntry[];
+  summaryMood?: string;
+  summaryThemes?: string[];
+  summaryLessons?: string[];
+  summaryActionItems?: string[];
+  summaryText?: string;
+  journalEntryId?: string;
+  totalDurationSeconds: number;
+  startedAt: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VoiceJournalTurnResponse {
+  userTranscript: string;
+  aiResponse: string;
+  exchangeCount: number;
+  readyToSummarize: boolean;
+}
+
+export interface VoiceJournalSummary {
+  mood: string;
+  themes: string[];
+  lessons: string[];
+  actionItems: string[];
+  journalText: string;
+}
+
+// ============================================
+// HEALTH CORRELATION / INSIGHT TYPES
+// ============================================
+
+export type PatternCategory = 'correlation' | 'theme' | 'behavioral';
+
+export type CorrelationType =
+  | 'sleep_mood_negative'
+  | 'exercise_gratitude'
+  | 'best_day_profile'
+  | 'sleep_energy_correlation'
+  | 'recovery_mood_correlation'
+  | 'stress_exercise_inverse';
+
+export interface HealthCorrelation {
+  id: string;
+  userId: string;
+  correlationType: CorrelationType;
+  headline: string;
+  insight: string;
+  correlationStrength: number;
+  dataPoints: number;
+  confidence: 'high' | 'medium' | 'low';
+  windowDays: number;
+  isActive: boolean;
+  dismissedAt?: string;
+  computedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================
+// THEME DETECTION TYPES
+// ============================================
+
+export type ThemeTag =
+  | 'work_stress'
+  | 'relationship_conflict'
+  | 'health_concern'
+  | 'financial_worry'
+  | 'gratitude'
+  | 'personal_growth'
+  | 'social_connection'
+  | 'family'
+  | 'sleep_issues'
+  | 'exercise_motivation'
+  | 'anxiety'
+  | 'self_doubt'
+  | 'productivity'
+  | 'spiritual'
+  | 'creative_expression';
+
+export interface ThemeInsight {
+  theme: ThemeTag;
+  frequency: number;
+  percentage: number;
+  trend: 'increasing' | 'stable' | 'decreasing';
+  temporalPattern?: string;
+  coOccurrences?: ThemeTag[];
+  antiCorrelations?: ThemeTag[];
+}
+
+// ============================================
+// GOAL DECOMPOSITION TYPES
+// ============================================
+
+export type GoalActionType = 'habit' | 'schedule' | 'journal_prompt' | 'tracking' | 'milestone' | 'behavioral_trick';
+export type GoalActionResponseType = 'accept' | 'edit' | 'skip';
+export type HealthPillar = 'fitness' | 'nutrition' | 'wellbeing';
+
+export interface GoalAction {
+  id: string;
+  goalId: string;
+  userId: string;
+  actionType: GoalActionType;
+  title: string;
+  description?: string;
+  pillar?: HealthPillar;
+  frequency?: string;
+  isAiGenerated: boolean;
+  isCompleted: boolean;
+  completedAt?: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalActionResponseRecord {
+  id: string;
+  actionId: string;
+  userId: string;
+  responseType: GoalActionResponseType;
+  editedTitle?: string;
+  editedDescription?: string;
+  createdAt: string;
+}
+
+export interface GoalDecomposition {
+  actions: GoalAction[];
+  milestones: LifeGoalMilestone[];
+  pillarMappings: Array<{ pillar: HealthPillar; relevance: string }>;
+  motivationCalibration: string;
+}

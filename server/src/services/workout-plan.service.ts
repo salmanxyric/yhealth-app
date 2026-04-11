@@ -515,6 +515,12 @@ class WorkoutPlanService {
 
       // Update streak
       await gamificationService.updateStreak(userId);
+
+      // Record for unified streak system
+      try {
+        const { streakService } = await import('./streak.service.js');
+        await streakService.recordActivity(userId, 'workout', workoutLog.id);
+      } catch { /* streak recording is non-blocking */ }
     } else {
       workoutLog.xpEarned = 0; // No XP for updates
     }

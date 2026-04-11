@@ -2,7 +2,7 @@ import { createMetadata } from '@/lib/seo';
 import AdminContactsPageContent from './AdminContactsPageContent';
 
 export const metadata = createMetadata({
-  title: 'Contacts - YHealth Admin',
+  title: 'Contacts - Balencia Admin',
   description: 'Manage contact form submissions.',
   path: '/admin/contacts',
   noIndex: true,

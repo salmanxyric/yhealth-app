@@ -3,7 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import './styles/animations.css';
 
 export const metadata: Metadata = {
-  title: 'Leaderboard | YHealth',
+  title: 'Leaderboard | Balencia',
   description: 'Compete with the community and track your fitness progress on the leaderboard',
   viewport: {
     width: 'device-width',

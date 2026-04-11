@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import {
   TrendingUp,
   TrendingDown,
@@ -153,40 +153,60 @@ function StatCard({
   color: string;
   subtitle?: string;
 }) {
+  // Map color classes to accent bar colors
+  const accentColor = color.includes('emerald')
+    ? 'from-emerald-400 to-emerald-500'
+    : color.includes('orange')
+    ? 'from-orange-400 to-amber-500'
+    : color.includes('blue')
+    ? 'from-blue-400 to-blue-500'
+    : color.includes('red')
+    ? 'from-red-400 to-red-500'
+    : 'from-emerald-400 to-teal-500';
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02, y: -2 }}
-      className="bg-gradient-to-br from-white/5 to-white/5 border border-white/10 rounded-xl p-4 sm:p-5 hover:bg-white/10 transition-all backdrop-blur-sm shadow-lg hover:shadow-xl"
+      whileHover={{ y: -3 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+      className="group relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl hover:border-white/[0.12] transition-all duration-300"
     >
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${color} flex items-center justify-center shadow-lg`}>
-          {icon}
+      {/* Colored left accent bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b ${accentColor} rounded-l-2xl`} />
+
+      {/* Subtle ambient glow on hover */}
+      <div className={`absolute -top-12 -right-12 w-32 h-32 rounded-full bg-gradient-to-br ${accentColor} opacity-0 group-hover:opacity-[0.06] blur-3xl transition-opacity duration-500`} />
+
+      <div className="relative p-4 sm:p-5 pl-5 sm:pl-6">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <span className="text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 font-semibold block mb-0.5">{label}</span>
+            {subtitle && <span className="text-[10px] sm:text-xs text-slate-600 block truncate">{subtitle}</span>}
+          </div>
+          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${color} flex items-center justify-center shrink-0 ring-1 ring-white/[0.06]`}>
+            {icon}
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-xs sm:text-sm text-slate-400 block font-medium truncate">{label}</span>
-          {subtitle && <span className="text-xs text-slate-500 mt-0.5 truncate block">{subtitle}</span>}
+        <div className="flex items-end justify-between gap-2">
+          <span className="text-2xl sm:text-[28px] font-bold tracking-tight bg-gradient-to-br from-white via-white to-slate-300 bg-clip-text text-transparent truncate leading-tight">{value}</span>
+          {change !== undefined && change !== null && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className={`flex items-center text-[11px] sm:text-xs font-semibold px-2 py-1 rounded-lg shrink-0 ring-1 ${
+                change > 0
+                  ? 'text-red-400 bg-red-500/[0.08] ring-red-500/20'
+                  : change < 0
+                  ? 'text-emerald-400 bg-emerald-500/[0.08] ring-emerald-500/20'
+                  : 'text-slate-400 bg-slate-500/[0.08] ring-slate-500/20'
+              }`}
+            >
+              {change > 0 ? <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1" /> : change < 0 ? <TrendingDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1" /> : <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1" />}
+              {Math.abs(change).toFixed(1)} kg
+            </motion.div>
+          )}
         </div>
-      </div>
-      <div className="flex items-end justify-between gap-2">
-        <span className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent truncate">{value}</span>
-        {change !== undefined && change !== null && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className={`flex items-center text-xs sm:text-sm font-medium px-2 py-1 rounded-lg shrink-0 ${
-              change > 0
-                ? 'text-red-400 bg-red-500/10'
-                : change < 0
-                ? 'text-emerald-400 bg-emerald-500/10'
-                : 'text-slate-400 bg-slate-500/10'
-            }`}
-          >
-            {change > 0 ? <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" /> : change < 0 ? <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" /> : <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />}
-            {Math.abs(change).toFixed(1)} kg
-          </motion.div>
-        )}
       </div>
     </motion.div>
   );
@@ -208,25 +228,28 @@ function MeasurementRow({
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -10 }}
+      initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: (index || 0) * 0.05 }}
-      whileHover={{ scale: 1.02, x: 4 }}
-      className="flex items-center justify-between py-3 sm:py-4 px-4 sm:px-5 rounded-xl bg-gradient-to-r from-white/5 to-white/5 hover:from-white/10 hover:to-white/10 transition-all border border-white/10 hover:border-teal-500/30 shadow-sm hover:shadow-lg backdrop-blur-sm group"
+      transition={{ delay: (index || 0) * 0.04, type: 'spring', stiffness: 300, damping: 26 }}
+      whileHover={{ x: 3 }}
+      className="group relative flex items-center justify-between py-3 sm:py-3.5 px-4 sm:px-5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-all duration-200 border border-white/[0.06] hover:border-teal-500/20 backdrop-blur-sm"
     >
-      <span className="text-slate-200 font-medium text-sm sm:text-base group-hover:text-white transition-colors">{label}</span>
-      <div className="flex items-center gap-2 sm:gap-4">
-        <span className="text-white font-bold text-lg sm:text-xl bg-gradient-to-r from-white to-slate-200 bg-clip-text text-transparent">
-          {current} cm
+      {/* Subtle left accent on hover */}
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-0 group-hover:h-[60%] bg-gradient-to-b from-teal-400 to-cyan-400 rounded-full transition-all duration-300" />
+
+      <span className="text-slate-400 font-medium text-sm sm:text-[13px] group-hover:text-slate-200 transition-colors duration-200 pl-1">{label}</span>
+      <div className="flex items-center gap-2 sm:gap-3">
+        <span className="text-white font-semibold text-base sm:text-lg tabular-nums tracking-tight">
+          {current} <span className="text-slate-500 text-xs font-normal">cm</span>
         </span>
         {change !== undefined && change !== 0 && (
           <motion.span
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className={`text-xs sm:text-sm font-semibold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-sm ${
+            className={`text-[11px] sm:text-xs font-semibold px-2 py-0.5 sm:py-1 rounded-md ring-1 ${
               change > 0
-                ? 'text-red-400 bg-red-500/20 border border-red-500/30'
-                : 'text-emerald-400 bg-emerald-500/20 border border-emerald-500/30'
+                ? 'text-red-400 bg-red-500/[0.08] ring-red-500/20'
+                : 'text-emerald-400 bg-emerald-500/[0.08] ring-emerald-500/20'
             }`}
           >
             {change > 0 ? '+' : ''}{change.toFixed(1)}
@@ -801,117 +824,157 @@ export function ProgressTab() {
     shoulders: 'Shoulders',
   };
 
+  const tabItems = [
+    { id: 'weight' as const, label: 'Weight', icon: Scale },
+    { id: 'measurements' as const, label: 'Measurements', icon: Ruler },
+    { id: 'photos' as const, label: 'Photos', icon: Camera },
+    // { id: 'workouts' as const, label: 'Workouts', icon: Trophy },
+    // { id: 'analytics' as const, label: 'Analytics', icon: Target },
+  ];
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
+      transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="relative space-y-6 sm:space-y-8"
     >
+      {/* Ambient background glow elements */}
+      <div className="pointer-events-none absolute -top-32 -left-32 w-80 h-80 rounded-full bg-emerald-500/[0.03] blur-[100px]" />
+      <div className="pointer-events-none absolute -top-20 right-0 w-64 h-64 rounded-full bg-cyan-500/[0.03] blur-[80px]" />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold bg-gradient-to-r from-white via-emerald-100 to-cyan-100 bg-clip-text text-transparent">
-            Progress Tracking
-          </h2>
-          <p className="text-slate-400 mt-1">Monitor your health journey</p>
-          {lastUpdated && (
-            <p className="text-xs text-slate-500 mt-1">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </p>
-          )}
+        <div className="flex items-center gap-4">
+          {/* Icon badge */}
+          <div className="relative shrink-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 flex items-center justify-center ring-1 ring-white/[0.08]">
+              <TrendingUp className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-400" />
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-slate-900" />
+          </div>
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+              Progress
+            </h2>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-sm text-slate-500">Monitor your health journey</p>
+              {lastUpdated && (
+                <>
+                  <span className="text-slate-700">|</span>
+                  <p className="text-xs text-slate-600">
+                    {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl transition-colors disabled:opacity-50 backdrop-blur-sm"
+            className="flex items-center gap-2 px-3.5 py-2 text-sm bg-white/[0.03] hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 border border-white/[0.06] hover:border-white/[0.1] rounded-xl transition-all duration-200 disabled:opacity-50 backdrop-blur-sm"
           >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </motion.button>
           {activeTab === 'weight' && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setShowWeightModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-medium rounded-xl transition-all shadow-lg shadow-emerald-500/20"
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"
             >
               <Plus className="w-4 h-4" />
               Log Weight
-            </button>
+            </motion.button>
           )}
           {activeTab === 'measurements' && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setShowMeasurementsModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-white font-medium rounded-xl transition-all shadow-lg shadow-teal-500/20"
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-teal-500 hover:bg-teal-400 text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-teal-500/20 hover:shadow-teal-500/30"
             >
               <Plus className="w-4 h-4" />
               Log Measurements
-            </button>
+            </motion.button>
           )}
           {activeTab === 'photos' && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => setShowPhotoModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-medium rounded-xl transition-all shadow-lg shadow-emerald-500/20"
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"
             >
               <Plus className="w-4 h-4" />
               Upload Photo
-            </button>
+            </motion.button>
           )}
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        {[
-          { id: 'weight' as const, label: 'Weight', icon: Scale },
-          { id: 'measurements' as const, label: 'Measurements', icon: Ruler },
-          { id: 'photos' as const, label: 'Photos', icon: Camera },
-          // { id: 'workouts' as const, label: 'Workouts', icon: Trophy },
-          // { id: 'analytics' as const, label: 'Analytics', icon: Target },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-transparent'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Tab Navigation - Premium with animated indicator */}
+      <LayoutGroup id="progress-tabs">
+        <div className="relative flex items-center gap-1 p-1 overflow-x-auto scrollbar-hide rounded-xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-sm">
+          {tabItems.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 whitespace-nowrap z-10 ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="progress-active-tab"
+                    className="absolute inset-0 rounded-lg bg-white/[0.08] border border-white/[0.08]"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <Icon className={`w-4 h-4 relative z-10 ${isActive ? 'text-emerald-400' : ''}`} />
+                <span className="relative z-10">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </LayoutGroup>
 
       {/* Tab Content */}
       <AnimatePresence mode="wait">
         {activeTab === 'weight' && (
           <motion.div
             key="weight"
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
             className="space-y-6"
           >
-            {/* Time Period Filter and View Mode */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white/5 rounded-xl p-4 border border-white/10">
+            {/* Filter Bar - Minimal, integrated */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 py-3 px-4 rounded-xl bg-white/[0.015] border border-white/[0.04]">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-slate-400" />
-                  <span className="text-sm text-slate-400 whitespace-nowrap">Period:</span>
+                  <Filter className="w-3.5 h-3.5 text-slate-600" />
+                  <span className="text-xs uppercase tracking-wider text-slate-600 font-semibold">Period</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {[7, 30, 90, 180, 365, null].map((days) => (
                     <button
                       key={days || 'all'}
                       onClick={() => setTimePeriod(days)}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
                         timePeriod === days
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
+                          ? 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25'
+                          : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
                       }`}
                     >
                       {days ? `${days}d` : 'All'}
@@ -920,16 +983,16 @@ export function ProgressTab() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-400 whitespace-nowrap">View:</span>
-                <div className="flex gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+                <span className="text-xs uppercase tracking-wider text-slate-600 font-semibold">View</span>
+                <div className="flex gap-0.5 bg-white/[0.03] rounded-lg p-0.5 ring-1 ring-white/[0.04]">
                   {(['daily', 'weekly', 'monthly'] as const).map((mode) => (
                     <button
                       key={mode}
                       onClick={() => setViewMode(mode)}
-                      className={`px-3 py-1.5 text-sm rounded-md transition-colors capitalize ${
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 capitalize ${
                         viewMode === mode
-                          ? 'bg-emerald-500 text-white'
-                          : 'text-slate-400 hover:text-white'
+                          ? 'bg-emerald-500 text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-300'
                       }`}
                     >
                       {mode}
@@ -967,145 +1030,453 @@ export function ProgressTab() {
               />
             </div>
 
-            {/* Analytics Insights */}
+            {/* Analytics Insights - Redesigned */}
             {(weeklyChange !== null || consistencyScore > 0) && (
-              <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-2xl p-4 sm:p-6 backdrop-blur-sm">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-purple-400" />
-                  Analytics Insights
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  {weeklyChange !== null && (
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10 backdrop-blur-sm">
-                      <p className="text-sm text-slate-400 mb-1">Weekly Average Change</p>
-                      <p className={`text-xl sm:text-2xl font-bold ${weeklyChange < 0 ? 'text-emerald-400' : weeklyChange > 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                        {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(2)} kg/week
-                      </p>
+              <div className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl">
+                {/* Subtle gradient accent at top */}
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent" />
+
+                <div className="p-4 sm:p-6">
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center ring-1 ring-emerald-500/20">
+                      <Target className="w-4 h-4 text-emerald-400" />
                     </div>
-                  )}
-                  <div className="bg-white/5 rounded-xl p-4 border border-white/10 backdrop-blur-sm">
-                    <p className="text-sm text-slate-400 mb-1">Consistency Score</p>
-                    <p className="text-xl sm:text-2xl font-bold text-cyan-400">{consistencyScore}%</p>
-                    <p className="text-xs text-slate-500 mt-1">Days logged (last 4 weeks)</p>
+                    <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Insights</h3>
                   </div>
-                  {filteredWeightHistory.length > 0 && (
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10 backdrop-blur-sm">
-                      <p className="text-sm text-slate-400 mb-1">Data Points</p>
-                      <p className="text-xl sm:text-2xl font-bold text-white">{filteredWeightHistory.length}</p>
-                      <p className="text-xs text-slate-500 mt-1">{getTimePeriodLabel(timePeriod)}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {weeklyChange !== null && (
+                      <div className="relative overflow-hidden rounded-xl bg-white/[0.02] border border-white/[0.05] p-4">
+                        <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-emerald-400 to-teal-500 rounded-l-xl" />
+                        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2 pl-2">Weekly Change</p>
+                        <p className={`text-xl sm:text-2xl font-bold tracking-tight pl-2 ${weeklyChange < 0 ? 'text-emerald-400' : weeklyChange > 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                          {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(2)}
+                          <span className="text-sm font-normal text-slate-500 ml-1">kg/wk</span>
+                        </p>
+                      </div>
+                    )}
+                    <div className="relative overflow-hidden rounded-xl bg-white/[0.02] border border-white/[0.05] p-4">
+                      <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan-400 to-blue-500 rounded-l-xl" />
+                      <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2 pl-2">Consistency</p>
+                      <p className="text-xl sm:text-2xl font-bold text-cyan-400 tracking-tight pl-2">
+                        {consistencyScore}
+                        <span className="text-sm font-normal text-slate-500 ml-0.5">%</span>
+                      </p>
+                      <p className="text-[10px] text-slate-600 mt-1 pl-2">Last 4 weeks</p>
                     </div>
-                  )}
+                    {filteredWeightHistory.length > 0 && (
+                      <div className="relative overflow-hidden rounded-xl bg-white/[0.02] border border-white/[0.05] p-4">
+                        <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-slate-400 to-slate-500 rounded-l-xl" />
+                        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-2 pl-2">Data Points</p>
+                        <p className="text-xl sm:text-2xl font-bold text-white tracking-tight pl-2">{filteredWeightHistory.length}</p>
+                        <p className="text-[10px] text-slate-600 mt-1 pl-2">{getTimePeriodLabel(timePeriod)}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Charts Section */}
-            <div className="space-y-8">
-              {/* Weight and BMI Charts */}
-              <div className="grid lg:grid-cols-2 gap-8">
-                {/* Weight Trend Chart */}
-                <div className="bg-gradient-to-br from-white/5 to-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm shadow-xl">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">Weight Trend</h3>
-                    <div className="flex items-center gap-2 text-sm">
-                      {weight.trend === 'down' && (
-                        <span className="flex items-center text-emerald-400">
-                          <TrendingDown className="w-4 h-4 mr-1" />
-                          Losing
-                        </span>
-                      )}
-                      {weight.trend === 'up' && (
-                        <span className="flex items-center text-red-400">
-                          <TrendingUp className="w-4 h-4 mr-1" />
-                          Gaining
-                        </span>
-                      )}
-                      {weight.trend === 'stable' && (
-                        <span className="flex items-center text-slate-400">
-                          <Minus className="w-4 h-4 mr-1" />
-                          Stable
-                        </span>
-                      )}
+            <div className="space-y-6">
+              <div className="grid lg:grid-cols-2 gap-5 sm:gap-6">
+                {/* Weight Trend Chart - Glass card */}
+                <div className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl shadow-xl shadow-black/5">
+                  <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
+                  <div className="p-5 sm:p-6">
+                    <div className="flex items-center justify-between mb-5">
+                      <h3 className="text-[15px] font-semibold text-white tracking-tight">Weight Trend</h3>
+                      <div className="flex items-center gap-1.5 text-xs font-medium">
+                        {weight.trend === 'down' && (
+                          <span className="flex items-center text-emerald-400 bg-emerald-500/[0.08] px-2.5 py-1 rounded-lg ring-1 ring-emerald-500/20">
+                            <TrendingDown className="w-3.5 h-3.5 mr-1" />
+                            Losing
+                          </span>
+                        )}
+                        {weight.trend === 'up' && (
+                          <span className="flex items-center text-red-400 bg-red-500/[0.08] px-2.5 py-1 rounded-lg ring-1 ring-red-500/20">
+                            <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                            Gaining
+                          </span>
+                        )}
+                        {weight.trend === 'stable' && (
+                          <span className="flex items-center text-slate-400 bg-slate-500/[0.08] px-2.5 py-1 rounded-lg ring-1 ring-slate-500/20">
+                            <Minus className="w-3.5 h-3.5 mr-1" />
+                            Stable
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  {viewMode === 'daily' && (
-                    <WeightTrendChart
-                      history={filteredWeightHistory}
-                      timePeriod={timePeriod}
-                      showTrendLine={true}
-                    />
-                  )}
-                  {viewMode === 'weekly' && (
-                    <>
-                      {filteredWeightHistory.length > 0 ? (
-                        <WeeklyProgressChart
-                          weightHistory={filteredWeightHistory}
-                          timePeriod={timePeriod}
-                        />
-                      ) : (
-                        <div className="h-64 flex flex-col items-center justify-center text-slate-400 bg-slate-900/20 rounded-lg border border-white/5">
-                          <Calendar className="w-12 h-12 mb-3 text-slate-500 opacity-50" />
-                          <p className="text-base font-medium mb-1">No weekly data available</p>
-                          <p className="text-sm text-slate-500 mb-4">Log your weight to see weekly breakdown</p>
-                          <button
-                            onClick={() => setShowWeightModal(true)}
-                            className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition-colors text-sm font-medium border border-emerald-500/30"
-                          >
-                            Log Your First Weight
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {viewMode === 'monthly' && (
-                    <>
-                      {filteredWeightHistory.length > 0 ? (
-                        <MonthlyProgressChart weightHistory={filteredWeightHistory} />
-                      ) : (
-                        <div className="h-64 flex flex-col items-center justify-center text-slate-400 bg-slate-900/20 rounded-lg border border-white/5">
-                          <Calendar className="w-12 h-12 mb-3 text-slate-500 opacity-50" />
-                          <p className="text-base font-medium mb-1">No monthly data available</p>
-                          <p className="text-sm text-slate-500 mb-4">Log your weight to see monthly breakdown</p>
-                          <button
-                            onClick={() => setShowWeightModal(true)}
-                            className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition-colors text-sm font-medium border border-emerald-500/30"
-                          >
-                            Log Your First Weight
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
+                    {viewMode === 'daily' && (
+                      <WeightTrendChart
+                        history={filteredWeightHistory}
+                        timePeriod={timePeriod}
+                        showTrendLine={true}
+                      />
+                    )}
+                    {viewMode === 'weekly' && (
+                      <>
+                        {filteredWeightHistory.length > 0 ? (
+                          <WeeklyProgressChart
+                            weightHistory={filteredWeightHistory}
+                            timePeriod={timePeriod}
+                          />
+                        ) : (
+                          <div className="h-64 flex flex-col items-center justify-center text-slate-500 rounded-xl bg-white/[0.01] border border-white/[0.04]">
+                            <Calendar className="w-10 h-10 mb-3 text-slate-600" />
+                            <p className="text-sm font-medium text-slate-400 mb-1">No weekly data</p>
+                            <p className="text-xs text-slate-600 mb-4">Log weight to see weekly breakdown</p>
+                            <button
+                              onClick={() => setShowWeightModal(true)}
+                              className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-400 rounded-lg transition-all duration-200 text-xs font-medium ring-1 ring-emerald-500/20"
+                            >
+                              Log Your First Weight
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {viewMode === 'monthly' && (
+                      <>
+                        {filteredWeightHistory.length > 0 ? (
+                          <MonthlyProgressChart weightHistory={filteredWeightHistory} />
+                        ) : (
+                          <div className="h-64 flex flex-col items-center justify-center text-slate-500 rounded-xl bg-white/[0.01] border border-white/[0.04]">
+                            <Calendar className="w-10 h-10 mb-3 text-slate-600" />
+                            <p className="text-sm font-medium text-slate-400 mb-1">No monthly data</p>
+                            <p className="text-xs text-slate-600 mb-4">Log weight to see monthly breakdown</p>
+                            <button
+                              onClick={() => setShowWeightModal(true)}
+                              className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-400 rounded-lg transition-all duration-200 text-xs font-medium ring-1 ring-emerald-500/20"
+                            >
+                              Log Your First Weight
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
 
-                  {/* Weight Stats */}
-                  <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/10">
-                    <div className="text-center">
-                      <span className="text-xs text-slate-400 block">Starting</span>
-                      <span className="text-lg font-semibold text-white">
-                        {weight.starting ? `${weight.starting} kg` : '—'}
-                      </span>
-                    </div>
-                    <div className="text-center">
-                      <span className="text-xs text-slate-400 block">Lowest</span>
-                      <span className="text-lg font-semibold text-emerald-400">
-                        {weight.lowest ? `${weight.lowest} kg` : '—'}
-                      </span>
-                    </div>
-                    <div className="text-center">
-                      <span className="text-xs text-slate-400 block">Highest</span>
-                      <span className="text-lg font-semibold text-red-400">
-                        {weight.highest ? `${weight.highest} kg` : '—'}
-                      </span>
+                    {/* Weight Stats - Refined */}
+                    <div className="grid grid-cols-3 gap-3 mt-5 pt-5 border-t border-white/[0.06]">
+                      <div className="text-center">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold block mb-1">Starting</span>
+                        <span className="text-base sm:text-lg font-semibold text-slate-300 tabular-nums">
+                          {weight.starting ? `${weight.starting}` : '—'}
+                        </span>
+                        {weight.starting && <span className="text-[10px] text-slate-600 ml-0.5">kg</span>}
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold block mb-1">Lowest</span>
+                        <span className="text-base sm:text-lg font-semibold text-emerald-400 tabular-nums">
+                          {weight.lowest ? `${weight.lowest}` : '—'}
+                        </span>
+                        {weight.lowest && <span className="text-[10px] text-emerald-600 ml-0.5">kg</span>}
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold block mb-1">Highest</span>
+                        <span className="text-base sm:text-lg font-semibold text-red-400 tabular-nums">
+                          {weight.highest ? `${weight.highest}` : '—'}
+                        </span>
+                        {weight.highest && <span className="text-[10px] text-red-600 ml-0.5">kg</span>}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* BMI Chart */}
-                <div className="bg-gradient-to-br from-white/5 to-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm shadow-xl">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-white">BMI Trend</h3>
+                {/* BMI Chart - Glass card */}
+                <div className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl shadow-xl shadow-black/5">
+                  <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-blue-500/20 to-transparent" />
+                  <div className="p-5 sm:p-6">
+                    <div className="flex items-center justify-between mb-5">
+                      <h3 className="text-[15px] font-semibold text-white tracking-tight">BMI Trend</h3>
+                      {currentBMI && bmiCategory && (
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-lg ring-1 ${
+                          bmiCategory.category === 'Normal' ? 'text-emerald-400 bg-emerald-500/[0.08] ring-emerald-500/20'
+                          : bmiCategory.category === 'Underweight' ? 'text-blue-400 bg-blue-500/[0.08] ring-blue-500/20'
+                          : bmiCategory.category === 'Overweight' ? 'text-orange-400 bg-orange-500/[0.08] ring-orange-500/20'
+                          : 'text-red-400 bg-red-500/[0.08] ring-red-500/20'
+                        }`}>
+                          {bmiCategory.category}
+                        </span>
+                      )}
+                    </div>
+                    <BMITrendChart
+                      weightHistory={filteredWeightHistory}
+                      heightCm={userHeight}
+                      timePeriod={timePeriod}
+                    />
+                    {!userHeight && (
+                      <div className="mt-4 p-3 sm:p-4 bg-blue-500/[0.06] border border-blue-500/10 rounded-xl text-center">
+                        <p className="text-xs text-blue-400 mb-1">Height required for BMI calculation</p>
+                        <p className="text-[10px] text-slate-500">Update your profile with your height</p>
+                      </div>
+                    )}
+                    {currentBMI && (
+                      <div className="mt-5 pt-5 border-t border-white/[0.06] text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold mb-1.5">Current BMI</p>
+                        <p className={`text-3xl font-bold tracking-tight ${bmiCategory?.color || 'text-white'}`}>
+                          {currentBMI.toFixed(1)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'measurements' && (
+          <motion.div
+            key="measurements"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="space-y-6"
+          >
+            {/* Body Measurements Section - Glass card */}
+            <div className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl shadow-xl shadow-black/5">
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-teal-500/20 to-transparent" />
+              <div className="p-4 sm:p-6 lg:p-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-teal-500/10 flex items-center justify-center ring-1 ring-teal-500/20 shrink-0">
+                      <Ruler className="w-5 h-5 sm:w-6 sm:h-6 text-teal-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight">Body Measurements</h3>
+                      <p className="text-xs sm:text-sm text-slate-500">Track your body composition changes</p>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setShowMeasurementsModal(true)}
+                    className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 text-sm bg-teal-500 hover:bg-teal-400 text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-teal-500/20 w-full sm:w-auto"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Log Measurements
+                  </motion.button>
+                </div>
+
+                {measurements.current ? (
+                  <>
+                    {/* Measurement List */}
+                    <div className="grid md:grid-cols-2 gap-2.5 sm:gap-3 mb-8">
+                      {(Object.keys(measurementLabels) as (keyof BodyMeasurements)[]).map((key, index) => (
+                        <MeasurementRow
+                          key={key}
+                          label={measurementLabels[key]}
+                          current={measurements.current?.[key]}
+                          change={measurements.changes?.[key]}
+                          index={index}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Measurement Trend Chart */}
+                    {measurementHistory.length > 0 && (
+                      <div className="mt-8 pt-8 border-t border-white/[0.06]">
+                        <div className="mb-4">
+                          <h4 className="text-[15px] font-semibold text-white tracking-tight mb-1">Measurement Trends</h4>
+                          <p className="text-xs text-slate-500">Track your progress over time</p>
+                        </div>
+                        <MeasurementTrendChart history={measurementHistory} />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-12 sm:py-16">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="space-y-4"
+                    >
+                      <div className="w-14 h-14 mx-auto rounded-2xl bg-teal-500/10 flex items-center justify-center ring-1 ring-teal-500/20">
+                        <Ruler className="w-7 h-7 text-teal-400" />
+                      </div>
+                      <div>
+                        <p className="text-base font-semibold text-white mb-1">No measurements yet</p>
+                        <p className="text-sm text-slate-500 mb-6 max-w-xs mx-auto">
+                          Track your body measurements to visualize changes over time
+                        </p>
+                        <motion.button
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setShowMeasurementsModal(true)}
+                          className="px-6 py-2.5 bg-teal-500 hover:bg-teal-400 text-white text-sm font-medium rounded-xl transition-all duration-200 shadow-lg shadow-teal-500/20"
+                        >
+                          Log Your First Measurement
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'photos' && (
+          <motion.div
+            key="photos"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="space-y-6"
+          >
+            {/* AI-Powered Photo Comparison */}
+            <PhotoComparisonWithAI
+              firstSet={photos.firstSet}
+              latestSet={photos.latest}
+              onUploadClick={() => setShowPhotoModal(true)}
+            />
+
+            {/* Photo Gallery - Glass card */}
+            {photos.latest.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl shadow-xl shadow-black/5"
+              >
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
+                <div className="p-5 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center ring-1 ring-emerald-500/20">
+                        <Camera className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-[15px] font-semibold text-white tracking-tight">Photo Gallery</h3>
+                        <p className="text-xs text-slate-500">{photos.count} photos total</p>
+                      </div>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowPhotoModal(true)}
+                      className="flex items-center justify-center gap-2 px-4 py-2 text-sm bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/20"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Upload
+                    </motion.button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {photos.latest.map((photo, index) => (
+                      <motion.div
+                        key={photo.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.04, type: 'spring', stiffness: 300, damping: 26 }}
+                        whileHover={{ y: -4 }}
+                        className="relative group cursor-pointer"
+                      >
+                        {photo.photoUrl ? (
+                          <div className="aspect-[3/4] rounded-xl overflow-hidden bg-slate-800/50 ring-1 ring-white/[0.06] group-hover:ring-emerald-500/30 transition-all duration-300 shadow-lg group-hover:shadow-xl group-hover:shadow-emerald-500/10">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={photo.photoUrl}
+                              alt={`${photo.photoType} photo`}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              loading="lazy"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
+                              <div className="text-white">
+                                <div className="font-medium capitalize text-xs">{photo.photoType}</div>
+                                <div className="text-slate-400 text-[10px]">{new Date(photo.recordDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="aspect-[3/4] rounded-xl bg-white/[0.02] border border-dashed border-white/[0.08] flex items-center justify-center">
+                            <Camera className="w-7 h-7 text-slate-700" />
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === 'workouts' && (
+          <motion.div
+            key="workouts"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="space-y-6"
+          >
+            {/* Workout Stats - Glass card */}
+            <div className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl shadow-xl shadow-black/5">
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
+              <div className="p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-500/10 flex items-center justify-center ring-1 ring-amber-500/20">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white tracking-tight">Workout Summary</h3>
+                    <p className="text-xs text-slate-500">Your fitness activity overview</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                  {[
+                    { value: workouts.thisWeek, label: 'This Week', gradient: 'from-emerald-400 to-teal-400', delay: 0.05 },
+                    { value: workouts.thisMonth, label: 'This Month', gradient: 'from-teal-400 to-cyan-400', delay: 0.1 },
+                    { value: workouts.totalCompleted, label: 'Total Completed', gradient: 'from-white to-slate-300', delay: 0.15 },
+                  ].map((stat) => (
+                    <motion.div
+                      key={stat.label}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: stat.delay, type: 'spring', stiffness: 300, damping: 26 }}
+                      className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 sm:p-5 text-center"
+                    >
+                      <div className={`text-3xl sm:text-4xl font-bold bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent mb-1 tabular-nums tracking-tight`}>
+                        {stat.value}
+                      </div>
+                      <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">{stat.label}</div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <motion.div
+            key="analytics"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="space-y-6"
+          >
+            {/* Analytics Tab Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+              {/* BMI Chart - Glass card */}
+              <div className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl shadow-xl shadow-black/5">
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-blue-500/20 to-transparent" />
+                <div className="p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="text-[15px] font-semibold text-white tracking-tight">BMI Trend</h3>
                     {currentBMI && bmiCategory && (
-                      <span className={`text-sm font-medium ${bmiCategory.color}`}>
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-lg ring-1 ${
+                        bmiCategory.category === 'Normal' ? 'text-emerald-400 bg-emerald-500/[0.08] ring-emerald-500/20'
+                        : bmiCategory.category === 'Underweight' ? 'text-blue-400 bg-blue-500/[0.08] ring-blue-500/20'
+                        : bmiCategory.category === 'Overweight' ? 'text-orange-400 bg-orange-500/[0.08] ring-orange-500/20'
+                        : 'text-red-400 bg-red-500/[0.08] ring-red-500/20'
+                      }`}>
                         {bmiCategory.category}
                       </span>
                     )}
@@ -1116,316 +1487,59 @@ export function ProgressTab() {
                     timePeriod={timePeriod}
                   />
                   {!userHeight && (
-                    <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg text-center">
-                      <p className="text-sm text-blue-400 mb-2">Height required for BMI calculation</p>
-                      <p className="text-xs text-slate-400">Please update your profile with your height to see BMI trends</p>
+                    <div className="mt-4 p-3 bg-blue-500/[0.06] border border-blue-500/10 rounded-xl text-center">
+                      <p className="text-xs text-blue-400 mb-1">Height required for BMI calculation</p>
+                      <p className="text-[10px] text-slate-500">Update your profile with your height</p>
                     </div>
                   )}
                   {currentBMI && (
-                    <div className="mt-4 pt-4 border-t border-white/10 text-center">
-                      <p className="text-sm text-slate-400 mb-1">Current BMI</p>
-                      <p className={`text-3xl font-bold ${bmiCategory?.color || 'text-white'}`}>
+                    <div className="mt-5 pt-5 border-t border-white/[0.06] text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold mb-1.5">Current BMI</p>
+                      <p className={`text-3xl font-bold tracking-tight ${bmiCategory?.color || 'text-white'}`}>
                         {currentBMI.toFixed(1)}
                       </p>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
 
-        {activeTab === 'measurements' && (
-          <motion.div
-            key="measurements"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            {/* Body Measurements Section */}
-            <div className="bg-gradient-to-br from-white/5 via-white/5 to-white/5 border border-white/10 rounded-2xl p-4 sm:p-6 lg:p-8 backdrop-blur-sm shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-teal-500/20 via-cyan-500/20 to-blue-500/20 flex items-center justify-center shadow-lg shrink-0">
-                    <Ruler className="w-6 h-6 sm:w-7 sm:h-7 text-teal-400" />
+              {/* Analytics Insights - Glass card */}
+              <div className="relative overflow-hidden rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-xl shadow-xl shadow-black/5">
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
+                <div className="p-4 sm:p-6">
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center ring-1 ring-emerald-500/20">
+                      <Target className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Progress Insights</h3>
                   </div>
-                  <div>
-                    <h3 className="text-xl sm:text-2xl font-bold text-white mb-0.5 sm:mb-1">Body Measurements</h3>
-                    <p className="text-xs sm:text-sm text-slate-400">Track your body composition</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowMeasurementsModal(true)}
-                  className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-teal-500/20 hover:shadow-xl hover:shadow-teal-500/30 w-full sm:w-auto"
-                >
-                  <Plus className="w-5 h-5" />
-                  Log Measurements
-                </button>
-              </div>
-
-              {measurements.current ? (
-                <>
-                  {/* Measurement List */}
-                  <div className="grid md:grid-cols-2 gap-4 mb-8">
-                    {(Object.keys(measurementLabels) as (keyof BodyMeasurements)[]).map((key, index) => (
-                      <MeasurementRow
-                        key={key}
-                        label={measurementLabels[key]}
-                        current={measurements.current?.[key]}
-                        change={measurements.changes?.[key]}
-                        index={index}
-                      />
-                    ))}
-                  </div>
-                  
-                  {/* Measurement Trend Chart */}
-                  {measurementHistory.length > 0 && (
-                    <div className="mt-8 pt-8 border-t border-white/10">
-                      <div className="mb-4">
-                        <h4 className="text-lg font-semibold text-white mb-2">Measurement Trends</h4>
-                        <p className="text-sm text-slate-400">Track your progress over time</p>
+                  <div className="space-y-3">
+                    {weeklyChange !== null && (
+                      <div className="relative overflow-hidden rounded-xl bg-white/[0.02] border border-white/[0.05] p-3 sm:p-4">
+                        <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-emerald-400 to-teal-500 rounded-l-xl" />
+                        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5 pl-2">Weekly Change</p>
+                        <p className={`text-xl sm:text-2xl font-bold tracking-tight pl-2 ${weeklyChange < 0 ? 'text-emerald-400' : weeklyChange > 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                          {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(2)} <span className="text-sm font-normal text-slate-500">kg/wk</span>
+                        </p>
                       </div>
-                      <MeasurementTrendChart history={measurementHistory} />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-12 text-slate-400">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="space-y-4"
-                  >
-                    <div className="w-16 h-16 mx-auto rounded-full bg-teal-500/20 flex items-center justify-center">
-                      <Ruler className="w-8 h-8 text-teal-400" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-white mb-1">No measurements logged yet</p>
-                      <p className="text-sm text-slate-400 mb-6">
-                        Track your body measurements to see changes over time
+                    )}
+                    <div className="relative overflow-hidden rounded-xl bg-white/[0.02] border border-white/[0.05] p-3 sm:p-4">
+                      <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan-400 to-blue-500 rounded-l-xl" />
+                      <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5 pl-2">Consistency</p>
+                      <p className="text-xl sm:text-2xl font-bold text-cyan-400 tracking-tight pl-2">
+                        {consistencyScore}<span className="text-sm font-normal text-slate-500 ml-0.5">%</span>
                       </p>
-                      <button
-                        onClick={() => setShowMeasurementsModal(true)}
-                        className="px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-white font-medium rounded-xl transition-all shadow-lg shadow-teal-500/20"
-                      >
-                        Log Your First Measurement
-                      </button>
+                      <p className="text-[10px] text-slate-600 mt-1 pl-2">Last 4 weeks</p>
                     </div>
-                  </motion.div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-
-        {activeTab === 'photos' && (
-          <motion.div
-            key="photos"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            {/* AI-Powered Photo Comparison */}
-            <PhotoComparisonWithAI
-              firstSet={photos.firstSet}
-              latestSet={photos.latest}
-              onUploadClick={() => setShowPhotoModal(true)}
-            />
-
-            {/* Photo Gallery */}
-            {photos.latest.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-gradient-to-br from-slate-900/80 via-slate-800/50 to-slate-900/80 border border-emerald-500/20 rounded-3xl p-6 backdrop-blur-sm shadow-2xl"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/30 to-teal-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                      <Camera className="w-6 h-6 text-emerald-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white">Photo Gallery</h3>
-                      <p className="text-sm text-slate-400">{photos.count} photos total</p>
-                    </div>
+                    {filteredWeightHistory.length > 0 && (
+                      <div className="relative overflow-hidden rounded-xl bg-white/[0.02] border border-white/[0.05] p-3 sm:p-4">
+                        <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-slate-400 to-slate-500 rounded-l-xl" />
+                        <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1.5 pl-2">Data Points</p>
+                        <p className="text-xl sm:text-2xl font-bold text-white tracking-tight pl-2">{filteredWeightHistory.length}</p>
+                        <p className="text-[10px] text-slate-600 mt-1 pl-2">{getTimePeriodLabel(timePeriod)}</p>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => setShowPhotoModal(true)}
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/30"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Upload Photo
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                  {photos.latest.map((photo, index) => (
-                    <motion.div
-                      key={photo.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      whileHover={{ scale: 1.02, y: -4 }}
-                      className="relative group cursor-pointer"
-                    >
-                      {photo.photoUrl ? (
-                        <div className="aspect-[3/4] rounded-2xl overflow-hidden bg-slate-800 border-2 border-emerald-500/20 group-hover:border-emerald-500/50 transition-all shadow-lg group-hover:shadow-xl group-hover:shadow-emerald-500/20">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={photo.photoUrl}
-                            alt={`${photo.photoType} photo`}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            loading="lazy"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                            <div className="text-white">
-                              <div className="font-semibold capitalize text-sm">{photo.photoType}</div>
-                              <div className="text-slate-300 text-xs">{new Date(photo.recordDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="aspect-[3/4] rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-dashed border-slate-600 flex items-center justify-center">
-                          <Camera className="w-8 h-8 text-slate-600" />
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-
-        {activeTab === 'workouts' && (
-          <motion.div
-            key="workouts"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            {/* Workout Stats */}
-            <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-2xl p-4 sm:p-6 lg:p-8 backdrop-blur-sm shadow-xl">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center">
-                  <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg sm:text-xl font-semibold text-white">Workout Summary</h3>
-                  <p className="text-xs sm:text-sm text-slate-400">Your fitness activity overview</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="bg-white/5 rounded-xl p-4 sm:p-6 border border-white/10 text-center backdrop-blur-sm"
-                >
-                  <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-1 sm:mb-2">
-                    {workouts.thisWeek}
-                  </div>
-                  <div className="text-xs sm:text-sm text-slate-400">This Week</div>
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="bg-white/5 rounded-xl p-4 sm:p-6 border border-white/10 text-center backdrop-blur-sm"
-                >
-                  <div className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent mb-1 sm:mb-2">
-                    {workouts.thisMonth}
-                  </div>
-                  <div className="text-xs sm:text-sm text-slate-400">This Month</div>
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="bg-white/5 rounded-xl p-4 sm:p-6 border border-white/10 text-center backdrop-blur-sm"
-                >
-                  <div className="text-3xl sm:text-4xl font-bold text-white mb-1 sm:mb-2">{workouts.totalCompleted}</div>
-                  <div className="text-xs sm:text-sm text-slate-400">Total Completed</div>
-                </motion.div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {activeTab === 'analytics' && (
-          <motion.div
-            key="analytics"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            {/* Analytics Tab Content */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-              {/* BMI Chart */}
-              <div className="bg-gradient-to-br from-white/5 to-white/5 border border-white/10 rounded-2xl p-4 sm:p-6 backdrop-blur-sm shadow-xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base sm:text-lg font-semibold text-white">BMI Trend</h3>
-                  {currentBMI && bmiCategory && (
-                    <span className={`text-xs sm:text-sm font-medium ${bmiCategory.color}`}>
-                      {bmiCategory.category}
-                    </span>
-                  )}
-                </div>
-                <BMITrendChart
-                  weightHistory={filteredWeightHistory}
-                  heightCm={userHeight}
-                  timePeriod={timePeriod}
-                />
-                {!userHeight && (
-                  <div className="mt-4 p-3 sm:p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-center">
-                    <p className="text-xs sm:text-sm text-blue-400 mb-1 sm:mb-2">Height required for BMI calculation</p>
-                    <p className="text-xs text-slate-400">Please update your profile with your height</p>
-                  </div>
-                )}
-                {currentBMI && (
-                  <div className="mt-4 pt-4 border-t border-white/10 text-center">
-                    <p className="text-xs sm:text-sm text-slate-400 mb-1">Current BMI</p>
-                    <p className={`text-2xl sm:text-3xl font-bold ${bmiCategory?.color || 'text-white'}`}>
-                      {currentBMI.toFixed(1)}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Analytics Insights */}
-              <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-2xl p-4 sm:p-6 backdrop-blur-sm shadow-xl">
-                <h3 className="text-base sm:text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <Target className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
-                  Progress Insights
-                </h3>
-                <div className="space-y-3 sm:space-y-4">
-                  {weeklyChange !== null && (
-                    <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10 backdrop-blur-sm">
-                      <p className="text-xs sm:text-sm text-slate-400 mb-1">Weekly Average Change</p>
-                      <p className={`text-xl sm:text-2xl font-bold ${weeklyChange < 0 ? 'text-emerald-400' : weeklyChange > 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                        {weeklyChange > 0 ? '+' : ''}{weeklyChange.toFixed(2)} kg/week
-                      </p>
-                    </div>
-                  )}
-                  <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10 backdrop-blur-sm">
-                    <p className="text-xs sm:text-sm text-slate-400 mb-1">Consistency Score</p>
-                    <p className="text-xl sm:text-2xl font-bold text-cyan-400">{consistencyScore}%</p>
-                    <p className="text-xs text-slate-500 mt-1">Days logged (last 4 weeks)</p>
-                  </div>
-                  {filteredWeightHistory.length > 0 && (
-                    <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10 backdrop-blur-sm">
-                      <p className="text-xs sm:text-sm text-slate-400 mb-1">Data Points</p>
-                      <p className="text-xl sm:text-2xl font-bold text-white">{filteredWeightHistory.length}</p>
-                      <p className="text-xs text-slate-500 mt-1">{getTimePeriodLabel(timePeriod)}</p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -1436,45 +1550,51 @@ export function ProgressTab() {
       {/* Modals */}
       <AnimatePresence>
         {showWeightModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={() => setShowWeightModal(false)}>
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-gradient-to-br from-slate-900 to-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative overflow-hidden bg-slate-900 border border-white/[0.08] rounded-2xl p-6 w-full max-w-sm shadow-2xl shadow-black/40"
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+              {/* Top accent line */}
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent" />
+
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center ring-1 ring-emerald-500/20">
                   <Scale className="w-5 h-5 text-emerald-400" />
                 </div>
-                <h3 className="text-xl font-semibold text-white">Log Weight</h3>
+                <h3 className="text-lg font-semibold text-white tracking-tight">Log Weight</h3>
               </div>
-              <div className="mb-4">
-                <label className="text-sm text-slate-400 block mb-2">Weight (kg)</label>
+              <div className="mb-5">
+                <label className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block mb-2">Weight (kg)</label>
                 <input
                   type="number"
                   step="0.1"
                   value={weightInput}
                   onChange={(e) => setWeightInput(e.target.value)}
                   placeholder="e.g., 75.5"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition-all duration-200 text-lg tabular-nums"
+                  autoFocus
                 />
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowWeightModal(false)}
-                  className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl transition-colors font-medium"
+                  className="flex-1 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-slate-200 rounded-xl transition-all duration-200 font-medium text-sm border border-white/[0.06]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleLogWeight}
                   disabled={isSaving || !weightInput}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white font-medium text-sm rounded-xl transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
                 >
                   {isSaving ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       Saving...
                     </>
                   ) : (

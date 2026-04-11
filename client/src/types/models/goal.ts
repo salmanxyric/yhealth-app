@@ -12,6 +12,8 @@ export type GoalCategory =
   | 'health_condition'
   | 'habit_building'
   | 'overall_optimization'
+  | 'nutrition'
+  | 'fitness'
   | 'custom';
 
 export type HealthPillar = 'fitness' | 'nutrition' | 'wellbeing';

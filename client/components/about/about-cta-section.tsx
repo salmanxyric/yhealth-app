@@ -73,7 +73,7 @@ export function AboutCTASection() {
                 transition={{ duration: 0.5, delay: 0.5 }}
                 className="text-lg lg:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed"
               >
-                Join thousands of people who are taking control of their health with YHealth.
+                Join thousands of people who are taking control of their health with Balencia.
                 Start your wellness journey today and experience the power of AI-driven personal
                 health coaching.
               </motion.p>

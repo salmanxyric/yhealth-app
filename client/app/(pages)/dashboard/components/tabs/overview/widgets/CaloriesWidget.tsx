@@ -45,7 +45,7 @@ export function CaloriesWidget({ consumed, burned, target, isLoading }: Calories
             </div>
             <div>
               <h3 className="text-sm font-medium text-slate-400">Calories</h3>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-lg font-bold text-white">
                 {isLoading ? '—' : consumed?.toLocaleString() || '0'}
               </p>
               <p className="text-xs text-slate-400">

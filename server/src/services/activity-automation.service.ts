@@ -4,11 +4,11 @@
  * Handles activity logs from user_plans (different from schedule_items from daily_schedules)
  */
 
-import { ChatAnthropic } from '@langchain/anthropic';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { query, transaction } from '../database/pg.js';
 import { logger } from './logger.service.js';
-import { env } from '../config/env.config.js';
+import { modelFactory } from './model-factory.service.js';
 import { messageService } from './message.service.js';
 import { socketService } from './socket.service.js';
 import { cache } from './cache.service.js';
@@ -67,12 +67,11 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 // ============================================
 
 class ActivityAutomationService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'default',
       maxTokens: 500,
     });
   }
@@ -477,11 +476,13 @@ ${typePrompts[messageType]}
 ${nameContext}
 
 RULES:
-- You MUST reference at least ONE specific data point (recovery %, sleep hours, streak days, hydration %, health score) and interpret what it means for this activity
-- Never use generic filler: "You've got this", "Stay focused", "Let's crush it", "Keep up the great work"
-- Sound like a knowledgeable friend who reviewed their health data before texting — not a notification system
-- If recovery is below 50%, frame rest/modification as strategic and data-backed, not as failure
-- Connect this single activity to their broader health trajectory
+- You MAY reference a data point (recovery %, sleep hours, streak days) if it naturally fits — don't force it
+- Keep it warm and brief — 1-2 sentences max. Sound like a supportive friend texting, not a health dashboard
+- Never use generic filler: "You've got this", "Stay focused", "Let's crush it"
+- If recovery is below 50%, suggest modification warmly — not as failure
+- Prioritize encouragement and personality over data density
+- GOOD: "Morning workout time! You've been really consistent this week 💪"
+- BAD: "Time for your workout! Recovery is 67%, strain 4.2, HRV 45ms, sleep 6.8hrs. Your weekly completion rate is 71%."
 
 Return ONLY the message text.`;
   }

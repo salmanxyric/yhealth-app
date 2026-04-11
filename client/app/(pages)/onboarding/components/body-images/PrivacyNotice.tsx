@@ -97,7 +97,7 @@ export function PrivacyNotice({ isConsented, onConsentChange }: PrivacyNoticePro
           </div>
         </div>
         <span className="text-sm text-slate-300 leading-tight">
-          I consent to yHealth securely storing and analyzing my photos to provide
+          I consent to Balencia securely storing and analyzing my photos to provide
           personalized health insights and track my progress.
         </span>
       </label>

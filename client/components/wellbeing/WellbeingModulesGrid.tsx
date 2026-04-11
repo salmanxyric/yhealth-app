@@ -11,6 +11,8 @@ import {
   Calendar as CalendarIcon,
   Wind,
   Heart,
+  Lightbulb,
+  Eye,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -115,6 +117,28 @@ export const WELLBEING_MODULES: WellbeingModule[] = [
     trend: "stable",
     actionLabel: "Start",
     gradient: "from-purple-500 via-pink-500 to-rose-500",
+  },
+  {
+    id: "insights",
+    title: "Insights",
+    description: "Health correlations and recurring themes from your journals",
+    icon: Lightbulb,
+    href: "/wellbeing/insights",
+    status: "Auto-updated",
+    trend: "up",
+    actionLabel: "View",
+    gradient: "from-amber-500 via-orange-500 to-red-500",
+  },
+  {
+    id: "vision",
+    title: "Vision Health",
+    description: "Color vision tests, eye exercises, and focus training",
+    icon: Eye,
+    href: "/wellbeing/vision",
+    status: "Ready to test",
+    trend: "stable",
+    actionLabel: "Start",
+    gradient: "from-sky-400 via-blue-500 to-indigo-500",
   },
 ];
 

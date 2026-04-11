@@ -15,7 +15,9 @@ CREATE TABLE life_goals (
     -- Goal definition
     category VARCHAR(30) NOT NULL CHECK (category IN (
         'spiritual', 'social', 'productivity', 'happiness',
-        'anxiety_management', 'creative', 'personal_growth', 'custom'
+        'anxiety_management', 'creative', 'personal_growth',
+        'financial', 'faith', 'relationships', 'education',
+        'career', 'health_wellness', 'custom'
     )),
     title VARCHAR(200) NOT NULL,
     description TEXT,

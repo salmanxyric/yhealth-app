@@ -80,6 +80,16 @@ const EXPECTED_TABLES = [
   'testimonials',
   // AI Coaching Profiles
   'user_coaching_profiles',
+  // Wellbeing — Journaling & Check-ins
+  'daily_checkins',
+  'life_goals',
+  'daily_intentions',
+  'journal_goal_links',
+  'journal_insights',
+  'journal_patterns',
+  'lessons_learned',
+  'voice_journal_sessions',
+  'mood_behavioral_patterns',
   // Gamification
   'variable_rewards',
   'daily_pledges',
@@ -149,13 +159,45 @@ const EXPECTED_TABLES = [
   'goal_daily_tracking',
   'user_commitments',
   'proactive_messages',
-  // Journaling system tables
-  'daily_checkins',
-  'life_goals',
-  'daily_intentions',
-  'journal_goal_links',
-  'journal_insights',
-  'journal_patterns',
+  // Intelligence tables (Epic 08)
+  'insight_feedback',
+  'weekly_analysis_reports',
+  'prediction_accuracy_tracking',
+  // Spotify integration
+  'spotify_cached_playlists',
+  // Yoga & Meditation (F7.9)
+  'yoga_poses',
+  'yoga_sessions',
+  'yoga_session_logs',
+  'meditation_timers',
+  'yoga_streaks',
+  // Life History (pgvector 768-dim)
+  'user_life_history',
+  // Life goal milestones, motivation & goal actions
+  'life_goal_milestones',
+  'life_goal_checkins',
+  'user_motivation_profiles',
+  'goal_actions',
+  'goal_action_responses',
+  // Email engine tables
+  'email_logs',
+  'email_preferences',
+  // Vision Testing
+  'vision_test_sessions',
+  'vision_test_responses',
+  'vision_streaks',
+  // Finance module
+  'finance_profiles',
+  'finance_transactions',
+  'finance_budgets',
+  'finance_saving_goals',
+  'finance_ai_insights',
+  'finance_monthly_snapshots',
+  // Streak system
+  'user_streaks',
+  'streak_activity_log',
+  'streak_freeze_log',
+  'streak_rewards',
 ];
 
 // List of expected enum types
@@ -402,6 +444,50 @@ async function runFullSchema(): Promise<void> {
     '80-exercise-lookup-tables.sql',
     '82-testimonials.sql',
     '83-user-coaching-profiles.sql',
+    // Journaling & check-ins
+    '84-daily-checkins.sql',
+    '85-life-goals.sql',
+    '86-journal-insights.sql',
+    // Journaling inspiration features
+    '87-lessons-learned.sql',
+    '88-insight-feedback.sql',
+    '88-voice-journal-sessions.sql',
+    // Intelligence tables
+    '89-weekly-analysis-reports.sql',
+    '90-prediction-accuracy.sql',
+    // Spotify integration
+    '91-spotify-cached-playlists.sql',
+    // Yoga & Meditation
+    '92-yoga-poses.sql',
+    '93-yoga-sessions.sql',
+    '94-yoga-session-logs.sql',
+    '95-meditation-timers.sql',
+    '96-yoga-streaks.sql',
+    // Life History
+    '97-user-life-history.sql',
+    // Life goal milestones & checkins
+    '98-life-goal-milestones-checkins.sql',
+    // Motivation profiles
+    '99-user-motivation-profiles.sql',
+    // Goal actions
+    '100-goal-actions.sql',
+    // Proactive messages
+    '101-proactive-messages.sql',
+    // Email engine
+    '102-email-logs.sql',
+    '103-email-preferences.sql',
+    // Vision testing
+    '104-vision-test-sessions.sql',
+    '105-vision-test-responses.sql',
+    '106-vision-streaks.sql',
+    // Finance module
+    '107-finance.sql',
+    // Streak system
+    '108-user-streaks.sql',
+    '109-streak-activity-log.sql',
+    '110-streak-freeze-log.sql',
+    '111-streak-rewards.sql',
+    // Triggers (must be last)
     '99-triggers.sql',
   ];
 
@@ -876,9 +962,48 @@ export async function autoMigrate(): Promise<{
             'consent_records': '03-consent-records.sql',
             'users': '02-users.sql',
             'user_coaching_profiles': '83-user-coaching-profiles.sql',
+            'daily_checkins': '84-daily-checkins.sql',
+            'life_goals': '85-life-goals.sql',
+            'daily_intentions': '85-life-goals.sql',
+            'journal_goal_links': '85-life-goals.sql',
+            'journal_insights': '86-journal-insights.sql',
+            'journal_patterns': '86-journal-insights.sql',
             'newsletter_subscriptions': '76-newsletter-subscriptions.sql',
             'user_roles': '77-user-roles.sql',
             'leaderboard_snapshots': '69-leaderboard-snapshots.sql',
+            'lessons_learned': '87-lessons-learned.sql',
+            'voice_journal_sessions': '88-voice-journal-sessions.sql',
+            'insight_feedback': '88-insight-feedback.sql',
+            'weekly_analysis_reports': '89-weekly-analysis-reports.sql',
+            'prediction_accuracy_tracking': '90-prediction-accuracy.sql',
+            'spotify_cached_playlists': '91-spotify-cached-playlists.sql',
+            'yoga_poses': '92-yoga-poses.sql',
+            'yoga_sessions': '93-yoga-sessions.sql',
+            'yoga_session_logs': '94-yoga-session-logs.sql',
+            'meditation_timers': '95-meditation-timers.sql',
+            'yoga_streaks': '96-yoga-streaks.sql',
+            'user_life_history': '97-user-life-history.sql',
+            'life_goal_milestones': '98-life-goal-milestones-checkins.sql',
+            'life_goal_checkins': '98-life-goal-milestones-checkins.sql',
+            'user_motivation_profiles': '99-user-motivation-profiles.sql',
+            'goal_actions': '100-goal-actions.sql',
+            'goal_action_responses': '100-goal-actions.sql',
+            'proactive_messages': '101-proactive-messages.sql',
+            'email_logs': '102-email-logs.sql',
+            'email_preferences': '103-email-preferences.sql',
+            'vision_test_sessions': '104-vision-test-sessions.sql',
+            'vision_test_responses': '105-vision-test-responses.sql',
+            'vision_streaks': '106-vision-streaks.sql',
+            'finance_profiles': '107-finance.sql',
+            'finance_transactions': '107-finance.sql',
+            'finance_budgets': '107-finance.sql',
+            'finance_saving_goals': '107-finance.sql',
+            'finance_ai_insights': '107-finance.sql',
+            'finance_monthly_snapshots': '107-finance.sql',
+            'user_streaks': '108-user-streaks.sql',
+            'streak_activity_log': '109-streak-activity-log.sql',
+            'streak_freeze_log': '110-streak-freeze-log.sql',
+            'streak_rewards': '111-streak-rewards.sql',
           };
           
           const tableFile = tableToFileMap[table] || tableFiles.find(f => {
@@ -932,25 +1057,22 @@ export async function autoMigrate(): Promise<{
         }
       }
 
-      // Also run any column addition migrations (like add-voice-calls-session-type, add-calories-to-shopping-list)
+      // Run all add-* migration files (table creation, column additions, enum updates)
+      // All migrations are idempotent (IF NOT EXISTS / IF EXISTS guards)
       for (const migrationFile of migrationFiles) {
-        if (migrationFile.includes('add-') && (
-          migrationFile.includes('column') || 
-          migrationFile.includes('session-type') ||
-          migrationFile.includes('calories') ||
-          migrationFile.includes('shopping-list')
-        )) {
+        if (migrationFile.startsWith('add-')) {
           try {
-            logger.info(`Running column addition migration: ${migrationFile}`);
+            logger.info(`Running migration: ${migrationFile}`);
             await runMigration(migrationFile);
           } catch (error: any) {
-            // Ignore "column already exists" errors (code 42701) and "duplicate" errors
-            if (error?.code !== '42701' && !error?.message?.includes('already exists') && !error?.message?.includes('duplicate')) {
+            // Ignore "already exists" / "duplicate" errors
+            if (error?.code !== '42701' && error?.code !== '42P07' && error?.code !== '42710' &&
+                !error?.message?.includes('already exists') && !error?.message?.includes('duplicate')) {
               logger.warn(`Migration ${migrationFile} had issues (may already be applied):`, {
                 error: (error as Error).message
               });
             } else {
-              logger.debug(`Migration ${migrationFile} already applied or column exists`);
+              logger.debug(`Migration ${migrationFile} already applied`);
             }
           }
         }

@@ -79,7 +79,7 @@ export function LoadingScreen({
           >
             <Image
               src="/logo1.png"
-              alt="yHealth"
+              alt="Balencia"
               width={size === "lg" ? 64 : size === "md" ? 48 : 36}
               height={size === "lg" ? 64 : size === "md" ? 48 : 36}
               className="object-contain"

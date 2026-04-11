@@ -548,7 +548,7 @@ describe('AICoachServiceClient', () => {
       // Set up the cookie
       Object.defineProperty(document, 'cookie', {
         writable: true,
-        value: 'yhealth_access_token=jwt-token-abc; other_cookie=xyz',
+        value: 'balencia_access_token=jwt-token-abc; other_cookie=xyz',
       });
 
       mockFetch.mockResolvedValueOnce({

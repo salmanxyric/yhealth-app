@@ -37,7 +37,7 @@ export function StepsWidget({ steps, target, isLoading }: StepsWidgetProps) {
             </div>
             <div>
               <h3 className="text-sm font-medium text-slate-400">Steps</h3>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-lg font-bold text-white">
                 {isLoading ? '—' : steps?.toLocaleString() || '0'}
               </p>
             </div>

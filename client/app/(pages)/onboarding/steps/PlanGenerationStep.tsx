@@ -210,7 +210,7 @@ function TransitionState() {
       exit={{ opacity: 0 }}
       className="flex items-center justify-center min-h-[400px]"
     >
-      <Sparkles className="w-12 h-12 text-purple-400 animate-pulse" />
+      <Sparkles className="w-12 h-12 text-sky-500 animate-pulse" />
     </motion.div>
   );
 }

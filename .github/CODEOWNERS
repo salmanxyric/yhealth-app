@@ -5,68 +5,68 @@
 # See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Global owners (fallback)
-* @yhealth-team/maintainers
+* @balencia-team/maintainers
 
 # ============================================
 # Client (Frontend)
 # ============================================
-/client/ @yhealth-team/frontend-team
-/client/app/ @yhealth-team/frontend-team
-/client/components/ @yhealth-team/frontend-team
-/client/hooks/ @yhealth-team/frontend-team
-/client/lib/ @yhealth-team/frontend-team
+/client/ @balencia-team/frontend-team
+/client/app/ @balencia-team/frontend-team
+/client/components/ @balencia-team/frontend-team
+/client/hooks/ @balencia-team/frontend-team
+/client/lib/ @balencia-team/frontend-team
 
 # ============================================
 # Server (Backend)
 # ============================================
-/server/ @yhealth-team/backend-team
-/server/src/ @yhealth-team/backend-team
-/server/src/controllers/ @yhealth-team/backend-team
-/server/src/services/ @yhealth-team/backend-team
-/server/src/routes/ @yhealth-team/backend-team
+/server/ @balencia-team/backend-team
+/server/src/ @balencia-team/backend-team
+/server/src/controllers/ @balencia-team/backend-team
+/server/src/services/ @balencia-team/backend-team
+/server/src/routes/ @balencia-team/backend-team
 
 # ============================================
 # Database
 # ============================================
-/server/src/database/ @yhealth-team/backend-team @yhealth-team/database-team
-/server/src/database/migrations/ @yhealth-team/database-team
+/server/src/database/ @balencia-team/backend-team @balencia-team/database-team
+/server/src/database/migrations/ @balencia-team/database-team
 
 # ============================================
 # Shared Types
 # ============================================
-/shared/ @yhealth-team/backend-team @yhealth-team/frontend-team
+/shared/ @balencia-team/backend-team @balencia-team/frontend-team
 
 # ============================================
 # Documentation
 # ============================================
-/docs/ @yhealth-team/docs-team
-*.md @yhealth-team/docs-team
-README.md @yhealth-team/maintainers
-CONTRIBUTING.md @yhealth-team/maintainers
-CODE_OF_CONDUCT.md @yhealth-team/maintainers
+/docs/ @balencia-team/docs-team
+*.md @balencia-team/docs-team
+README.md @balencia-team/maintainers
+CONTRIBUTING.md @balencia-team/maintainers
+CODE_OF_CONDUCT.md @balencia-team/maintainers
 
 # ============================================
 # CI/CD & DevOps
 # ============================================
-/.github/ @yhealth-team/devops-team
-/.github/workflows/ @yhealth-team/devops-team
-docker-compose.yml @yhealth-team/devops-team
-Dockerfile @yhealth-team/devops-team
-*.dockerfile @yhealth-team/devops-team
+/.github/ @balencia-team/devops-team
+/.github/workflows/ @balencia-team/devops-team
+docker-compose.yml @balencia-team/devops-team
+Dockerfile @balencia-team/devops-team
+*.dockerfile @balencia-team/devops-team
 
 # ============================================
 # Configuration Files
 # ============================================
-package.json @yhealth-team/maintainers
-tsconfig.json @yhealth-team/maintainers
-.eslintrc* @yhealth-team/maintainers
-.prettierrc* @yhealth-team/maintainers
+package.json @balencia-team/maintainers
+tsconfig.json @balencia-team/maintainers
+.eslintrc* @balencia-team/maintainers
+.prettierrc* @balencia-team/maintainers
 
 # ============================================
 # Security & Secrets
 # ============================================
-.env* @yhealth-team/devops-team
-*.pem @yhealth-team/devops-team
-*.key @yhealth-team/devops-team
-secrets/ @yhealth-team/devops-team
+.env* @balencia-team/devops-team
+*.pem @balencia-team/devops-team
+*.key @balencia-team/devops-team
+secrets/ @balencia-team/devops-team
 

@@ -100,7 +100,7 @@ class TTSService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(typeof document !== 'undefined' && document.cookie.includes('yhealth_access_token')
+          ...(typeof document !== 'undefined' && document.cookie.includes('balencia_access_token')
             ? {
                 Authorization: `Bearer ${this.getAuthToken()}`,
               }
@@ -177,7 +177,7 @@ class TTSService {
   private getAuthToken(): string | null {
     if (typeof document === 'undefined') return null;
     const value = `; ${document.cookie}`;
-    const parts = value.split('; yhealth_access_token=');
+    const parts = value.split('; balencia_access_token=');
     if (parts.length === 2) {
       return parts.pop()?.split(';').shift() || null;
     }

@@ -61,48 +61,13 @@ export function WhoopOverview() {
     deps: [dateRange.from?.toISOString(), dateRange.to?.toISOString()], // Refetch when date range changes
   });
 
-  // Refetch on mount and when WHOOP page is opened - always get fresh data
+  // Listen for refresh events from parent (visibility change, manual refresh)
   useEffect(() => {
-    // Fetch immediately, no delay
-    refetch();
-  }, [refetch]);
-
-  useEffect(() => {
-    const handlePageOpened = () => refetch();
-    const handleRefreshRequested = () => refetch();
-    window.addEventListener('whoop-page-opened', handlePageOpened);
-    window.addEventListener('whoop-refresh-requested', handleRefreshRequested);
-    return () => {
-      window.removeEventListener('whoop-page-opened', handlePageOpened);
-      window.removeEventListener('whoop-refresh-requested', handleRefreshRequested);
-    };
-  }, [refetch]);
-
-  // Listen for tab change events to refetch when tab becomes active
-  useEffect(() => {
-    const handleTabChange = (event: CustomEvent<{ tab: string }>) => {
-      if (event.detail.tab === 'overview') {
-        // Refetch immediately when overview tab becomes active
-        refetch();
-      }
-    };
-
-    window.addEventListener('whoop-tab-changed', handleTabChange as EventListener);
-    
-    // Also refetch when component becomes visible (user switches back to tab)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && !isLoading) {
-        refetch();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      window.removeEventListener('whoop-tab-changed', handleTabChange as EventListener);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isLoading, refetch]);
+    const handleRefresh = () => refetch();
+    window.addEventListener('whoop-refresh-requested', handleRefresh);
+    return () => window.removeEventListener('whoop-refresh-requested', handleRefresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { mutate: triggerSync, isLoading: isSyncing } = useApiMutation({
     onSuccess: () => {
@@ -131,10 +96,10 @@ export function WhoopOverview() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Date Range Picker */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4">
           <DateRangePicker
             dateRange={dateRange}
             onDateRangeChange={handleDateRangeChange}
@@ -169,13 +134,13 @@ export function WhoopOverview() {
           <span>Loading trends...</span>
         </div>
       ) : error ? (
-        <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-6 backdrop-blur-sm">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 sm:p-6 backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
               <div>
-                <p className="text-red-400 font-medium">Failed to load trends</p>
-                <p className="text-sm text-red-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-red-400 font-medium">Failed to load trends</p>
+                <p className="text-[13px] sm:text-[14px] text-red-300/70 mt-1">
                   {error.message || 'Unable to fetch WHOOP trends. Please check your connection and try again.'}
                 </p>
                 {error.message?.includes('90 days') && (
@@ -204,13 +169,13 @@ export function WhoopOverview() {
           </div>
         </div>
       ) : !data ? (
-        <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-6 backdrop-blur-sm">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-4 sm:p-6 backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
               <div>
-                <p className="text-blue-400 font-medium">No trend data available</p>
-                <p className="text-sm text-blue-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No trend data available</p>
+                <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                   Unable to load WHOOP trends. Please try refreshing.
                 </p>
               </div>
@@ -246,13 +211,13 @@ export function WhoopOverview() {
           ((!data.trends.recovery7d || (Array.isArray(data.trends.recovery7d) && data.trends.recovery7d.length === 0)) &&
            (!data.trends.sleep7d || (Array.isArray(data.trends.sleep7d) && data.trends.sleep7d.length === 0)) &&
            (!data.trends.strain7d || (Array.isArray(data.trends.strain7d) && data.trends.strain7d.length === 0))) ? (
-        <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-6 backdrop-blur-sm">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-4 sm:p-6 backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
               <div>
-                <p className="text-blue-400 font-medium">No trend data available</p>
-                <p className="text-sm text-blue-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No trend data available</p>
+                <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                   WHOOP data hasn&apos;t been synced yet. Your device is connected, but no historical data has been received. This usually means:
                   <br />• Data sync may take a few minutes after connecting
                   <br />• Make sure your WHOOP device is actively tracking and syncing
@@ -296,13 +261,13 @@ export function WhoopOverview() {
 
         if (!hasData) {
           return (
-            <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-6 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
+            <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-4 sm:p-6 backdrop-blur-sm">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-blue-400" />
+                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
                   <div>
-                    <p className="text-blue-400 font-medium">No trend data available</p>
-                    <p className="text-sm text-blue-300/70 mt-1">
+                    <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No trend data available</p>
+                    <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                       No data points found for the selected date range. Make sure your WHOOP device is syncing data regularly.
                     </p>
                   </div>
@@ -427,19 +392,19 @@ export function WhoopOverview() {
           }));
 
         return (
-          <div className="relative rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-xl border border-white/20 p-8 transition-all duration-500 hover:from-white/15 hover:to-white/10 hover:shadow-2xl hover:shadow-purple-500/20 group">
+          <div className="relative rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-xl border border-white/20 p-4 sm:p-8 transition-all duration-500 hover:from-white/15 hover:to-white/10 hover:shadow-2xl hover:shadow-purple-500/20 group">
             {/* Decorative gradient overlay */}
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             
             <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
                 <div>
-                  <h3 className="text-2xl font-bold mb-1 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  <h3 className="text-[18px] sm:text-[20px] font-bold mb-1 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                     Trends
                   </h3>
-                  <p className="text-sm text-slate-400">Historical performance metrics</p>
+                  <p className="text-[13px] sm:text-[14px] text-slate-400">Historical performance metrics</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <div className="px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 backdrop-blur-sm">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
@@ -461,7 +426,7 @@ export function WhoopOverview() {
                 </div>
               </div>
               
-              <ResponsiveContainer width="100%" height={350}>
+              <ResponsiveContainer width="100%" height={280}>
                 <LineChart 
                   data={chartData}
                   margin={{ top: 10, right: 10, left: 0, bottom: 0 }}

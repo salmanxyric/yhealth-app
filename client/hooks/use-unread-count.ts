@@ -55,23 +55,13 @@ export function useUnreadCount() {
       return;
     }
 
-    // Subscribe to unread count updates
+    // Subscribe to unread count updates via socket (real-time)
     const unsubscribe = subscribeToUnreadCountUpdates((data) => {
       setUnreadCount(data.totalUnread);
     });
 
-    // Refetch on visibility change (when user returns to tab)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        fetchUnreadCount();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
     return () => {
       unsubscribe();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [isAuthenticated, user, fetchUnreadCount]);
 

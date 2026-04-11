@@ -143,7 +143,7 @@ async function processStressReminders(): Promise<void> {
           try {
             await mailHelper.send({
               email: user.email,
-              subject: 'How was your stress today? - yHealth',
+              subject: 'How was your stress today? - Balencia',
               html: `
                 <!DOCTYPE html>
                 <html>

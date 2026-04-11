@@ -17,14 +17,17 @@ import { TodaySchedule } from './TodaySchedule';
 import { WeeklyChart, type ActivityPeriod } from './WeeklyChart';
 import { CurrentPlanCard } from './CurrentPlanCard';
 import { WeeklyFocus } from './WeeklyFocus';
-import { WaterIntakeWidget, XPLevelWidget } from '../../gamification';
+import { WaterIntakeWidget, XPLevelWidget, StreakWidget, StreakMilestoneModal } from '../../gamification';
+import { useStreak } from '@/hooks/use-streak';
 import { EmotionTrendsWidget } from '../../wellbeing';
 import { AnalyticsTab } from './AnalyticsTab';
 import { ScoringTab } from './ScoringTab';
 import { AlarmsTab } from '../alarms/AlarmsTab';
-import { LayoutDashboard, BarChart3, Award, Bell, Sparkles } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
+import { WeatherWidget } from './WeatherWidget';
 import { UnifiedHealthDashboard } from './widgets/UnifiedHealthDashboard';
 import type { EnhancedHealthMetrics } from './widgets/UnifiedHealthDashboard';
+import { DashboardCard } from './widgets/DashboardCard';
 
 interface OverviewTabProps {
   plan: Plan | null;
@@ -33,84 +36,6 @@ interface OverviewTabProps {
   weekCompletionRate: number;
   onActivityComplete: (activityId: string) => void;
   onRefresh?: () => void;
-}
-
-// Premium Tab Button Component
-function PremiumTabButton({
-  id,
-  label,
-  icon: Icon,
-  isActive,
-  onClick,
-  index,
-}: {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  isActive: boolean;
-  onClick: () => void;
-  index: number;
-}) {
-  return (
-    <motion.button
-      onClick={onClick}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.98 }}
-      className={`relative flex items-center gap-2 px-4 sm:px-6 py-3 rounded-xl font-medium text-sm sm:text-base transition-all duration-300 ${
-        isActive
-          ? 'text-white'
-          : 'text-slate-400 hover:text-white'
-      }`}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-    >
-      {/* Active background with glow */}
-      {isActive && (
-        <motion.div
-          layoutId="activeTabBg"
-          className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-cyan-600 rounded-xl"
-          initial={false}
-          transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-          style={{
-            boxShadow: '0 0 30px rgba(16, 185, 129, 0.4), 0 4px 20px rgba(0, 0, 0, 0.3)',
-          }}
-        />
-      )}
-      
-      {/* Hover background */}
-      {!isActive && (
-        <motion.div
-          className="absolute inset-0 bg-white/5 rounded-xl opacity-0 hover:opacity-100 transition-opacity"
-        />
-      )}
-
-      {/* Icon with animation */}
-      <motion.span
-        className="relative z-10"
-        animate={isActive ? { scale: [1, 1.2, 1] } : {}}
-        transition={{ duration: 0.3 }}
-      >
-        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-      </motion.span>
-      
-      {/* Label */}
-      <span className="relative z-10 whitespace-nowrap">{label}</span>
-
-      {/* Active indicator dot */}
-      {isActive && (
-        <motion.span
-          className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2 }}
-          style={{
-            boxShadow: '0 0 10px rgba(255, 255, 255, 0.8)',
-          }}
-        />
-      )}
-    </motion.button>
-  );
 }
 
 // Animated Tab Content Wrapper
@@ -137,6 +62,9 @@ export function OverviewTab({
   onActivityComplete,
   onRefresh,
 }: OverviewTabProps) {
+  // Streak system
+  const { milestone, dismissMilestone } = useStreak();
+
   // State for dynamic data
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [weeklyActivity, setWeeklyActivity] = useState<WeeklyActivityData | null>(null);
@@ -187,7 +115,8 @@ export function OverviewTab({
   // Fetch enhanced health metrics
   const fetchEnhancedHealthMetrics = useCallback(async () => {
     try {
-      const response = await api.get<EnhancedHealthMetrics>('/stats/enhanced-health-metrics');
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await api.get<EnhancedHealthMetrics>(`/stats/enhanced-health-metrics?tz=${encodeURIComponent(tz)}`);
       if (response.success && response.data) {
         setEnhancedHealthMetrics(response.data);
       }
@@ -226,22 +155,13 @@ export function OverviewTab({
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    const handleWaterUpdate = () => {
-      setTimeout(() => {
-        fetchEnhancedHealthMetrics();
-      }, 500);
-    };
-    
-    window.addEventListener('water-intake-updated', handleWaterUpdate);
-    
+
     const pollInterval = setInterval(() => {
       fetchEnhancedHealthMetrics();
     }, 30000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('water-intake-updated', handleWaterUpdate);
       clearInterval(pollInterval);
     };
   }, [fetchEnhancedHealthMetrics]);
@@ -251,56 +171,41 @@ export function OverviewTab({
     fetchWeeklyActivity(selectedWeek);
   }, [selectedWeek]);
 
+  // Update water state directly from API response — no refetch needed
+  const updateWaterFromResponse = useCallback((log: { mlConsumed: number; targetMl: number }) => {
+    setEnhancedHealthMetrics((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        water: {
+          consumed: log.mlConsumed,
+          target: log.targetMl || prev.water.target,
+        },
+      };
+    });
+  }, []);
+
   // Handle add water
   const handleAddWater = async () => {
     try {
-      const response = await api.post<{ log: { glassesConsumed: number; mlConsumed: number } }>('/water/add-glass');
-      
+      const response = await api.post<{ log: { glassesConsumed: number; mlConsumed: number; targetMl: number } }>('/water/add-glass');
       if (response.success && response.data?.log) {
-        const newGlasses = response.data.log.glassesConsumed;
-        
-        setEnhancedHealthMetrics((prev) => {
-          if (!prev) {
-            return {
-              steps: { value: null, target: 10000 },
-              whoopAge: { value: null, chronologicalAge: null },
-              water: { consumed: newGlasses, target: 8 },
-              calories: { consumed: 0, burned: 0, target: 2200 },
-              nutrition: {
-                macros: { protein: 0, carbs: 0, fats: 0 },
-                targets: { protein: 150, carbs: 200, fats: 65 },
-              },
-              heartRate: {
-                current: null,
-                resting: null,
-                history: [],
-              },
-              analytics: {
-                weeklyAvg: 0,
-                consistencyScore: 0,
-                dataPoints: 0,
-                trend: 'stable' as const,
-              },
-            };
-          }
-          return {
-            ...prev,
-            water: {
-              consumed: newGlasses,
-              target: prev.water.target,
-            },
-          };
-        });
-        
-        window.dispatchEvent(new CustomEvent('water-intake-updated'));
-        
-        setTimeout(async () => {
-          await fetchEnhancedHealthMetrics();
-        }, 500);
+        updateWaterFromResponse(response.data.log);
       }
     } catch (err) {
       console.error('Failed to add water:', err);
-      await fetchEnhancedHealthMetrics();
+    }
+  };
+
+  // Handle remove water
+  const handleRemoveWater = async () => {
+    try {
+      const response = await api.post<{ log: { glassesConsumed: number; mlConsumed: number; targetMl: number } }>('/water/remove', { amountMl: 250 });
+      if (response.success && response.data?.log) {
+        updateWaterFromResponse(response.data.log);
+      }
+    } catch (err) {
+      console.error('Failed to remove water:', err);
     }
   };
 
@@ -317,55 +222,69 @@ export function OverviewTab({
   const [activeTab, setActiveTab] = useState<'dashboard' | 'analytics' | 'scoring' | 'alarms'>('dashboard');
 
   const tabs = [
-    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
-    { id: 'scoring' as const, label: 'Scoring', icon: Award },
-    { id: 'alarms' as const, label: 'Alarms', icon: Bell },
+    { id: 'dashboard' as const, label: 'Dashboard' },
+    { id: 'analytics' as const, label: 'Analytics' },
+    { id: 'scoring' as const, label: 'Scoring' },
+    { id: 'alarms' as const, label: 'Alarms' },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Premium Tab Navigation */}
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header: Title + Weather */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative"
+        className="flex items-center justify-between"
       >
-        <div className="flex items-center gap-2 p-2 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl overflow-x-auto scrollbar-hide">
-          {tabs.map((tab, index) => (
-            <PremiumTabButton
-              key={tab.id}
-              id={tab.id}
-              label={tab.label}
-              icon={tab.icon}
-              isActive={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              index={index}
-            />
-          ))}
-        </div>
-        
-        {/* Decorative bottom glow */}
-        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-3/4 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
+        <h1 className="text-xl sm:text-2xl font-semibold text-white">Overview</h1>
+        <WeatherWidget />
       </motion.div>
+
+      {/* Tab Bar: Underline tabs + Refresh */}
+      <div className="border-b border-white/[0.06]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4 sm:gap-6">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative pb-3 text-sm font-medium transition-colors ${
+                    isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {tab.label}
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTabUnderline"
+                      className="absolute bottom-0 left-0 right-0 h-[2px] bg-emerald-500 rounded-full"
+                      transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Refresh button */}
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-white transition-colors pb-3"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Refresh now</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Tab Content with AnimatePresence */}
       <AnimatePresence mode="wait">
         {activeTab === 'dashboard' && (
           <TabContent key="dashboard" tabId="dashboard">
             <div className="space-y-6">
-              {/* Stats Cards */}
-              <StatsCards
-                completedToday={completedToday}
-                totalToday={totalToday}
-                todayProgress={todayProgress}
-                effectiveWeekRate={effectiveWeekRate}
-                weekChange={weekChange}
-                currentStreak={currentStreak}
-                plan={plan}
-                isLoadingStats={isLoadingStats}
-              />
-
               {/* Health Metrics Dashboard */}
               <UnifiedHealthDashboard
                 data={enhancedHealthMetrics || {
@@ -391,36 +310,32 @@ export function OverviewTab({
                 }}
                 isLoading={isLoadingStats}
                 onAddWater={handleAddWater}
+                onRemoveWater={handleRemoveWater}
               />
 
               {/* Main Content Grid */}
               <div className="grid lg:grid-cols-3 gap-6">
                 {/* Left Column - Schedule & Chart */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="lg:col-span-2 space-y-6"
-                >
+                <div className="lg:col-span-2 space-y-6">
                   {/* Today's Schedule */}
-                  <div className="glass-premium rounded-3xl p-1">
+                  <DashboardCard accent="sky" padding="none">
                     <TodaySchedule
                       todayData={todayData}
                       plan={plan}
                       onActivityComplete={onActivityComplete}
                       onRefresh={onRefresh}
                     />
-                  </div>
+                  </DashboardCard>
 
                   {/* Weekly Overview Chart */}
-                  <div className="glass-premium rounded-3xl p-1">
+                  <DashboardCard accent="emerald" padding="none">
                     <WeeklyChart
                       weeklyActivity={weeklyActivity}
                       selectedWeek={selectedWeek}
                       onWeekChange={setSelectedWeek}
                     />
-                  </div>
-                </motion.div>
+                  </DashboardCard>
+                </div>
 
                 {/* Right Column - Widgets */}
                 <motion.div
@@ -429,52 +344,10 @@ export function OverviewTab({
                   transition={{ delay: 0.2 }}
                   className="space-y-4"
                 >
-                  {/* XP & Level Widget */}
-                  <motion.div 
-                    className="glass-premium rounded-2xl p-1"
-                    whileHover={{ scale: 1.01 }}
-                    transition={{ type: 'spring', stiffness: 400 }}
-                  >
-                    <XPLevelWidget />
-                  </motion.div>
-
-                  {/* Water Intake Widget */}
-                  <motion.div 
-                    className="glass-premium rounded-2xl p-1"
-                    whileHover={{ scale: 1.01 }}
-                    transition={{ type: 'spring', stiffness: 400 }}
-                  >
-                    <WaterIntakeWidget />
-                  </motion.div>
-
-                  {/* Emotional Wellbeing Widget */}
-                  <motion.div 
-                    className="glass-premium rounded-2xl p-1"
-                    whileHover={{ scale: 1.01 }}
-                    transition={{ type: 'spring', stiffness: 400 }}
-                  >
-                    <EmotionTrendsWidget compact />
-                  </motion.div>
-
-                  {/* Current Plan Card */}
-                  {plan && (
-                    <motion.div 
-                      className="glass-premium rounded-2xl p-1"
-                      whileHover={{ scale: 1.01 }}
-                      transition={{ type: 'spring', stiffness: 400 }}
-                    >
-                      <CurrentPlanCard plan={plan} />
-                    </motion.div>
-                  )}
-
-                  {/* Weekly Focus */}
-                  <motion.div 
-                    className="glass-premium rounded-2xl p-1"
-                    whileHover={{ scale: 1.01 }}
-                    transition={{ type: 'spring', stiffness: 400 }}
-                  >
-                    <WeeklyFocus weeklySummary={weeklySummary} />
-                  </motion.div>
+                  <StreakWidget />
+                  <EmotionTrendsWidget compact />
+                  {plan && <CurrentPlanCard plan={plan} />}
+                  <WeeklyFocus weeklySummary={weeklySummary} />
                 </motion.div>
               </div>
             </div>
@@ -505,6 +378,9 @@ export function OverviewTab({
           </TabContent>
         )}
       </AnimatePresence>
+
+      {/* Streak Milestone Celebration */}
+      <StreakMilestoneModal milestone={milestone} onDismiss={dismissMilestone} />
     </div>
   );
 }

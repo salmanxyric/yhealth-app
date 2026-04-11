@@ -30,7 +30,12 @@ CREATE TABLE journal_entries (
     
     -- Streak tracking
     streak_day INTEGER, -- Day number in current streak
-    
+
+    -- Enhanced journaling fields
+    checkin_id UUID, -- Link to daily check-in
+    journaling_mode VARCHAR(20) CHECK (journaling_mode IN ('quick_reflection', 'deep_dive', 'gratitude', 'life_perspective', 'free_write')),
+    ai_generated_prompt BOOLEAN DEFAULT false,
+
     -- Timestamp (UTC)
     logged_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     

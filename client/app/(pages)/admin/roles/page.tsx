@@ -2,7 +2,7 @@ import { createMetadata } from '@/lib/seo';
 import AdminRolesPageContent from './AdminRolesPageContent';
 
 export const metadata = createMetadata({
-  title: 'Roles Management - YHealth Admin',
+  title: 'Roles Management - Balencia Admin',
   description: 'Manage user roles and permissions.',
   path: '/admin/roles',
   noIndex: true,

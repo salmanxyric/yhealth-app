@@ -465,6 +465,107 @@ class ActivityStatusService {
       throw ApiError.internal('Failed to delete status for date');
     }
   }
+
+  // ─── Lifecycle Management Methods ───────────────────────────────────────
+
+  async updateCurrentStatusWithLifecycle(
+    userId: string,
+    status: ActivityStatus,
+    source: string = 'manual',
+    expectedEndDate?: string,
+    reason?: string,
+  ): Promise<CurrentStatusResponse> {
+    // Wrap in transaction to prevent partial state (status updated but lifecycle fields not)
+    const { transaction } = await import('../database/pg.js');
+
+    let result: CurrentStatusResponse | undefined;
+    await transaction(async (client) => {
+      // Update user profile status
+      const statusResult = await client.query(
+        `UPDATE users SET current_activity_status = $1, activity_status_updated_at = NOW()
+         WHERE id = $2 RETURNING current_activity_status AS status, activity_status_updated_at AS "updatedAt"`,
+        [status, userId]
+      );
+      result = statusResult.rows[0] ?? { status, updatedAt: new Date() };
+
+      // Upsert today's history entry
+      await client.query(
+        `INSERT INTO activity_status_history (user_id, status_date, activity_status, expected_end_date, detected_from, notes, follow_up_sent, source)
+         VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, false, $4)
+         ON CONFLICT (user_id, status_date) DO UPDATE SET
+           activity_status = $2,
+           expected_end_date = $3,
+           detected_from = $4,
+           notes = COALESCE($5, activity_status_history.notes),
+           follow_up_sent = false,
+           updated_at = NOW()`,
+        [userId, status, expectedEndDate ?? null, source, reason ?? null]
+      );
+    });
+
+    return result!;
+  }
+
+  async getActiveNonWorkingStatuses(): Promise<Array<{
+    user_id: string;
+    activity_status: ActivityStatus;
+    status_date: string;
+    expected_end_date: string | null;
+    follow_up_sent: boolean;
+    timezone: string;
+  }>> {
+    const result = await query<{
+      user_id: string;
+      activity_status: ActivityStatus;
+      status_date: string;
+      expected_end_date: string | null;
+      follow_up_sent: boolean;
+      timezone: string;
+    }>(
+      `SELECT ash.user_id, ash.activity_status, ash.status_date::text,
+              ash.expected_end_date::text, ash.follow_up_sent,
+              COALESCE(u.timezone, 'UTC') AS timezone
+       FROM (
+         SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY status_date DESC) AS rn
+         FROM activity_status_history
+         WHERE status_date >= CURRENT_DATE - INTERVAL '30 days'
+       ) ash
+       JOIN users u ON u.id = ash.user_id
+       WHERE ash.rn = 1
+         AND ash.activity_status NOT IN ('working', 'excellent', 'good')
+         AND u.is_active = true`
+    );
+
+    return result.rows;
+  }
+
+  async markFollowUpSent(userId: string): Promise<void> {
+    await query(
+      `UPDATE activity_status_history
+       SET follow_up_sent = true
+       WHERE user_id = $1 AND status_date = CURRENT_DATE AND follow_up_sent = false`,
+      [userId]
+    );
+  }
+
+  async resetToWorking(userId: string): Promise<void> {
+    await this.updateCurrentStatus(userId, 'working' as ActivityStatus);
+    logger.info('[ActivityStatus] Reset user to working status', { userId });
+  }
+
+  async getDaysSinceLastWorkingStatus(userId: string): Promise<number> {
+    const result = await query<{ days: string }>(
+      `SELECT COALESCE(
+        CURRENT_DATE - MAX(status_date), 0
+       )::text AS days
+       FROM activity_status_history
+       WHERE user_id = $1
+         AND activity_status IN ('working', 'excellent', 'good')`,
+      [userId]
+    );
+
+    return parseInt(result.rows[0]?.days ?? '0', 10);
+  }
 }
 
 export const activityStatusService = new ActivityStatusService();

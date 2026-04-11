@@ -17,7 +17,7 @@ jest.mock("framer-motion", () => ({
 const mockStep: TourStepConfig = {
   id: "welcome",
   type: "fullscreen",
-  title: "Welcome to yHealth, {firstName}!",
+  title: "Welcome to Balencia, {firstName}!",
   description: "Your AI-powered health companion is ready.",
   icon: "Sparkles",
   accentColor: "from-emerald-500 to-cyan-500",
@@ -50,7 +50,7 @@ describe("TourWelcomeModal", () => {
       />
     );
 
-    expect(screen.getByText("Welcome to yHealth, Alex!")).toBeInTheDocument();
+    expect(screen.getByText("Welcome to Balencia, Alex!")).toBeInTheDocument();
   });
 
   it("interpolates {firstName} in title and description", () => {
@@ -82,7 +82,7 @@ describe("TourWelcomeModal", () => {
       />
     );
 
-    expect(screen.getByText("Welcome to yHealth, there!")).toBeInTheDocument();
+    expect(screen.getByText("Welcome to Balencia, there!")).toBeInTheDocument();
   });
 
   it("renders start and skip buttons with correct text", () => {

@@ -127,6 +127,24 @@ export function useExpressions({
     []
   );
 
+  // ---- Facial Asymmetry ----
+  // Seeded per-expression random offsets for natural asymmetry.
+  // Generated once per expression name, cached for the session.
+  const asymmetryCache = useRef<Map<string, number>>(new Map());
+
+  function getAsymmetryOffset(expressionName: string): number {
+    const cached = asymmetryCache.current.get(expressionName);
+    if (cached !== undefined) return cached;
+    // Deterministic hash from expression name → [-0.05, +0.05]
+    let hash = 0;
+    for (let i = 0; i < expressionName.length; i++) {
+      hash = ((hash << 5) - hash + expressionName.charCodeAt(i)) | 0;
+    }
+    const offset = ((hash % 100) / 100) * 0.1 - 0.05; // [-0.05, +0.05]
+    asymmetryCache.current.set(expressionName, offset);
+    return offset;
+  }
+
   // ---- Tick (called each frame from RAF loop) ----
 
   const tick = useCallback(() => {
@@ -165,6 +183,14 @@ export function useExpressions({
     active.currentIntensity = lerp(0, active.targetIntensity, progress);
     if (active.currentIntensity > 0.001) {
       values[active.name] = active.currentIntensity;
+    }
+
+    // Apply facial asymmetry — subtle ±0.05 offset per expression for natural feel
+    for (const expr of ALL_EMOTION_EXPRESSIONS) {
+      if (values[expr] > 0.001) {
+        const offset = getAsymmetryOffset(expr);
+        values[expr] = Math.max(0, Math.min(1, values[expr] + offset));
+      }
     }
 
     // Write to shared ref

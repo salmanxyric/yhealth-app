@@ -3,11 +3,11 @@
  * LangGraph workflow for rescheduling missed workout tasks
  */
 
-import { ChatAnthropic } from '@langchain/anthropic';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { query, transaction } from '../database/pg.js';
 import type { PoolClient } from 'pg';
 import { logger } from './logger.service.js';
-import { env } from '../config/env.config.js';
+import { modelFactory } from './model-factory.service.js';
 import { workoutAuditService, type MissedTask } from './workout-audit.service.js';
 import { workoutConstraintService, type UserConstraints, type RescheduleProposal, type RescheduleAction } from './workout-constraint.service.js';
 import { workoutSlotCalculatorService, type ValidSlot } from './workout-slot-calculator.service.js';
@@ -40,12 +40,11 @@ export interface RescheduleResult {
 // ============================================
 
 class WorkoutRescheduleWorkflowService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'default',
       temperature: 0.7,
       maxTokens: 1000,
     });

@@ -22,18 +22,18 @@ interface Testimonial {
 
 // Fallback hardcoded testimonials (used when API is unavailable)
 const fallbackTestimonials: Testimonial[] = [
-  { id: 1, name: "Sarah Johnson", role: "Fitness Enthusiast", avatar: "/avatars/sarah.jpg", rating: 5, verified: true, pillar: "fitness", is_featured: true, content: "YHealth completely transformed my approach to wellness. The AI insights helped me understand my body better than any other app. I've lost 20 pounds and feel more energetic than ever!" },
-  { id: 2, name: "Michael Chen", role: "Software Engineer", avatar: "/avatars/michael.jpg", rating: 5, verified: true, pillar: "wellbeing", content: "As someone who spends long hours at the desk, YHealth's reminders and personalized exercise recommendations have been a game-changer. My back pain is gone and I sleep so much better now." },
-  { id: 3, name: "Emily Rodriguez", role: "Working Mom", avatar: "/avatars/emily.jpg", rating: 5, verified: true, pillar: "nutrition", content: "Balancing work and family left no time for my health. YHealth made it easy with quick workouts and meal planning. The whole family is eating healthier now!" },
+  { id: 1, name: "Sarah Johnson", role: "Fitness Enthusiast", avatar: "/avatars/sarah.jpg", rating: 5, verified: true, pillar: "fitness", is_featured: true, content: "Balencia completely transformed my approach to wellness. The AI insights helped me understand my body better than any other app. I've lost 20 pounds and feel more energetic than ever!" },
+  { id: 2, name: "Michael Chen", role: "Software Engineer", avatar: "/avatars/michael.jpg", rating: 5, verified: true, pillar: "wellbeing", content: "As someone who spends long hours at the desk, Balencia's reminders and personalized exercise recommendations have been a game-changer. My back pain is gone and I sleep so much better now." },
+  { id: 3, name: "Emily Rodriguez", role: "Working Mom", avatar: "/avatars/emily.jpg", rating: 5, verified: true, pillar: "nutrition", content: "Balancing work and family left no time for my health. Balencia made it easy with quick workouts and meal planning. The whole family is eating healthier now!" },
   { id: 4, name: "David Thompson", role: "Marathon Runner", avatar: "/avatars/david.jpg", rating: 5, verified: true, pillar: "fitness", is_featured: true, content: "The training insights and recovery tracking helped me shave 15 minutes off my marathon time. The integration with my fitness devices is seamless." },
-  { id: 5, name: "Lisa Park", role: "Yoga Instructor", avatar: "/avatars/lisa.jpg", rating: 5, verified: true, pillar: "wellbeing", content: "I recommend YHealth to all my students. The mindfulness features and stress tracking complement yoga practice beautifully. It's holistic wellness at its best." },
-  { id: 6, name: "James Wilson", role: "Personal Trainer", avatar: "/avatars/james.jpg", rating: 5, verified: true, pillar: "fitness", content: "As a fitness professional, I've tried countless apps. YHealth stands out with its comprehensive approach. I use it with all my clients now." },
+  { id: 5, name: "Lisa Park", role: "Yoga Instructor", avatar: "/avatars/lisa.jpg", rating: 5, verified: true, pillar: "wellbeing", content: "I recommend Balencia to all my students. The mindfulness features and stress tracking complement yoga practice beautifully. It's holistic wellness at its best." },
+  { id: 6, name: "James Wilson", role: "Personal Trainer", avatar: "/avatars/james.jpg", rating: 5, verified: true, pillar: "fitness", content: "As a fitness professional, I've tried countless apps. Balencia stands out with its comprehensive approach. I use it with all my clients now." },
   { id: 7, name: "Amanda Foster", role: "Nutritionist", avatar: "/avatars/amanda.jpg", rating: 4, verified: true, pillar: "nutrition", content: "The meal tracking and nutritional insights are spot-on. My clients love how easy it is to log their meals and see their progress over time." },
-  { id: 8, name: "Robert Kim", role: "Business Executive", avatar: "/avatars/robert.jpg", rating: 5, verified: true, pillar: "wellbeing", content: "With my busy schedule, I needed something that works around my life. YHealth's smart scheduling and quick check-ins fit perfectly into my routine." },
+  { id: 8, name: "Robert Kim", role: "Business Executive", avatar: "/avatars/robert.jpg", rating: 5, verified: true, pillar: "wellbeing", content: "With my busy schedule, I needed something that works around my life. Balencia's smart scheduling and quick check-ins fit perfectly into my routine." },
   { id: 9, name: "Jennifer Adams", role: "Healthcare Worker", avatar: "/avatars/jennifer.jpg", rating: 5, verified: true, pillar: "nutrition", content: "Working night shifts made maintaining health difficult. The personalized recommendations adapted to my schedule beautifully. Highly recommended!" },
-  { id: 10, name: "Chris Martinez", role: "College Student", avatar: "/avatars/chris.jpg", rating: 5, verified: true, pillar: "fitness", content: "Affordable and effective! As a student on a budget, YHealth gives me premium features without breaking the bank. My energy levels have never been better." },
+  { id: 10, name: "Chris Martinez", role: "College Student", avatar: "/avatars/chris.jpg", rating: 5, verified: true, pillar: "fitness", content: "Affordable and effective! As a student on a budget, Balencia gives me premium features without breaking the bank. My energy levels have never been better." },
   { id: 11, name: "Sophia Lee", role: "Wellness Coach", avatar: "/avatars/sophia.jpg", rating: 5, verified: true, pillar: "wellbeing", is_featured: true, content: "The holistic approach to health tracking is exactly what I recommend to my clients. Sleep, nutrition, exercise, and mental wellness all in one place." },
-  { id: 12, name: "Daniel Brown", role: "Retired Teacher", avatar: "/avatars/daniel.jpg", rating: 4, verified: true, pillar: "nutrition", content: "At 65, I was skeptical about health apps. YHealth proved me wrong with its easy interface and gentle reminders. My doctor is impressed with my progress!" },
+  { id: 12, name: "Daniel Brown", role: "Retired Teacher", avatar: "/avatars/daniel.jpg", rating: 4, verified: true, pillar: "nutrition", content: "At 65, I was skeptical about health apps. Balencia proved me wrong with its easy interface and gentle reminders. My doctor is impressed with my progress!" },
 ];
 
 const pillarConfig = {
@@ -398,7 +398,7 @@ export function TestimonialsSection() {
           <GSAPScrollReveal direction="up" distance={20} duration={0.5} delay={0.2}>
             <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
               Join thousands of satisfied users who have transformed their health
-              journey with yHealth&apos;s AI-powered coaching and personalized wellness plans.
+              journey with Balencia&apos;s AI-powered coaching and personalized wellness plans.
             </p>
           </GSAPScrollReveal>
         </div>

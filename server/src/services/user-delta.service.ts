@@ -30,7 +30,6 @@ export interface DeltaSummary {
   scoreDelta: number | null;
   scoreNow: number | null;
   scoreAtLastVisit: number | null;
-  newSleepRecords: number;
   goalsProgressChanges: { title: string; prev: number; now: number }[];
   habitsCompletedSince: number;
   unreadProactiveMessages: number;
@@ -192,8 +191,8 @@ class UserDeltaService {
     const since = new Date(sinceTimestamp);
     const hoursSince = (Date.now() - since.getTime()) / (1000 * 60 * 60);
 
-    // Run 6 targeted queries in parallel
-    const [workouts, meals, sleepCount, habits, proactiveMessages] = await Promise.all([
+    // Run targeted queries in parallel
+    const [workouts, meals, habits, proactiveMessages] = await Promise.all([
       // 1. New workouts since last visit
       query<{ workout_name: string }>(
         `SELECT workout_name FROM workout_logs
@@ -209,14 +208,7 @@ class UserDeltaService {
         [userId, since]
       ),
 
-      // 3. New sleep records (WHOOP)
-      query<{ count: string }>(
-        `SELECT COUNT(*) as count FROM whoop_sleep_data
-         WHERE user_id = $1 AND created_at >= $2`,
-        [userId, since]
-      ).catch(() => ({ rows: [{ count: '0' }] })),
-
-      // 4. Habits completed since last visit
+      // 3. Habits completed since last visit
       query<{ count: string }>(
         `SELECT COUNT(*) as count FROM habit_logs
          WHERE habit_id IN (SELECT id FROM habits WHERE user_id = $1 AND is_active = true)
@@ -225,7 +217,7 @@ class UserDeltaService {
         [userId, since]
       ).catch(() => ({ rows: [{ count: '0' }] })),
 
-      // 5. Proactive messages sent while user was away
+      // 4. Proactive messages sent while user was away
       query<{ count: string }>(
         `SELECT COUNT(*) as count FROM proactive_messages
          WHERE user_id = $1 AND created_at >= $2`,
@@ -258,7 +250,6 @@ class UserDeltaService {
     const newWorkoutNames = workouts.rows.map(r => r.workout_name);
     const newWorkoutCount = newWorkoutNames.length;
     const newMealCount = parseInt(meals.rows[0]?.count || '0', 10);
-    const newSleepRecords = parseInt(sleepCount.rows[0]?.count || '0', 10);
     const habitsCompleted = parseInt(habits.rows[0]?.count || '0', 10);
     const unreadMessages = parseInt(proactiveMessages.rows[0]?.count || '0', 10);
 
@@ -287,7 +278,6 @@ class UserDeltaService {
       scoreDelta,
       scoreNow,
       scoreAtLastVisit,
-      newSleepRecords,
       goalsProgressChanges,
       habitsCompletedSince: habitsCompleted,
       unreadProactiveMessages: unreadMessages,
@@ -516,11 +506,6 @@ class UserDeltaService {
       parts.push(`Meals logged: ${delta.newMeals}`);
     } else if (delta.hoursSinceLastVisit > 24) {
       parts.push(`No meals logged since last visit.`);
-    }
-
-    // Sleep
-    if (delta.newSleepRecords > 0) {
-      parts.push(`New sleep records (WHOOP): ${delta.newSleepRecords}`);
     }
 
     // Habits

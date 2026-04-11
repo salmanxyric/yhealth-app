@@ -104,7 +104,7 @@ function CircularProgress({
   color?: string;
   label: string;
   unit?: string;
-  icon?: React.ElementType;
+  icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   showValue?: boolean;
 }) {
   const radius = (size - strokeWidth) / 2;

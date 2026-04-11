@@ -52,7 +52,7 @@ export function BeforeAfterSection() {
           <div className="absolute inset-0 w-full h-full" style={{ minHeight: 280 }}>
             <Image
               src={BEFORE_AFTER_IMAGE}
-              alt="Before and after transformation with YHealth"
+              alt="Before and after transformation with Balencia"
               fill
               className="object-cover object-center select-none"
               sizes="(max-width: 640px) 100vw, (max-width: 896px) 100vw, 896px"

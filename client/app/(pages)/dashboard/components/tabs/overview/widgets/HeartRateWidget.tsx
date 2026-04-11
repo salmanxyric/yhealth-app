@@ -91,7 +91,7 @@ export function HeartRateWidget({
             </div>
             <div>
               <h3 className="text-sm font-medium text-slate-400">HEART RATE</h3>
-              <p className="text-3xl font-bold text-white">{currentBpm}</p>
+              <p className="text-lg font-bold text-white">{currentBpm}</p>
               <p className="text-xs text-slate-400">BPM</p>
             </div>
           </div>

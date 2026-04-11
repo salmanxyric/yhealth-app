@@ -110,6 +110,51 @@ const TABLE_FILES = [
   '82-testimonials.sql',
   // AI Coach coaching profiles
   '83-user-coaching-profiles.sql',
+  // Newsletter subscriptions
+  '76-newsletter-subscriptions.sql',
+  // User roles (many-to-many join table)
+  '77-user-roles.sql',
+  // Journaling & wellbeing system tables
+  '84-daily-checkins.sql',
+  '85-life-goals.sql',
+  '86-journal-insights.sql',
+  '87-lessons-learned.sql',
+  '88-insight-feedback.sql',
+  '88-voice-journal-sessions.sql',
+  // Intelligence & analytics tables
+  '89-weekly-analysis-reports.sql',
+  '90-prediction-accuracy.sql',
+  // Spotify integration
+  '91-spotify-cached-playlists.sql',
+  // Yoga system tables
+  '92-yoga-poses.sql',
+  '93-yoga-sessions.sql',
+  '94-yoga-session-logs.sql',
+  '95-meditation-timers.sql',
+  '96-yoga-streaks.sql',
+  // Life history
+  '97-user-life-history.sql',
+  // Life goal milestones, motivation & goal actions
+  '98-life-goal-milestones-checkins.sql',
+  '99-user-motivation-profiles.sql',
+  '100-goal-actions.sql',
+  // Proactive messaging log
+  '101-proactive-messages.sql',
+  // Email engine tables
+  '102-email-logs.sql',
+  '103-email-preferences.sql',
+  // Vision testing tables
+  '104-vision-test-sessions.sql',
+  '105-vision-test-responses.sql',
+  '106-vision-streaks.sql',
+  // Finance
+  '107-finance.sql',
+  // Streak system
+  '108-user-streaks.sql',
+  '109-streak-activity-log.sql',
+  '110-streak-freeze-log.sql',
+  '111-streak-rewards.sql',
+  // Triggers (must be last)
   '99-triggers.sql',
 ];
 
@@ -169,7 +214,7 @@ async function setupDatabase() {
     : {
         host: process.env['DB_HOST'] || 'localhost',
         port: parseInt(process.env['DB_PORT'] || '5432', 10),
-        database: process.env['DB_NAME'] || 'yhealth',
+        database: process.env['DB_NAME'] || 'balencia',
         user: process.env['DB_USER'] || 'postgres',
         password: process.env['DB_PASSWORD'] || '',
       };

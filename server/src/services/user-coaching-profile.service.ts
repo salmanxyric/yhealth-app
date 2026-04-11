@@ -5,18 +5,20 @@
  * buildCoachingMemorySection() and buildConciseUserContext() methods consume.
  */
 
-import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
 import { comprehensiveUserContextService } from './comprehensive-user-context.service.js';
 import type { ComprehensiveUserContext } from './comprehensive-user-context.service.js';
+import { statusPatternAnalyzerService } from './status-pattern-analyzer.service.js';
 import { aiScoringService } from './ai-scoring.service.js';
 import type { DailyScore } from './ai-scoring.service.js';
 import { mentalRecoveryScoreService } from './mental-recovery-score.service.js';
 import { gamificationService } from './gamification.service.js';
 import { env } from '../config/env.config.js';
 import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
+import { modelFactory } from './model-factory.service.js';
 
 // ============================================
 // TYPES
@@ -52,6 +54,17 @@ export interface Patterns {
 export interface GoalsContext {
   primaryGoal: { title: string; progress: number; daysRemaining: number } | null;
   activeGoals: { title: string; progress: number }[];
+  activeLifeGoals: Array<{
+    category: string;
+    title: string;
+    progress: number;
+    daysSinceLastActivity?: number;
+    isStalled: boolean;
+  }>;
+  lifeGoalCount: number;
+  stalledLifeGoalCount: number;
+  motivationTier?: string;
+  pendingActionsCount?: number;
 }
 
 export interface CurrentState {
@@ -269,13 +282,13 @@ interface AIInsightsResult {
 // ============================================
 
 class UserCoachingProfileService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
   private tableEnsured = false;
+  private ensureTablePromise: Promise<void> | null = null;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'reasoning',
       maxTokens: 1500,
     });
   }
@@ -287,56 +300,77 @@ class UserCoachingProfileService {
   private async ensureTable(): Promise<void> {
     if (this.tableEnsured) return;
 
+    // Promise-based lock: if another concurrent call is already running DDL, wait for it
+    if (this.ensureTablePromise) {
+      await this.ensureTablePromise;
+      return;
+    }
+
+    this.ensureTablePromise = this._doEnsureTable();
     try {
-      await query(`
-        CREATE TABLE IF NOT EXISTS user_coaching_profiles (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          profile_data JSONB NOT NULL,
-          adherence_scores JSONB,
-          key_insights JSONB,
-          risk_flags JSONB,
-          predictions JSONB,
-          next_best_actions JSONB,
-          goal_alignment JSONB,
-          data_gaps JSONB,
-          coaching_tone VARCHAR(20) DEFAULT 'direct',
-          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          generation_model VARCHAR(50),
-          generation_tokens INTEGER,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          UNIQUE(user_id)
-        )
-      `);
+      await this.ensureTablePromise;
+    } finally {
+      this.ensureTablePromise = null;
+    }
+  }
 
-      // Add new columns for stable traits and versioning (idempotent)
-      await query(`ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS stable_traits JSONB`);
-      await query(`ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS recent_observations JSONB`);
-      await query(`ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS profile_version INTEGER DEFAULT 1`);
-      await query(`ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS stable_traits_updated_at TIMESTAMPTZ`);
-      await query(`ALTER TABLE user_coaching_profiles ADD COLUMN IF NOT EXISTS personal_context JSONB DEFAULT '{}'`);
+  private async _doEnsureTable(): Promise<void> {
+    if (this.tableEnsured) return;
 
-      // Profile history table for archival
-      await query(`
-        CREATE TABLE IF NOT EXISTS user_coaching_profile_history (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          profile_version INTEGER NOT NULL,
-          profile_data JSONB NOT NULL,
-          stable_traits JSONB,
-          recent_observations JSONB,
-          generated_at TIMESTAMPTZ NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-      await query(`CREATE INDEX IF NOT EXISTS idx_profile_history_user ON user_coaching_profile_history(user_id, profile_version DESC)`);
-
+    try {
+      // Try a lightweight probe first — table + columns are managed by sync-missing-columns.sql at startup
+      await query(`SELECT 1 FROM user_coaching_profiles LIMIT 0`);
       this.tableEnsured = true;
-    } catch (error) {
-      logger.error('[CoachingProfile] Error ensuring table exists', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+    } catch {
+      // Table doesn't exist yet — create it (fallback for first-time setup before migration runs)
+      try {
+        await query(`
+          CREATE TABLE IF NOT EXISTS user_coaching_profiles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            profile_data JSONB NOT NULL,
+            adherence_scores JSONB,
+            key_insights JSONB,
+            risk_flags JSONB,
+            predictions JSONB,
+            next_best_actions JSONB,
+            goal_alignment JSONB,
+            data_gaps JSONB,
+            coaching_tone VARCHAR(20) DEFAULT 'direct',
+            generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            generation_model VARCHAR(50),
+            generation_tokens INTEGER,
+            stable_traits JSONB,
+            recent_observations JSONB,
+            profile_version INTEGER DEFAULT 1,
+            stable_traits_updated_at TIMESTAMPTZ,
+            personal_context JSONB DEFAULT '{}',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(user_id)
+          )
+        `);
+
+        await query(`
+          CREATE TABLE IF NOT EXISTS user_coaching_profile_history (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            profile_version INTEGER NOT NULL,
+            profile_data JSONB NOT NULL,
+            stable_traits JSONB,
+            recent_observations JSONB,
+            generated_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        await query(`CREATE INDEX IF NOT EXISTS idx_profile_history_user ON user_coaching_profile_history(user_id, profile_version DESC)`);
+
+        this.tableEnsured = true;
+      } catch (error) {
+        logger.error('[CoachingProfile] Error ensuring table exists', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
     }
   }
 
@@ -429,29 +463,44 @@ class UserCoachingProfileService {
         const generatedAt = new Date(row.generated_at);
         const ageHours = (Date.now() - generatedAt.getTime()) / (1000 * 60 * 60);
 
+        const profile = typeof row.profile_data === 'string'
+          ? JSON.parse(row.profile_data)
+          : row.profile_data;
+        if (row.stable_traits) {
+          profile.stableTraits = typeof row.stable_traits === 'string' ? JSON.parse(row.stable_traits) : row.stable_traits;
+        }
+        if (row.recent_observations) {
+          profile.recentObservations = typeof row.recent_observations === 'string' ? JSON.parse(row.recent_observations) : row.recent_observations;
+        }
+        if (row.personal_context) {
+          profile.personalContext = typeof row.personal_context === 'string' ? JSON.parse(row.personal_context) : row.personal_context;
+        }
+
         // Fresh enough (<6h), return cached
         if (ageHours < 6) {
-          logger.info('[CoachingProfile] Returning cached profile', {
+          logger.debug('[CoachingProfile] Returning cached profile', {
             userId,
             ageHours: Math.round(ageHours * 10) / 10,
           });
-          const profile = typeof row.profile_data === 'string'
-            ? JSON.parse(row.profile_data)
-            : row.profile_data;
-          if (row.stable_traits) {
-            profile.stableTraits = typeof row.stable_traits === 'string' ? JSON.parse(row.stable_traits) : row.stable_traits;
-          }
-          if (row.recent_observations) {
-            profile.recentObservations = typeof row.recent_observations === 'string' ? JSON.parse(row.recent_observations) : row.recent_observations;
-          }
-          if (row.personal_context) {
-            profile.personalContext = typeof row.personal_context === 'string' ? JSON.parse(row.personal_context) : row.personal_context;
-          }
           return profile;
         }
+
+        // Stale-while-revalidate: return stale profile NOW, refresh in background
+        // This prevents blocking chat messages with 37s profile regeneration
+        logger.info('[CoachingProfile] Returning stale profile, refreshing in background', {
+          userId,
+          ageHours: Math.round(ageHours * 10) / 10,
+        });
+        this.generateProfile(userId, cachedContext).catch((err) => {
+          logger.warn('[CoachingProfile] Background refresh failed', {
+            userId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+        return profile;
       }
 
-      // Stale or missing -- regenerate
+      // No profile exists at all — must generate (first time only)
       return this.generateProfile(userId, cachedContext);
     } catch (error) {
       logger.error('[CoachingProfile] Error in getOrGenerateProfile', {
@@ -500,6 +549,18 @@ class UserCoachingProfileService {
     const patterns = this.buildPatterns(workoutLogs);
     const memorableMoments = this.buildMemorableMoments(gamificationStats, context.goals, workoutLogs);
     const goalsContext = this.buildGoalsContext(context);
+
+    // Fetch pending goal actions count (non-blocking)
+    try {
+      const pendingResult = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM goal_actions WHERE user_id = $1 AND is_completed = false`,
+        [userId]
+      );
+      goalsContext.pendingActionsCount = parseInt(pendingResult.rows[0]?.count ?? '0', 10);
+    } catch {
+      // Non-fatal: pending actions count is informational
+    }
+
     const currentState = this.buildCurrentState(context, recoveryScore, dailyScore);
     const nutritionJourney = this.buildNutritionJourney(context);
     const adherenceScores = this.computeAdherenceScores(historicalScores);
@@ -508,6 +569,16 @@ class UserCoachingProfileService {
     const goalAlignment = this.computeGoalAlignment(context.goals, context, adherenceScores);
     const riskFlags = this.detectRisks(context, historicalScores, recoveryScore);
     const dataGaps = this.detectDataGaps(context, dailyScore);
+
+    // Status pattern analysis (day-of-week, post-event patterns)
+    const statusPatterns = await this.safeCall(
+      () => statusPatternAnalyzerService.analyzeAllPatterns(userId), []
+    );
+    if (statusPatterns.length > 0) {
+      statusPatternAnalyzerService.persistPatterns(userId, statusPatterns).catch((error) => {
+        logger.warn('[CoachingProfile] Failed to persist status patterns', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      });
+    }
 
     // ----- Step 3: LLM-powered insights -----
     const aiInsights = await this.generateAIInsights(
@@ -609,11 +680,11 @@ class UserCoachingProfileService {
     userId: string
   ): Promise<{ firstName: string; daysOnPlatform: number }> {
     const result = await query<{
-      name: string | null;
+      first_name: string | null;
       email: string | null;
       created_at: string;
     }>(
-      `SELECT name, email, created_at FROM users WHERE id = $1 LIMIT 1`,
+      `SELECT first_name, email, created_at FROM users WHERE id = $1 LIMIT 1`,
       [userId]
     );
 
@@ -623,7 +694,7 @@ class UserCoachingProfileService {
 
     const row = result.rows[0];
     const firstName =
-      row.name?.split(' ')[0] || row.email?.split('@')[0] || 'User';
+      row.first_name || row.email?.split('@')[0] || 'User';
     const createdAt = new Date(row.created_at);
     const daysOnPlatform = Math.max(
       1,
@@ -949,7 +1020,23 @@ class UserCoachingProfileService {
       });
     }
 
-    return { primaryGoal, activeGoals };
+    // Life goals from comprehensive context
+    const activeLifeGoals = (context.goals.activeLifeGoals ?? []).map(g => ({
+      category: g.category,
+      title: g.title,
+      progress: g.progress,
+      daysSinceLastActivity: g.daysSinceLastActivity,
+      isStalled: (g.daysSinceLastActivity ?? 0) > 7,
+    }));
+
+    return {
+      primaryGoal,
+      activeGoals,
+      activeLifeGoals,
+      lifeGoalCount: context.goals.lifeGoalCount ?? 0,
+      stalledLifeGoalCount: context.goals.stalledLifeGoals ?? 0,
+      motivationTier: context.goals.motivationTier as string | undefined,
+    };
   }
 
   /**
@@ -1652,28 +1739,147 @@ Rules:
         return defaults;
       }
 
-      const response = await this.llm.invoke([
-        new SystemMessage(systemPrompt),
-        new HumanMessage(dataSummary),
-      ]);
+      // Attempt LLM call with timeout + single retry on empty response
+      let content = '';
+      const MAX_ATTEMPTS = 2;
+      const LLM_INSIGHT_TIMEOUT_MS = 15000; // 15s per attempt (was unbounded, causing 18-20s waits)
 
-      llmCircuitBreaker.recordSuccess();
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+          const response = await Promise.race([
+            this.llm.invoke([
+              new SystemMessage(systemPrompt),
+              new HumanMessage(dataSummary),
+            ]),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('LLM insights timeout')), LLM_INSIGHT_TIMEOUT_MS)
+            ),
+          ]);
 
-      const content =
-        typeof response.content === 'string'
-          ? response.content
-          : JSON.stringify(response.content);
+          llmCircuitBreaker.recordSuccess();
+
+          // Extract text content — handle both string and array formats from LangChain
+          if (typeof response.content === 'string') {
+            content = response.content;
+          } else if (Array.isArray(response.content)) {
+            content = response.content
+              .map((part: any) => (typeof part === 'string' ? part : part?.text || ''))
+              .join('');
+          } else {
+            content = JSON.stringify(response.content);
+          }
+
+          if (content.length > 10) break; // Got a real response
+        } catch (_timeoutError) {
+          logger.warn('[CoachingProfile] LLM insight attempt timed out', {
+            attempt: attempt + 1,
+            timeout: LLM_INSIGHT_TIMEOUT_MS,
+          });
+        }
+
+        logger.warn('[CoachingProfile] LLM returned near-empty response, retrying', {
+          attempt: attempt + 1,
+          contentLength: content.length,
+          rawContent: content.substring(0, 100),
+        });
+
+        // Brief delay before retry to avoid hammering provider
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
 
       // Extract JSON from response (handle markdown code blocks)
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Strip markdown code fences first
+      const cleaned = content.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '');
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         logger.warn('[CoachingProfile] LLM response did not contain valid JSON', {
           contentLength: content.length,
+          contentPreview: content.substring(0, 200),
         });
         return defaults;
       }
 
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<AIInsightsResult>;
+      // Sanitize common LLM JSON issues
+      const sanitized = jsonMatch[0]
+        // Remove single-line comments
+        .replace(/\/\/[^\n]*/g, '')
+        // Remove multi-line comments
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        // Fix missing commas between array elements: } { or } "key" or "val" {
+        .replace(/\}\s*\{/g, '}, {')
+        // Fix missing commas between object properties: "value" "nextKey"  or  "value"\n"nextKey"
+        .replace(/"(\s*)\n(\s*)"/g, '",\n$2"')
+        // Fix missing comma: ] "key" (array end followed by next property)
+        .replace(/\]\s*"/g, '], "')
+        // Fix missing comma: true/false/null/number followed by "key" on next line
+        .replace(/(true|false|null|\d+\.?\d*)\s*\n(\s*)"/g, '$1,\n$2"')
+        // Remove trailing commas before ] or }
+        .replace(/,\s*([}\]])/g, '$1')
+        // Fix unescaped newlines inside string values
+        .replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) =>
+          match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
+        );
+
+      let parsed: Partial<AIInsightsResult>;
+      try {
+        parsed = JSON.parse(sanitized) as Partial<AIInsightsResult>;
+      } catch (firstError) {
+        // Second attempt: more aggressive cleanup for stubborn LLM output
+        try {
+          const aggressive = sanitized
+            // Remove control characters except \n\r\t
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+            // Fix double commas
+            .replace(/,\s*,/g, ',')
+            // Re-strip trailing commas (may appear after previous fixes)
+            .replace(/,\s*([}\]])/g, '$1');
+          parsed = JSON.parse(aggressive) as Partial<AIInsightsResult>;
+        } catch {
+          // Third attempt: repair truncated JSON by closing unclosed brackets/braces
+          try {
+            let repaired = sanitized
+              .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+              .replace(/,\s*,/g, ',')
+              .replace(/,\s*([}\]])/g, '$1');
+
+            // Count unclosed brackets and close them
+            let openBraces = 0;
+            let openBrackets = 0;
+            let inString = false;
+            let escaped = false;
+            for (const ch of repaired) {
+              if (escaped) { escaped = false; continue; }
+              if (ch === '\\') { escaped = true; continue; }
+              if (ch === '"') { inString = !inString; continue; }
+              if (inString) continue;
+              if (ch === '{') openBraces++;
+              else if (ch === '}') openBraces--;
+              else if (ch === '[') openBrackets++;
+              else if (ch === ']') openBrackets--;
+            }
+
+            // If we're inside a string (odd quotes), close it
+            if (inString) repaired += '"';
+            // Close unclosed structures
+            for (let i = 0; i < openBrackets; i++) repaired += ']';
+            for (let i = 0; i < openBraces; i++) repaired += '}';
+
+            // Strip trailing commas one more time after repair
+            repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+
+            parsed = JSON.parse(repaired) as Partial<AIInsightsResult>;
+            logger.info('[CoachingProfile] Repaired truncated JSON successfully');
+          } catch (_repairError) {
+            logger.warn('[CoachingProfile] All JSON parse attempts failed, returning defaults', {
+              error: (firstError as Error).message,
+              contentSnippet: sanitized.substring(0, 200),
+            });
+            return defaults;
+          }
+        }
+      }
 
       return {
         correlations: Array.isArray(parsed.correlations) ? parsed.correlations : defaults.correlations,
@@ -1686,8 +1892,20 @@ Rules:
         predictions: Array.isArray(parsed.predictions) ? parsed.predictions : defaults.predictions,
       };
     } catch (error) {
-      if (llmCircuitBreaker.isRateLimitError(error)) {
+      if (modelFactory.isAuthError(error)) {
+        // Permanently blacklist provider with invalid API key (24h cooldown)
+        modelFactory.markCurrentProviderRateLimited(24 * 60 * 60 * 1000);
+        logger.warn('[CoachingProfile] Provider has invalid API key, blacklisted for 24h');
+        try {
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          logger.info('[CoachingProfile] Switched to next LLM provider after auth failure');
+        } catch { /* no providers available */ }
+      } else if (llmCircuitBreaker.isRateLimitError(error)) {
         llmCircuitBreaker.recordRateLimitError(error);
+        try {
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          logger.info('[CoachingProfile] Switched to fallback LLM provider after rate limit');
+        } catch { /* no providers available */ }
       }
       logger.error('[CoachingProfile] Error generating AI insights', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -2024,9 +2242,8 @@ Rules:
         return null;
       }
 
-      const llmPro = new ChatAnthropic({
-        anthropicApiKey: env.anthropic.apiKey,
-        model: env.anthropic.model,
+      const llmPro = modelFactory.getModel({
+        tier: 'reasoning',
         maxTokens: 1200,
       });
 
@@ -2045,7 +2262,33 @@ Rules:
         return null;
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      let parsed: any;
+      try {
+        const sanitized = jsonMatch[0]
+          .replace(/\/\/[^\n]*/g, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\}\s*\{/g, '}, {')
+          .replace(/"(\s*)\n(\s*)"/g, '",\n$2"')
+          .replace(/\]\s*"/g, '], "')
+          .replace(/(true|false|null|\d+\.?\d*)\s*\n(\s*)"/g, '$1,\n$2"')
+          .replace(/,\s*([}\]])/g, '$1')
+          .replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) =>
+            match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
+          );
+        parsed = JSON.parse(sanitized);
+      } catch {
+        try {
+          const aggressive = jsonMatch[0]
+            .replace(/\/\/[^\n]*/g, '')
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+            .replace(/,\s*,/g, ',')
+            .replace(/,\s*([}\]])/g, '$1');
+          parsed = JSON.parse(aggressive);
+        } catch {
+          logger.warn('[CoachingProfile] Stable traits JSON parse failed, returning null');
+          return null;
+        }
+      }
 
       const stableTraits: StableTraits = {
         personalityType: parsed.personalityType || 'steady_performer',
@@ -2074,8 +2317,18 @@ Rules:
       logger.info('[CoachingProfile] Stable traits updated', { userId, personalityType: stableTraits.personalityType });
       return stableTraits;
     } catch (error) {
-      if (llmCircuitBreaker.isRateLimitError(error)) {
+      if (modelFactory.isAuthError(error)) {
+        modelFactory.markCurrentProviderRateLimited(24 * 60 * 60 * 1000);
+        logger.warn('[CoachingProfile] Provider has invalid API key, blacklisted for 24h');
+        try {
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+        } catch { /* no providers available */ }
+      } else if (llmCircuitBreaker.isRateLimitError(error)) {
         llmCircuitBreaker.recordRateLimitError(error);
+        try {
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          logger.info('[CoachingProfile] Switched to fallback LLM provider after rate limit');
+        } catch { /* no providers available */ }
       }
       logger.error('[CoachingProfile] Error updating stable traits', {
         userId,
@@ -2097,6 +2350,13 @@ Rules:
     profile: CoachingProfile
   ): Promise<void> {
     try {
+      // Verify user exists before upserting to avoid FK violation
+      const userExists = await query('SELECT 1 FROM users WHERE id = $1', [userId]);
+      if (userExists.rows.length === 0) {
+        logger.warn('[CoachingProfile] Skipping upsert — user not found', { userId });
+        return;
+      }
+
       await query(
         `INSERT INTO user_coaching_profiles (
           user_id, profile_data, adherence_scores, key_insights, risk_flags,
@@ -2186,6 +2446,7 @@ Rules:
       nutritionAnalysis: {},
       competitions: {},
       progressTrend: {},
+      activityStatus: { current: 'working', since: new Date().toISOString(), source: 'manual', recentHistory: [], patterns: [], activeOverrides: false, daysSinceLastWorkingStatus: 0 },
     };
   }
 

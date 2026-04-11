@@ -62,20 +62,36 @@ export function ObservatoryFilterBar({ filter, onFilterChange }: Props) {
   return (
     <div
       className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3"
-      style={{ top: 62, zIndex: 30 }}
+      style={{ top: 72, zIndex: 30 }}
     >
       {/* Mode pills */}
-      <div className="flex rounded-full border border-white/10 overflow-hidden">
+      <div
+        className="flex rounded-full overflow-hidden"
+        style={{
+          background: "rgba(255, 255, 255, 0.05)",
+          backdropFilter: "blur(16px)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.3)",
+        }}
+      >
         {modes.map((m) => (
           <button
             key={m}
             onClick={() => switchMode(m)}
-            className={`observatory-font-display px-3 py-1.5 transition-all duration-200 ${
+            className={`observatory-font-display px-4 py-2 transition-all duration-200 ${
               filter.mode === m
-                ? "bg-purple-500/25 text-purple-200"
+                ? "text-purple-100"
                 : "text-white/30 hover:text-white/50 hover:bg-white/5"
             }`}
-            style={{ fontSize: 9, letterSpacing: "0.15em" }}
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.15em",
+              ...(filter.mode === m
+                ? {
+                    background: "linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(99, 102, 241, 0.2) 100%)",
+                  }
+                : {}),
+            }}
           >
             {modeLabels[m]}
           </button>
@@ -84,24 +100,31 @@ export function ObservatoryFilterBar({ filter, onFilterChange }: Props) {
 
       {/* Period navigator */}
       {filter.mode !== "all_time" && (
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2 rounded-full px-3 py-1.5"
+          style={{
+            background: "rgba(255, 255, 255, 0.05)",
+            backdropFilter: "blur(16px)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+          }}
+        >
           <button
             onClick={() => onFilterChange(navigatePrev(filter))}
-            className="text-white/30 hover:text-white/60 transition-colors px-1"
-            style={{ fontSize: 14 }}
+            className="text-white/40 hover:text-white/70 transition-colors px-1.5 py-0.5 rounded hover:bg-white/5"
+            style={{ fontSize: 16 }}
           >
             &lsaquo;
           </button>
           <span
-            className="observatory-font-display text-white/60 min-w-[120px] text-center"
-            style={{ fontSize: 10, letterSpacing: "0.12em" }}
+            className="observatory-font-display text-white/70 min-w-[120px] text-center"
+            style={{ fontSize: 12, letterSpacing: "0.12em" }}
           >
             {getLabel(filter)}
           </span>
           <button
             onClick={() => onFilterChange(navigateNext(filter))}
-            className="text-white/30 hover:text-white/60 transition-colors px-1"
-            style={{ fontSize: 14 }}
+            className="text-white/40 hover:text-white/70 transition-colors px-1.5 py-0.5 rounded hover:bg-white/5"
+            style={{ fontSize: 16 }}
           >
             &rsaquo;
           </button>

@@ -199,9 +199,9 @@ export function ChatContainer({ className }: ChatContainerProps) {
 
   const handleSendMessage = async (
     message: string,
-    options?: { mediaFiles?: File[]; repliedToId?: string }
+    options?: { mediaFiles?: File[]; repliedToId?: string; gifUrl?: string }
   ) => {
-    if (!message.trim() && (!options?.mediaFiles || options.mediaFiles.length === 0) || isSending)
+    if (!message.trim() && (!options?.mediaFiles || options.mediaFiles.length === 0) && !options?.gifUrl || isSending)
       return;
 
     // For now, only text messages are supported in RAG chat
@@ -210,8 +210,9 @@ export function ChatContainer({ className }: ChatContainerProps) {
     const tempUserMessage: ChatMessageItemData = {
       id: `temp-${Date.now()}`,
       role: 'user',
-      content: message,
+      content: options?.gifUrl ? '' : message,
       timestamp: new Date().toISOString(),
+      ...(options?.gifUrl && { contentType: 'gif', mediaUrl: options.gifUrl, mediaType: 'gif' as const }),
     };
 
     setMessages((prev) => [...prev, tempUserMessage]);
@@ -220,7 +221,7 @@ export function ChatContainer({ className }: ChatContainerProps) {
 
     try {
       const response = await ragChatService.sendMessage({
-        message,
+        message: options?.gifUrl ? `[User sent a GIF]` : message,
         conversationId: activeConversationId || undefined,
       });
 

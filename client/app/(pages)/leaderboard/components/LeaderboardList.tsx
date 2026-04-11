@@ -220,7 +220,7 @@ export function LeaderboardList({
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] sm:text-xs text-gray-500 truncate">@yhealth</p>
+                <p className="text-[10px] sm:text-xs text-gray-500 truncate">@balencia</p>
               </div>
 
               {/* Score */}

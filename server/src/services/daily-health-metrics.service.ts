@@ -6,14 +6,14 @@
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
 
-export interface DailyHealthMetrics {
+export interface DailBalenciaMetrics {
   sleepHours: number | null;
   recoveryScore: number | null;
   strainScore: number | null;
   cycleDay: number | null;
 }
 
-export interface DailyHealthMetricsHistory {
+export interface DailBalenciaMetricsHistory {
   id: string;
   userId: string;
   metricDate: Date;
@@ -33,7 +33,7 @@ export interface DailyHealthMetricsHistory {
 export async function updateDailyMetrics(
   userId: string,
   date: Date,
-  metrics: DailyHealthMetrics,
+  metrics: DailBalenciaMetrics,
   provider: string = 'whoop'
 ): Promise<void> {
   const metricDate = new Date(date);
@@ -113,7 +113,7 @@ export async function getDailyMetricsHistory(
   userId: string,
   startDate: Date,
   endDate: Date
-): Promise<DailyHealthMetricsHistory[]> {
+): Promise<DailBalenciaMetricsHistory[]> {
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
   const end = new Date(endDate);
@@ -158,7 +158,7 @@ export async function getDailyMetricsHistory(
  */
 export async function getCurrentDailyMetrics(
   userId: string
-): Promise<DailyHealthMetrics | null> {
+): Promise<DailBalenciaMetrics | null> {
   const result = await query<{
     daily_sleep_hours: number | null;
     daily_recovery_score: number | null;
@@ -206,7 +206,7 @@ export function extractMetricsFromWhoopData(
   sleepData: any,
   strainData: any,
   cycleData?: any
-): DailyHealthMetrics {
+): DailBalenciaMetrics {
   return {
     sleepHours: sleepData?.duration_minutes
       ? parseFloat((sleepData.duration_minutes / 60).toFixed(2))
@@ -217,7 +217,7 @@ export function extractMetricsFromWhoopData(
   };
 }
 
-export const dailyHealthMetricsService = {
+export const dailBalenciaMetricsService = {
   updateDailyMetrics,
   getDailyMetricsHistory,
   getCurrentDailyMetrics,

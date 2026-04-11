@@ -1,33 +1,9 @@
-# Build both client (Next.js) and server (Node/TypeScript) for yhealth-app
-# Build: docker build -t yhealth-app .
-# Optional targets: docker build --target client -t yhealth-client . | docker build --target server -t yhealth-server .
+# Build yHealth server (Node/TypeScript) for Railway deployment
+# Build: docker build -t yhealth-server .
+# Run:   docker run -p 5000:5000 yhealth-server
 
 # -----------------------------------------------------------------------------
-# Stage 1: Build client (Next.js)
-# -----------------------------------------------------------------------------
-FROM node:20-alpine AS client-builder
-
-WORKDIR /app
-
-# Copy client package files
-COPY client/package.json client/package-lock.json* ./client/
-
-# Install client dependencies (use npm ci when lockfile exists)
-WORKDIR /app/client
-RUN npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
-
-# Copy client source
-WORKDIR /app
-COPY client ./client
-WORKDIR /app/client
-
-# Next.js build (needs NODE_ENV=production for optimized output)
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
-
-# -----------------------------------------------------------------------------
-# Stage 2: Build server (TypeScript)
+# Stage 1: Build server (TypeScript)
 # -----------------------------------------------------------------------------
 FROM node:20-alpine AS server-builder
 
@@ -51,25 +27,45 @@ WORKDIR /app/server
 RUN npm run build
 
 # -----------------------------------------------------------------------------
-# Stage 3: Final image with both artifacts (for verification / run both)
+# Stage 2: Production runtime
 # -----------------------------------------------------------------------------
 FROM node:20-alpine AS final
 
 WORKDIR /app
 
-# Copy server runtime
-COPY --from=server-builder /app/server/dist ./server/dist
-COPY --from=server-builder /app/server/package.json ./server/
-COPY --from=server-builder /app/server/node_modules ./server/node_modules
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nodejs
 
-# Copy client runtime (.next + static)
-COPY --from=client-builder /app/client/.next ./client/.next
-COPY --from=client-builder /app/client/public ./client/public
-COPY --from=client-builder /app/client/package.json ./client/package.json
-COPY --from=client-builder /app/client/node_modules ./client/node_modules
+# Copy server production dependencies
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/node_modules ./server/node_modules
 
-# Default: run server only (client can be served via next start in another container or reverse proxy)
+# Copy built application
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/dist ./server/dist
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/package.json ./server/
+
+# Copy database table SQL files (needed by auto-migrate at runtime)
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/database/tables ./server/dist/server/src/database/tables
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/database/migrations ./server/dist/server/src/database/migrations
+
+# Copy email templates (EJS files needed at runtime)
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/mails ./server/src/mails
+# Symlink email templates to where compiled JS expects them
+RUN mkdir -p server/dist/server/src && \
+    ln -sf /app/server/src/mails server/dist/server/src/mails
+
+# Switch to non-root user
+USER nodejs
+
 ENV NODE_ENV=production
+ENV PORT=5000
+ENV HOST=0.0.0.0
+
 WORKDIR /app/server
-EXPOSE 9090
-CMD ["node", "dist/index.js"]
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+CMD ["node", "dist/server/src/index.js"]

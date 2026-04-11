@@ -49,7 +49,7 @@ class ReportController {
     const pdfBuffer = await reportGenerationService.generatePDF(report, userId);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="yhealth-report-${period}-${Date.now()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="balencia-report-${period}-${Date.now()}.pdf"`);
     res.send(pdfBuffer);
   });
 
@@ -69,7 +69,7 @@ class ReportController {
     const csvContent = await reportGenerationService.generateCSV(report);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="yhealth-report-${period}-${Date.now()}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="balencia-report-${period}-${Date.now()}.csv"`);
     res.send(csvContent);
   });
 }

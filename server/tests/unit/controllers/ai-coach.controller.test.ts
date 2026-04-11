@@ -22,6 +22,13 @@ jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
 }));
 
+jest.unstable_mockModule('../../../src/services/model-factory.service.js', () => ({
+  modelFactory: {
+    getModel: jest.fn().mockReturnValue({}),
+    getActiveProvider: jest.fn().mockReturnValue('mock'),
+  },
+}));
+
 // Dynamic imports after mock setup
 const { createMockAuthRequest, createMockResponse, createMockNext } = await import('../../helpers/mocks.js');
 const { aiCoachController } = await import('../../../src/controllers/ai-coach.controller.js');

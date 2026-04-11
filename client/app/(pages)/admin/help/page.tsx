@@ -252,7 +252,7 @@ export default function AdminHelpPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Page Header with Gradient */}
       <AdminPageHeader
         title="Help Center Management"

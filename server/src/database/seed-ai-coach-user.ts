@@ -11,7 +11,7 @@ import { query, closePool } from './pg.js';
 
 // Fixed UUID for AI Coach - must match AI_COACH_USER_ID in .env
 const AI_COACH_USER_ID = '00000000-0000-0000-0000-000000000001';
-const AI_COACH_EMAIL = 'ai-coach@yhealth.system';
+const AI_COACH_EMAIL = 'ai-coach@balencia.system';
 
 interface UserRow {
   id: string;

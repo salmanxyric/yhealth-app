@@ -3,9 +3,9 @@
 import { useRef, useState, useEffect } from "react";
 import { motion, useInView } from "framer-motion";
 import {
-  HeartCrack,
-  Target,
-  RotateCcw,
+  Layers,
+  MonitorSmartphone,
+  UserX,
   AlertTriangle,
   ArrowRight,
   Zap,
@@ -21,23 +21,23 @@ const heroStats = [
   {
     value: 87,
     suffix: "%",
-    label: "Abandon health goals",
+    label: "Abandon their goals",
     sublabel: "within 90 days",
     color: "from-red-500 to-orange-500",
   },
   {
-    value: 72,
+    value: 120,
     prefix: "$",
     suffix: "B",
-    label: "Wasted on fitness",
+    label: "Wasted on self-improvement",
     sublabel: "annually worldwide",
     color: "from-amber-500 to-yellow-500",
   },
   {
-    value: 4.2,
-    suffix: "×",
-    label: "Average restart cycle",
-    sublabel: "before giving up entirely",
+    value: 5,
+    suffix: "+",
+    label: "Apps juggled",
+    sublabel: "to manage one life",
     color: "from-purple-500 to-pink-500",
   },
 ];
@@ -45,39 +45,39 @@ const heroStats = [
 const painPoints = [
   {
     number: "01",
-    icon: HeartCrack,
+    icon: Layers,
     stat: { value: 87, suffix: "%" },
-    title: "The Accountability Void",
-    headline: "Nobody's watching. Nobody cares.",
+    title: "The App Sprawl Problem",
+    headline: "One life. Five disconnected apps.",
     description:
-      "Without an intelligent system that adapts to your behavior, tracks your patterns, and intervenes before you slip — you're fighting biology with willpower alone. Willpower is a finite resource. It always runs out.",
-    barLabel: "Quit rate without AI coaching",
+      "One app for fitness, another for habits, another for finances, another for journaling. None talk to each other. Your life is fragmented across disconnected tools that can't see the full picture — so neither can you.",
+    barLabel: "Users overwhelmed by app fragmentation",
     barValue: 87,
     gradient: "from-red-500 via-rose-500 to-pink-500",
     glowColor: "rgba(239, 68, 68, 0.3)",
   },
   {
     number: "02",
-    icon: Target,
+    icon: MonitorSmartphone,
     stat: { value: 73, suffix: "%" },
-    title: "The Personalization Myth",
-    headline: "Built for everyone. Optimized for no one.",
+    title: "The Passive Tracking Trap",
+    headline: "You log data. Nothing happens.",
     description:
-      "Cookie-cutter programs ignore your genetics, stress levels, sleep quality, and lifestyle. You follow plans designed for a statistical average that doesn't exist — burning time on routines your body actively resists.",
-    barLabel: "Using wrong-fit programs",
+      "Traditional apps wait for you to figure out what to do. You track steps, log meals, record moods — and get a dashboard of charts no one acts on. That's not coaching. That's note-taking with extra steps.",
+    barLabel: "Apps that only track, never coach",
     barValue: 73,
     gradient: "from-amber-500 via-orange-500 to-red-500",
     glowColor: "rgba(245, 158, 11, 0.3)",
   },
   {
     number: "03",
-    icon: RotateCcw,
-    stat: { value: 4.2, suffix: "×" },
-    title: "The Restart Spiral",
-    headline: "Miss one week. Lose everything.",
+    icon: UserX,
+    stat: { value: 5, suffix: "+" },
+    title: "The One-Size-Fits-None Approach",
+    headline: "Plans designed for someone else.",
     description:
-      "You miss a workout, skip a meal plan, or hit a plateau. Without intelligent recovery protocols and adaptive programming, every setback erases weeks of progress. The cycle doesn't just repeat — it compounds into learned helplessness.",
-    barLabel: "Average restart attempts",
+      "Cookie-cutter programs ignore your motivation level, life context, and what actually matters to you. Whether you're barely hanging on or ready to push hard — you get the same generic advice that doesn't fit your reality.",
+    barLabel: "Users following mismatched programs",
     barValue: 84,
     gradient: "from-purple-500 via-violet-500 to-indigo-500",
     glowColor: "rgba(139, 92, 246, 0.3)",
@@ -145,14 +145,14 @@ function AnimatedBar({
   return (
     <div ref={ref} className="w-full">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-muted-foreground/70 font-medium">
+        <span className="text-xs text-muted-foreground/90 font-medium">
           {label}
         </span>
         <span className="text-xs font-bold text-foreground/60 tabular-nums">
           {value}%
         </span>
       </div>
-      <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+      <div className="h-2 rounded-full bg-white/[0.12] overflow-hidden">
         <motion.div
           className={cn("h-full rounded-full bg-gradient-to-r", gradient)}
           initial={{ width: 0 }}
@@ -173,16 +173,17 @@ export function ProblemPainSection() {
   const sectionRef = useRef<HTMLElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
 
-  // GSAP section entrance
+  // Cinematic section entrance with blur
   useGSAP(
     () => {
       if (!sectionRef.current) return;
       gsap.fromTo(
         sectionRef.current,
-        { opacity: 0.2, y: 60 },
+        { opacity: 0, y: 60, filter: "blur(6px)" },
         {
           opacity: 1,
           y: 0,
+          filter: "blur(0px)",
           ease: "none",
           scrollTrigger: {
             trigger: sectionRef.current,
@@ -197,7 +198,27 @@ export function ProblemPainSection() {
     []
   );
 
-  // GSAP staggered card reveal
+  // Word-by-word title text reveal
+  useGSAP(
+    () => {
+      if (!sectionRef.current) return;
+      gsap.from(".problem-title-word", {
+        y: 40,
+        opacity: 0,
+        duration: 0.7,
+        stagger: 0.08,
+        ease: "power3.out",
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top 80%",
+        },
+      });
+    },
+    sectionRef,
+    []
+  );
+
+  // Cinematic 3D staggered card reveal
   useGSAP(
     () => {
       if (!cardsRef.current) return;
@@ -205,13 +226,15 @@ export function ProblemPainSection() {
       if (!cards.length) return;
       gsap.fromTo(
         cards,
-        { opacity: 0, y: 60, scale: 0.96 },
+        { opacity: 0, y: 60, scale: 0.92, rotateX: 8 },
         {
           opacity: 1,
           y: 0,
           scale: 1,
-          stagger: 0.15,
-          duration: 0.7,
+          rotateX: 0,
+          transformPerspective: 1200,
+          stagger: 0.18,
+          duration: 0.9,
           ease: "power3.out",
           scrollTrigger: {
             trigger: cardsRef.current,
@@ -253,15 +276,23 @@ export function ProblemPainSection() {
             The problem
           </div>
           <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 tracking-tight leading-[1.1]">
-            The wellness industry has
+            {["People", "don\u2019t", "fail", "at"].map((word) => (
+              <span key={word} className="problem-title-word inline-block mr-[0.3em]">
+                {word}
+              </span>
+            ))}
             <span className="block mt-2 bg-gradient-to-r from-red-400 via-orange-400 to-amber-400 bg-clip-text text-transparent">
-              an 87% failure rate.
+              {["self-improvement.", "Their", "tools", "do."].map((word) => (
+                <span key={word} className="problem-title-word inline-block mr-[0.3em]">
+                  {word}
+                </span>
+              ))}
             </span>
           </h2>
           <p className="text-base sm:text-lg text-muted-foreground/80 max-w-2xl mx-auto leading-relaxed">
-            Fragmented apps, conflicting advice, and zero personalization leave
-            millions trapped in an endless cycle of starting over. Here&apos;s
-            exactly why traditional approaches fail.
+            Fragmented apps, passive tracking, and one-size-fits-all programs
+            leave millions stuck in an endless cycle of starting over. Here&apos;s
+            exactly why traditional tools fail you.
           </p>
         </GSAPScrollReveal>
 
@@ -277,12 +308,23 @@ export function ProblemPainSection() {
           {heroStats.map((stat) => (
             <div
               key={stat.label}
-              className="hero-stat relative group rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm p-6 sm:p-8 text-center overflow-hidden hover:border-white/15 transition-all duration-500"
+              className="hero-stat relative group rounded-2xl border border-white/[0.08] p-6 sm:p-8 text-center overflow-hidden transition-all duration-500 hover:border-white/15"
+              style={{
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)',
+              }}
             >
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-b from-white/[0.02] to-transparent" />
+              {/* Top gradient accent line */}
+              <div className={cn("absolute top-0 left-0 right-0 h-px bg-gradient-to-r opacity-50", stat.color)} />
+
+              {/* Background number watermark */}
+              <span className={cn("absolute top-2 right-4 text-7xl sm:text-8xl font-black bg-gradient-to-br bg-clip-text text-transparent opacity-[0.04] select-none", stat.color)}>
+                {stat.prefix || ""}{stat.value}{stat.suffix}
+              </span>
+
               <p
                 className={cn(
-                  "text-4xl sm:text-5xl font-black mb-2 bg-gradient-to-br bg-clip-text text-transparent",
+                  "text-4xl sm:text-5xl md:text-6xl font-black mb-3 bg-gradient-to-br bg-clip-text text-transparent relative",
                   stat.color
                 )}
               >
@@ -293,10 +335,10 @@ export function ProblemPainSection() {
                   decimals={stat.value % 1 !== 0 ? 1 : 0}
                 />
               </p>
-              <p className="text-sm font-semibold text-foreground/80 mb-1">
+              <p className="text-sm sm:text-base font-semibold text-white/80 mb-1 relative">
                 {stat.label}
               </p>
-              <p className="text-xs text-muted-foreground/60">
+              <p className="text-xs sm:text-sm text-white/40 relative">
                 {stat.sublabel}
               </p>
             </div>
@@ -310,7 +352,7 @@ export function ProblemPainSection() {
             return (
               <motion.div
                 key={pain.number}
-                className="pain-card group relative rounded-3xl border border-white/[0.08] bg-white/[0.015] backdrop-blur-sm overflow-hidden transition-all duration-500 hover:border-white/15"
+                className="pain-card group relative rounded-3xl border border-white/[0.12] bg-white/[0.07] backdrop-blur-sm overflow-hidden transition-all duration-500 hover:border-white/15"
                 whileHover={{
                   boxShadow: `0 0 60px -12px ${pain.glowColor}, 0 0 0 1px rgba(255,255,255,0.1)`,
                 }}
@@ -358,13 +400,13 @@ export function ProblemPainSection() {
 
                     {/* Right: Content */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-[0.2em] mb-2">
+                      <p className="text-xs font-semibold text-muted-foreground/80 uppercase tracking-[0.2em] mb-2">
                         {pain.title}
                       </p>
                       <h3 className="text-2xl sm:text-3xl font-bold mb-4 tracking-tight text-foreground/90">
                         {pain.headline}
                       </h3>
-                      <p className="text-muted-foreground/70 text-sm sm:text-base leading-relaxed mb-6 max-w-2xl">
+                      <p className="text-muted-foreground/90 text-sm sm:text-base leading-relaxed mb-6 max-w-2xl">
                         {pain.description}
                       </p>
 
@@ -411,7 +453,7 @@ export function ProblemPainSection() {
             <Zap className="w-4 h-4 text-primary" />
             <span className="text-sm font-medium text-foreground/80">
               This is exactly why we built{" "}
-              <span className="text-primary font-bold">YHealth</span>
+              <span className="text-primary font-bold">Balencia</span>
             </span>
             <ArrowRight className="w-4 h-4 text-primary" />
           </div>

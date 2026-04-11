@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { DashboardSidebar, MobileBottomNav } from "@/app/(pages)/dashboard/components";
 import { useSubscriptionAccessOptional } from "@/app/context/SubscriptionAccessContext";
 import { SubscriptionPaywallOverlay } from "@/components/subscription/SubscriptionGate";
+import { DashboardHeader } from "./DashboardHeader";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -102,8 +103,9 @@ export function DashboardLayout({
       </div>
 
       {/* Main Content (blurred when locked, overlay on top) */}
-      <div className={`${sidebarCollapsed ? 'md:ml-[80px]' : 'md:ml-[280px]'} min-h-screen pb-20 md:pb-0 overflow-x-hidden transition-all duration-300 ${locked ? 'pointer-events-none select-none' : ''}`}>
+      <div className={`${sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} min-h-screen pb-20 md:pb-0 overflow-x-hidden transition-all duration-300 ${locked ? 'pointer-events-none select-none' : ''}`}>
         <div className={locked ? 'blur-md' : ''}>
+          <DashboardHeader />
           {children}
         </div>
       </div>

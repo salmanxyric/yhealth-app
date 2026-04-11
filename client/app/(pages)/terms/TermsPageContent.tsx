@@ -153,7 +153,7 @@ export default function TermsPageContent() {
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={heroInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5, delay: 0.2 }}>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                These terms govern your use of the YHealth platform. We&apos;ve written them in plain
+                These terms govern your use of the Balencia platform. We&apos;ve written them in plain
                 language so you can understand exactly what you&apos;re agreeing to.
               </p>
             </motion.div>
@@ -187,7 +187,7 @@ export default function TermsPageContent() {
         </div>
 
         <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto flex gap-10">
+          <div className="max-w-8xl mx-auto flex gap-10">
             {/* TOC Sidebar */}
             <motion.aside initial={{ opacity: 0, x: -30 }} animate={contentInView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.5 }} className="hidden lg:block w-64 flex-shrink-0">
               <div className="sticky top-24 glass-card rounded-2xl p-5">
@@ -216,11 +216,11 @@ export default function TermsPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      By accessing or using the YHealth platform, website, mobile application, or any of our services (collectively, the &quot;Platform&quot;),
+                      By accessing or using the Balencia platform, website, mobile application, or any of our services (collectively, the &quot;Platform&quot;),
                       you agree to be bound by these Terms of Service (&quot;Terms&quot;). If you do not agree to these Terms, you must not access or use the Platform.
                     </p>
                     <p className="text-muted-foreground leading-relaxed">
-                      These Terms constitute a legally binding agreement between you and YHealth Inc. (&quot;YHealth,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;).
+                      These Terms constitute a legally binding agreement between you and Balencia Inc. (&quot;Balencia,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;).
                       They apply to all users of the Platform, including visitors, registered users, and subscribers.
                     </p>
                     <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
@@ -240,7 +240,7 @@ export default function TermsPageContent() {
                     <h2 className="text-2xl font-bold">2. Eligibility</h2>
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
-                    <p className="text-muted-foreground leading-relaxed">To use the YHealth Platform, you must:</p>
+                    <p className="text-muted-foreground leading-relaxed">To use the Balencia Platform, you must:</p>
                     <ul className="space-y-2">
                       {[
                         "Be at least 16 years of age (or the age of digital consent in your jurisdiction)",
@@ -294,7 +294,7 @@ export default function TermsPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      YHealth grants you a limited, non-exclusive, non-transferable, revocable license to use the Platform for your personal, non-commercial health and wellness purposes, subject to these Terms.
+                      Balencia grants you a limited, non-exclusive, non-transferable, revocable license to use the Platform for your personal, non-commercial health and wellness purposes, subject to these Terms.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {[
@@ -352,7 +352,7 @@ export default function TermsPageContent() {
                       <div>
                         <p className="text-foreground font-semibold text-sm mb-1">Critical Notice</p>
                         <p className="text-sm text-muted-foreground">
-                          YHealth is <span className="text-amber-400 font-semibold">NOT</span> a medical device, medical provider, or substitute for professional medical advice, diagnosis, or treatment.
+                          Balencia is <span className="text-amber-400 font-semibold">NOT</span> a medical device, medical provider, or substitute for professional medical advice, diagnosis, or treatment.
                         </p>
                       </div>
                     </div>
@@ -360,7 +360,7 @@ export default function TermsPageContent() {
                       {[
                         "The AI health coach and all platform features are for informational and educational purposes only",
                         "Always consult a qualified healthcare professional before starting any new exercise, nutrition, or wellness program",
-                        "Never disregard professional medical advice or delay seeking treatment based on information from YHealth",
+                        "Never disregard professional medical advice or delay seeking treatment based on information from Balencia",
                         "If you experience a medical emergency, call your local emergency services immediately",
                         "Individual results may vary based on health status, genetics, adherence, and other factors",
                       ].map((item) => (
@@ -381,7 +381,7 @@ export default function TermsPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      The Platform, including all content, features, functionality, software, algorithms, designs, and trademarks, is owned by YHealth Inc. and protected by intellectual property laws worldwide.
+                      The Platform, including all content, features, functionality, software, algorithms, designs, and trademarks, is owned by Balencia Inc. and protected by intellectual property laws worldwide.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-pink-500/5 border border-pink-500/10">
@@ -404,7 +404,7 @@ export default function TermsPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      YHealth offers both free and premium subscription plans. By subscribing to a paid plan, you agree to the following:
+                      Balencia offers both free and premium subscription plans. By subscribing to a paid plan, you agree to the following:
                     </p>
                     <ul className="space-y-2">
                       {[
@@ -508,12 +508,12 @@ export default function TermsPageContent() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">Legal Department</h4>
-                        <p className="text-xs text-muted-foreground mb-1">Email: legal@yhealth.app</p>
+                        <p className="text-xs text-muted-foreground mb-1">Email: legal@balencia.app</p>
                         <p className="text-xs text-muted-foreground">Phone: +1 (555) 123-4567</p>
                       </div>
                       <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">Mailing Address</h4>
-                        <p className="text-xs text-muted-foreground">YHealth Inc.<br />Attn: Legal Team<br />123 Health Innovation Blvd<br />San Francisco, CA 94105, USA</p>
+                        <p className="text-xs text-muted-foreground">Balencia Inc.<br />Attn: Legal Team<br />123 Health Innovation Blvd<br />San Francisco, CA 94105, USA</p>
                       </div>
                     </div>
                   </div>

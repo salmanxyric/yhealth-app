@@ -1,6 +1,6 @@
 /**
  * @file Seed Blog Posts
- * @description Creates 3 seed blog posts about yHealth features
+ * @description Creates 3 seed blog posts about Balencia features
  */
 
 import { query, closePool } from './pg.js';
@@ -44,14 +44,14 @@ interface BlogSeed {
 
 const BLOG_POSTS: BlogSeed[] = [
   {
-    title: "Introducing yHealth: The Future of Personalized Health Management",
-    slug: "introducing-yhealth-future-personalized-health-management",
-    excerpt: "Discover how yHealth is revolutionizing personal health and wellness through AI-powered insights, comprehensive health tracking, and intelligent coaching that adapts to your unique needs.",
-    content: `<h2>Welcome to yHealth: Your Complete Health Transformation Platform</h2>
-<p>In an era where health data is fragmented across countless apps and devices, yHealth emerges as the unified platform that brings everything together. We're not just another fitness app—we're your intelligent health companion, powered by cutting-edge AI and designed to understand you like never before.</p>
+    title: "Introducing Balencia: The Future of Personalized Health Management",
+    slug: "introducing-balencia-future-personalized-health-management",
+    excerpt: "Discover how Balencia is revolutionizing personal health and wellness through AI-powered insights, comprehensive health tracking, and intelligent coaching that adapts to your unique needs.",
+    content: `<h2>Welcome to Balencia: Your Complete Health Transformation Platform</h2>
+<p>In an era where health data is fragmented across countless apps and devices, Balencia emerges as the unified platform that brings everything together. We're not just another fitness app—we're your intelligent health companion, powered by cutting-edge AI and designed to understand you like never before.</p>
 
-<h3>The yHealth Vision</h3>
-<p>yHealth was born from a simple yet powerful idea: <strong>health should be personal, intelligent, and accessible.</strong> We've built a comprehensive platform that combines:</p>
+<h3>The Balencia Vision</h3>
+<p>Balencia was born from a simple yet powerful idea: <strong>health should be personal, intelligent, and accessible.</strong> We've built a comprehensive platform that combines:</p>
 <ul>
   <li><strong>AI-Powered Intelligence:</strong> Advanced machine learning that learns from your patterns, preferences, and progress</li>
   <li><strong>Holistic Health Tracking:</strong> From fitness and nutrition to sleep, recovery, and mental wellbeing</li>
@@ -60,20 +60,20 @@ const BLOG_POSTS: BlogSeed[] = [
   <li><strong>Data-Driven Insights:</strong> Real-time analytics that help you make informed health decisions</li>
 </ul>
 
-<h3>Why yHealth is Different</h3>
-<p>Unlike traditional health apps that offer generic advice, yHealth creates a truly personalized experience:</p>
+<h3>Why Balencia is Different</h3>
+<p>Unlike traditional health apps that offer generic advice, Balencia creates a truly personalized experience:</p>
 
 <h4>1. Intelligent Assessment</h4>
 <p>Our AI-powered assessment system goes beyond simple questionnaires. Through conversational AI and deep learning, we understand not just what you want to achieve, but why, and how to help you get there.</p>
 
 <h4>2. Unified Health Ecosystem</h4>
-<p>Connect WHOOP, Fitbit, Garmin, Oura, Strava, Apple Health, and Google Fit—all in one place. yHealth intelligently prioritizes data sources and gives you a complete picture of your health.</p>
+<p>Connect WHOOP, Fitbit, Garmin, Oura, Strava, Apple Health, and Google Fit—all in one place. Balencia intelligently prioritizes data sources and gives you a complete picture of your health.</p>
 
 <h4>3. Adaptive AI Coaching</h4>
 <p>Choose from multiple coaching styles (Supportive, Direct, Analytical, Motivational) and intensity levels. Your AI coach learns your preferences and adapts recommendations in real-time.</p>
 
 <h4>4. Comprehensive Health Pillars</h4>
-<p>yHealth addresses five core health pillars:</p>
+<p>Balencia addresses five core health pillars:</p>
 <ul>
   <li><strong>Fitness Optimization:</strong> Personalized workout plans that adapt to your progress</li>
   <li><strong>Nutrition Intelligence:</strong> AI-powered meal planning and dietary insights</li>
@@ -82,7 +82,7 @@ const BLOG_POSTS: BlogSeed[] = [
   <li><strong>Real-Time Insights:</strong> Instant analytics and proactive recommendations</li>
 </ul>
 
-<h3>The Technology Behind yHealth</h3>
+<h3>The Technology Behind Balencia</h3>
 <p>Built on modern, scalable architecture:</p>
 <ul>
   <li><strong>Multi-Provider AI:</strong> Leveraging OpenAI, DeepSeek, and Google Gemini with intelligent fallback</li>
@@ -92,27 +92,27 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h3>Your Health Journey Starts Here</h3>
-<p>Whether you're a fitness enthusiast, someone starting their wellness journey, or looking to optimize your health, yHealth adapts to your needs. Our platform learns from your data, understands your goals, and provides personalized guidance every step of the way.</p>
+<p>Whether you're a fitness enthusiast, someone starting their wellness journey, or looking to optimize your health, Balencia adapts to your needs. Our platform learns from your data, understands your goals, and provides personalized guidance every step of the way.</p>
 
 <h3>Join the Health Revolution</h3>
-<p>yHealth is more than an app—it's a movement toward personalized, intelligent health management. Experience the future of wellness where AI understands you, data guides you, and technology empowers you to achieve your best health.</p>
+<p>Balencia is more than an app—it's a movement toward personalized, intelligent health management. Experience the future of wellness where AI understands you, data guides you, and technology empowers you to achieve your best health.</p>
 
-<p><strong>Ready to transform your health?</strong> Start your journey with yHealth today and discover what personalized health management truly means.</p>`,
-    meta_title: "Introducing yHealth: The Future of Personalized Health Management",
-    meta_description: "Discover yHealth, the comprehensive AI-powered health platform that unifies fitness, nutrition, wellness, and coaching into one intelligent system designed for your unique needs.",
-    meta_keywords: "yHealth, personalized health, AI health platform, health management, wellness technology, fitness AI, health tracking",
+<p><strong>Ready to transform your health?</strong> Start your journey with Balencia today and discover what personalized health management truly means.</p>`,
+    meta_title: "Introducing Balencia: The Future of Personalized Health Management",
+    meta_description: "Discover Balencia, the comprehensive AI-powered health platform that unifies fitness, nutrition, wellness, and coaching into one intelligent system designed for your unique needs.",
+    meta_keywords: "Balencia, personalized health, AI health platform, health management, wellness technology, fitness AI, health tracking",
     category: "Platform",
-    tags: ["yHealth", "Health Platform", "AI", "Wellness", "Technology"],
+    tags: ["Balencia", "Health Platform", "AI", "Wellness", "Technology"],
   },
   {
-    title: "How yHealth Transforms Personal Health Through AI and Data Intelligence",
-    slug: "how-yhealth-transforms-personal-health-ai-data-intelligence",
-    excerpt: "Explore how yHealth leverages artificial intelligence, wearable device integration, and comprehensive data analytics to deliver personalized health insights and actionable recommendations.",
-    content: `<h2>The yHealth Advantage: AI-Powered Health Transformation</h2>
-<p>In a world overflowing with health apps and fitness trackers, yHealth stands apart by combining artificial intelligence, comprehensive data integration, and personalized coaching into one seamless platform. Here's how we're transforming personal health management.</p>
+    title: "How Balencia Transforms Personal Health Through AI and Data Intelligence",
+    slug: "how-balencia-transforms-personal-health-ai-data-intelligence",
+    excerpt: "Explore how Balencia leverages artificial intelligence, wearable device integration, and comprehensive data analytics to deliver personalized health insights and actionable recommendations.",
+    content: `<h2>The Balencia Advantage: AI-Powered Health Transformation</h2>
+<p>In a world overflowing with health apps and fitness trackers, Balencia stands apart by combining artificial intelligence, comprehensive data integration, and personalized coaching into one seamless platform. Here's how we're transforming personal health management.</p>
 
 <h3>The Power of Unified Health Data</h3>
-<p>Most people have health data scattered across multiple platforms—a fitness tracker here, a nutrition app there, sleep data somewhere else. yHealth solves this fragmentation by creating a unified health ecosystem.</p>
+<p>Most people have health data scattered across multiple platforms—a fitness tracker here, a nutrition app there, sleep data somewhere else. Balencia solves this fragmentation by creating a unified health ecosystem.</p>
 
 <h4>Comprehensive Device Integration</h4>
 <p>Connect all your health devices and platforms:</p>
@@ -121,7 +121,7 @@ const BLOG_POSTS: BlogSeed[] = [
   <li><strong>Activity Platforms:</strong> Strava, Apple Health, Google Fit</li>
   <li><strong>Smart Devices:</strong> Smart scales, blood pressure monitors, and more</li>
 </ul>
-<p>yHealth intelligently syncs data from all sources, eliminates duplicates, and creates a single source of truth for your health metrics.</p>
+<p>Balencia intelligently syncs data from all sources, eliminates duplicates, and creates a single source of truth for your health metrics.</p>
 
 <h3>AI That Understands You</h3>
 <p>Our multi-provider AI system (OpenAI, DeepSeek, Gemini) doesn't just process data—it understands context, patterns, and your unique health journey.</p>
@@ -135,7 +135,7 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h4>Conversational AI Assessment</h4>
-<p>Unlike static questionnaires, yHealth's Deep Assessment uses conversational AI to:</p>
+<p>Unlike static questionnaires, Balencia's Deep Assessment uses conversational AI to:</p>
 <ul>
   <li>Ask intelligent follow-up questions based on your responses</li>
   <li>Explore motivations, barriers, and lifestyle factors</li>
@@ -144,7 +144,7 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h3>Personalized Coaching at Scale</h3>
-<p>yHealth's AI coaching system adapts to your personality, preferences, and goals:</p>
+<p>Balencia's AI coaching system adapts to your personality, preferences, and goals:</p>
 
 <h4>Four Distinct Coaching Styles</h4>
 <ul>
@@ -158,7 +158,7 @@ const BLOG_POSTS: BlogSeed[] = [
 <p>Choose from Gentle, Moderate, or Intensive coaching based on your needs and preferences. The system learns what works best for you and adjusts automatically.</p>
 
 <h3>Real-Time Health Intelligence</h3>
-<p>yHealth processes your health data in real-time to provide:</p>
+<p>Balencia processes your health data in real-time to provide:</p>
 <ul>
   <li><strong>Immediate Insights:</strong> Understand what your data means right now</li>
   <li><strong>Proactive Alerts:</strong> Get notified about important patterns or concerns</li>
@@ -167,7 +167,7 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h3>Safety and Health Guardrails</h3>
-<p>yHealth prioritizes your safety with built-in health guardrails:</p>
+<p>Balencia prioritizes your safety with built-in health guardrails:</p>
 <ul>
   <li>Detects potential overexertion from wearable data</li>
   <li>Recommends rest when recovery scores are low</li>
@@ -176,8 +176,8 @@ const BLOG_POSTS: BlogSeed[] = [
   <li>Provides evidence-based recommendations only</li>
 </ul>
 
-<h3>The yHealth Difference</h3>
-<p>What sets yHealth apart:</p>
+<h3>The Balencia Difference</h3>
+<p>What sets Balencia apart:</p>
 <ul>
   <li><strong>Holistic Approach:</strong> Addresses fitness, nutrition, recovery, and mental wellbeing</li>
   <li><strong>Continuous Learning:</strong> AI that gets smarter with your data</li>
@@ -187,21 +187,21 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h3>Transform Your Health Today</h3>
-<p>yHealth isn't just tracking your health—it's actively helping you improve it. Through intelligent analysis, personalized coaching, and comprehensive data integration, we're making advanced health management accessible to everyone.</p>
+<p>Balencia isn't just tracking your health—it's actively helping you improve it. Through intelligent analysis, personalized coaching, and comprehensive data integration, we're making advanced health management accessible to everyone.</p>
 
-<p>Experience the future of personal health. Join yHealth and discover how AI and data intelligence can transform your wellness journey.</p>`,
-    meta_title: "How yHealth Transforms Personal Health Through AI and Data Intelligence",
-    meta_description: "Learn how yHealth leverages AI, wearable integration, and data analytics to deliver personalized health insights and transform your wellness journey.",
+<p>Experience the future of personal health. Join Balencia and discover how AI and data intelligence can transform your wellness journey.</p>`,
+    meta_title: "How Balencia Transforms Personal Health Through AI and Data Intelligence",
+    meta_description: "Learn how Balencia leverages AI, wearable integration, and data analytics to deliver personalized health insights and transform your wellness journey.",
     meta_keywords: "AI health, health transformation, personalized health, health analytics, wellness AI, health intelligence",
     category: "Technology",
     tags: ["AI", "Health Intelligence", "Data Analytics", "Personalization", "Technology"],
   },
   {
-    title: "The Future of Health: How yHealth is Revolutionizing Wellness Technology",
-    slug: "future-of-health-yhealth-revolutionizing-wellness-technology",
-    excerpt: "Discover how yHealth is pioneering the next generation of health technology, combining AI, wearable integration, and personalized coaching to create the most advanced wellness platform available.",
+    title: "The Future of Health: How Balencia is Revolutionizing Wellness Technology",
+    slug: "future-of-health-balencia-revolutionizing-wellness-technology",
+    excerpt: "Discover how Balencia is pioneering the next generation of health technology, combining AI, wearable integration, and personalized coaching to create the most advanced wellness platform available.",
     content: `<h2>The Next Generation of Health Technology</h2>
-<p>The health and wellness industry is at an inflection point. Traditional apps offer generic advice, wearable devices provide raw data without context, and coaching services are expensive and inaccessible. yHealth is changing all of that by creating the first truly intelligent, personalized health platform.</p>
+<p>The health and wellness industry is at an inflection point. Traditional apps offer generic advice, wearable devices provide raw data without context, and coaching services are expensive and inaccessible. Balencia is changing all of that by creating the first truly intelligent, personalized health platform.</p>
 
 <h3>Why Current Solutions Fall Short</h3>
 <p>Most health apps today suffer from fundamental limitations:</p>
@@ -213,25 +213,25 @@ const BLOG_POSTS: BlogSeed[] = [
   <li><strong>Reactive, Not Proactive:</strong> Telling you what happened, not what to do next</li>
 </ul>
 
-<h3>The yHealth Revolution</h3>
-<p>yHealth represents a paradigm shift in health technology. We've built a platform that:</p>
+<h3>The Balencia Revolution</h3>
+<p>Balencia represents a paradigm shift in health technology. We've built a platform that:</p>
 
 <h4>1. Unifies Your Health Ecosystem</h4>
-<p>Instead of juggling multiple apps, yHealth becomes your single health command center. Connect WHOOP for recovery, Fitbit for activity, Strava for workouts, and more—all synchronized and analyzed together.</p>
+<p>Instead of juggling multiple apps, Balencia becomes your single health command center. Connect WHOOP for recovery, Fitbit for activity, Strava for workouts, and more—all synchronized and analyzed together.</p>
 
 <h4>2. Learns and Adapts</h4>
-<p>Our AI doesn't just process data—it learns your patterns, understands your preferences, and adapts recommendations in real-time. The more you use yHealth, the smarter it gets.</p>
+<p>Our AI doesn't just process data—it learns your patterns, understands your preferences, and adapts recommendations in real-time. The more you use Balencia, the smarter it gets.</p>
 
 <h4>3. Provides True Personalization</h4>
-<p>From assessment to coaching style to plan generation, every aspect of yHealth is tailored to you. No two users have the same experience because no two people are the same.</p>
+<p>From assessment to coaching style to plan generation, every aspect of Balencia is tailored to you. No two users have the same experience because no two people are the same.</p>
 
 <h4>4. Offers Proactive Intelligence</h4>
-<p>yHealth doesn't wait for you to ask questions. It analyzes your data, identifies patterns, and proactively suggests actions before problems arise.</p>
+<p>Balencia doesn't wait for you to ask questions. It analyzes your data, identifies patterns, and proactively suggests actions before problems arise.</p>
 
 <h3>Advanced Features That Set Us Apart</h3>
 
 <h4>Multi-Provider AI Architecture</h4>
-<p>yHealth uses a sophisticated multi-provider AI system with automatic fallback:</p>
+<p>Balencia uses a sophisticated multi-provider AI system with automatic fallback:</p>
 <ul>
   <li>Primary: OpenAI for complex reasoning and analysis</li>
   <li>Secondary: DeepSeek for cost-effective processing</li>
@@ -240,13 +240,13 @@ const BLOG_POSTS: BlogSeed[] = [
 <p>This ensures reliability, cost efficiency, and optimal performance for every request.</p>
 
 <h4>Intelligent Data Fusion</h4>
-<p>When you have multiple devices tracking the same metric, yHealth's "Golden Source" system intelligently prioritizes data sources based on accuracy, reliability, and your preferences.</p>
+<p>When you have multiple devices tracking the same metric, Balencia's "Golden Source" system intelligently prioritizes data sources based on accuracy, reliability, and your preferences.</p>
 
 <h4>Conversational Health Assessment</h4>
 <p>Our Deep Assessment uses conversational AI to conduct natural, adaptive health evaluations. It's like talking to a health expert who remembers everything and asks the right follow-up questions.</p>
 
 <h4>Adaptive Plan Generation</h4>
-<p>yHealth creates personalized activity plans that:</p>
+<p>Balencia creates personalized activity plans that:</p>
 <ul>
   <li>Adapt to your schedule and availability</li>
   <li>Adjust intensity based on recovery data</li>
@@ -265,7 +265,7 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h3>Privacy and Security First</h3>
-<p>Your health data is among the most sensitive information you have. yHealth treats it accordingly:</p>
+<p>Your health data is among the most sensitive information you have. Balencia treats it accordingly:</p>
 <ul>
   <li>End-to-end encryption for all data transfers</li>
   <li>Read-only access to connected devices</li>
@@ -275,7 +275,7 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h3>What's Next for Health Technology</h3>
-<p>yHealth is just the beginning. We're continuously innovating with:</p>
+<p>Balencia is just the beginning. We're continuously innovating with:</p>
 <ul>
   <li><strong>Voice Coaching:</strong> Hands-free, real-time workout guidance</li>
   <li><strong>Advanced Analytics:</strong> Predictive health modeling</li>
@@ -285,15 +285,15 @@ const BLOG_POSTS: BlogSeed[] = [
 </ul>
 
 <h3>Join the Health Revolution</h3>
-<p>The future of personal health management is here. yHealth combines the best of AI, data science, and user experience design to create something truly revolutionary.</p>
+<p>The future of personal health management is here. Balencia combines the best of AI, data science, and user experience design to create something truly revolutionary.</p>
 
-<p>Whether you're optimizing peak performance, starting a wellness journey, or managing chronic conditions, yHealth adapts to your needs and grows with you.</p>
+<p>Whether you're optimizing peak performance, starting a wellness journey, or managing chronic conditions, Balencia adapts to your needs and grows with you.</p>
 
-<p><strong>Experience the future of health technology.</strong> Join thousands of users who have transformed their wellness journey with yHealth.</p>
+<p><strong>Experience the future of health technology.</strong> Join thousands of users who have transformed their wellness journey with Balencia.</p>
 
-<p>Your health deserves intelligence, personalization, and innovation. That's exactly what yHealth delivers.</p>`,
-    meta_title: "The Future of Health: How yHealth is Revolutionizing Wellness Technology",
-    meta_description: "Explore how yHealth is pioneering the next generation of health technology with AI, data intelligence, and personalized wellness solutions.",
+<p>Your health deserves intelligence, personalization, and innovation. That's exactly what Balencia delivers.</p>`,
+    meta_title: "The Future of Health: How Balencia is Revolutionizing Wellness Technology",
+    meta_description: "Explore how Balencia is pioneering the next generation of health technology with AI, data intelligence, and personalized wellness solutions.",
     meta_keywords: "health technology, wellness innovation, AI health platform, future of health, health revolution, wellness technology",
     category: "Innovation",
     tags: ["Technology", "Innovation", "Health Revolution", "AI", "Future of Health"],

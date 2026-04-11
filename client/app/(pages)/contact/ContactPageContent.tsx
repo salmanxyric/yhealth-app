@@ -33,7 +33,7 @@ const contactInfo = [
   {
     icon: Mail,
     label: "Email Us",
-    value: "support@yhealth.ai",
+    value: "support@balencia.ai",
     description: "We respond within 24 hours",
     color: "text-primary",
     bgColor: "bg-primary/10",
@@ -311,7 +311,7 @@ export default function ContactPageContent() {
         </div>
 
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 max-w-8xl mx-auto">
             {/* Contact Form */}
             <motion.div
               initial={{ opacity: 0, x: -40 }}
@@ -551,7 +551,7 @@ export default function ContactPageContent() {
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
                     className="w-full h-full"
-                    title="YHealth Office Location"
+                    title="Balencia Office Location"
                   />
                 </div>
               </div>
@@ -612,7 +612,7 @@ export default function ContactPageContent() {
             </h2>
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
               Check out our comprehensive FAQ section for instant answers to the most
-              commonly asked questions about YHealth.
+              commonly asked questions about Balencia.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">

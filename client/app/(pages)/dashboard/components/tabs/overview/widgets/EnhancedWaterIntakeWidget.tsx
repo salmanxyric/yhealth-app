@@ -45,7 +45,7 @@ export function EnhancedWaterIntakeWidget({
             </div>
             <div>
               <h3 className="text-sm font-medium text-slate-400">Water Intake</h3>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-lg font-bold text-white">
                 {isLoading ? '—' : `${glasses}/${targetGlasses}`}
               </p>
               <p className="text-xs text-slate-400">

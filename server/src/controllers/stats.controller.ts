@@ -5,6 +5,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { query } from '../database/pg.js';
 import { logger } from '../services/logger.service.js';
+import cache from '../services/cache.service.js';
 import type { UserPlanRow, IActivity, DayOfWeek } from './plan/plan.types.js';
 
 // Types
@@ -553,9 +554,20 @@ export const getEnhancedHealthMetrics = asyncHandler(async (req: AuthenticatedRe
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
 
-  // Use date string in YYYY-MM-DD format (same as water service uses)
-  // This ensures consistency across all queries
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Accept user timezone for accurate local-date meal filtering (same as GET /diet-plans/meals)
+  const userTz = (req.query.tz as string) || 'UTC';
+  const safeTz = /^[A-Za-z_/+-]+$/.test(userTz) ? userTz : 'UTC';
+
+  // Use user's local date (timezone-aware) to match meal_logs dates correctly
+  // This fixes the issue where UTC date differs from user's local date (e.g., PKT is UTC+5)
+  const now = new Date();
+  const userDate = new Date(now.toLocaleString('en-US', { timeZone: safeTz }));
+  const todayStr = `${userDate.getFullYear()}-${String(userDate.getMonth() + 1).padStart(2, '0')}-${String(userDate.getDate()).padStart(2, '0')}`;
+
+  // Cache for 60 seconds per user per day per timezone
+  const cacheKey = `enhanced-health-metrics:${userId}:${todayStr}:${safeTz}`;
+  const enhancedMetrics = await cache.getOrSet(cacheKey, async () => {
+
   const today = new Date(todayStr);
   today.setHours(0, 0, 0, 0);
   const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -633,12 +645,18 @@ export const getEnhancedHealthMetrics = asyncHandler(async (req: AuthenticatedRe
   });
 
   // Get calories consumed from meal_logs (primary source)
-  // Fallback to health_data_records for backward compatibility
+  // Use timezone-aware date filtering to match user's local "today"
+  // Falls back to summing from foods JSONB when row-level calories is NULL
   const caloriesConsumedResult = await query<{ total: string }>(
-    `SELECT COALESCE(SUM(calories), 0) as total
+    `SELECT COALESCE(SUM(
+       CASE
+         WHEN calories IS NOT NULL AND calories > 0 THEN calories
+         ELSE (SELECT COALESCE(SUM((f->>'calories')::numeric), 0) FROM jsonb_array_elements(COALESCE(foods, '[]'::jsonb)) AS f WHERE f->>'calories' IS NOT NULL)
+       END
+     ), 0) as total
      FROM meal_logs
      WHERE user_id = $1
-     AND DATE(eaten_at) = $2::date`,
+     AND eaten_at::date = $2::date`,
     [userId, todayStr]
   );
   let caloriesConsumed = parseFloat(caloriesConsumedResult.rows[0]?.total || '0');
@@ -696,19 +714,31 @@ export const getEnhancedHealthMetrics = asyncHandler(async (req: AuthenticatedRe
   const caloriesTarget = 2200;
 
   // Get nutrition macros from meal_logs (primary source)
-  // Sum all macros from meals eaten today
+  // Use same timezone-aware date filtering + JSONB foods fallback as calories query
   const nutritionResult = await query<{
     total_protein: string;
     total_carbs: string;
     total_fats: string;
   }>(
     `SELECT 
-       COALESCE(SUM(protein_grams), 0) as total_protein,
-       COALESCE(SUM(carbs_grams), 0) as total_carbs,
-       COALESCE(SUM(fat_grams), 0) as total_fats
+       COALESCE(SUM(
+         CASE WHEN protein_grams IS NOT NULL AND protein_grams > 0 THEN protein_grams
+              ELSE (SELECT COALESCE(SUM((f->>'protein')::numeric), 0) FROM jsonb_array_elements(COALESCE(foods, '[]'::jsonb)) AS f WHERE f->>'protein' IS NOT NULL)
+         END
+       ), 0) as total_protein,
+       COALESCE(SUM(
+         CASE WHEN carbs_grams IS NOT NULL AND carbs_grams > 0 THEN carbs_grams
+              ELSE (SELECT COALESCE(SUM((f->>'carbs')::numeric), 0) FROM jsonb_array_elements(COALESCE(foods, '[]'::jsonb)) AS f WHERE f->>'carbs' IS NOT NULL)
+         END
+       ), 0) as total_carbs,
+       COALESCE(SUM(
+         CASE WHEN fat_grams IS NOT NULL AND fat_grams > 0 THEN fat_grams
+              ELSE (SELECT COALESCE(SUM((f->>'fat')::numeric), 0) FROM jsonb_array_elements(COALESCE(foods, '[]'::jsonb)) AS f WHERE f->>'fat' IS NOT NULL)
+         END
+       ), 0) as total_fats
      FROM meal_logs
      WHERE user_id = $1
-     AND DATE(eaten_at) = $2::date`,
+     AND eaten_at::date = $2::date`,
     [userId, todayStr]
   );
   
@@ -912,7 +942,7 @@ export const getEnhancedHealthMetrics = asyncHandler(async (req: AuthenticatedRe
     chronologicalAge = Math.floor(ageDiff / (1000 * 60 * 60 * 24 * 365.25));
   }
 
-  const enhancedMetrics = {
+  return {
     steps: {
       value: stepsValue,
       target: stepsTarget,
@@ -952,6 +982,9 @@ export const getEnhancedHealthMetrics = asyncHandler(async (req: AuthenticatedRe
     } : undefined,
   };
 
+  }, 60); // 60 second TTL
+
+  res.set('Cache-Control', 'private, max-age=60');
   ApiResponse.success(res, enhancedMetrics);
 });
 

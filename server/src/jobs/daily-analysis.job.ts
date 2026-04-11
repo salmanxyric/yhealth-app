@@ -9,12 +9,15 @@ import { query } from '../database/pg.js';
 import { logger } from '../services/logger.service.js';
 import { dailyAnalysisService } from '../services/daily-analysis.service.js';
 import { userCoachingProfileService } from '../services/user-coaching-profile.service.js';
+import { predictionAccuracyService } from '../services/prediction-accuracy.service.js';
+import { weeklyReportService } from '../services/weekly-report.service.js';
 
 // ============================================
 // CONFIGURATION
 // ============================================
 
 const JOB_INTERVAL_MS = 2 * 60 * 60 * 1000; // Run every 2 hours (catches timezone rollovers)
+const STARTUP_DELAY_MS = 90 * 1000; // 90-second delay — staggered from proactive messaging (30s) to prevent query overlap
 const BATCH_SIZE = 5; // Fewer parallel since LLM-heavy
 const INTER_BATCH_DELAY_MS = 3000; // 3 seconds between batches
 let isRunning = false;
@@ -63,16 +66,29 @@ async function processDailyAnalysis(): Promise<void> {
       await Promise.allSettled(
         batch.map(async (user) => {
           try {
-            // Update profile first so the daily report uses the latest coaching context (spec: profile-before-report)
-            await userCoachingProfileService.generateProfile(user.id).catch((err) => {
-              logger.warn('[DailyAnalysisJob] Profile update failed (non-fatal, continuing with report)', {
-                userId: user.id,
-                error: err instanceof Error ? err.message : 'Unknown',
+            // Only regenerate profile if stale (>2h) — avoids redundant queries when coach profile job already ran
+            const existingProfile = await userCoachingProfileService.getProfile(user.id);
+            if (!existingProfile) {
+              await userCoachingProfileService.generateProfile(user.id).catch((err) => {
+                logger.warn('[DailyAnalysisJob] Profile generation failed (non-fatal, continuing with report)', {
+                  userId: user.id,
+                  error: err instanceof Error ? err.message : 'Unknown',
+                });
               });
-            });
+            } else {
+              logger.debug('[DailyAnalysisJob] Profile fresh, skipping regeneration', { userId: user.id.slice(0, 8) });
+            }
 
             await dailyAnalysisService.generateDailyReport(user.id, user.score_date);
             processed++;
+
+            // Track yesterday's prediction accuracy (non-fatal)
+            await predictionAccuracyService.trackPredictionAccuracy(user.id, user.score_date).catch((err) => {
+              logger.warn('[DailyAnalysisJob] Prediction tracking failed (non-fatal)', {
+                userId: user.id.slice(0, 8),
+                error: err instanceof Error ? err.message : 'Unknown',
+              });
+            });
 
             logger.debug('[DailyAnalysisJob] Generated report', {
               userId: user.id,
@@ -101,6 +117,27 @@ async function processDailyAnalysis(): Promise<void> {
         totalEligible: result.rows.length,
       });
     }
+
+    // On Sundays, generate weekly reports for users who had daily reports this week
+    const today = new Date();
+    if (today.getUTCDay() === 0 && processed > 0) {
+      const processedUserIds = [...new Set(result.rows.map((r) => r.id))];
+      let weeklyGenerated = 0;
+      for (const uid of processedUserIds) {
+        try {
+          const report = await weeklyReportService.generateWeeklyReport(uid);
+          if (report) weeklyGenerated++;
+        } catch (err) {
+          logger.warn('[DailyAnalysisJob] Weekly report generation failed (non-fatal)', {
+            userId: uid.slice(0, 8),
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        }
+      }
+      if (weeklyGenerated > 0) {
+        logger.info('[DailyAnalysisJob] Weekly reports generated', { count: weeklyGenerated });
+      }
+    }
   } catch (error) {
     logger.error('[DailyAnalysisJob] Fatal error', {
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -125,14 +162,16 @@ export function startDailyAnalysis(): void {
 
   logger.info('[DailyAnalysisJob] Starting daily analysis job', {
     intervalMs: JOB_INTERVAL_MS,
+    startupDelayMs: STARTUP_DELAY_MS,
     batchSize: BATCH_SIZE,
   });
 
-  // Run immediately on start
-  processDailyAnalysis();
-
-  // Then run on interval
-  intervalId = setInterval(processDailyAnalysis, JOB_INTERVAL_MS);
+  // Delay first run to stagger from other background jobs (proactive messaging starts at 30s)
+  setTimeout(() => {
+    processDailyAnalysis();
+    // Then run on interval
+    intervalId = setInterval(processDailyAnalysis, JOB_INTERVAL_MS);
+  }, STARTUP_DELAY_MS);
 }
 
 /**

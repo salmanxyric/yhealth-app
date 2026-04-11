@@ -14,8 +14,10 @@ import { llmCircuitBreaker } from '../services/llm-circuit-breaker.service.js';
 // ============================================
 
 const JOB_INTERVAL_MS = 6 * 60 * 60 * 1000; // Run every 6 hours
-const PROFILE_STALE_HOURS = 6;
-const BATCH_SIZE = 3; // Keep small to avoid overwhelming OpenAI rate limits
+const PROFILE_STALE_HOURS = 12; // Profiles valid for 12 hours (was 6h — reduced query load)
+const BATCH_SIZE = 2; // Keep small to avoid overwhelming DB + OpenAI rate limits
+const MAX_USERS_PER_RUN = 10; // Cap users per run to prevent query storms (was 100)
+const INTER_BATCH_DELAY_MS = 5000; // 5 seconds between batches to spread DB load
 let isRunning = false;
 let intervalId: NodeJS.Timeout | null = null;
 
@@ -57,7 +59,7 @@ async function processCoachProfileGeneration(): Promise<void> {
            OR p.generated_at < NOW() - INTERVAL '${PROFILE_STALE_HOURS} hours'
          )
        ORDER BY p.generated_at ASC NULLS FIRST
-       LIMIT 100`,
+       LIMIT ${MAX_USERS_PER_RUN}`,
     );
 
     if (result.rows.length === 0) {
@@ -103,6 +105,11 @@ async function processCoachProfileGeneration(): Promise<void> {
           }
         })
       );
+
+      // Inter-batch delay to spread DB load and prevent query storms
+      if (i + BATCH_SIZE < result.rows.length) {
+        await new Promise((resolve) => setTimeout(resolve, INTER_BATCH_DELAY_MS));
+      }
     }
 
     if (processed > 0 || errors > 0) {

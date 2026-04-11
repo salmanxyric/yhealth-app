@@ -191,7 +191,7 @@ export function ExerciseDetailView() {
   const hasTabContent = instructions.length > 0 || tips.length > 0 || commonMistakes.length > 0;
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-8 relative">
+    <div className="max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-8 relative">
       {/* Background mesh gradient */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div className="absolute top-20 left-1/4 w-96 h-96 bg-emerald-500/[0.03] rounded-full blur-3xl" />

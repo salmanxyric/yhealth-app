@@ -109,7 +109,7 @@ export function useAuth() {
             redirect: false,
           });
 
-          toast.success("Account created successfully! Welcome to yHealth!");
+          toast.success("Account created successfully! Welcome to Balencia!");
           router.push("/dashboard");
           return true;
         }

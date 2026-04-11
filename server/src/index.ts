@@ -22,11 +22,18 @@ import { competitionAutoCreateJob } from "./jobs/competition-auto-create.job.js"
 import { coachProfileGenerationJob } from "./jobs/coach-profile-generation.job.js";
 import { dailyAnalysisJob } from "./jobs/daily-analysis.job.js";
 import { whoopSyncJob } from "./jobs/whoop-sync.job.js";
+import { insightsComputationJob } from "./jobs/insights-computation.job.js";
+import { lifeHistoryDigestJob } from "./jobs/life-history-digest.job.js";
+import { engagementScoringJob } from "./jobs/engagement-scoring.job.js";
+import { startEmailDigestJob, stopEmailDigestJob } from "./jobs/email-digest.job.js";
+import { streakValidationJob } from "./jobs/streak-validation.job.js";
 import { activityEventProcessor } from "./workers/activity-event-processor.worker.js";
 import { ensureDefaultPlans } from "./services/subscription.service.js";
+import { query } from "./database/pg.js";
 
-// Embedding worker and queue require Redis - lazy import to avoid crash when Redis is unavailable
+// Embedding & email workers require Redis - lazy import to avoid crash when Redis is unavailable
 let embeddingWorker: { close: () => Promise<void> } | null = null;
+let emailWorker: { close: () => Promise<void> } | null = null;
 let embeddingQueueService: { close: () => Promise<void> } | null = null;
 
 const numCPUs = os.cpus().length;
@@ -76,6 +83,21 @@ async function gracefulShutdown(signal: string): Promise<void> {
     dailyAnalysisJob.stop();
     logger.info("Daily analysis job stopped");
 
+    insightsComputationJob.stop();
+    logger.info("Insights computation job stopped");
+
+    lifeHistoryDigestJob.stop();
+    logger.info("Life history digest job stopped");
+
+    engagementScoringJob.stop();
+    logger.info("Engagement scoring job stopped");
+
+    stopEmailDigestJob();
+    logger.info("Email digest job stopped");
+
+    streakValidationJob.stop();
+    logger.info("Streak validation job stopped");
+
     await activityEventProcessor.stop();
     logger.info("Activity event processor stopped");
 
@@ -83,6 +105,10 @@ async function gracefulShutdown(signal: string): Promise<void> {
     if (embeddingQueueService) await embeddingQueueService.close();
     if (embeddingWorker) await embeddingWorker.close();
     logger.info("Embedding worker and queue closed");
+
+    // Close email worker (if started)
+    if (emailWorker) await emailWorker.close();
+    logger.info("Email worker closed");
 
     // Stop accepting new connections
     if (server) {
@@ -131,11 +157,68 @@ async function startServer(): Promise<void> {
       });
     }
 
+    // Ensure roles table + default 'User' role exist (required for user registration FK)
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS roles (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          name VARCHAR(100) NOT NULL,
+          slug VARCHAR(100) UNIQUE NOT NULL,
+          description TEXT,
+          is_system BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await query(`
+        INSERT INTO roles (id, name, slug, description, is_system) VALUES
+          ('11111111-1111-1111-1111-111111111101', 'User', 'user', 'Default application user', true),
+          ('11111111-1111-1111-1111-111111111102', 'Admin', 'admin', 'Full administrative access', true),
+          ('11111111-1111-1111-1111-111111111106', 'System', 'system', 'System/internal service accounts', true)
+        ON CONFLICT (slug) DO NOTHING
+      `);
+      logger.info('Default roles ensured');
+    } catch (err) {
+      logger.warn('Failed to ensure default roles (non-fatal)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Ensure streak tables exist (required for streak system)
+    try {
+      const { readFileSync } = await import('fs');
+      const { join } = await import('path');
+      const streakMigrationPath = join(import.meta.dirname, 'database', 'migrations', 'add-streak-tables.sql');
+      const streakSQL = readFileSync(streakMigrationPath, 'utf-8');
+      await query(streakSQL);
+      logger.info('Streak tables ensured');
+    } catch (err) {
+      logger.warn('Failed to ensure streak tables (non-fatal)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // Auto-seed subscription plans if table is empty
     try {
       await ensureDefaultPlans();
     } catch (err) {
       logger.warn("Failed to auto-seed subscription plans", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Ensure AI Coach system user exists (required for proactive messaging)
+    try {
+      const AI_COACH_USER_ID = process.env.AI_COACH_USER_ID || '00000000-0000-0000-0000-000000000001';
+      await query(
+        `INSERT INTO users (id, email, password, first_name, last_name, role_id, auth_provider, onboarding_status, is_email_verified, is_active)
+         VALUES ($1, 'ai-coach@balencia.system', 'SYSTEM_USER_NO_LOGIN', 'AI', 'Coach', '11111111-1111-1111-1111-111111111101', 'local', 'completed', true, true)
+         ON CONFLICT (id) DO NOTHING`,
+        [AI_COACH_USER_ID]
+      );
+      logger.info('AI Coach system user ensured');
+    } catch (err) {
+      logger.warn('Failed to ensure AI Coach user (non-fatal)', {
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -159,8 +242,19 @@ async function startServer(): Promise<void> {
           error: err instanceof Error ? err.message : String(err),
         });
       }
+
+      // Start email worker
+      try {
+        const { startEmailWorker } = await import("./workers/email-worker.js");
+        emailWorker = startEmailWorker();
+        logger.info("Email worker started (Redis available)");
+      } catch (err) {
+        logger.warn("Failed to start email worker", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     } else {
-      logger.info("Embedding worker skipped (Redis not configured - set REDIS_URL or REDIS_HOST)");
+      logger.info("Embedding/email workers skipped (Redis not configured - set REDIS_URL or REDIS_HOST)");
     }
 
     // Start listening
@@ -183,9 +277,11 @@ async function startServer(): Promise<void> {
       }
 
       // Start background jobs. Cron-style jobs run only on one worker in cluster mode to avoid N× repetition.
+      // Set ENABLE_BACKGROUND_JOBS=false in .env to disable all background jobs (useful for development)
+      const backgroundJobsEnabled = process.env.ENABLE_BACKGROUND_JOBS !== 'false';
       const isSchedulerWorker = !cluster.worker || cluster.worker.id === 0;
 
-      if (isSchedulerWorker) {
+      if (isSchedulerWorker && backgroundJobsEnabled) {
         // Lightweight jobs — start immediately
         reminderProcessorJob.start();
         logger.info("Reminder processor job started");
@@ -223,13 +319,42 @@ async function startServer(): Promise<void> {
 
         setTimeout(() => {
           coachProfileGenerationJob.start();
-          logger.info("Coach profile generation job started (staggered 180s)");
-        }, 180_000);
+          logger.info("Coach profile generation job started (staggered 300s)");
+        }, 300_000); // 5 minutes — gives proactive messaging (30s) and daily analysis (90s) time to finish and populate cache
 
         setTimeout(() => {
           whoopSyncJob.start();
           logger.info("WHOOP daily sync job started (staggered 240s)");
         }, 240_000);
+
+        setTimeout(() => {
+          insightsComputationJob.start();
+          logger.info("Insights computation job started (staggered 360s)");
+        }, 360_000);
+
+        setTimeout(() => {
+          lifeHistoryDigestJob.start();
+          logger.info("Life history digest job started (staggered 420s)");
+        }, 420_000);
+
+        setTimeout(() => {
+          engagementScoringJob.start();
+          logger.info("Engagement scoring job started (staggered 480s)");
+        }, 480_000);
+
+        setTimeout(() => {
+          startEmailDigestJob();
+          logger.info("Email digest job started (staggered 540s)");
+        }, 540_000);
+
+        setTimeout(() => {
+          streakValidationJob.start();
+          logger.info("Streak validation job started (staggered 600s)");
+        }, 600_000);
+      }
+
+      if (!backgroundJobsEnabled) {
+        logger.info("Background jobs DISABLED (ENABLE_BACKGROUND_JOBS=false)");
       }
 
       // Event-driven / queue consumer — start on all workers (or keep on scheduler only if it's a single consumer)

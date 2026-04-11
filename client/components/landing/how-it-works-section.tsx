@@ -3,9 +3,9 @@
 import { useRef, useState } from "react";
 import { motion, useInView } from "framer-motion";
 import {
-  Watch,
+  Compass,
   Cpu,
-  FileCheck,
+  MessageSquare,
   Trophy,
   ArrowRight,
   CheckCircle2,
@@ -17,47 +17,47 @@ import { AnimatedGradientMesh, GSAPScrollReveal, FloatingCard } from "./shared";
 const steps = [
   {
     number: "01",
-    icon: Watch,
-    title: "Connect Wearables",
-    subtitle: "One Dashboard",
+    icon: Compass,
+    title: "Tell Us What Matters",
+    subtitle: "60-Second Setup",
     description:
-      "Sync Apple Watch, Huawei Health, Whoop-style trackers, and more. Your data flows in automatically so the AI has the full picture.",
+      "Share your life goals, priorities, and where you are today. Whether it's fitness, career, relationships, or faith — your AI coach starts by listening.",
     color: "from-cyan-400 to-cyan-600",
     glowColor: "180 80% 55%",
-    features: ["Apple Health", "Huawei Health", "Whoop-style devices"],
+    features: ["Life goals assessment", "Motivation calibration", "Any life domain"],
   },
   {
     number: "02",
     icon: Cpu,
-    title: "AI Analyzes Your Data",
-    subtitle: "Intelligent Analysis",
+    title: "AI Builds Your Game Plan",
+    subtitle: "Intelligent Roadmap",
     description:
-      "Our AI analyzes your data across fitness, nutrition, and wellbeing to understand patterns and readiness.",
+      "Our AI decomposes your goals into actionable steps across every life domain — workouts, habits, journal prompts, milestones — all personalized to your motivation level.",
     color: "from-purple-400 to-purple-600",
     glowColor: "280 80% 55%",
-    features: ["Recovery & strain", "Sleep & stress", "Nutrition signals"],
+    features: ["Goal decomposition", "Cross-domain planning", "Adaptive difficulty"],
   },
   {
     number: "03",
-    icon: FileCheck,
-    title: "Get Personalized Plan",
-    subtitle: "Your Plan, Your Pace",
+    icon: MessageSquare,
+    title: "Get Proactive Coaching",
+    subtitle: "AI Reaches Out First",
     description:
-      "Receive a plan tailored to your goals, schedule, and current state. Workouts, nutrition, and recovery that adapt in real time.",
+      "Your AI coach doesn't wait for you to log in. Morning motivation, evening reflections, timely nudges — it initiates the conversation when it matters most.",
     color: "from-pink-400 to-pink-600",
     glowColor: "330 80% 55%",
-    features: ["Adaptive plans", "Emotional AI coach", "Emergency support"],
+    features: ["Proactive nudges", "Emotional intelligence", "Voice & text coaching"],
   },
   {
     number: "04",
     icon: Trophy,
-    title: "Track & Compete",
-    subtitle: "Stay Motivated",
+    title: "Watch Your Life Transform",
+    subtitle: "Track Everything",
     description:
-      "Track progress, join challenges, and climb the leaderboard. Compete with others or yourself—and see real results.",
+      "Track progress across every goal. Celebrate wins with XP and achievements. Adjust the plan as you grow — your coach evolves with you.",
     color: "from-amber-400 to-orange-600",
     glowColor: "30 80% 55%",
-    features: ["Leaderboards", "Challenges", "Milestone rewards"],
+    features: ["Life Score tracking", "Achievements & XP", "Weekly insights"],
   },
 ];
 
@@ -195,7 +195,7 @@ function StepCard({
                 >
                   <CheckCircle2
                     className={`w-3.5 h-3.5 transition-colors duration-300 ${
-                      isActive || isCompleted ? "text-primary" : "text-muted-foreground/50"
+                      isActive || isCompleted ? "text-primary" : "text-muted-foreground/80"
                     }`}
                   />
                   <span className="text-muted-foreground">{feature}</span>
@@ -285,7 +285,7 @@ function CentralAI() {
         className="absolute -bottom-8 text-center"
       >
         <span className="text-xs text-muted-foreground">Powered by</span>
-        <div className="text-sm font-semibold gradient-text">yHealth AI Engine</div>
+        <div className="text-sm font-semibold gradient-text">Balencia AI Engine</div>
       </motion.div>
     </div>
   );
@@ -349,6 +349,26 @@ export function HowItWorksSection() {
   const [activeStep, setActiveStep] = useState(-1);
   const [pathLen, setPathLen] = useState(0);
 
+  // GSAP staggered entrance for step cards
+  useGSAP(
+    () => {
+      if (!sectionRef.current) return;
+      gsap.from(".hiw-step", {
+        x: -40,
+        opacity: 0,
+        duration: 0.8,
+        stagger: 0.15,
+        ease: "power3.out",
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top 75%",
+        },
+      });
+    },
+    sectionRef,
+    []
+  );
+
   // GSAP ScrollTrigger for step progression and path drawing
   useGSAP(
     () => {
@@ -401,14 +421,14 @@ export function HowItWorksSection() {
           <GSAPScrollReveal direction="up" distance={40} delay={0.1}>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6">
               From Sign-Up to
-              <span className="block gradient-text-animated">Transformation</span>
+              <span className="block gradient-text-animated">Your Best Life</span>
             </h2>
           </GSAPScrollReveal>
 
           <GSAPScrollReveal direction="up" distance={40} delay={0.2}>
             <p className="text-lg text-muted-foreground">
-              Your path to better health starts with a simple conversation. Let
-              our AI guide you every step of the way.
+              Your path to your best life starts with a simple conversation. Let
+              your AI life coach guide you every step of the way.
             </p>
           </GSAPScrollReveal>
         </div>
@@ -422,13 +442,14 @@ export function HowItWorksSection() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-6">
             {steps.map((step, index) => (
-              <StepCard
-                key={step.number}
-                step={step}
-                index={index}
-                isActive={activeStep === index}
-                isCompleted={activeStep > index}
-              />
+              <div key={step.number} className="hiw-step">
+                <StepCard
+                  step={step}
+                  index={index}
+                  isActive={activeStep === index}
+                  isCompleted={activeStep > index}
+                />
+              </div>
             ))}
           </div>
         </div>

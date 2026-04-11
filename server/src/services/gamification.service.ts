@@ -327,6 +327,11 @@ class GamificationService {
         logger.info(`User ${userId} set new streak record: ${longestStreak} days`);
       }
 
+      // Sync with unified streak system (fire-and-forget)
+      import('./streak.service.js').then(({ streakService }) =>
+        streakService.recordActivity(userId, 'activity')
+      ).catch(() => {});
+
       return result;
     } catch (error) {
       await client.query('ROLLBACK');

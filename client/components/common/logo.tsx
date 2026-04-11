@@ -22,7 +22,7 @@ export function Logo({ className, size = "md", showText = true }: LogoProps) {
       <div className={cn("relative flex items-center justify-center", sizes[size].icon)}>
         <Image
           src="/logo1.png"
-          alt="yHealth Logo"
+          alt="Balencia Logo"
           width={sizes[size].img}
           height={sizes[size].img}
           className="object-contain"
@@ -36,7 +36,7 @@ export function Logo({ className, size = "md", showText = true }: LogoProps) {
             sizes[size].text
           )}
         >
-          yHealth
+          Balencia
         </span>
       )}
     </Link>

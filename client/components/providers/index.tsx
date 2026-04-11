@@ -8,6 +8,7 @@ import { VoiceAssistantProvider } from "@/app/context/VoiceAssistantContext";
 import { ProductTourProvider } from "@/app/context/ProductTourContext";
 import { SocketInitializer } from "@/components/common/socket-initializer";
 import { Toaster } from "react-hot-toast";
+import { MusicPlayerProvider } from "./music-player-provider";
 
 const ProductTour = dynamic(
   () =>
@@ -34,7 +35,9 @@ export function Providers({ children }: ProvidersProps) {
               forcedTheme="dark"
               disableTransitionOnChange
             >
-              {children}
+              <MusicPlayerProvider>
+                {children}
+              </MusicPlayerProvider>
               <ProductTour />
               <Toaster
                 position="top-right"

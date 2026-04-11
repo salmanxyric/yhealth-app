@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { createRateLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { moodController } from '../controllers/wellbeing/mood.controller.js';
 import { energyController } from '../controllers/wellbeing/energy.controller.js';
 import { journalController } from '../controllers/wellbeing/journal.controller.js';
@@ -12,7 +13,10 @@ import { habitController } from '../controllers/wellbeing/habit.controller.js';
 import { routineController } from '../controllers/wellbeing/routine.controller.js';
 import { mindfulnessController } from '../controllers/wellbeing/mindfulness.controller.js';
 import { breathingController } from '../controllers/wellbeing/breathing.controller.js';
+import { yogaController } from '../controllers/wellbeing/yoga.controller.js';
+import { visionController } from '../controllers/wellbeing/vision.controller.js';
 import emotionalCheckInRoutes from './emotional-checkin.routes.js';
+import { insightsController } from '../controllers/wellbeing/insights.controller.js';
 
 const router = Router();
 
@@ -50,6 +54,45 @@ router.get('/mood/timeline', moodController.getMoodTimeline);
  * @access  Private
  */
 router.get('/mood/patterns', moodController.getMoodPatterns);
+
+/**
+ * @route   GET /api/v1/wellbeing/mood/transitions/:date
+ * @desc    Get mood arc transitions for a specific day
+ * @access  Private
+ */
+router.get('/mood/transitions/:date', moodController.getMoodTransitions);
+
+/**
+ * @route   GET /api/v1/wellbeing/mood/transition-patterns
+ * @desc    Get aggregate trigger→mood correlation patterns
+ * @access  Private
+ */
+router.get('/mood/transition-patterns', moodController.getTransitionPatterns);
+
+// ============================================
+// BEHAVIORAL PATTERNS
+// ============================================
+
+/**
+ * @route   GET /api/v1/wellbeing/behavioral-patterns
+ * @desc    Get active behavioral patterns
+ * @access  Private
+ */
+router.get('/behavioral-patterns', moodController.getBehavioralPatterns);
+
+/**
+ * @route   POST /api/v1/wellbeing/behavioral-patterns/:id/acknowledge
+ * @desc    Acknowledge a behavioral pattern
+ * @access  Private
+ */
+router.post('/behavioral-patterns/:id/acknowledge', moodController.acknowledgeBehavioralPattern);
+
+/**
+ * @route   POST /api/v1/wellbeing/behavioral-patterns/:id/dismiss
+ * @desc    Dismiss a behavioral pattern
+ * @access  Private
+ */
+router.post('/behavioral-patterns/:id/dismiss', moodController.dismissBehavioralPattern);
 
 // ============================================
 // F7.4: ENERGY LEVEL MONITORING
@@ -359,5 +402,89 @@ router.delete('/breathing/:id', breathingController.deleteBreathingTest);
  */
 router.use('/emotional-checkin', emotionalCheckInRoutes);
 
-export default router;
+// ============================================
+// HEALTH INSIGHTS / CORRELATIONS
+// ============================================
 
+/**
+ * @route   GET /api/v1/wellbeing/insights/correlations
+ * @desc    Get active health-performance correlations
+ * @access  Private
+ */
+router.get('/insights/correlations', insightsController.getCorrelations);
+
+/**
+ * @route   POST /api/v1/wellbeing/insights/:id/dismiss
+ * @desc    Dismiss an insight
+ * @access  Private
+ */
+router.post('/insights/:id/dismiss', insightsController.dismissInsight);
+
+/**
+ * @route   GET /api/v1/wellbeing/insights/themes
+ * @desc    Get theme insights (frequency, trends, co-occurrences)
+ * @access  Private
+ */
+router.get('/insights/themes', insightsController.getThemes);
+
+/**
+ * @route   POST /api/v1/wellbeing/insights/compute
+ * @desc    Trigger on-demand insight computation
+ * @access  Private
+ */
+router.post('/insights/compute', insightsController.computeNow);
+
+// ============================================
+// F7.9: YOGA & MEDITATION
+// ============================================
+
+// Pose Library
+router.get('/yoga/poses', yogaController.listPoses);
+router.get('/yoga/poses/:slug', yogaController.getPoseBySlug);
+
+// Session Templates & User Sessions
+router.get('/yoga/sessions/templates', yogaController.getTemplates);
+router.get('/yoga/sessions', yogaController.getUserSessions);
+router.get('/yoga/sessions/:id', yogaController.getSessionById);
+router.delete('/yoga/sessions/:id', yogaController.deleteSession);
+
+// Session Logs (start, update, complete)
+router.post('/yoga/sessions/:id/start', yogaController.startSession);
+router.patch('/yoga/sessions/logs/:logId', yogaController.updateSessionLog);
+router.post('/yoga/sessions/logs/:logId/complete', yogaController.completeSession);
+
+// History & Progress
+router.get('/yoga/history', yogaController.getHistory);
+router.get('/yoga/stats', yogaController.getStats);
+router.get('/yoga/streak', yogaController.getStreak);
+
+// Meditation Timers
+router.post('/yoga/meditation/start', yogaController.startMeditation);
+router.post('/yoga/meditation/:id/complete', yogaController.completeMeditation);
+
+// AI Yoga Pose Coach
+router.post('/yoga/coach', createRateLimiter({ windowMs: 60000, max: 10 }), yogaController.analysePose);
+
+// AI Coach Session Tracking
+router.post('/yoga/coach/session/start', yogaController.startAICoachSession);
+router.post('/yoga/coach/session/:logId/complete', yogaController.completeAICoachSession);
+
+// ============================================
+// VISION TESTING
+// ============================================
+
+// Color Vision Tests
+router.post('/vision/test/start', visionController.startTest);
+router.post('/vision/test/:sessionId/complete', visionController.completeTest);
+
+// Eye Exercises
+router.post('/vision/exercise/start', visionController.startExercise);
+router.post('/vision/exercise/:sessionId/complete', visionController.completeExercise);
+
+// History & Progress
+router.get('/vision/history', visionController.getHistory);
+router.get('/vision/stats', visionController.getStats);
+router.get('/vision/streak', visionController.getStreak);
+router.get('/vision/sessions/:id', visionController.getSessionById);
+
+export default router;

@@ -328,7 +328,7 @@ class SummaryDeliveryService {
       });
     }
 
-    message += `\n_Open the yHealth app to view action items and track your progress._`;
+    message += `\n_Open the Balencia app to view action items and track your progress._`;
 
     return message;
   }

@@ -93,7 +93,7 @@ gh api repos/:owner/:repo/branches/main/protection \
 
 ```hcl
 resource "github_branch_protection" "main" {
-  repository_id = github_repository.yhealth.id
+  repository_id = github_repository.balencia.id
   pattern       = "main"
 
   required_status_checks {
@@ -132,25 +132,25 @@ Create `.github/CODEOWNERS` to automatically request reviews from code owners:
 
 ```
 # Global owners
-* @yhealth-team/maintainers
+* @balencia-team/maintainers
 
 # Client code
-/client/ @yhealth-team/frontend-team
-/client/app/ @yhealth-team/frontend-team
+/client/ @balencia-team/frontend-team
+/client/app/ @balencia-team/frontend-team
 
 # Server code
-/server/ @yhealth-team/backend-team
-/server/src/ @yhealth-team/backend-team
+/server/ @balencia-team/backend-team
+/server/src/ @balencia-team/backend-team
 
 # Database
-/server/src/database/ @yhealth-team/backend-team @yhealth-team/database-team
+/server/src/database/ @balencia-team/backend-team @balencia-team/database-team
 
 # Documentation
-/docs/ @yhealth-team/docs-team
-*.md @yhealth-team/docs-team
+/docs/ @balencia-team/docs-team
+*.md @balencia-team/docs-team
 
 # CI/CD
-/.github/ @yhealth-team/devops-team
+/.github/ @balencia-team/devops-team
 ```
 
 ## 🚨 Emergency Procedures

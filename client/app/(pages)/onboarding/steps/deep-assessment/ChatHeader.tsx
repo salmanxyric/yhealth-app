@@ -1,13 +1,11 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, Brain } from 'lucide-react';
-import { SwitchModeButton } from './SwitchModeButton';
+import { ArrowLeft, Zap } from 'lucide-react';
 import { LanguageSelector } from './LanguageSelector';
-import { ModeToggle } from './ModeToggle';
 import type { SupportedLanguage } from '@/src/shared/services';
 import type { AssessmentInteractionMode } from './types';
-import { TARGET_USER_MESSAGES } from './constants';
+import { cn } from '@/lib/utils';
 
 interface ChatHeaderProps {
   userMessageCount: number;
@@ -18,65 +16,51 @@ interface ChatHeaderProps {
   canChangeLanguage: boolean;
   interactionMode?: AssessmentInteractionMode;
   onInteractionModeChange?: (mode: AssessmentInteractionMode) => void;
+  disableQuickMode?: boolean;
 }
 
 export function ChatHeader({
-  userMessageCount,
   language,
   onLanguageChange,
   onBack,
   onSwitchMode,
   canChangeLanguage,
-  interactionMode = 'qa',
-  onInteractionModeChange,
+  disableQuickMode = false,
 }: ChatHeaderProps) {
-  const progress = Math.min((userMessageCount / TARGET_USER_MESSAGES) * 100, 100);
-
   return (
-    <div className="flex-shrink-0 px-4 py-2 flex items-center justify-between bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/30">
+    <div className="flex-shrink-0 flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-white/10 bg-[#02000f]/90 backdrop-blur-xl">
       {/* Back button */}
       <motion.button
         onClick={onBack}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-slate-400 hover:text-white transition-all"
+        className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-3 rounded-lg sm:rounded-xl text-white text-sm sm:text-base border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all group"
         whileHover={{ x: -2 }}
       >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        <span className="text-xs font-medium">Back</span>
+        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-0.5 transition-transform" />
+        <span className="font-medium hidden sm:inline">Back to Assessment Style</span>
+        <span className="font-medium sm:hidden">Back</span>
       </motion.button>
 
-      {/* Center: Phase & Progress */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Brain className="w-3.5 h-3.5 text-violet-400" />
-          <span className="text-xs font-medium text-white">AI Coach</span>
-        </div>
-        <div className="h-1.5 w-24 bg-slate-800 rounded-full overflow-hidden">
-          <motion.div
-            className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full"
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-          />
-        </div>
-        <span className="text-xs text-slate-500">
-          {userMessageCount}/{TARGET_USER_MESSAGES}
-        </span>
-      </div>
-
-      {/* Right: Mode Toggle, Language & Quick Mode */}
-      <div className="flex items-center gap-2 z-50">
-        {onInteractionModeChange && (
-          <ModeToggle
-            mode={interactionMode}
-            onModeChange={onInteractionModeChange}
-            disabled={userMessageCount > 0}
-          />
-        )}
+      {/* Right: Language + Quick Mode */}
+      <div className="flex items-center gap-2">
         <LanguageSelector
           language={language}
           onLanguageChange={onLanguageChange}
           canChange={canChangeLanguage}
         />
-        <SwitchModeButton onClick={onSwitchMode} />
+        <motion.button
+          onClick={disableQuickMode ? undefined : onSwitchMode}
+          disabled={disableQuickMode}
+          className={cn(
+            'flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base font-medium transition-all border',
+            disableQuickMode
+              ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 border-slate-700'
+              : 'bg-emerald-600 text-white hover:bg-emerald-500 border-white/20 shadow-lg shadow-emerald-600/20'
+          )}
+          whileTap={disableQuickMode ? undefined : { scale: 0.97 }}
+        >
+          <Zap className="w-4 h-4" />
+          <span>Quick Mode</span>
+        </motion.button>
       </div>
     </div>
   );

@@ -110,16 +110,20 @@ class StressService {
       : new Date().toISOString();
 
     // Insert new log
+    // Convert triggers array to PostgreSQL text[] literal format
+    const triggersArray = Array.isArray(input.triggers) && input.triggers.length > 0
+      ? `{${input.triggers.map((t: string) => `"${t}"`).join(',')}}`
+      : '{}';
     const result = await query<StressLogRow>(
       `INSERT INTO stress_logs (
         user_id, stress_rating, triggers, other_trigger, note,
         check_in_type, client_request_id, logged_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz)
+      ) VALUES ($1, $2, $3::text[], $4, $5, $6, $7, $8::timestamptz)
       RETURNING *`,
       [
         userId,
         input.stressRating,
-        input.triggers || [],
+        triggersArray,
         input.otherTrigger || null,
         input.note || null,
         input.checkInType,

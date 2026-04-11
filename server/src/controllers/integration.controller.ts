@@ -12,6 +12,7 @@ import {
   generatePKCE,
 } from '../services/whoop.service.js';
 import { whoopDataService } from '../services/whoop-data.service.js';
+import { socketService } from '../services/socket.service.js';
 import type {
   SelectIntegrationsInput,
   InitiateOAuthInput,
@@ -23,7 +24,7 @@ import type {
 } from '../validators/integration.validator.js';
 
 // Type definitions
-type IntegrationProvider = 'whoop' | 'apple_health' | 'fitbit' | 'garmin' | 'oura' | 'samsung_health' | 'myfitnesspal' | 'nutritionix' | 'cronometer' | 'strava';
+type IntegrationProvider = 'whoop' | 'apple_health' | 'fitbit' | 'garmin' | 'oura' | 'samsung_health' | 'myfitnesspal' | 'nutritionix' | 'cronometer' | 'strava' | 'spotify';
 type SyncStatus = 'active' | 'paused' | 'error' | 'disconnected' | 'pending';
 type DataType = 'heart_rate' | 'hrv' | 'sleep' | 'steps' | 'workouts' | 'calories' | 'nutrition' | 'strain' | 'recovery' | 'body_temp' | 'vo2_max' | 'training_load' | 'gps_activities';
 
@@ -175,6 +176,16 @@ const INTEGRATION_METADATA: IIntegrationMeta[] = [
     authType: 'oauth2',
     scopes: ['read:all', 'activity:read'],
   },
+  {
+    provider: 'spotify',
+    displayName: 'Spotify',
+    description: 'Music for workouts, meditation, and recovery',
+    tier: 3,
+    dataTypes: [],
+    syncFrequencyMinutes: 0,
+    authType: 'oauth2',
+    scopes: ['user-read-playback-state', 'user-modify-playback-state', 'streaming', 'user-library-read', 'playlist-read-private', 'user-read-recently-played'],
+  },
 ];
 
 // OAuth URLs for each provider
@@ -209,6 +220,10 @@ const OAUTH_URLS: Record<IntegrationProvider, { auth: string; token: string }> =
   strava: {
     auth: 'https://www.strava.com/oauth/authorize',
     token: 'https://www.strava.com/oauth/token',
+  },
+  spotify: {
+    auth: 'https://accounts.spotify.com/authorize',
+    token: 'https://accounts.spotify.com/api/token',
   },
 };
 
@@ -958,6 +973,12 @@ export const triggerSync = asyncHandler(async (req: AuthenticatedRequest, res: R
       WHERE id = $2`,
       [result.status, integration.id]
     );
+
+    // Notify frontend so WHOOP page auto-refreshes
+    socketService.emitToUser(userId, 'whoop-data-synced', {
+      syncedAt: new Date().toISOString(),
+      type: 'manual',
+    });
   } catch (error) {
     await query(
       `UPDATE sync_logs SET

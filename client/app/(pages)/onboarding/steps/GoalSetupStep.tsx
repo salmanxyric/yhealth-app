@@ -145,7 +145,7 @@ export function GoalSetupStep() {
         <button
           onClick={handleRegenerateGoals}
           disabled={isGenerating}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-3 py-1.5 text-sm border border-white/20 text-white hover:bg-white/5 rounded-lg transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
           {isGenerating ? 'Regenerating...' : 'Regenerate Goals'}
@@ -231,18 +231,18 @@ function GoalSetupHeader() {
       animate={{ opacity: 1, y: 0 }}
     >
       <motion.div
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-linear-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 mb-6"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-sky-600/10 border border-sky-600 mb-6"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.2 }}
       >
         <Sparkles className="w-4 h-4 text-emerald-400" />
-        <span className="text-sm font-medium text-emerald-400">AI-Generated Goals</span>
+        <span className="text-sm font-medium text-white/80">AI-Generated Goals</span>
       </motion.div>
 
       <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
         Your Personalized{' '}
-        <span className="bg-linear-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+        <span className="text-white">
           Goals
         </span>
       </h1>

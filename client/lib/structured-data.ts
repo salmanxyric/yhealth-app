@@ -3,13 +3,13 @@
  * Used in server components (layout.tsx, page.tsx) via <script type="application/ld+json">
  */
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://yhealth.app';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://balencia.app';
 
 export function organizationJsonLd() {
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
-    name: 'YHealth',
+    name: 'Balencia',
     url: SITE_URL,
     logo: `${SITE_URL}/logo.png`,
     description: 'AI-Powered Personal Health & Wellness Platform',
@@ -26,7 +26,7 @@ export function webSiteJsonLd() {
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: 'YHealth',
+    name: 'Balencia',
     url: SITE_URL,
     potentialAction: {
       '@type': 'SearchAction',
@@ -40,7 +40,7 @@ export function softwareApplicationJsonLd() {
   return {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    name: 'YHealth',
+    name: 'Balencia',
     applicationCategory: 'HealthApplication',
     operatingSystem: 'Web',
     description:
@@ -74,11 +74,11 @@ export function articleJsonLd(article: {
     ...(article.modifiedTime && { dateModified: article.modifiedTime }),
     author: {
       '@type': 'Person',
-      name: article.authorName || 'YHealth Team',
+      name: article.authorName || 'Balencia Team',
     },
     publisher: {
       '@type': 'Organization',
-      name: 'YHealth',
+      name: 'Balencia',
       logo: { '@type': 'ImageObject', url: `${SITE_URL}/logo.png` },
     },
   };

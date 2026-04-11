@@ -2,8 +2,8 @@ import { createMetadata } from '@/lib/seo';
 import WhoopPageContent from './WhoopPageContent';
 
 export const metadata = createMetadata({
-  title: 'WHOOP Integration - YHealth',
-  description: 'Connect and manage your WHOOP wearable integration with YHealth.',
+  title: 'WHOOP Integration - Balencia',
+  description: 'Connect and manage your WHOOP wearable integration with Balencia.',
   path: '/whoop',
   noIndex: true,
 });

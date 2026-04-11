@@ -240,17 +240,26 @@ class MessageService {
       await chatService.incrementUnreadCount(chatId, senderId);
     });
 
-    // Emit unread count updates to all participants except sender
+    // Emit unread count updates to connected participants (async, non-blocking)
     const chatForNotify = await chatService.getChatById(chatId, senderId);
     if (chatForNotify.participants) {
-      for (const participant of chatForNotify.participants) {
-        if (participant.user_id !== senderId) {
-          const newUnreadCount = await chatService.getTotalUnreadCount(participant.user_id);
-          socketService.emitToUser(participant.user_id, 'unreadCountUpdate', {
-            totalUnread: newUnreadCount,
-            chatId,
-          });
-        }
+      // Only query unread counts for connected users (skip offline ones)
+      const connectedRecipients = chatForNotify.participants
+        .filter(p => p.user_id !== senderId && socketService.isUserConnected(p.user_id))
+        .map(p => p.user_id);
+
+      if (connectedRecipients.length > 0) {
+        // Single batched query instead of N sequential queries
+        chatService.getBatchUnreadCounts(connectedRecipients).then(counts => {
+          for (const userId of connectedRecipients) {
+            socketService.emitToUser(userId, 'unreadCountUpdate', {
+              totalUnread: counts.get(userId) ?? 0,
+              chatId,
+            });
+          }
+        }).catch(err => {
+          logger.error('[MessageService] Failed to broadcast unread counts', { error: (err as Error).message });
+        });
       }
     }
 

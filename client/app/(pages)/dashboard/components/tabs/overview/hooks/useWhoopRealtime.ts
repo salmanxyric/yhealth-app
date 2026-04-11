@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api-client';
 
 export interface WhoopRealtimeData {
@@ -35,8 +35,9 @@ export interface WhoopRealtimeData {
 }
 
 interface UseWhoopRealtimeOptions {
-  pollInterval?: number; // in milliseconds
   enabled?: boolean;
+  /** Refetch interval in ms; omit to disable polling. */
+  pollInterval?: number;
 }
 
 const defaultData: WhoopRealtimeData = {
@@ -71,12 +72,11 @@ const defaultData: WhoopRealtimeData = {
 };
 
 export function useWhoopRealtime(options: UseWhoopRealtimeOptions = {}) {
-  const { pollInterval = 10000, enabled = true } = options;
+  const { enabled = true, pollInterval } = options;
 
   const [data, setData] = useState<WhoopRealtimeData>(defaultData);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchWhoopData = useCallback(async () => {
     if (!enabled) return;
@@ -184,17 +184,12 @@ export function useWhoopRealtime(options: UseWhoopRealtimeOptions = {}) {
     fetchWhoopData();
   }, [fetchWhoopData]);
 
-  // Set up polling
   useEffect(() => {
-    if (!enabled) return;
-
-    intervalRef.current = setInterval(fetchWhoopData, pollInterval);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
+    if (!enabled || pollInterval == null || pollInterval <= 0) return;
+    const id = setInterval(() => {
+      void fetchWhoopData();
+    }, pollInterval);
+    return () => clearInterval(id);
   }, [enabled, pollInterval, fetchWhoopData]);
 
   // Refetch function for manual refresh

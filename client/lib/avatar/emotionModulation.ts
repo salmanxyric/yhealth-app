@@ -394,6 +394,92 @@ export const EMOTION_MODULATORS: Record<string, EmotionModulators> = {
     microExpressionProb: 0.12,
     bodyTension: 0.7,
   },
+
+  // === CONVERSATIONAL STATES ===
+  listening: {
+    amplitudeScale: 0.7,
+    frequencyScale: 0.8,
+    postureLean: 0.02,          // slight forward lean (engaged)
+    shoulderOffset: -0.01,
+    headTilt: 0.015,            // soft right tilt (attentive)
+    headNod: 0.02,              // slow nod tendency
+    blinkInterval: [2.5, 5],
+    doubleBlinkProb: 0.12,
+    saccadeInterval: [1.2, 2.8], // calm, steady gaze
+    saccadeAmplitude: [0.8, 2.5],
+    fingerCurlOffset: 0,
+    fingerMicroScale: 0.5,      // quiet hands
+    weightShiftScale: 0.6,
+    gestureScale: 0.3,          // minimal gestures
+    gestureSpeed: 0.6,
+    breathingRate: 0.85,
+    breathingDepth: 1.1,
+    microExpressionProb: 0.08,
+    bodyTension: 0.25,
+  },
+  explaining: {
+    amplitudeScale: 1.2,
+    frequencyScale: 1.1,
+    postureLean: 0.015,         // slight forward lean (teaching)
+    shoulderOffset: -0.015,
+    headTilt: 0,
+    headNod: -0.01,             // slight chin up (projecting)
+    blinkInterval: [2, 4.5],
+    doubleBlinkProb: 0.15,
+    saccadeInterval: [0.5, 1.5], // engaged eye movement
+    saccadeAmplitude: [1.5, 3.5],
+    fingerCurlOffset: -0.03,    // open hands
+    fingerMicroScale: 1.2,
+    weightShiftScale: 1.0,
+    gestureScale: 1.4,          // expressive gestures
+    gestureSpeed: 1.1,
+    breathingRate: 1.05,
+    breathingDepth: 1.1,
+    microExpressionProb: 0.15,
+    bodyTension: 0.35,
+  },
+  confident: {
+    amplitudeScale: 1.0,
+    frequencyScale: 0.95,
+    postureLean: -0.01,         // slight backward lean (assured)
+    shoulderOffset: -0.02,      // shoulders back and down
+    headTilt: 0,
+    headNod: -0.01,             // chin slightly up
+    blinkInterval: [2.5, 5],
+    doubleBlinkProb: 0.1,
+    saccadeInterval: [0.8, 2.2], // steady, deliberate gaze
+    saccadeAmplitude: [1, 3],
+    fingerCurlOffset: 0,
+    fingerMicroScale: 0.8,
+    weightShiftScale: 0.9,
+    gestureScale: 1.2,          // controlled, purposeful gestures
+    gestureSpeed: 0.9,
+    breathingRate: 0.9,
+    breathingDepth: 1.15,       // deep, calm breaths
+    microExpressionProb: 0.1,
+    bodyTension: 0.5,
+  },
+  disagreeing: {
+    amplitudeScale: 0.85,
+    frequencyScale: 1.0,
+    postureLean: -0.015,        // slight backward lean
+    shoulderOffset: 0.01,
+    headTilt: -0.02,            // tilt left (questioning)
+    headNod: 0,
+    blinkInterval: [2, 4],
+    doubleBlinkProb: 0.15,
+    saccadeInterval: [0.5, 1.5],
+    saccadeAmplitude: [1.5, 3.5],
+    fingerCurlOffset: 0.02,
+    fingerMicroScale: 0.7,
+    weightShiftScale: 0.8,
+    gestureScale: 0.9,
+    gestureSpeed: 1.1,
+    breathingRate: 1.05,
+    breathingDepth: 0.9,
+    microExpressionProb: 0.18,
+    bodyTension: 0.55,
+  },
 };
 
 // ============================================

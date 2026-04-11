@@ -178,7 +178,7 @@ function SectionHeader({
   title,
   subtitle,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   iconBg: string;
   title: string;

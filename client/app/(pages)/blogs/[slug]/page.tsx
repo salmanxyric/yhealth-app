@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import BlogDetailPageContent from './BlogDetailPageContent';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://yhealth.app';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://balencia.app';
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
 
 export async function generateMetadata({
@@ -16,18 +16,18 @@ export async function generateMetadata({
       next: { revalidate: 3600 },
     });
     if (!res.ok) {
-      return { title: 'Blog Post - YHealth' };
+      return { title: 'Blog Post - Balencia' };
     }
     const data = await res.json();
     const blog = data?.data;
     if (!blog) {
-      return { title: 'Blog Post - YHealth' };
+      return { title: 'Blog Post - Balencia' };
     }
 
     const title = blog.title;
     const description = blog.excerpt || blog.title;
     const image = blog.featured_image || DEFAULT_OG_IMAGE;
-    const authorName = `${blog.author_first_name || ''} ${blog.author_last_name || ''}`.trim() || 'YHealth Team';
+    const authorName = `${blog.author_first_name || ''} ${blog.author_last_name || ''}`.trim() || 'Balencia Team';
 
     return {
       title,
@@ -40,7 +40,7 @@ export async function generateMetadata({
         images: [{ url: image, width: 1200, height: 630, alt: title }],
         publishedTime: blog.published_at || undefined,
         authors: [authorName],
-        siteName: 'YHealth',
+        siteName: 'Balencia',
       },
       twitter: {
         card: 'summary_large_image',
@@ -53,7 +53,7 @@ export async function generateMetadata({
       },
     };
   } catch {
-    return { title: 'Blog Post - YHealth' };
+    return { title: 'Blog Post - Balencia' };
   }
 }
 

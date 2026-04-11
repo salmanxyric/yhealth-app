@@ -9,6 +9,7 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { chatService } from '../services/chat.service.js';
+import cache from '../services/cache.service.js';
 
 /**
  * POST /api/chats
@@ -358,7 +359,11 @@ export const getTotalUnreadCount = asyncHandler(
     const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized();
 
-    const unreadCount = await chatService.getTotalUnreadCount(userId);
+    // Cache for 15 seconds per user — socket handles real-time updates
+    const cacheKey = `unread-count:${userId}`;
+    const unreadCount = await cache.getOrSet(cacheKey, async () => {
+      return chatService.getTotalUnreadCount(userId);
+    }, 15);
 
     ApiResponse.success(res, { unreadCount }, 'Unread count retrieved successfully', 200, req);
   }

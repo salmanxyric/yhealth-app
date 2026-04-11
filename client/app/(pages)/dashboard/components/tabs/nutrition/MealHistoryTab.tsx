@@ -205,7 +205,7 @@ export function MealHistoryTab({ onEditMeal, onDeleteMeal }: MealHistoryTabProps
         <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center mb-6">
           <X className="w-10 h-10 text-red-400" />
         </div>
-        <h3 className="text-xl font-semibold text-white mb-2">Error Loading History</h3>
+        <h3 className="text-base font-semibold text-white mb-2">Error Loading History</h3>
         <p className="text-slate-400 text-center max-w-md mb-6">{error}</p>
         <motion.button
           onClick={fetchMeals}
@@ -227,7 +227,7 @@ export function MealHistoryTab({ onEditMeal, onDeleteMeal }: MealHistoryTabProps
         <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center mb-6">
           <Utensils className="w-10 h-10 text-emerald-400" />
         </div>
-        <h3 className="text-xl font-semibold text-white mb-2">No Meal History Found</h3>
+        <h3 className="text-base font-semibold text-white mb-2">No Meal History Found</h3>
         <p className="text-slate-400 text-center max-w-md mb-6">
           {searchQuery
             ? "No meals match your search. Try adjusting your search or date range."
@@ -238,12 +238,12 @@ export function MealHistoryTab({ onEditMeal, onDeleteMeal }: MealHistoryTabProps
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white">Meal History</h2>
-          <p className="text-slate-400 text-sm">View and manage your nutrition meal logs</p>
+          <h2 className="text-[16px] sm:text-[18px] font-bold text-white">Meal History</h2>
+          <p className="text-slate-400 text-[13px]">View and manage your nutrition meal logs</p>
         </div>
         <motion.button
           onClick={fetchMeals}
@@ -320,15 +320,15 @@ export function MealHistoryTab({ onEditMeal, onDeleteMeal }: MealHistoryTabProps
               className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-3"
             >
               {/* Date Header */}
-              <div className="flex items-center justify-between pb-2 border-b border-slate-700/50">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-lg font-semibold text-white">{formatSmartDate(dateObj)}</h3>
-                  <span className="text-xs text-slate-500">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0 pb-2 border-b border-slate-700/50">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <h3 className="text-[15px] sm:text-[16px] font-semibold text-white truncate">{formatSmartDate(dateObj)}</h3>
+                  <span className="text-[11px] sm:text-xs text-slate-500 shrink-0">
                     {format(dateObj, "EEEE")} • {dateMeals.length} meal{dateMeals.length !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-2.5 sm:gap-4 text-[11px] sm:text-xs ml-6 sm:ml-0">
                   <div className="flex items-center gap-1 text-slate-400">
                     <Flame className="w-3 h-3 text-orange-400" />
                     <span className="text-white font-medium">{Math.round(totals.calories)}</span>
@@ -387,7 +387,7 @@ export function MealHistoryTab({ onEditMeal, onDeleteMeal }: MealHistoryTabProps
                                 {mealTime}
                               </span>
                             </div>
-                          <div className="flex items-center gap-3 text-xs text-slate-400 ml-6">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-slate-400 ml-6">
                             <span className="flex items-center gap-1">
                               <Flame className="w-3 h-3 text-orange-400" />
                               {meal.calories || 0} kcal
@@ -414,23 +414,23 @@ export function MealHistoryTab({ onEditMeal, onDeleteMeal }: MealHistoryTabProps
                           </div>
                         </div>
                         {(onEditMeal || onDeleteMeal) && (
-                          <div className="flex items-center gap-2 ml-4 shrink-0">
+                          <div className="flex items-center gap-1 sm:gap-2 ml-2 sm:ml-4 shrink-0">
                             {onEditMeal && (
                               <button
                                 onClick={() => onEditMeal(clientMeal)}
-                                className="p-2 rounded-lg bg-slate-700/50 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                className="p-1.5 sm:p-2 rounded-lg bg-slate-700/50 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
                                 title="Edit meal"
                               >
-                                <Edit3 className="w-4 h-4" />
+                                <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               </button>
                             )}
                             {onDeleteMeal && (
                               <button
                                 onClick={() => onDeleteMeal(meal.id)}
-                                className="p-2 rounded-lg bg-slate-700/50 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                className="p-1.5 sm:p-2 rounded-lg bg-slate-700/50 text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                                 title="Delete meal"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               </button>
                             )}
                           </div>

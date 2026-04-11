@@ -55,10 +55,10 @@ export function PlansTab({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-6"
+      className="space-y-4 sm:space-y-6"
     >
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h3 className="text-lg font-semibold text-white">Your Diet Plans</h3>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <h3 className="text-[16px] sm:text-[18px] font-semibold text-white">Your Diet Plans</h3>
         <div className="flex gap-2">
           {selectedPlanIds.size > 0 && (
             <motion.button
@@ -67,9 +67,9 @@ export function PlansTab({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onPlansDelete}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/20 text-red-400 font-medium text-sm hover:bg-red-500/30 transition-colors"
+              className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-red-500/20 text-red-400 font-medium text-[13px] sm:text-sm hover:bg-red-500/30 transition-colors"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Delete ({selectedPlanIds.size})
             </motion.button>
           )}
@@ -77,9 +77,9 @@ export function PlansTab({
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onPlanCreate}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 text-white font-medium text-sm hover:bg-emerald-600 transition-colors"
+            className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-500 text-white font-medium text-[13px] sm:text-sm hover:bg-emerald-600 transition-colors"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Create Plan
           </motion.button>
         </div>
@@ -92,17 +92,17 @@ export function PlansTab({
           ))}
         </div>
       ) : plans.length === 0 ? (
-        <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-8 text-center">
-          <Clock className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-          <h4 className="text-white font-medium mb-2">No diet plans yet</h4>
-          <p className="text-slate-400 text-sm mb-4">Generate an AI-powered plan or create a custom one</p>
-          <div className="flex items-center justify-center gap-3">
+        <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-5 sm:p-8 text-center">
+          <Clock className="w-10 h-10 sm:w-12 sm:h-12 text-slate-600 mx-auto mb-3 sm:mb-4" />
+          <h4 className="text-white font-medium mb-2 text-[14px] sm:text-[15px]">No diet plans yet</h4>
+          <p className="text-slate-400 text-[13px] sm:text-sm mb-4">Generate an AI-powered plan or create a custom one</p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onAIGenerate}
               disabled={aiGenerating}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500 text-white font-medium text-sm hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-purple-500 text-white font-medium text-[13px] sm:text-sm hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {aiGenerating ? (
                 <>
@@ -120,7 +120,7 @@ export function PlansTab({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onPlanCreate}
-              className="px-4 py-2 rounded-xl bg-slate-700 text-white font-medium text-sm hover:bg-slate-600 transition-colors"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-slate-700 text-white font-medium text-[13px] sm:text-sm hover:bg-slate-600 transition-colors"
             >
               Create Manual Plan
             </motion.button>
@@ -134,7 +134,7 @@ export function PlansTab({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className={`rounded-2xl border p-5 transition-all ${
+              className={`rounded-2xl border p-4 sm:p-5 transition-all ${
                 plan.isActive
                   ? "bg-emerald-500/10 border-emerald-500/30"
                   : selectedPlanIds.has(plan.id)
@@ -142,7 +142,7 @@ export function PlansTab({
                   : "bg-slate-800/50 border-slate-700/50"
               }`}
             >
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
                 <div className="flex items-start gap-3">
                   <button
                     onClick={() => onPlanSelect(plan.id)}
@@ -195,26 +195,26 @@ export function PlansTab({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-white/5">
-                  <p className="text-xs text-slate-500 mb-1">Calories</p>
-                  <p className="text-lg font-bold text-orange-400">{plan.targetCalories}</p>
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-white/5">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mb-1">Calories</p>
+                  <p className="text-[14px] sm:text-base font-semibold text-orange-400">{plan.targetCalories}</p>
                 </div>
-                <div className="p-3 rounded-xl bg-white/5">
-                  <p className="text-xs text-slate-500 mb-1">Protein</p>
-                  <p className="text-lg font-bold text-red-400">{plan.targetProtein}g</p>
+                <div className="p-2.5 sm:p-3 rounded-xl bg-white/5">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mb-1">Protein</p>
+                  <p className="text-[14px] sm:text-base font-semibold text-red-400">{plan.targetProtein}g</p>
                 </div>
-                <div className="p-3 rounded-xl bg-white/5">
-                  <p className="text-xs text-slate-500 mb-1">Carbs</p>
-                  <p className="text-lg font-bold text-amber-400">{plan.targetCarbs}g</p>
+                <div className="p-2.5 sm:p-3 rounded-xl bg-white/5">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mb-1">Carbs</p>
+                  <p className="text-[14px] sm:text-base font-semibold text-amber-400">{plan.targetCarbs}g</p>
                 </div>
-                <div className="p-3 rounded-xl bg-white/5">
-                  <p className="text-xs text-slate-500 mb-1">Fat</p>
-                  <p className="text-lg font-bold text-purple-400">{plan.targetFat}g</p>
+                <div className="p-2.5 sm:p-3 rounded-xl bg-white/5">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mb-1">Fat</p>
+                  <p className="text-[14px] sm:text-base font-semibold text-purple-400">{plan.targetFat}g</p>
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-700/50 flex items-center justify-between text-xs">
+              <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-700/50 flex items-center justify-between text-[11px] sm:text-xs">
                 <span className="text-slate-500">{plan.mealsPerDay} meals/day</span>
                 <span className="text-slate-500">Created {plan.createdAt}</span>
               </div>

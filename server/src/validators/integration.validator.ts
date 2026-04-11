@@ -12,6 +12,7 @@ const integrationProviderEnum = z.enum([
   'nutritionix',
   'cronometer',
   'strava',
+  'spotify',
 ]);
 
 // Data types

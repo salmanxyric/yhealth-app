@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,40 +136,35 @@ export function UserPagination({
 
         {/* Page Numbers */}
         <div className="flex items-center gap-1.5">
-          <AnimatePresence mode="wait">
-            {getPageNumbers().map((page, index) => {
-              if (page === "ellipsis") {
-                return (
-                  <div
-                    key={`ellipsis-${index}`}
-                    className="px-1.5 py-1 text-slate-600"
-                  >
-                    <MoreHorizontal className="w-4 h-4" />
-                  </div>
-                );
-              }
-
-              const isActive = page === currentPage;
-
+          {getPageNumbers().map((page, index) => {
+            if (page === "ellipsis") {
               return (
-                <motion.button
-                  key={page}
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  onClick={() => onPageChange(page)}
-                  className={cn(
-                    "min-w-10 h-10 px-3 rounded-xl text-sm font-medium transition-all duration-200",
-                    isActive
-                      ? "bg-linear-to-r from-emerald-500 to-sky-500 text-white shadow-lg shadow-emerald-500/25"
-                      : "bg-slate-800/40 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-slate-700/30"
-                  )}
+                <div
+                  key={`ellipsis-${index}`}
+                  className="px-1.5 py-1 text-slate-600"
                 >
-                  {page}
-                </motion.button>
+                  <MoreHorizontal className="w-4 h-4" />
+                </div>
               );
-            })}
-          </AnimatePresence>
+            }
+
+            const isActive = page === currentPage;
+
+            return (
+              <button
+                key={page}
+                onClick={() => onPageChange(page)}
+                className={cn(
+                  "min-w-10 h-10 px-3 rounded-xl text-sm font-medium transition-all duration-200",
+                  isActive
+                    ? "bg-linear-to-r from-emerald-500 to-sky-500 text-white shadow-lg shadow-emerald-500/25"
+                    : "bg-slate-800/40 text-slate-400 hover:bg-slate-700/60 hover:text-white border border-slate-700/30"
+                )}
+              >
+                {page}
+              </button>
+            );
+          })}
         </div>
 
         {/* Next Button */}

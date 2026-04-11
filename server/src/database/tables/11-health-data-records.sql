@@ -34,3 +34,9 @@ CREATE TABLE health_data_records (
 CREATE INDEX idx_health_data_user_type_recorded ON health_data_records(user_id, data_type, recorded_at DESC);
 CREATE INDEX idx_health_data_user_recorded ON health_data_records(user_id, recorded_at DESC);
 CREATE INDEX idx_health_data_user_type_golden ON health_data_records(user_id, data_type, is_golden_source);
+
+-- Deduplication constraint: prevents duplicate records from the same integration source
+-- Partial index (WHERE raw_data_id IS NOT NULL) allows legacy rows without source IDs
+CREATE UNIQUE INDEX idx_health_data_records_dedup
+  ON health_data_records(user_id, provider, data_type, raw_data_id)
+  WHERE raw_data_id IS NOT NULL;

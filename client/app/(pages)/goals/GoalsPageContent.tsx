@@ -45,6 +45,9 @@ import {
   Square,
   BarChart3,
   Pencil,
+  GripVertical,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
@@ -54,6 +57,7 @@ import { DashboardLayout } from "@/components/layout";
 import { AIGoalModal } from "./components/AIGoalModal";
 import { BulkActionsBar } from "./components/BulkActionsBar";
 import { GoalsAnalytics } from "./components/GoalsAnalytics";
+import TaskProgressModal from "./components/TaskProgressModal";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -62,6 +66,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  DndContext,
+  DragOverlay,
+  useDroppable,
+  useDraggable,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type { DragStartEvent, DragEndEvent } from "@dnd-kit/core";
 
 // Types
 interface Milestone {
@@ -207,7 +223,626 @@ const goalCategoryConfig: Record<
   },
 };
 
+// Kanban column configuration
+const KANBAN_COLUMNS = [
+  { id: "active", label: "Active", color: "emerald", icon: Zap, statusValues: ["active"] },
+  { id: "in_progress", label: "In Progress", color: "violet", icon: TrendingUp, statusValues: ["in_progress"] },
+  { id: "paused", label: "Paused", color: "amber", icon: Pause, statusValues: ["paused"] },
+  { id: "completed", label: "Completed", color: "sky", icon: CheckCircle2, statusValues: ["completed"] },
+] as const;
+
+type KanbanColumnId = (typeof KANBAN_COLUMNS)[number]["id"];
+
+function getColumnForStatus(status: string): KanbanColumnId {
+  for (const col of KANBAN_COLUMNS) {
+    if ((col.statusValues as readonly string[]).includes(status)) return col.id;
+  }
+  return "active";
+}
+
+function getStatusForColumn(columnId: string): string {
+  switch (columnId) {
+    case "active": return "active";
+    case "in_progress": return "in_progress";
+    case "paused": return "paused";
+    case "completed": return "completed";
+    default: return "active";
+  }
+}
+
+// Column color utilities
+function getColumnDotColor(color: string): string {
+  switch (color) {
+    case "emerald": return "bg-emerald-400";
+    case "violet": return "bg-violet-400";
+    case "amber": return "bg-amber-400";
+    case "sky": return "bg-sky-400";
+    default: return "bg-slate-400";
+  }
+}
+
+function getColumnBorderGlow(color: string): string {
+  switch (color) {
+    case "emerald": return "border-emerald-500/40 shadow-emerald-500/10";
+    case "violet": return "border-violet-500/40 shadow-violet-500/10";
+    case "amber": return "border-amber-500/40 shadow-amber-500/10";
+    case "sky": return "border-sky-500/40 shadow-sky-500/10";
+    default: return "border-slate-500/40 shadow-slate-500/10";
+  }
+}
+
+function getColumnCountBadge(color: string): string {
+  switch (color) {
+    case "emerald": return "bg-emerald-500/20 text-emerald-300";
+    case "violet": return "bg-violet-500/20 text-violet-300";
+    case "amber": return "bg-amber-500/20 text-amber-300";
+    case "sky": return "bg-sky-500/20 text-sky-300";
+    default: return "bg-slate-500/20 text-slate-300";
+  }
+}
+
+// --- Kanban Column Component ---
+function KanbanColumn({
+  columnId,
+  label,
+  color,
+  icon: Icon,
+  goals,
+  children,
+}: {
+  columnId: string;
+  label: string;
+  color: string;
+  icon: React.ComponentType<{ className?: string }>;
+  goals: Goal[];
+  children: React.ReactNode;
+}) {
+  const { isOver, setNodeRef } = useDroppable({ id: columnId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col flex-1 min-w-[280px] min-h-[calc(100vh-360px)] snap-center rounded-xl border transition-all duration-200 ${
+        isOver
+          ? `${getColumnBorderGlow(color)} shadow-lg bg-white/[0.03]`
+          : "border-white/[0.06] bg-[#0f0f18]/50"
+      }`}
+    >
+      {/* Column Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-2.5 h-2.5 rounded-full ${getColumnDotColor(color)}`} />
+          <span className="text-sm font-semibold text-white">{label}</span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getColumnCountBadge(color)}`}>
+            {goals.length}
+          </span>
+        </div>
+        <Icon className="w-4 h-4 text-slate-500" />
+      </div>
+
+      {/* Scrollable Card Container — fills remaining height */}
+      <div className="flex-1 p-2 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        {goals.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] flex items-center justify-center mb-3">
+              <Icon className="w-5 h-5 text-slate-600" />
+            </div>
+            <p className="text-xs text-slate-500">No {label.toLowerCase()} goals</p>
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Draggable Goal Card ---
+function DraggableGoalCard({
+  goal,
+  onUpdateProgress,
+  onEdit,
+  onDelete,
+  onStatusChange,
+  onExpand,
+  onViewDetails,
+  isExpanded,
+}: {
+  goal: Goal;
+  onUpdateProgress: (goal: Goal) => void;
+  onEdit: (goal: Goal) => void;
+  onDelete: (goal: Goal) => void;
+  onStatusChange: (goal: Goal, status: string) => void;
+  onExpand: (goalId: string | null) => void;
+  onViewDetails: (goal: Goal) => void;
+  isExpanded: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: goal.id,
+    data: { column: getColumnForStatus(goal.status) },
+  });
+
+  const config = goalCategoryConfig[goal.category] || goalCategoryConfig.custom;
+  const daysRemaining = Math.ceil(
+    (new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`group relative rounded-xl bg-[#0f0f18] border border-white/[0.06] hover:border-white/[0.12] transition-all cursor-grab active:cursor-grabbing touch-none ${
+        isDragging ? "opacity-30 scale-[0.98]" : "opacity-100"
+      }`}
+    >
+      <div className="p-3">
+        {/* Top row: grip + category icon + title + dropdown */}
+        <div className="flex items-start gap-2">
+          {/* Drag Handle indicator */}
+          <div className="mt-0.5 p-0.5 rounded opacity-40 group-hover:opacity-100 transition-opacity">
+            <GripVertical className="w-4 h-4 text-slate-500" />
+          </div>
+
+          {/* Category Icon */}
+          <div className={`w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0 ${config.color}`}>
+            {config.icon}
+          </div>
+
+          {/* Title + badges */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h4
+              className="text-sm font-medium text-white truncate max-w-[160px] cursor-pointer hover:text-emerald-400 transition-colors"
+              onClick={(e) => { e.stopPropagation(); onViewDetails(goal); }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+                {goal.title}
+              </h4>
+              {goal.isPrimary && (
+                <Star className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              )}
+            </div>
+            <span
+              className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                goal.status === "active"
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : goal.status === "in_progress"
+                  ? "bg-violet-500/15 text-violet-400"
+                  : goal.status === "completed"
+                  ? "bg-sky-500/15 text-sky-400"
+                  : goal.status === "paused"
+                  ? "bg-amber-500/15 text-amber-400"
+                  : "bg-slate-500/15 text-slate-400"
+              }`}
+            >
+              {goal.status === "in_progress" ? "in progress" : goal.status}
+            </span>
+          </div>
+
+          {/* Dropdown Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100">
+                <MoreVertical className="w-3.5 h-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-44 bg-[#0f0f18] backdrop-blur-xl border-white/[0.06] rounded-xl shadow-xl"
+            >
+              {(goal.status === "active" || goal.status === "in_progress") && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => onUpdateProgress(goal)}
+                    className="text-emerald-400 focus:text-emerald-300 focus:bg-emerald-500/10 cursor-pointer"
+                  >
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                    Update Progress
+                  </DropdownMenuItem>
+                  {goal.status === "active" && (
+                    <DropdownMenuItem
+                      onClick={() => onStatusChange(goal, "in_progress")}
+                      className="text-violet-400 focus:text-violet-300 focus:bg-violet-500/10 cursor-pointer"
+                    >
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      Start Progress
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    onClick={() => onStatusChange(goal, "paused")}
+                    className="text-amber-400 focus:text-amber-300 focus:bg-amber-500/10 cursor-pointer"
+                  >
+                    <Pause className="w-4 h-4 mr-2" />
+                    Pause
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onStatusChange(goal, "completed")}
+                    className="text-green-400 focus:text-green-300 focus:bg-green-500/10 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Complete
+                  </DropdownMenuItem>
+                </>
+              )}
+              {goal.status === "paused" && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => onStatusChange(goal, "active")}
+                    className="text-emerald-400 focus:text-emerald-300 focus:bg-emerald-500/10 cursor-pointer"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Resume
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onStatusChange(goal, "in_progress")}
+                    className="text-violet-400 focus:text-violet-300 focus:bg-violet-500/10 cursor-pointer"
+                  >
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                    Start Progress
+                  </DropdownMenuItem>
+                </>
+              )}
+              {goal.status === "completed" && (
+                <DropdownMenuItem
+                  onClick={() => onStatusChange(goal, "active")}
+                  className="text-emerald-400 focus:text-emerald-300 focus:bg-emerald-500/10 cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Reactivate
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator className="bg-white/[0.06]" />
+              <DropdownMenuItem
+                onClick={() => onEdit(goal)}
+                className="text-sky-400 focus:text-sky-300 focus:bg-sky-500/10 cursor-pointer"
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onExpand(isExpanded ? null : goal.id)}
+                className="text-slate-300 focus:text-white focus:bg-white/5 cursor-pointer"
+              >
+                <ChevronDown className={`w-4 h-4 mr-2 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                {isExpanded ? "Less" : "More"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onDelete(goal)}
+                className="text-red-400 focus:text-red-300 focus:bg-red-500/10 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-slate-500">Progress</span>
+            <span className="text-[10px] font-medium text-slate-300">{goal.progress}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+            <motion.div
+              className={`h-full rounded-full bg-gradient-to-r ${
+                goal.status === "completed"
+                  ? "from-green-500 to-emerald-500"
+                  : "from-emerald-500 to-sky-500"
+              }`}
+              initial={{ width: 0 }}
+              animate={{ width: `${goal.progress}%` }}
+              transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+            />
+          </div>
+        </div>
+
+        {/* Meta row */}
+        <div className="mt-2.5 flex items-center gap-3 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1">
+            <Target className="w-3 h-3" />
+            {goal.currentValue || 0}/{goal.targetValue} {goal.targetUnit}
+          </span>
+          <span className="flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            {goal.durationWeeks}w
+          </span>
+          <span
+            className={`flex items-center gap-1 ${
+              daysRemaining < 7 && daysRemaining > 0
+                ? "text-amber-400"
+                : daysRemaining <= 0
+                ? "text-red-400"
+                : ""
+            }`}
+          >
+            <Clock className="w-3 h-3" />
+            {daysRemaining > 0 ? `${daysRemaining}d` : "Due"}
+          </span>
+        </div>
+
+        {/* Expanded details */}
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
+                {goal.description && (
+                  <p className="text-xs text-slate-400 line-clamp-3">{goal.description}</p>
+                )}
+                {goal.motivation && (
+                  <div className="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.04]">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Quote className="w-3 h-3 text-amber-400" />
+                      <span className="text-[10px] font-medium text-slate-400">Why It Matters</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 italic">&quot;{goal.motivation}&quot;</p>
+                  </div>
+                )}
+                {goal.milestones && goal.milestones.length > 0 && (
+                  <div className="space-y-1">
+                    {goal.milestones.slice(0, 3).map((m, idx) => (
+                      <div key={m.id || `ms-${idx}`} className="flex items-center gap-1.5">
+                        {m.completed ? (
+                          <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />
+                        ) : (
+                          <Circle className="w-3 h-3 text-slate-600 shrink-0" />
+                        )}
+                        <span className={`text-[11px] ${m.completed ? "text-green-400 line-through" : "text-slate-500"}`}>
+                          {m.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+// --- Drag Overlay Card ---
+function GoalCardOverlay({ goal }: { goal: Goal }) {
+  const config = goalCategoryConfig[goal.category] || goalCategoryConfig.custom;
+
+  return (
+    <div className="w-[280px] rounded-xl bg-[#0f0f18]/90 border border-emerald-500/30 shadow-2xl shadow-emerald-500/20 opacity-90 rotate-2 backdrop-blur-sm">
+      <div className="p-3">
+        <div className="flex items-start gap-2">
+          <div className={`w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0 ${config.color}`}>
+            {config.icon}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-medium text-white truncate">{goal.title}</h4>
+            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400">
+              {goal.status}
+            </span>
+          </div>
+        </div>
+        <div className="mt-2">
+          <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-sky-500"
+              style={{ width: `${goal.progress}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Progress Update Modal
+// --- Goal Detail Modal ---
+const GoalDetailModal = ({
+  isOpen,
+  onClose,
+  goal,
+  onEdit,
+  onUpdateProgress,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  goal: Goal | null;
+  onEdit: () => void;
+  onUpdateProgress: () => void;
+}) => {
+  if (!goal) return null;
+
+  const config = goalCategoryConfig[goal.category] || goalCategoryConfig.custom;
+  const daysRemaining = Math.ceil(
+    (new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+  const startDate = new Date(goal.startDate);
+  const targetDate = new Date(goal.targetDate);
+  const totalDays = Math.ceil((targetDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const daysElapsed = Math.max(0, totalDays - daysRemaining);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl bg-[#0f0f18] border border-white/[0.08] shadow-2xl"
+          >
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-[#0f0f18] border-b border-white/[0.06] p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center ${config.color}`}>
+                    {config.icon}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-semibold text-white">{goal.title}</h2>
+                      {goal.isPrimary && <Star className="w-4 h-4 text-amber-400" />}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        goal.status === "active" ? "bg-emerald-500/15 text-emerald-400"
+                          : goal.status === "in_progress" ? "bg-violet-500/15 text-violet-400"
+                          : goal.status === "completed" ? "bg-sky-500/15 text-sky-400"
+                          : "bg-amber-500/15 text-amber-400"
+                      }`}>
+                        {goal.status === "in_progress" ? "In Progress" : goal.status.charAt(0).toUpperCase() + goal.status.slice(1)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 capitalize">{goal.category.replace(/_/g, " ")}</span>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* Progress Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-slate-400">Progress</span>
+                  <span className="text-sm font-semibold text-white">{goal.progress}%</span>
+                </div>
+                <div className="h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <motion.div
+                    className={`h-full rounded-full bg-gradient-to-r ${goal.status === "completed" ? "from-green-500 to-emerald-500" : "from-emerald-500 to-sky-500"}`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${goal.progress}%` }}
+                    transition={{ duration: 0.8 }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 text-[11px] text-slate-500">
+                  <span>Current: {goal.currentValue || 0} {goal.targetUnit}</span>
+                  <span>Target: {goal.targetValue} {goal.targetUnit}</span>
+                </div>
+              </div>
+
+              {/* Timeline */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                  <Calendar className="w-4 h-4 text-emerald-400 mb-1.5" />
+                  <p className="text-[10px] text-slate-500 mb-0.5">Started</p>
+                  <p className="text-xs font-medium text-slate-300">
+                    {startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                  <Clock className="w-4 h-4 text-sky-400 mb-1.5" />
+                  <p className="text-[10px] text-slate-500 mb-0.5">Duration</p>
+                  <p className="text-xs font-medium text-slate-300">{goal.durationWeeks} weeks</p>
+                </div>
+                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                  <Target className={`w-4 h-4 mb-1.5 ${daysRemaining <= 7 ? "text-amber-400" : daysRemaining <= 0 ? "text-red-400" : "text-violet-400"}`} />
+                  <p className="text-[10px] text-slate-500 mb-0.5">Remaining</p>
+                  <p className={`text-xs font-medium ${daysRemaining <= 0 ? "text-red-400" : daysRemaining <= 7 ? "text-amber-400" : "text-slate-300"}`}>
+                    {daysRemaining > 0 ? `${daysRemaining} days` : "Overdue"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Time Progress Bar */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-500">Time Elapsed</span>
+                  <span className="text-[10px] text-slate-400">{daysElapsed} / {totalDays} days</span>
+                </div>
+                <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div className="h-full rounded-full bg-violet-500/50" style={{ width: `${Math.min(100, (daysElapsed / totalDays) * 100)}%` }} />
+                </div>
+              </div>
+
+              {/* Description */}
+              {goal.description && (
+                <div>
+                  <h3 className="text-xs font-medium text-slate-400 mb-1.5">Description</h3>
+                  <p className="text-sm text-slate-300 leading-relaxed">{goal.description}</p>
+                </div>
+              )}
+
+              {/* Motivation */}
+              {goal.motivation && (
+                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.04]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Quote className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-medium text-slate-400">Why It Matters</span>
+                  </div>
+                  <p className="text-sm text-slate-400 italic leading-relaxed">&quot;{goal.motivation}&quot;</p>
+                </div>
+              )}
+
+              {/* Milestones */}
+              {goal.milestones && goal.milestones.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-medium text-slate-400 mb-2">
+                    Milestones ({goal.milestones.filter(m => m.completed).length}/{goal.milestones.length})
+                  </h3>
+                  <div className="space-y-1.5">
+                    {goal.milestones.map((m, idx) => (
+                      <div
+                        key={m.id || `ms-${idx}`}
+                        className={`flex items-center gap-2 p-2 rounded-lg ${m.completed ? "bg-green-500/5" : "bg-white/[0.02]"}`}
+                      >
+                        {m.completed ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                        ) : (
+                          <Circle className="w-4 h-4 text-slate-600 shrink-0" />
+                        )}
+                        <span className={`text-xs ${m.completed ? "text-green-400 line-through" : "text-slate-400"}`}>
+                          {m.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => { onClose(); onUpdateProgress(); }}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-medium transition-colors"
+                >
+                  Update Progress
+                </button>
+                <button
+                  onClick={() => { onClose(); onEdit(); }}
+                  className="flex-1 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-sm font-medium transition-colors"
+                >
+                  Edit Goal
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 const ProgressModal = ({
   isOpen,
   onClose,
@@ -243,7 +878,7 @@ const ProgressModal = ({
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+            className="bg-[#0f0f18] border border-white/[0.06] rounded-xl p-6 max-w-md w-full shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
@@ -266,7 +901,7 @@ const ProgressModal = ({
 
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <div className="p-4 rounded-xl bg-white/5 border border-white/[0.06]">
                   <p className="text-xs text-slate-400 mb-1">Current</p>
                   <p className="text-2xl font-bold text-white">
                     {goal.currentValue || 0} <span className="text-sm font-normal text-slate-500">{goal.targetUnit}</span>
@@ -289,7 +924,7 @@ const ProgressModal = ({
                     type="number"
                     value={newValue}
                     onChange={(e) => setNewValue(Number(e.target.value))}
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-lg font-medium focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white text-lg font-medium focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
                   />
                   {progressDiff !== 0 && (
                     <div className={`absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 ${progressDiff > 0 ? "text-green-400" : "text-red-400"}`}>
@@ -343,7 +978,7 @@ const ProgressModal = ({
               <button
                 onClick={onClose}
                 disabled={isLoading}
-                className="flex-1 px-4 py-3 rounded-xl bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
+                className="flex-1 px-4 py-3 rounded-xl bg-white/5 text-white border border-white/[0.06] hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
@@ -431,7 +1066,7 @@ const CreateGoalModal = ({
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-slate-900 border border-white/10 rounded-2xl p-4 sm:p-6 max-w-2xl w-full shadow-2xl my-8 max-h-[90vh] overflow-y-auto"
+            className="bg-[#0f0f18] border border-white/[0.06] rounded-xl p-4 sm:p-6 max-w-2xl w-full shadow-2xl my-8 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
@@ -476,7 +1111,7 @@ const CreateGoalModal = ({
                       className={`p-3 sm:p-4 rounded-xl border transition-all cursor-pointer text-left ${
                         formData.category === key
                           ? `bg-gradient-to-br ${config.bgColor} border-white/20`
-                          : "bg-white/5 border-white/10 hover:border-white/20"
+                          : "bg-white/5 border-white/[0.06] hover:border-white/20"
                       }`}
                     >
                       <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg ${config.bgColor.replace("from-", "bg-").split(" ")[0]} flex items-center justify-center ${config.color} mb-2`}>
@@ -508,7 +1143,7 @@ const CreateGoalModal = ({
                     value={formData.title ?? ""}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     placeholder="e.g., Lose 10 lbs in 12 weeks"
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
                   />
                 </div>
 
@@ -521,7 +1156,7 @@ const CreateGoalModal = ({
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     rows={2}
                     placeholder="Describe your goal in detail..."
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
                   />
                 </div>
 
@@ -532,7 +1167,7 @@ const CreateGoalModal = ({
                       type="number"
                       value={formData.currentValue ?? 0}
                       onChange={(e) => setFormData({ ...formData, currentValue: Number(e.target.value) || 0 })}
-                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50 transition-all"
+                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all"
                     />
                   </div>
                   <div>
@@ -541,7 +1176,7 @@ const CreateGoalModal = ({
                       type="number"
                       value={formData.targetValue ?? 0}
                       onChange={(e) => setFormData({ ...formData, targetValue: Number(e.target.value) || 0 })}
-                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50 transition-all"
+                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all"
                     />
                   </div>
                   <div>
@@ -551,7 +1186,7 @@ const CreateGoalModal = ({
                       value={formData.targetUnit ?? ""}
                       onChange={(e) => setFormData({ ...formData, targetUnit: e.target.value })}
                       placeholder="lbs"
-                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all"
+                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all"
                     />
                   </div>
                   <div>
@@ -559,10 +1194,10 @@ const CreateGoalModal = ({
                     <select
                       value={formData.durationWeeks ?? 12}
                       onChange={(e) => setFormData({ ...formData, durationWeeks: Number(e.target.value) || 12 })}
-                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50 transition-all cursor-pointer"
+                      className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all cursor-pointer"
                     >
                       {[4, 8, 12, 16, 24, 52].map((w) => (
-                        <option key={w} value={w} className="bg-slate-900">{w}</option>
+                        <option key={w} value={w} className="bg-[#0f0f18]">{w}</option>
                       ))}
                     </select>
                   </div>
@@ -580,11 +1215,11 @@ const CreateGoalModal = ({
                     onChange={(e) => setFormData({ ...formData, motivation: e.target.value })}
                     rows={2}
                     placeholder="This helps keep you motivated..."
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
                   />
                 </div>
 
-                <label className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
+                <label className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/[0.06] cursor-pointer hover:bg-white/10 transition-colors">
                   <input
                     type="checkbox"
                     checked={formData.isPrimary}
@@ -602,11 +1237,11 @@ const CreateGoalModal = ({
               </div>
             )}
 
-            <div className="flex gap-3 mt-6 pt-4 border-t border-white/10">
+            <div className="flex gap-3 mt-6 pt-4 border-t border-white/[0.06]">
               <button
                 onClick={onClose}
                 disabled={isLoading}
-                className="flex-1 px-4 py-3 rounded-xl bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
+                className="flex-1 px-4 py-3 rounded-xl bg-white/5 text-white border border-white/[0.06] hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
@@ -710,7 +1345,7 @@ const EditGoalModal = ({
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-slate-900 border border-white/10 rounded-2xl p-4 sm:p-6 max-w-2xl w-full shadow-2xl my-8 max-h-[90vh] overflow-y-auto"
+            className="bg-[#0f0f18] border border-white/[0.06] rounded-xl p-4 sm:p-6 max-w-2xl w-full shadow-2xl my-8 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
@@ -732,7 +1367,7 @@ const EditGoalModal = ({
             </div>
 
             {/* Current Category Display */}
-            <div className="mb-6 p-4 rounded-xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10">
+            <div className="mb-6 p-4 rounded-xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/[0.06]">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg ${config.bgColor.replace("from-", "bg-").split(" ")[0]} flex items-center justify-center ${config.color}`}>
                   {config.icon}
@@ -754,7 +1389,7 @@ const EditGoalModal = ({
                   value={formData.title ?? ""}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="e.g., Lose 10 lbs in 12 weeks"
-                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
                 />
               </div>
 
@@ -767,7 +1402,7 @@ const EditGoalModal = ({
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
                   placeholder="Describe your goal in detail..."
-                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
                 />
               </div>
 
@@ -778,7 +1413,7 @@ const EditGoalModal = ({
                     type="number"
                     value={formData.currentValue ?? 0}
                     onChange={(e) => setFormData({ ...formData, currentValue: Number(e.target.value) || 0 })}
-                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50 transition-all"
+                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all"
                   />
                 </div>
                 <div>
@@ -787,7 +1422,7 @@ const EditGoalModal = ({
                     type="number"
                     value={formData.targetValue ?? 0}
                     onChange={(e) => setFormData({ ...formData, targetValue: Number(e.target.value) || 0 })}
-                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50 transition-all"
+                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all"
                   />
                 </div>
                 <div>
@@ -797,7 +1432,7 @@ const EditGoalModal = ({
                     value={formData.targetUnit ?? ""}
                     onChange={(e) => setFormData({ ...formData, targetUnit: e.target.value })}
                     placeholder="lbs"
-                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all"
+                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all"
                   />
                 </div>
                 <div>
@@ -805,10 +1440,10 @@ const EditGoalModal = ({
                   <select
                     value={formData.durationWeeks ?? 12}
                     onChange={(e) => setFormData({ ...formData, durationWeeks: Number(e.target.value) || 12 })}
-                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-emerald-500/50 transition-all cursor-pointer"
+                    className="w-full px-3 sm:px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all cursor-pointer"
                   >
                     {[4, 8, 12, 16, 24, 52].map((w) => (
-                      <option key={w} value={w} className="bg-slate-900">{w}</option>
+                      <option key={w} value={w} className="bg-[#0f0f18]">{w}</option>
                     ))}
                   </select>
                 </div>
@@ -826,11 +1461,11 @@ const EditGoalModal = ({
                   onChange={(e) => setFormData({ ...formData, motivation: e.target.value })}
                   rows={2}
                   placeholder="This helps keep you motivated..."
-                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
+                  className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all resize-none"
                 />
               </div>
 
-              <label className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
+              <label className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/[0.06] cursor-pointer hover:bg-white/10 transition-colors">
                 <input
                   type="checkbox"
                   checked={formData.isPrimary}
@@ -847,11 +1482,11 @@ const EditGoalModal = ({
               </label>
             </div>
 
-            <div className="flex gap-3 mt-6 pt-4 border-t border-white/10">
+            <div className="flex gap-3 mt-6 pt-4 border-t border-white/[0.06]">
               <button
                 onClick={onClose}
                 disabled={isLoading}
-                className="flex-1 px-4 py-3 rounded-xl bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
+                className="flex-1 px-4 py-3 rounded-xl bg-white/5 text-white border border-white/[0.06] hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
@@ -908,7 +1543,7 @@ const ConfirmModal = ({
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
-          className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+          className="bg-[#0f0f18] border border-white/[0.06] rounded-xl p-6 max-w-md w-full shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-4 mb-4">
@@ -925,7 +1560,7 @@ const ConfirmModal = ({
             <button
               onClick={onClose}
               disabled={isLoading}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
+              className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 text-white border border-white/[0.06] hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
             >
               Cancel
             </button>
@@ -969,11 +1604,27 @@ export default function GoalsPageContent() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
+  // View toggle
+  const [boardView, setBoardView] = useState<"board" | "list">("board");
+
+  // DnD state
+  const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
+
+  // Search expanded on mobile
+  const [searchExpanded, setSearchExpanded] = useState(false);
+
+  // DnD sensors
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 8 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } });
+  const keyboardSensor = useSensor(KeyboardSensor);
+  const sensors = useSensors(pointerSensor, touchSensor, keyboardSensor);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -1018,6 +1669,7 @@ export default function GoalsPageContent() {
     }
   }, [isAuthenticated, fetchGoals]);
 
+  // Filtered goals (used for list view and search across board)
   const filteredGoals = useMemo(() => {
     return goals.filter((goal) => {
       const matchesFilter = filter === "all" || goal.status === filter;
@@ -1029,6 +1681,31 @@ export default function GoalsPageContent() {
     });
   }, [goals, filter, searchQuery]);
 
+  // Goals grouped by kanban column (search-filtered)
+  const kanbanColumns = useMemo(() => {
+    const searchFiltered = goals.filter((goal) => {
+      return (
+        !searchQuery ||
+        goal.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        goal.description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    });
+
+    const grouped: Record<KanbanColumnId, Goal[]> = {
+      active: [],
+      in_progress: [],
+      paused: [],
+      completed: [],
+    };
+
+    for (const goal of searchFiltered) {
+      const col = getColumnForStatus(goal.status);
+      grouped[col].push(goal);
+    }
+
+    return grouped;
+  }, [goals, searchQuery]);
+
   const stats = useMemo(() => ({
     total: goals.length,
     active: goals.filter((g) => g.status === "active").length,
@@ -1039,6 +1716,13 @@ export default function GoalsPageContent() {
       : 0,
     primaryGoal: goals.find((g) => g.isPrimary),
   }), [goals]);
+
+  const activeGoal = useMemo(() => {
+    if (!activeGoalId) return null;
+    return goals.find((g) => g.id === activeGoalId) || null;
+  }, [activeGoalId, goals]);
+
+  // --- Handlers ---
 
   const handleCreateGoal = async (data: NewGoalData) => {
     setIsCreating(true);
@@ -1084,13 +1768,17 @@ export default function GoalsPageContent() {
         currentValue: newValue,
       });
 
+      const newProgress = Math.min(100, Math.round((newValue / selectedGoal.targetValue) * 100));
+      const autoCompleted = newProgress >= 100 && selectedGoal.status !== "completed";
+
       setGoals((prev) =>
         prev.map((g) =>
           g.id === selectedGoal.id
             ? {
                 ...g,
                 currentValue: newValue,
-                progress: Math.min(100, Math.round((newValue / g.targetValue) * 100)),
+                progress: newProgress,
+                ...(autoCompleted ? { status: "completed" } : {}),
               }
             : g
         )
@@ -1098,7 +1786,11 @@ export default function GoalsPageContent() {
 
       setIsProgressModalOpen(false);
       setSelectedGoal(null);
-      toast.success("Progress updated successfully!");
+      if (autoCompleted) {
+        toast.success("Goal completed! Progress reached 100%");
+      } else {
+        toast.success("Progress updated successfully!");
+      }
     } catch (err) {
       console.error("Failed to update progress:", err);
       toast.error("Failed to update progress");
@@ -1319,9 +2011,79 @@ export default function GoalsPageContent() {
 
   const getPlanForGoal = (goalId: string) => plans.find((p) => p.goalId === goalId);
 
+  // --- DnD Handlers ---
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveGoalId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveGoalId(null);
+
+    if (!over) return;
+
+    const goalId = active.id as string;
+    const overId = over.id as string;
+
+    // Resolve target column: over.id can be a column ID or a goal ID
+    const validColumnIds: string[] = KANBAN_COLUMNS.map((c) => c.id);
+    let targetColumn: string;
+    if (validColumnIds.includes(overId)) {
+      targetColumn = overId;
+    } else {
+      // Dropped on a card — find which column that card belongs to
+      const overGoal = goals.find((g) => g.id === overId);
+      if (!overGoal) return;
+      targetColumn = getColumnForStatus(overGoal.status);
+    }
+
+    // Find the goal
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return;
+
+    // Check if this is actually a new column
+    const currentColumn = getColumnForStatus(goal.status);
+    if (currentColumn === targetColumn) return;
+
+    const newStatus = getStatusForColumn(targetColumn);
+
+    // Optimistic update
+    const previousGoals = [...goals];
+    setGoals((prev) =>
+      prev.map((g) => {
+        if (g.id !== goalId) return g;
+        const updated = { ...g, status: newStatus };
+        // If completing, also set currentValue = targetValue
+        if (newStatus === "completed") {
+          updated.currentValue = g.targetValue;
+          updated.progress = 100;
+        }
+        return updated;
+      })
+    );
+
+    try {
+      const patchData: Record<string, unknown> = { status: newStatus };
+      if (newStatus === "completed") {
+        patchData.currentValue = goal.targetValue;
+      }
+      await api.patch(`/assessment/goals/${goalId}`, patchData);
+      toast.success(
+        `Goal moved to ${targetColumn === "other" ? "Other" : targetColumn.charAt(0).toUpperCase() + targetColumn.slice(1)}`
+      );
+    } catch (err) {
+      // Rollback
+      console.error("Failed to update goal status via drag:", err);
+      setGoals(previousGoals);
+      toast.error("Failed to move goal");
+    }
+  };
+
+  // --- Loading / Error States ---
+
   if (authLoading || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -1341,7 +2103,7 @@ export default function GoalsPageContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1364,131 +2126,165 @@ export default function GoalsPageContent() {
     );
   }
 
+  // --- Render ---
+
   return (
     <DashboardLayout activeTab="goals">
-      <div className="min-h-screen bg-slate-950">
+      <div className="min-h-screen bg-[#0a0a0f]">
+        {/* Background orbs */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 -left-40 w-80 h-80 bg-sky-500/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-500/[0.07] rounded-full blur-3xl" />
+          <div className="absolute top-1/2 -left-40 w-80 h-80 bg-sky-500/[0.07] rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-emerald-500/[0.04] rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <motion.header
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 sm:mb-8"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white">
-                  My{" "}
-                  <span className="bg-gradient-to-r from-emerald-400 to-sky-400 bg-clip-text text-transparent">
-                    Goals
-                  </span>
+        <div className="relative max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+          {/* ============ STICKY TOP BAR ============ */}
+          <div className="sticky top-0 z-30 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/[0.06]">
+            <div className="flex items-center justify-between h-14 gap-3">
+              {/* Left: Badge + Title */}
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                  <Target className="w-4.5 h-4.5 text-emerald-400" />
+                </div>
+                <h1 className="text-lg font-bold text-white whitespace-nowrap">
+                  My <span className="bg-gradient-to-r from-emerald-400 to-sky-400 bg-clip-text text-transparent">Goals</span>
                 </h1>
-                <p className="text-slate-400 mt-1">Track and manage your health objectives</p>
               </div>
 
-              <div className="flex items-center gap-3">
+              {/* Right: Search + View Toggle + AI + New */}
+              <div className="flex items-center gap-2">
+                {/* Search - expandable on mobile */}
+                <div className={`relative transition-all ${searchExpanded ? "w-48 sm:w-56" : "w-8 sm:w-48"}`}>
+                  <button
+                    onClick={() => setSearchExpanded(!searchExpanded)}
+                    className="sm:hidden absolute left-0 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-white/10 z-10 cursor-pointer"
+                  >
+                    <Search className="w-4 h-4 text-slate-400" />
+                  </button>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search..."
+                    className={`w-full pl-9 pr-3 py-1.5 rounded-lg bg-white/5 border border-white/[0.06] text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all ${
+                      searchExpanded ? "opacity-100" : "opacity-0 sm:opacity-100 pointer-events-none sm:pointer-events-auto"
+                    }`}
+                  />
+                  <Search className="hidden sm:block absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                </div>
+
+                {/* View Toggle */}
+                <div className="flex items-center p-0.5 rounded-lg bg-white/5 border border-white/[0.06]">
+                  <button
+                    onClick={() => setBoardView("board")}
+                    className={`p-1.5 rounded-md transition-all cursor-pointer ${
+                      boardView === "board" ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500 hover:text-white"
+                    }`}
+                    aria-label="Board view"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setBoardView("list")}
+                    className={`p-1.5 rounded-md transition-all cursor-pointer ${
+                      boardView === "list" ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500 hover:text-white"
+                    }`}
+                    aria-label="List view"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Analytics */}
                 <button
                   onClick={() => setShowAnalytics(!showAnalytics)}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-white font-medium rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                  className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                    showAnalytics
+                      ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                      : "bg-white/5 border-white/[0.06] text-slate-400 hover:text-white"
+                  }`}
+                  aria-label="Toggle analytics"
                 >
-                  <BarChart3 className="w-5 h-5" />
-                  <span className="hidden sm:inline">Analytics</span>
+                  <BarChart3 className="w-4 h-4" />
                 </button>
+
+                {/* AI Create */}
                 <button
                   onClick={() => setIsAIModalOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/25 cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/25 cursor-pointer"
                 >
-                  <Sparkles className="w-5 h-5" />
-                  <span className="hidden sm:inline">AI Create</span>
+                  <Sparkles className="w-4 h-4" />
+                  <span className="hidden md:inline">AI</span>
                 </button>
+
+                {/* + New Goal */}
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-sky-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-emerald-500/25 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-sky-600 text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-emerald-500/25 cursor-pointer"
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-4 h-4" />
                   <span className="hidden sm:inline">New Goal</span>
-                  <span className="sm:hidden">Add</span>
                 </button>
               </div>
             </div>
-          </motion.header>
+          </div>
 
-          {/* Stats */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8"
-          >
+          {/* ============ STATS ROW ============ */}
+          <div className="grid grid-cols-5 gap-2 py-4">
             {[
-              { label: "Total", value: stats.total, icon: Target, color: "emerald", bg: "from-emerald-500/10 via-emerald-600/5 to-sky-500/10" },
-              { label: "Active", value: stats.active, icon: Zap, color: "green", bg: "from-green-500/10 via-green-600/5 to-emerald-500/10" },
-              { label: "Completed", value: stats.completed, icon: CheckCircle2, color: "sky", bg: "from-sky-500/10 via-sky-600/5 to-blue-500/10" },
-              { label: "Paused", value: stats.paused, icon: Pause, color: "amber", bg: "from-amber-500/10 via-amber-600/5 to-yellow-500/10" },
-              { label: "Progress", value: `${stats.avgProgress}%`, icon: TrendingUp, color: "violet", bg: "from-violet-500/10 via-purple-600/5 to-pink-500/10" },
-            ].map((stat, index) => (
-              <motion.div
+              { label: "Total", value: stats.total, icon: Target, color: "emerald" },
+              { label: "Active", value: stats.active, icon: Zap, color: "green" },
+              { label: "Completed", value: stats.completed, icon: CheckCircle2, color: "sky" },
+              { label: "Paused", value: stats.paused, icon: Pause, color: "amber" },
+              { label: "Avg Progress", value: `${stats.avgProgress}%`, icon: TrendingUp, color: "violet" },
+            ].map((stat) => (
+              <div
                 key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 * index }}
-                whileHover={{ y: -2, transition: { duration: 0.2 } }}
-                className={`p-4 sm:p-5 rounded-2xl bg-gradient-to-br ${stat.bg} border border-white/10 hover:border-white/20 hover:shadow-lg hover:shadow-emerald-500/5 transition-all backdrop-blur-xl bg-slate-900/50`}
+                className="p-3 rounded-xl bg-[#0f0f18] border border-white/[0.06] hover:border-white/[0.1] transition-all"
               >
-                <div className="flex items-center justify-between mb-2 sm:mb-3">
-                  <div className={`p-2 rounded-lg bg-${stat.color}-500/20`}>
-                    <stat.icon className={`w-4 h-4 sm:w-5 sm:h-5 text-${stat.color}-400`} />
-                  </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <stat.icon className={`w-3.5 h-3.5 text-${stat.color}-400`} />
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">{stat.label}</span>
                 </div>
-                <p className="text-2xl sm:text-3xl font-bold text-white">{stat.value}</p>
-                <p className="text-xs sm:text-sm text-slate-400">{stat.label}</p>
-              </motion.div>
+                <p className="text-lg font-bold text-white">{stat.value}</p>
+              </div>
             ))}
-          </motion.div>
+          </div>
 
-          {/* Primary Goal */}
+          {/* ============ PRIMARY GOAL CARD ============ */}
           {stats.primaryGoal && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="mb-6 sm:mb-8"
-            >
-              <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 border border-amber-500/20">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                      <Star className="w-6 h-6 sm:w-7 sm:h-7 text-amber-400" />
+            <div className="mb-4">
+              <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 border border-amber-500/20">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                      <Star className="w-5 h-5 text-amber-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs font-medium text-amber-400 uppercase tracking-wide">Primary Goal</span>
-                      <h3 className="text-base sm:text-lg font-semibold text-white truncate">{stats.primaryGoal.title}</h3>
+                      <span className="text-[10px] font-medium text-amber-400 uppercase tracking-wide">Primary Goal</span>
+                      <h3 className="text-sm font-semibold text-white truncate">{stats.primaryGoal.title}</h3>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <p className="text-2xl sm:text-3xl font-bold text-white">{stats.primaryGoal.progress}%</p>
-                      <p className="text-xs text-slate-400">Complete</p>
+                      <p className="text-xl font-bold text-white">{stats.primaryGoal.progress}%</p>
                     </div>
                     <button
                       onClick={() => {
                         setSelectedGoal(stats.primaryGoal!);
                         setIsProgressModalOpen(true);
                       }}
-                      className="px-4 py-2 bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 transition-colors text-sm font-medium cursor-pointer"
+                      className="px-3 py-1.5 bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 transition-colors text-xs font-medium cursor-pointer"
                     >
                       Update
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-4">
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div className="mt-3">
+                  <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                     <motion.div
                       className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500"
                       initial={{ width: 0 }}
@@ -1498,465 +2294,512 @@ export default function GoalsPageContent() {
                   </div>
                 </div>
               </div>
-            </motion.div>
-          )}
-
-          {/* Analytics Section */}
-          {showAnalytics && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-8"
-            >
-              <GoalsAnalytics goals={goals} />
-            </motion.div>
-          )}
-
-          {/* Search & Filter */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6"
-          >
-            <div className="relative flex-1 group">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-emerald-500/10 group-focus-within:bg-emerald-500/20 transition-colors">
-                <Search className="w-4 h-4 text-emerald-400" />
-              </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search goals..."
-                className="w-full pl-14 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all backdrop-blur-sm"
-              />
             </div>
+          )}
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (isSelectionMode) {
-                    clearSelection();
-                  } else {
-                    setIsSelectionMode(true);
-                    selectAll();
-                  }
-                }}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                  isSelectionMode
-                    ? "bg-gradient-to-r from-emerald-600 to-sky-600 text-white shadow-lg shadow-emerald-500/25"
-                    : "bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10"
-                }`}
+          {/* ============ ANALYTICS SECTION ============ */}
+          <AnimatePresence>
+            {showAnalytics && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mb-4"
               >
-                {isSelectionMode ? (
-                  <>
-                    <X className="w-4 h-4 inline mr-2" />
-                    Cancel
-                  </>
-                ) : (
-                  <>
-                    <CheckSquare className="w-4 h-4 inline mr-2" />
-                    Select
-                  </>
-                )}
-              </button>
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-white/5 border border-white/10 overflow-x-auto backdrop-blur-sm relative">
-                {(["all", "active", "completed", "paused"] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`relative px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
-                      filter === f
-                        ? "text-white"
-                        : "text-slate-400 hover:text-white hover:bg-white/5"
-                    }`}
+                <GoalsAnalytics goals={goals} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ============ KANBAN BOARD (default view) ============ */}
+          {boardView === "board" && (
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="flex gap-3 pb-8 overflow-x-auto snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {KANBAN_COLUMNS.map((col) => (
+                  <KanbanColumn
+                    key={col.id}
+                    columnId={col.id}
+                    label={col.label}
+                    color={col.color}
+                    icon={col.icon}
+                    goals={kanbanColumns[col.id]}
                   >
-                    {filter === f && (
-                      <motion.div
-                        layoutId="activeGoalFilter"
-                        className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-sky-600 rounded-lg shadow-lg shadow-emerald-500/25"
-                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    {kanbanColumns[col.id].map((goal) => (
+                      <DraggableGoalCard
+                        key={goal.id}
+                        goal={goal}
+                        onUpdateProgress={(g) => {
+                          setSelectedGoal(g);
+                          setIsProgressModalOpen(true);
+                        }}
+                        onEdit={(g) => {
+                          setSelectedGoal(g);
+                          setIsEditModalOpen(true);
+                        }}
+                        onDelete={(g) => {
+                          setSelectedGoal(g);
+                          setIsDeleteModalOpen(true);
+                        }}
+                        onStatusChange={handleStatusChange}
+                        onExpand={setExpandedGoal}
+                        onViewDetails={(g) => {
+                          setSelectedGoal(g);
+                          setIsDetailModalOpen(true);
+                        }}
+                        isExpanded={expandedGoal === goal.id}
                       />
-                    )}
-                    <span className="relative z-10">{f.charAt(0).toUpperCase() + f.slice(1)}</span>
-                  </button>
+                    ))}
+                  </KanbanColumn>
                 ))}
               </div>
-            </div>
-          </motion.div>
 
-          {/* Bulk Actions Bar */}
-          <BulkActionsBar
-            selectedCount={selectedGoals.size}
-            onBulkDelete={() => setIsBulkDeleteModalOpen(true)}
-            onBulkUpdateStatus={handleBulkUpdateStatus}
-            onClearSelection={clearSelection}
-            isProcessing={isBulkProcessing}
-          />
+              <DragOverlay dropAnimation={null}>
+                {activeGoal ? <GoalCardOverlay goal={activeGoal} /> : null}
+              </DragOverlay>
+            </DndContext>
+          )}
 
-          {/* Goals List */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="space-y-4"
-          >
-            <AnimatePresence mode="popLayout">
-              {filteredGoals.length === 0 ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="relative text-center py-16 rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-800/50 to-slate-900/95 border border-white/5 backdrop-blur-xl overflow-hidden"
-                >
-                  {/* Animated background orbs */}
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <motion.div
-                      animate={{ x: [0, 20, 0], y: [0, -10, 0] }}
-                      transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute top-10 left-1/4 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl"
-                    />
-                    <motion.div
-                      animate={{ x: [0, -15, 0], y: [0, 15, 0] }}
-                      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-                      className="absolute bottom-10 right-1/4 w-40 h-40 bg-sky-500/10 rounded-full blur-2xl"
-                    />
-                  </div>
-                  <div className="relative z-10">
-                    <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-sky-500/20 border border-emerald-500/20 flex items-center justify-center">
-                      <Target className="w-10 h-10 text-emerald-400" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-white mb-2">
-                      {filter === "all" ? "No Goals Yet" : `No ${filter} goals`}
-                    </h3>
-                    <p className="text-slate-400 mb-6 max-w-md mx-auto px-4">
-                      {filter === "all"
-                        ? "Start your health journey by creating your first goal."
-                        : `You don't have any ${filter} goals at the moment.`}
-                    </p>
-                    <button
-                      onClick={() => setIsCreateModalOpen(true)}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-sky-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-emerald-500/25 cursor-pointer"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Create Goal
-                    </button>
-                  </div>
-                </motion.div>
-              ) : (
-                filteredGoals.map((goal, index) => {
-                  const config = goalCategoryConfig[goal.category] || goalCategoryConfig.custom;
-                  const plan = getPlanForGoal(goal.id);
-                  const daysRemaining = Math.ceil(
-                    (new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-                  );
-                  const isExpanded = expandedGoal === goal.id;
-
-                  return (
-                    <motion.div
-                      key={goal.id}
-                      layout
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ delay: index * 0.03 }}
-                      className="group"
-                    >
-                      <div
-                        className={`relative p-4 sm:p-6 rounded-2xl bg-gradient-to-br ${config.bgColor} border ${
-                          selectedGoals.has(goal.id)
-                            ? "border-emerald-500/50 shadow-lg shadow-emerald-500/20"
-                            : "border-white/10"
-                        } backdrop-blur-sm hover:border-white/20 transition-all overflow-hidden`}
+          {/* ============ LIST VIEW ============ */}
+          {boardView === "list" && (
+            <div className="pb-8">
+              {/* Filter pills + Select */}
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (isSelectionMode) {
+                        clearSelection();
+                      } else {
+                        setIsSelectionMode(true);
+                        selectAll();
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                      isSelectionMode
+                        ? "bg-gradient-to-r from-emerald-600 to-sky-600 text-white shadow-lg shadow-emerald-500/25"
+                        : "bg-white/5 border border-white/[0.06] text-slate-400 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    {isSelectionMode ? (
+                      <>
+                        <X className="w-4 h-4 inline mr-1.5" />
+                        Cancel
+                      </>
+                    ) : (
+                      <>
+                        <CheckSquare className="w-4 h-4 inline mr-1.5" />
+                        Select
+                      </>
+                    )}
+                  </button>
+                  <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/5 border border-white/[0.06]">
+                    {(["all", "active", "completed", "paused"] as const).map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        className={`relative px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
+                          filter === f
+                            ? "text-white"
+                            : "text-slate-400 hover:text-white hover:bg-white/5"
+                        }`}
                       >
-                        {/* Status indicator bar at top */}
-                        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${
-                          goal.status === "active" ? "from-emerald-500 to-sky-500" :
-                          goal.status === "completed" ? "from-green-500 to-emerald-500" :
-                          goal.status === "paused" ? "from-amber-500 to-yellow-500" :
-                          "from-slate-500 to-slate-600"
-                        }`} />
-                        <div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
-                          <div className="flex items-start gap-4 flex-1 min-w-0">
-                            {isSelectionMode && (
-                              <motion.button
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                exit={{ scale: 0 }}
-                                onClick={() => toggleSelection(goal.id)}
-                                className="mt-1 cursor-pointer"
-                              >
-                                {selectedGoals.has(goal.id) ? (
-                                  <motion.div
-                                    initial={{ scale: 0.8 }}
-                                    animate={{ scale: 1 }}
-                                    transition={{ type: "spring", stiffness: 400 }}
-                                  >
-                                    <CheckSquare className="w-5 h-5 text-emerald-400" />
-                                  </motion.div>
-                                ) : (
-                                  <Square className="w-5 h-5 text-slate-500 hover:text-slate-400" />
-                                )}
-                              </motion.button>
-                            )}
-                            <div
-                              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-white/10 flex items-center justify-center ${config.color} shrink-0`}
-                            >
-                              {config.icon}
-                            </div>
+                        {filter === f && (
+                          <motion.div
+                            layoutId="activeGoalFilter"
+                            className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-sky-600 rounded-md shadow-lg shadow-emerald-500/25"
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                          />
+                        )}
+                        <span className="relative z-10">{f.charAt(0).toUpperCase() + f.slice(1)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <h3 className="text-base sm:text-lg font-semibold text-white truncate">
-                                  {goal.title}
-                                </h3>
-                                {goal.isPrimary && (
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 flex items-center gap-1">
-                                    <Star className="w-3 h-3" />
-                                    Primary
-                                  </span>
-                                )}
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                    goal.status === "active"
-                                      ? "bg-green-500/20 text-green-400"
-                                      : goal.status === "completed"
-                                      ? "bg-blue-500/20 text-blue-400"
-                                      : goal.status === "paused"
-                                      ? "bg-yellow-500/20 text-yellow-400"
-                                      : "bg-slate-500/20 text-slate-400"
-                                  }`}
-                                >
-                                  {goal.status}
-                                </span>
-                              </div>
-                              <p className="text-sm text-slate-400 line-clamp-2 sm:line-clamp-1 mb-3">
-                                {goal.description}
-                              </p>
+              {/* Bulk Actions Bar */}
+              <BulkActionsBar
+                selectedCount={selectedGoals.size}
+                onBulkDelete={() => setIsBulkDeleteModalOpen(true)}
+                onBulkUpdateStatus={handleBulkUpdateStatus}
+                onClearSelection={clearSelection}
+                isProcessing={isBulkProcessing}
+              />
 
-                              <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm">
-                                <div className="flex items-center gap-1.5 text-slate-300">
-                                  <Target className="w-4 h-4 text-slate-500" />
-                                  <span>{goal.currentValue || 0}/{goal.targetValue} {goal.targetUnit}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 text-slate-300">
-                                  <Calendar className="w-4 h-4 text-slate-500" />
-                                  <span>{goal.durationWeeks}w</span>
-                                </div>
-                                <div
-                                  className={`flex items-center gap-1.5 ${
-                                    daysRemaining < 7 && daysRemaining > 0
-                                      ? "text-amber-400"
-                                      : daysRemaining <= 0
-                                      ? "text-red-400"
-                                      : "text-slate-300"
-                                  }`}
-                                >
-                                  <Clock className="w-4 h-4" />
-                                  <span>
-                                    {daysRemaining > 0 ? `${daysRemaining}d left` : "Overdue"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end gap-4 lg:w-52">
-                            <div className="flex-1 lg:w-full">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm text-slate-400">Progress</span>
-                                <span className="text-sm font-semibold text-white">{goal.progress}%</span>
-                              </div>
-                              <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                                <motion.div
-                                  className={`h-full rounded-full bg-gradient-to-r ${
-                                    goal.status === "completed"
-                                      ? "from-green-500 to-emerald-500"
-                                      : "from-emerald-500 to-sky-500"
-                                  }`}
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${goal.progress}%` }}
-                                  transition={{ duration: 1, ease: [0.4, 0, 0.2, 1] }}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {goal.status === "active" && (
-                                <button
-                                  onClick={() => {
-                                    setSelectedGoal(goal);
-                                    setIsProgressModalOpen(true);
-                                  }}
-                                  className="px-3 py-2 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm font-medium cursor-pointer flex items-center gap-1.5"
-                                >
-                                  <TrendingUp className="w-4 h-4" />
-                                  <span className="hidden sm:inline">Update</span>
-                                </button>
-                              )}
-
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer">
-                                    <MoreVertical className="w-4 h-4" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                  align="end"
-                                  className="w-48 bg-slate-900/95 backdrop-blur-xl border-white/10 rounded-xl shadow-xl"
-                                >
-                                  {goal.status === "active" && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onClick={() => handleStatusChange(goal, "paused")}
-                                        className="text-amber-400 focus:text-amber-300 focus:bg-amber-500/10 cursor-pointer"
-                                      >
-                                        <Pause className="w-4 h-4 mr-2" />
-                                        Pause
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => handleStatusChange(goal, "completed")}
-                                        className="text-green-400 focus:text-green-300 focus:bg-green-500/10 cursor-pointer"
-                                      >
-                                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                                        Complete
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-
-                                  {goal.status === "paused" && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleStatusChange(goal, "active")}
-                                      className="text-green-400 focus:text-green-300 focus:bg-green-500/10 cursor-pointer"
-                                    >
-                                      <Play className="w-4 h-4 mr-2" />
-                                      Resume
-                                    </DropdownMenuItem>
-                                  )}
-
-                                  {(goal.status === "completed" || goal.status === "abandoned") && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleStatusChange(goal, "active")}
-                                      className="text-emerald-400 focus:text-emerald-300 focus:bg-emerald-500/10 cursor-pointer"
-                                    >
-                                      <RefreshCw className="w-4 h-4 mr-2" />
-                                      Reactivate
-                                    </DropdownMenuItem>
-                                  )}
-
-                                  <DropdownMenuSeparator className="bg-white/10" />
-
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setSelectedGoal(goal);
-                                      setIsEditModalOpen(true);
-                                    }}
-                                    className="text-sky-400 focus:text-sky-300 focus:bg-sky-500/10 cursor-pointer"
-                                  >
-                                    <Pencil className="w-4 h-4 mr-2" />
-                                    Edit
-                                  </DropdownMenuItem>
-
-                                  <DropdownMenuItem
-                                    onClick={() => setExpandedGoal(isExpanded ? null : goal.id)}
-                                    className="text-slate-300 focus:text-white focus:bg-white/5 cursor-pointer"
-                                  >
-                                    <ChevronDown className={`w-4 h-4 mr-2 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                                    {isExpanded ? "Less" : "More"}
-                                  </DropdownMenuItem>
-
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setSelectedGoal(goal);
-                                      setIsDeleteModalOpen(true);
-                                    }}
-                                    className="text-red-400 focus:text-red-300 focus:bg-red-500/10 cursor-pointer"
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-
-                              {plan && (
-                                <Link
-                                  href="/dashboard?tab=plans"
-                                  className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                                >
-                                  <ChevronRight className="w-4 h-4" />
-                                </Link>
-                              )}
-                            </div>
-                          </div>
+              {/* Goals List */}
+              <div className="space-y-3">
+                <AnimatePresence mode="popLayout">
+                  {filteredGoals.length === 0 ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="relative text-center py-16 rounded-xl bg-[#0f0f18] border border-white/[0.06] overflow-hidden"
+                    >
+                      <div className="relative z-10">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gradient-to-br from-emerald-500/20 to-sky-500/20 border border-emerald-500/20 flex items-center justify-center">
+                          <Target className="w-8 h-8 text-emerald-400" />
                         </div>
-
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden"
-                            >
-                              <div className="mt-6 pt-6 border-t border-white/10 grid sm:grid-cols-2 gap-4 sm:gap-6">
-                                {goal.motivation && (
-                                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Quote className="w-4 h-4 text-amber-400" />
-                                      <span className="text-sm font-medium text-slate-300">Why It Matters</span>
-                                    </div>
-                                    <p className="text-sm text-slate-400 italic">&quot;{goal.motivation}&quot;</p>
-                                  </div>
-                                )}
-
-                                {goal.milestones && goal.milestones.length > 0 && (
-                                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                    <div className="flex items-center gap-2 mb-3">
-                                      <Award className="w-4 h-4 text-emerald-400" />
-                                      <span className="text-sm font-medium text-slate-300">Milestones</span>
-                                    </div>
-                                    <div className="space-y-2">
-                                      {goal.milestones.map((m, index) => (
-                                        <div key={m.id || `milestone-${index}`} className="flex items-center gap-2">
-                                          {m.completed ? (
-                                            <CheckCircle2 className="w-4 h-4 text-green-400" />
-                                          ) : (
-                                            <Circle className="w-4 h-4 text-slate-500" />
-                                          )}
-                                          <span className={`text-sm ${m.completed ? "text-green-300 line-through" : "text-slate-400"}`}>
-                                            {m.title}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                        <h3 className="text-lg font-semibold text-white mb-2">
+                          {filter === "all" ? "No Goals Yet" : `No ${filter} goals`}
+                        </h3>
+                        <p className="text-slate-400 mb-6 max-w-md mx-auto px-4 text-sm">
+                          {filter === "all"
+                            ? "Start your health journey by creating your first goal."
+                            : `You don't have any ${filter} goals at the moment.`}
+                        </p>
+                        <button
+                          onClick={() => setIsCreateModalOpen(true)}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-sky-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-emerald-500/25 cursor-pointer"
+                        >
+                          <Plus className="w-5 h-5" />
+                          Create Goal
+                        </button>
                       </div>
                     </motion.div>
-                  );
-                })
-              )}
-            </AnimatePresence>
-          </motion.div>
+                  ) : (
+                    filteredGoals.map((goal, index) => {
+                      const config = goalCategoryConfig[goal.category] || goalCategoryConfig.custom;
+                      const plan = getPlanForGoal(goal.id);
+                      const daysRemaining = Math.ceil(
+                        (new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                      );
+                      const isExpanded = expandedGoal === goal.id;
 
+                      return (
+                        <motion.div
+                          key={goal.id}
+                          layout
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ delay: index * 0.03 }}
+                          className="group"
+                        >
+                          <div
+                            className={`relative p-4 sm:p-5 rounded-xl bg-[#0f0f18] border ${
+                              selectedGoals.has(goal.id)
+                                ? "border-emerald-500/50 shadow-lg shadow-emerald-500/20"
+                                : "border-white/[0.06]"
+                            } hover:border-white/[0.12] transition-all overflow-hidden`}
+                          >
+                            {/* Status indicator bar at top */}
+                            <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${
+                              goal.status === "active" ? "from-emerald-500 to-sky-500" :
+                              goal.status === "in_progress" ? "from-violet-500 to-purple-500" :
+                              goal.status === "completed" ? "from-green-500 to-emerald-500" :
+                              goal.status === "paused" ? "from-amber-500 to-yellow-500" :
+                              "from-slate-500 to-slate-600"
+                            }`} />
+                            <div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
+                                {isSelectionMode && (
+                                  <motion.button
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    exit={{ scale: 0 }}
+                                    onClick={() => toggleSelection(goal.id)}
+                                    className="mt-1 cursor-pointer"
+                                  >
+                                    {selectedGoals.has(goal.id) ? (
+                                      <motion.div
+                                        initial={{ scale: 0.8 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: "spring", stiffness: 400 }}
+                                      >
+                                        <CheckSquare className="w-5 h-5 text-emerald-400" />
+                                      </motion.div>
+                                    ) : (
+                                      <Square className="w-5 h-5 text-slate-500 hover:text-slate-400" />
+                                    )}
+                                  </motion.button>
+                                )}
+                                <div
+                                  className={`w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center ${config.color} shrink-0`}
+                                >
+                                  {config.icon}
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                                    <h3 className="text-sm sm:text-base font-semibold text-white truncate">
+                                      {goal.title}
+                                    </h3>
+                                    {goal.isPrimary && (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 flex items-center gap-1">
+                                        <Star className="w-3 h-3" />
+                                        Primary
+                                      </span>
+                                    )}
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                        goal.status === "active"
+                                          ? "bg-green-500/20 text-green-400"
+                                          : goal.status === "in_progress"
+                                          ? "bg-violet-500/20 text-violet-400"
+                                          : goal.status === "completed"
+                                          ? "bg-sky-500/20 text-sky-400"
+                                          : goal.status === "paused"
+                                          ? "bg-yellow-500/20 text-yellow-400"
+                                          : "bg-slate-500/20 text-slate-400"
+                                      }`}
+                                    >
+                                      {goal.status === "in_progress" ? "in progress" : goal.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-slate-400 line-clamp-1 mb-2">
+                                    {goal.description}
+                                  </p>
+
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                                    <div className="flex items-center gap-1.5">
+                                      <Target className="w-3.5 h-3.5 text-slate-500" />
+                                      <span>{goal.currentValue || 0}/{goal.targetValue} {goal.targetUnit}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                                      <span>{goal.durationWeeks}w</span>
+                                    </div>
+                                    <div
+                                      className={`flex items-center gap-1.5 ${
+                                        daysRemaining < 7 && daysRemaining > 0
+                                          ? "text-amber-400"
+                                          : daysRemaining <= 0
+                                          ? "text-red-400"
+                                          : ""
+                                      }`}
+                                    >
+                                      <Clock className="w-3.5 h-3.5" />
+                                      <span>
+                                        {daysRemaining > 0 ? `${daysRemaining}d left` : "Overdue"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center lg:items-end gap-3 lg:w-48">
+                                <div className="flex-1 lg:w-full">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs text-slate-500">Progress</span>
+                                    <span className="text-xs font-semibold text-white">{goal.progress}%</span>
+                                  </div>
+                                  <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                                    <motion.div
+                                      className={`h-full rounded-full bg-gradient-to-r ${
+                                        goal.status === "completed"
+                                          ? "from-green-500 to-emerald-500"
+                                          : goal.status === "in_progress"
+                                          ? "from-violet-500 to-purple-500"
+                                          : "from-emerald-500 to-sky-500"
+                                      }`}
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${goal.progress}%` }}
+                                      transition={{ duration: 1, ease: [0.4, 0, 0.2, 1] }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {(goal.status === "active" || goal.status === "in_progress") && (
+                                    <button
+                                      onClick={() => {
+                                        setSelectedGoal(goal);
+                                        setIsProgressModalOpen(true);
+                                      }}
+                                      className="px-3 py-1.5 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 transition-colors text-xs font-medium cursor-pointer flex items-center gap-1.5"
+                                    >
+                                      <TrendingUp className="w-3.5 h-3.5" />
+                                      <span className="hidden sm:inline">Update</span>
+                                    </button>
+                                  )}
+
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <button className="p-2 rounded-lg bg-white/5 border border-white/[0.06] text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer">
+                                        <MoreVertical className="w-4 h-4" />
+                                      </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                      align="end"
+                                      className="w-44 bg-[#0f0f18] backdrop-blur-xl border-white/[0.06] rounded-xl shadow-xl"
+                                    >
+                                      {(goal.status === "active" || goal.status === "in_progress") && (
+                                        <>
+                                          {goal.status === "active" && (
+                                            <DropdownMenuItem
+                                              onClick={() => handleStatusChange(goal, "in_progress")}
+                                              className="text-violet-400 focus:text-violet-300 focus:bg-violet-500/10 cursor-pointer"
+                                            >
+                                              <TrendingUp className="w-4 h-4 mr-2" />
+                                              Start Progress
+                                            </DropdownMenuItem>
+                                          )}
+                                          <DropdownMenuItem
+                                            onClick={() => handleStatusChange(goal, "paused")}
+                                            className="text-amber-400 focus:text-amber-300 focus:bg-amber-500/10 cursor-pointer"
+                                          >
+                                            <Pause className="w-4 h-4 mr-2" />
+                                            Pause
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => handleStatusChange(goal, "completed")}
+                                            className="text-green-400 focus:text-green-300 focus:bg-green-500/10 cursor-pointer"
+                                          >
+                                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                                            Complete
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
+
+                                      {goal.status === "paused" && (
+                                        <>
+                                          <DropdownMenuItem
+                                            onClick={() => handleStatusChange(goal, "active")}
+                                            className="text-emerald-400 focus:text-emerald-300 focus:bg-emerald-500/10 cursor-pointer"
+                                          >
+                                            <Play className="w-4 h-4 mr-2" />
+                                            Resume
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => handleStatusChange(goal, "in_progress")}
+                                            className="text-violet-400 focus:text-violet-300 focus:bg-violet-500/10 cursor-pointer"
+                                          >
+                                            <TrendingUp className="w-4 h-4 mr-2" />
+                                            Start Progress
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
+
+                                      {goal.status === "completed" && (
+                                        <DropdownMenuItem
+                                          onClick={() => handleStatusChange(goal, "active")}
+                                          className="text-emerald-400 focus:text-emerald-300 focus:bg-emerald-500/10 cursor-pointer"
+                                        >
+                                          <RefreshCw className="w-4 h-4 mr-2" />
+                                          Reactivate
+                                        </DropdownMenuItem>
+                                      )}
+
+                                      <DropdownMenuSeparator className="bg-white/[0.06]" />
+
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedGoal(goal);
+                                          setIsEditModalOpen(true);
+                                        }}
+                                        className="text-sky-400 focus:text-sky-300 focus:bg-sky-500/10 cursor-pointer"
+                                      >
+                                        <Pencil className="w-4 h-4 mr-2" />
+                                        Edit
+                                      </DropdownMenuItem>
+
+                                      <DropdownMenuItem
+                                        onClick={() => setExpandedGoal(isExpanded ? null : goal.id)}
+                                        className="text-slate-300 focus:text-white focus:bg-white/5 cursor-pointer"
+                                      >
+                                        <ChevronDown className={`w-4 h-4 mr-2 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                        {isExpanded ? "Less" : "More"}
+                                      </DropdownMenuItem>
+
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedGoal(goal);
+                                          setIsDeleteModalOpen(true);
+                                        }}
+                                        className="text-red-400 focus:text-red-300 focus:bg-red-500/10 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+
+                                  {plan && (
+                                    <Link
+                                      href="/dashboard?tab=plans"
+                                      className="p-2 rounded-lg bg-white/5 border border-white/[0.06] text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                                    >
+                                      <ChevronRight className="w-4 h-4" />
+                                    </Link>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="mt-4 pt-4 border-t border-white/[0.06] grid sm:grid-cols-2 gap-4">
+                                    {goal.motivation && (
+                                      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <Quote className="w-4 h-4 text-amber-400" />
+                                          <span className="text-sm font-medium text-slate-300">Why It Matters</span>
+                                        </div>
+                                        <p className="text-sm text-slate-400 italic">&quot;{goal.motivation}&quot;</p>
+                                      </div>
+                                    )}
+
+                                    {goal.milestones && goal.milestones.length > 0 && (
+                                      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                                        <div className="flex items-center gap-2 mb-3">
+                                          <Award className="w-4 h-4 text-emerald-400" />
+                                          <span className="text-sm font-medium text-slate-300">Milestones</span>
+                                        </div>
+                                        <div className="space-y-2">
+                                          {goal.milestones.map((m, mIdx) => (
+                                            <div key={m.id || `milestone-${mIdx}`} className="flex items-center gap-2">
+                                              {m.completed ? (
+                                                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                                              ) : (
+                                                <Circle className="w-4 h-4 text-slate-500" />
+                                              )}
+                                              <span className={`text-sm ${m.completed ? "text-green-300 line-through" : "text-slate-400"}`}>
+                                                {m.title}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </motion.div>
+                      );
+                    })
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
+
+          {/* Pro Tip */}
           {goals.length > 0 && goals.length < 3 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="mt-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-600/5 to-sky-500/10 border border-emerald-500/20 backdrop-blur-sm"
+              className="mt-4 mb-8 p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 via-emerald-600/5 to-sky-500/10 border border-emerald-500/20"
             >
-              <div className="flex items-start gap-4">
+              <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-emerald-500/20 shrink-0">
-                  <Lightbulb className="w-5 h-5 text-emerald-400" />
+                  <Lightbulb className="w-4 h-4 text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white mb-1">Pro Tip</h3>
-                  <p className="text-sm text-slate-400">
+                  <h3 className="font-semibold text-white text-sm mb-1">Pro Tip</h3>
+                  <p className="text-xs text-slate-400">
                     Having 2-3 goals across different pillars leads to better success. Consider adding goals in fitness, nutrition, or wellbeing!
                   </p>
                 </div>
@@ -1964,6 +2807,24 @@ export default function GoalsPageContent() {
             </motion.div>
           )}
         </div>
+
+        {/* ============ MODALS ============ */}
+        <GoalDetailModal
+          isOpen={isDetailModalOpen}
+          onClose={() => {
+            setIsDetailModalOpen(false);
+            setSelectedGoal(null);
+          }}
+          goal={selectedGoal}
+          onEdit={() => {
+            setIsDetailModalOpen(false);
+            setIsEditModalOpen(true);
+          }}
+          onUpdateProgress={() => {
+            setIsDetailModalOpen(false);
+            setIsProgressModalOpen(true);
+          }}
+        />
 
         <CreateGoalModal
           isOpen={isCreateModalOpen}
@@ -1990,17 +2851,27 @@ export default function GoalsPageContent() {
           isLoading={isUpdating}
         />
 
-        <ProgressModal
-          key={selectedGoal?.id || "progress-modal"}
-          isOpen={isProgressModalOpen}
-          onClose={() => {
-            setIsProgressModalOpen(false);
-            setSelectedGoal(null);
-          }}
-          onSave={handleUpdateProgress}
-          goal={selectedGoal}
-          isLoading={isUpdating}
-        />
+        {/* Task-based progress modal (replaces old number input) */}
+        {selectedGoal && (
+          <TaskProgressModal
+            key={selectedGoal?.id || "task-progress-modal"}
+            goal={selectedGoal}
+            isOpen={isProgressModalOpen}
+            onClose={() => {
+              setIsProgressModalOpen(false);
+              setSelectedGoal(null);
+            }}
+            onProgressUpdated={(goalId, progress, currentValue) => {
+              setGoals(prev =>
+                prev.map(g =>
+                  g.id === goalId
+                    ? { ...g, currentValue, progress, ...(progress >= 100 ? { status: "completed" } : {}) }
+                    : g
+                )
+              );
+            }}
+          />
+        )}
 
         <ConfirmModal
           isOpen={isDeleteModalOpen}

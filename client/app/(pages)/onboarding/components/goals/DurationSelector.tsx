@@ -1,8 +1,8 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Calendar, Clock, Target, Zap } from 'lucide-react';
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { Calendar, Zap, Timer } from 'lucide-react';
+import Image from 'next/image';
 
 interface DurationSelectorProps {
   value: number;
@@ -10,283 +10,171 @@ interface DurationSelectorProps {
   disabled?: boolean;
 }
 
+const ICON_BASE = '/Onboardingicons';
+
 const DURATION_PRESETS = [
-  { weeks: 2, label: '2 weeks', description: 'Quick start', icon: Zap },
-  { weeks: 4, label: '4 weeks', description: 'Recommended', icon: Target },
-  { weeks: 8, label: '8 weeks', description: 'Build habits', icon: Clock },
-  { weeks: 12, label: '12 weeks', description: 'Full transform', icon: Calendar },
+  { weeks: 2, label: '2 Weeks', description: 'Quick Start', icon: Zap },
+  { weeks: 4, label: '4 Weeks', description: 'Recommended', recommended: true, icon: Timer },
+  { weeks: 8, label: '8 Weeks', description: 'Build Habits', icon: Calendar },
 ];
 
-/**
- * DurationSelector - Select plan duration in weeks
- *
- * Features:
- * - Preset duration options with descriptions
- * - Custom slider for fine-tuning
- * - Visual feedback on selection
- */
+const ALL_WEEKS = Array.from({ length: 12 }, (_, i) => i + 1);
+
 export function DurationSelector({ value, onChange, disabled = false }: DurationSelectorProps) {
-  const isCustomValue = !DURATION_PRESETS.some((p) => p.weeks === value);
-  const sliderRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [_sliderWidth, setSliderWidth] = useState(0);
-
-  // Calculate percentage for filled track
-  const fillPercentage = ((value - 1) / (12 - 1)) * 100;
-
-  // Update slider width on mount and resize
-  useEffect(() => {
-    const updateWidth = () => {
-      if (sliderRef.current) {
-        setSliderWidth(sliderRef.current.offsetWidth);
-      }
-    };
-    updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
-  }, []);
-
-  // Handle drag interaction
-  const handleInteraction = useCallback(
-    (clientX: number) => {
-      if (disabled || !sliderRef.current) return;
-
-      const rect = sliderRef.current.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const percentage = Math.max(0, Math.min(1, x / rect.width));
-      const newValue = Math.round(1 + percentage * 11);
-      onChange(newValue);
-    },
-    [disabled, onChange]
-  );
-
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (disabled) return;
-      setIsDragging(true);
-      handleInteraction(e.clientX);
-    },
-    [disabled, handleInteraction]
-  );
-
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (isDragging) {
-        handleInteraction(e.clientX);
-      }
-    },
-    [isDragging, handleInteraction]
-  );
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (disabled) return;
-      setIsDragging(true);
-      handleInteraction(e.touches[0].clientX);
-    },
-    [disabled, handleInteraction]
-  );
-
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (isDragging) {
-        handleInteraction(e.touches[0].clientX);
-      }
-    },
-    [isDragging, handleInteraction]
-  );
-
-  // Global mouse events for drag
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+  const fillPercent = ((value - 1) / 11) * 100;
 
   return (
     <motion.div
-      className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-6 mb-8"
+      className="rounded-2xl bg-[#0a0a1a] border border-white/10 p-4 sm:p-6 mb-6 sm:mb-8"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3 }}
     >
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-          <Calendar className="w-5 h-5 text-cyan-400" />
-        </div>
-        <div>
-          <h3 className="text-white font-semibold">Plan Duration</h3>
-          <p className="text-slate-400 text-sm">How long should your health plan run?</p>
-        </div>
+      <div className="text-center mb-5 sm:mb-6">
+        <h3 className="text-lg sm:text-xl font-semibold text-white mb-1">Plan Duration</h3>
+        <p className="text-slate-400 text-xs sm:text-sm">How long should your health plan run?</p>
       </div>
 
-      {/* Preset Options */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      {/* 3 Preset Cards */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6 sm:mb-8">
         {DURATION_PRESETS.map((preset) => {
           const isSelected = value === preset.weeks;
-          const IconComponent = preset.icon;
+          const IconComp = preset.icon;
 
           return (
             <button
               key={preset.weeks}
-              onClick={() => onChange(preset.weeks)}
+              onClick={() => !disabled && onChange(preset.weeks)}
               disabled={disabled}
-              className={`relative p-4 rounded-xl border-2 transition-all duration-200 text-left ${
-                isSelected
-                  ? 'border-cyan-500 bg-cyan-500/10'
-                  : 'border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800'
-              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`
+                relative flex flex-col items-center gap-1.5 sm:gap-2 p-3 sm:p-4 rounded-xl sm:rounded-2xl
+                transition-all duration-200 border
+                ${isSelected
+                  ? 'border-emerald-600 border-[1.5px] text-white'
+                  : 'bg-[#02000f] border-white/[0.24] text-white/80 hover:border-white/40'
+                }
+                ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+              `}
+              style={isSelected ? { backgroundImage: 'linear-gradient(178deg, rgba(5,150,105,0) 3%, rgba(5,150,105,0.3) 99%)' } : undefined}
             >
-              {/* Recommended Badge */}
-              {preset.weeks === 4 && (
-                <span className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500 text-white">
-                  Best
-                </span>
-              )}
-
-              <IconComponent
-                className={`w-5 h-5 mb-2 transition-colors ${isSelected ? 'text-cyan-400' : 'text-slate-400'}`}
-              />
-              <p className={`font-bold text-lg transition-colors ${isSelected ? 'text-white' : 'text-slate-300'}`}>
-                {preset.label}
-              </p>
-              <p className={`text-xs transition-colors ${isSelected ? 'text-cyan-300' : 'text-slate-500'}`}>
+              <IconComp className={`w-4 h-4 sm:w-5 sm:h-5 ${isSelected ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span className="font-semibold text-sm sm:text-base">{preset.label}</span>
+              <span className={`text-[10px] sm:text-xs ${isSelected ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {preset.description}
-              </p>
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* Custom Slider */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-400">Fine-tune duration</span>
-          <motion.span
-            key={value}
-            initial={{ scale: 1.1, opacity: 0.7 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="text-sm font-medium text-white"
-          >
-            {value} week{value !== 1 ? 's' : ''}
-            {isCustomValue && (
-              <span className="ml-2 text-xs text-cyan-400">(Custom)</span>
-            )}
-          </motion.span>
-        </div>
+      {/* ─── Horizontal Week Picker ─── */}
+      <div className="rounded-xl sm:rounded-2xl bg-[#0b081e] border border-dashed border-white/10 px-3 sm:px-4 py-4 sm:py-5 mb-5 sm:mb-6">
+        <div className="relative flex items-center">
+          {/* Start icon */}
+          <div className="shrink-0 w-6 sm:w-8 flex items-center justify-center mr-1 sm:mr-2">
+            <Image src={`${ICON_BASE}/Train for event.svg`} alt="" width={18} height={18} className="opacity-60 sm:w-5 sm:h-5" />
+          </div>
 
-        {/* Custom Slider Track */}
-        <div
-          ref={sliderRef}
-          className={`relative h-3 rounded-full cursor-pointer select-none ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={() => setIsDragging(false)}
-        >
-          {/* Background Track */}
-          <div className="absolute inset-0 bg-slate-700 rounded-full overflow-hidden">
-            {/* Tick marks */}
-            <div className="absolute inset-0 flex items-center justify-between px-1">
-              {Array.from({ length: 12 }, (_, i) => (
-                <div
-                  key={i}
-                  className={`w-0.5 h-1.5 rounded-full transition-colors duration-200 ${
-                    i + 1 <= value ? 'bg-cyan-300/50' : 'bg-slate-600'
-                  }`}
-                />
-              ))}
+          {/* Track container */}
+          <div className="flex-1 relative">
+            {/* Background track line */}
+            <div className="absolute left-0 right-0 top-[11px] sm:top-[13px] h-[3px] bg-slate-700/60 rounded-full">
+              <motion.div
+                className="h-full bg-gradient-to-r from-sky-500 to-teal-400 rounded-full"
+                animate={{ width: `${fillPercent}%` }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              />
+            </div>
+
+            {/* Week stops */}
+            <div className="relative flex justify-between">
+              {ALL_WEEKS.map((week) => {
+                const isActive = week === value;
+                const isBefore = week < value;
+
+                return (
+                  <button
+                    key={week}
+                    onClick={() => !disabled && onChange(week)}
+                    disabled={disabled}
+                    className="flex flex-col items-center z-10"
+                  >
+                    {/* Dot or active circle */}
+                    {isActive ? (
+                      <motion.div
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-sky-500 flex items-center justify-center shadow-lg shadow-sky-500/40 ring-[3px] ring-sky-500/20"
+                        layoutId="weekThumb"
+                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                      >
+                        <span className="text-[9px] sm:text-[10px] font-bold text-white">{week}w</span>
+                      </motion.div>
+                    ) : (
+                      <div
+                        className={`
+                          w-[6px] h-[6px] sm:w-2 sm:h-2 rounded-full mt-[9px] sm:mt-[10px] mb-[9px] sm:mb-[10px]
+                          transition-colors duration-200
+                          ${isBefore ? 'bg-sky-500/60' : 'bg-slate-600'}
+                        `}
+                      />
+                    )}
+
+                    {/* Label below */}
+                    <span
+                      className={`
+                        mt-1.5 text-[9px] sm:text-[10px] font-medium transition-colors
+                        ${isActive ? 'text-sky-400' : isBefore ? 'text-white/50' : 'text-white/30'}
+                      `}
+                    >
+                      {week}w
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Filled Track */}
-          <motion.div
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full"
-            initial={false}
-            animate={{ width: `${fillPercentage}%` }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          />
-
-          {/* Thumb */}
-          <motion.div
-            className={`absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white shadow-lg shadow-cyan-500/30 border-2 border-cyan-500 ${
-              isDragging ? 'scale-110' : ''
-            } transition-transform duration-150`}
-            initial={false}
-            animate={{
-              left: `calc(${fillPercentage}% - 10px)`,
-            }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            style={{ touchAction: 'none' }}
-          >
-            {/* Inner glow */}
-            <div className="absolute inset-1 rounded-full bg-cyan-400/30" />
-          </motion.div>
-        </div>
-
-        {/* Track labels */}
-        <div className="flex justify-between px-0.5 pointer-events-none">
-          {[1, 4, 8, 12].map((week) => (
-            <span
-              key={week}
-              className={`text-[10px] transition-colors duration-200 ${
-                value === week ? 'text-cyan-400 font-semibold' : 'text-slate-500'
-              }`}
-            >
-              {week}w
-            </span>
-          ))}
+          {/* End icon */}
+          <div className="shrink-0 w-6 sm:w-8 flex items-center justify-center ml-1 sm:ml-2">
+            <Image src={`${ICON_BASE}/Boost Energy.svg`} alt="" width={18} height={18} className="sm:w-5 sm:h-5" />
+          </div>
         </div>
       </div>
 
-      {/* Duration Info */}
-      <motion.div
-        className="mt-6 p-4 rounded-xl bg-slate-900/50 border border-slate-700/50"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-      >
-        <p className="text-sm text-slate-300">
-          {value <= 2 && (
-            <>
-              <span className="text-amber-400 font-medium">Quick Start:</span> Ideal for
-              testing the waters or building a single habit. You&apos;ll see initial progress
-              but sustainable change takes longer.
-            </>
-          )}
-          {value > 2 && value <= 4 && (
-            <>
-              <span className="text-emerald-400 font-medium">Recommended:</span> Perfect
-              balance of commitment and results. Enough time to build habits and see
-              measurable progress.
-            </>
-          )}
-          {value > 4 && value <= 8 && (
-            <>
-              <span className="text-cyan-400 font-medium">Habit Builder:</span> Excellent
-              for lasting change. Research shows 66 days to form a habit - you&apos;ll have
-              time to solidify new behaviors.
-            </>
-          )}
-          {value > 8 && (
-            <>
-              <span className="text-purple-400 font-medium">Full Transformation:</span>{' '}
-              Comprehensive journey for significant change. Perfect for major fitness goals
-              or complete lifestyle overhauls.
-            </>
-          )}
-        </p>
-      </motion.div>
+      {/* Duration Info Box */}
+      <div className="p-3 sm:p-4 rounded-xl border border-emerald-600/30 bg-emerald-600/5">
+        <div className="flex items-start gap-2.5">
+          <div className="shrink-0 w-5 h-5 rounded-full bg-emerald-600/20 flex items-center justify-center mt-0.5">
+            <span className="text-emerald-400 text-xs font-bold">i</span>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            {value <= 2 && (
+              <>
+                <span className="text-amber-400 font-semibold">Quick Start:</span>{' '}
+                Ideal for testing the waters. You&apos;ll see initial progress but sustainable change takes longer.
+              </>
+            )}
+            {value > 2 && value <= 5 && (
+              <>
+                <span className="text-emerald-400 font-semibold">Recommended:</span>{' '}
+                Perfect balance of commitment and results. Enough time to build habits and see progress.
+              </>
+            )}
+            {value > 5 && value <= 8 && (
+              <>
+                <span className="text-sky-400 font-semibold">Build Habits:</span>{' '}
+                Excellent for lasting change. Research shows 66 days to form a habit — you&apos;ll solidify new behaviors.
+              </>
+            )}
+            {value > 8 && (
+              <>
+                <span className="text-sky-400 font-semibold">Full Transformation:</span>{' '}
+                Comprehensive journey for significant change. Perfect for major fitness goals or lifestyle overhauls.
+              </>
+            )}
+          </p>
+        </div>
+      </div>
     </motion.div>
   );
 }

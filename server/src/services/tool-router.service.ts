@@ -28,6 +28,8 @@ export type ToolIntent =
   | 'emotional'    // Emotional check-ins, mental recovery
   | 'gamification' // XP, levels, streaks, achievements
   | 'personal'     // Personal life context (occupation, family, routine)
+  | 'music'        // Music playback, playlists, Spotify/Pulse
+  | 'status'       // Activity status (sick, traveling, injured, etc.)
   | 'general';     // Profile, preferences, general queries
 
 // ============================================
@@ -53,6 +55,7 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
 
   workouts: [
     'workoutManager',
+    'scheduleManager', // Needed for rescheduling missed workouts
     'getUserWorkoutPlans',
     'getUserWorkoutLogs',
     'getUserActivePlans',
@@ -77,8 +80,11 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'moodManager',
     'stressManager',
     'journalManager',
+    'voiceJournalManager',
     'energyManager',
     'habitManager',
+    'scheduleManager',
+    'getScheduleByDate',
     'getUserMoodTrends',
     'getUserActivityLogsWithMood',
     'createDailyCheckin',
@@ -112,6 +118,7 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
 
   integrations: [
     'getUserIntegrations',
+    'whoopAnalyticsManager',
   ],
 
   competitions: [
@@ -136,6 +143,13 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'getUserPreferences',
   ],
 
+  status: [
+    'statusManager',
+    'activityStatusUpdater',
+    'statusHistoryViewer',
+    'planAdjustmentManager',
+  ],
+
   general: [
     // Always available - core read tools
     'getUserActivePlans',
@@ -146,9 +160,15 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'getUserMoodTrends',
     'getUserTasks',
     'getScheduleByDate',
+    'scheduleManager', // Always available — system prompt references it for many scenarios
     'gamificationManager',
     'mentalRecoveryManager',
     'personalContextManager', // Always available — AI can save personal facts anytime
+    'whoopAnalyticsManager', // Always available — WHOOP data queries for health coaching
+  ],
+
+  music: [
+    'musicManager',
   ],
 };
 
@@ -181,14 +201,17 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
   schedules: [
     'schedule', 'calendar', 'plan my day', 'daily plan', 'agenda',
     'appointment', 'time', 'when', 'today', 'tomorrow', 'routine',
+    'prayer', 'fajr', 'dhuhr', 'asr', 'maghrib', 'isha',
+    'morning routine', 'evening routine', 'daily routine',
   ],
 
   wellbeing: [
     'mood', 'feeling', 'feel', 'emotion', 'stress', 'stressed', 'anxious',
-    'anxiety', 'journal', 'diary', 'energy', 'tired', 'exhausted', 'habit',
+    'anxiety', 'journal', 'journaling', 'journling', 'journl', 'diary', 'energy', 'tired', 'exhausted', 'habit',
     'mental', 'wellbeing', 'wellness', 'happy', 'sad', 'angry', 'calm',
     'check-in', 'checkin', 'check in', 'daily checkin', 'daily check-in',
     'reflection', 'reflections', 'insights', 'constellation', 'stars',
+    'voice journal', 'voice entry', 'speak', 'record', 'voice reflection',
   ],
 
   progress: [
@@ -213,6 +236,9 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
   integrations: [
     'whoop', 'fitbit', 'apple health', 'garmin', 'strava', 'integration',
     'connect', 'sync', 'import', 'device', 'wearable', 'watch',
+    'hrv', 'recovery score', 'strain score', 'sleep stages', 'spo2',
+    'resting heart rate', 'biometrics', 'recovery trend', 'sleep trend',
+    'sleep quality', 'skin temp', 'heart rate variability',
   ],
 
   competitions: [
@@ -236,6 +262,19 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
     'cook', 'cooking', 'kitchen', 'budget', 'money', 'afford',
     'live', 'living', 'apartment', 'house', 'home',
     'hobby', 'hobbies', 'interests', 'relationship',
+  ],
+
+  music: [
+    'music', 'song', 'songs', 'play music', 'playing', 'playlist', 'track',
+    'listen', 'spotify', 'pause music', 'stop music', 'next song',
+    'skip', 'volume', 'turn up', 'turn down', 'louder', 'quieter', 'mute',
+    'beats', 'tune', 'tunes', 'audio', 'soundscape', 'pulse',
+  ],
+
+  status: [
+    'status', 'sick', 'injured', 'traveling', 'vacation', 'rest day',
+    'activity status', 'feeling sick', 'hurt', 'recovery day', 'on leave',
+    'under the weather', 'not feeling well',
   ],
 
   general: [], // Fallback - no specific keywords
@@ -262,6 +301,8 @@ export function classifyIntent(message: string): { primary: ToolIntent; secondar
     emotional: 0,
     gamification: 0,
     personal: 0,
+    music: 0,
+    status: 0,
     general: 0,
   };
 
@@ -271,6 +312,22 @@ export function classifyIntent(message: string): { primary: ToolIntent; secondar
       if (lowerMessage.includes(keyword)) {
         // Longer keywords get higher weight
         intentScores[intent as ToolIntent] += keyword.length;
+      }
+    }
+  }
+
+  // Fuzzy fallback: if no strong match, check for partial keyword matches (min 4 chars)
+  // This catches misspellings like "journling" matching "journal" via shared prefix "journ"
+  const hasStrongMatch = Object.values(intentScores).some(s => s >= 4);
+  if (!hasStrongMatch) {
+    const words = lowerMessage.split(/\s+/);
+    for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
+      for (const keyword of keywords) {
+        if (keyword.length < 4) continue;
+        const prefix = keyword.substring(0, Math.max(4, Math.floor(keyword.length * 0.7)));
+        if (words.some(w => w.startsWith(prefix) || prefix.startsWith(w.substring(0, 4)))) {
+          intentScores[intent as ToolIntent] += Math.floor(keyword.length * 0.5);
+        }
       }
     }
   }
@@ -318,8 +375,9 @@ export function filterToolsByIntent(
     TOOL_GROUPS[secondaryIntent].forEach(name => relevantToolNames.add(name));
   });
 
-  // Always include general tools
+  // Always include general + status tools
   TOOL_GROUPS.general.forEach(name => relevantToolNames.add(name));
+  TOOL_GROUPS.status.forEach(name => relevantToolNames.add(name));
 
   // Filter tools
   const filteredTools = allTools.filter(tool => relevantToolNames.has(tool.name));
@@ -358,11 +416,20 @@ export function getCachedTools(
     return cached.tools;
   }
 
-  const tools = createFn();
-  toolCache.set(userId, { tools, timestamp: now });
-
-  logger.debug('[ToolRouter] Created and cached tools', { userId, toolCount: tools.length });
-  return tools;
+  try {
+    const tools = createFn();
+    toolCache.set(userId, { tools, timestamp: now });
+    logger.debug('[ToolRouter] Created and cached tools', { userId, toolCount: tools.length });
+    return tools;
+  } catch (error) {
+    logger.error('[ToolRouter] CRITICAL: Failed to create tools', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
+    });
+    // Return stale cache if available, otherwise empty array (chat still works, just no tools)
+    return cached?.tools || [];
+  }
 }
 
 /**

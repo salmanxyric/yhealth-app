@@ -53,11 +53,12 @@ describe('LeaderboardService', () => {
           { user_id: 'u1', total_score: 90, component_scores: { workout: 90, nutrition: 80, wellbeing: 85, biometrics: 70, engagement: 65, consistency: 60 }, name: 'User One', avatar: null },
           { user_id: 'u2', total_score: 80, component_scores: { workout: 80, nutrition: 70, wellbeing: 75, biometrics: 60, engagement: 55, consistency: 50 }, name: 'User Two', avatar: 'http://avatar.jpg' },
         ]))
+        .mockResolvedValueOnce(qr([])) // self-healing constraint check
         .mockResolvedValueOnce(qr([])); // snapshot insert
 
       await leaderboardService.materializeLeaderboard('global', '2026-02-16');
 
-      expect(mockQuery).toHaveBeenCalledTimes(2);
+      expect(mockQuery).toHaveBeenCalledTimes(3);
       expect(mockQuery.mock.calls[0][0]).toContain('daily_user_scores');
       expect(mockQuery.mock.calls[0][0]).toContain('JOIN users');
     });
@@ -67,11 +68,12 @@ describe('LeaderboardService', () => {
         .mockResolvedValueOnce(qr([
           { user_id: 'u1', total_score: 90, component_scores: {}, name: 'User One', avatar: null },
         ]))
+        .mockResolvedValueOnce(qr([])) // self-healing constraint check
         .mockResolvedValueOnce(qr([])); // snapshot insert
 
       await leaderboardService.materializeLeaderboard('global', '2026-02-16');
 
-      const snapshotCall = mockQuery.mock.calls[1];
+      const snapshotCall = mockQuery.mock.calls[2];
       expect(snapshotCall[0]).toContain('leaderboard_snapshots');
       expect(snapshotCall[0]).toContain('ON CONFLICT');
     });
@@ -81,6 +83,7 @@ describe('LeaderboardService', () => {
         .mockResolvedValueOnce(qr([
           { user_id: 'u1', total_score: 90, component_scores: {}, name: 'User One', avatar: null },
         ]))
+        .mockResolvedValueOnce(qr([])) // self-healing constraint check
         .mockResolvedValueOnce(qr([]));
 
       await leaderboardService.materializeLeaderboard('global', '2026-02-16');
@@ -97,6 +100,7 @@ describe('LeaderboardService', () => {
         .mockResolvedValueOnce(qr([
           { user_id: 'u1', total_score: 90, component_scores: {}, name: 'User', avatar: null },
         ]))
+        .mockResolvedValueOnce(qr([])) // self-healing constraint check
         .mockResolvedValueOnce(qr([]));
 
       await leaderboardService.materializeLeaderboard('global', '2026-02-16');
@@ -107,6 +111,7 @@ describe('LeaderboardService', () => {
     it('should not add to Redis when no members exist', async () => {
       mockQuery
         .mockResolvedValueOnce(qr([]))
+        .mockResolvedValueOnce(qr([])) // self-healing constraint check
         .mockResolvedValueOnce(qr([]));
 
       await leaderboardService.materializeLeaderboard('global', '2026-02-16');
@@ -119,6 +124,7 @@ describe('LeaderboardService', () => {
         .mockResolvedValueOnce(qr([
           { user_id: 'u1', total_score: 90, component_scores: {}, name: 'User', avatar: null },
         ]))
+        .mockResolvedValueOnce(qr([])) // self-healing constraint check
         .mockResolvedValueOnce(qr([]));
 
       await leaderboardService.materializeLeaderboard('competition', '2026-02-16', 100, 'comp-123');
@@ -129,6 +135,7 @@ describe('LeaderboardService', () => {
     it('should filter by competition entries for competition type', async () => {
       mockQuery
         .mockResolvedValueOnce(qr([]))
+        .mockResolvedValueOnce(qr([])) // self-healing constraint check
         .mockResolvedValueOnce(qr([]));
 
       await leaderboardService.materializeLeaderboard('competition', '2026-02-16', 100, 'comp-123');

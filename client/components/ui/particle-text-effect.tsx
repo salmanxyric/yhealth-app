@@ -414,6 +414,7 @@ export function ParticleTextEffect({
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("contextmenu", handleContextMenu);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [words, width, height]);
 
   return (

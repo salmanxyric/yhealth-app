@@ -1,4 +1,4 @@
-import { ChatAnthropic } from '@langchain/anthropic';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   HumanMessage,
   AIMessage,
@@ -8,9 +8,10 @@ import {
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 
-import { env } from '../config/env.config.js';
+import { modelFactory } from './model-factory.service.js';
 import { logger } from './logger.service.js';
 import { vectorEmbeddingService } from './vector-embedding.service.js';
+import { embeddingQueueService } from './embedding-queue.service.js';
 import { query } from '../database/pg.js';
 import { langGraphChatbotService } from './langgraph-chatbot.service.js';
 
@@ -86,7 +87,13 @@ When given context about the user's profile and previous conversations, use this
 Format responses clearly with:
 - Concise, direct answers to questions
 - Not use Bullet points for lists and recommendations
-- Clear action items when providing advice`;
+- Clear action items when providing advice
+
+GIF REACTIONS: When you want to include an expressive GIF reaction (for celebrations, encouragement, humor, or empathy), append [GIF:search_term] at the very end of your message. Use this sparingly — only when it adds genuine emotional value. Examples:
+- After a user hits a milestone: "Amazing work! You've completed your first week!" [GIF:celebration dance]
+- Encouragement: "You've got this!" [GIF:you got this motivation]
+- Humor: "Rest day means REST" [GIF:relaxing couch]
+Do NOT use GIFs in every message. Reserve them for high-emotion moments.`;
 
 /**
  * RAG-based AI Health Coach Chatbot Service
@@ -98,14 +105,13 @@ Format responses clearly with:
  * - Personalized responses based on user profile
  */
 class RAGChatbotService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'default',
       temperature: 0.7,
-      maxTokens: 1024,
+      maxTokens: 2048,
     });
   }
 
@@ -312,21 +318,37 @@ class RAGChatbotService {
       // Get current message count for sequence numbers
       const currentMessageCount = conversationData?.conversation?.messageCount ?? 0;
 
-      // Store messages with embeddings
-      await vectorEmbeddingService.storeMessageEmbedding({
+      // Store messages (embedding deferred to async worker)
+      const userMsgId = await vectorEmbeddingService.storeMessage({
         conversationId: activeConversationId,
         userId,
         role: 'user',
         content: message,
         sequenceNumber: currentMessageCount + 1,
       });
-      await vectorEmbeddingService.storeMessageEmbedding({
+      const assistantMsgId = await vectorEmbeddingService.storeMessage({
         conversationId: activeConversationId,
         userId,
         role: 'assistant',
         content: fullResponse,
         sequenceNumber: currentMessageCount + 2,
       });
+
+      // Queue async embedding backfill (non-blocking)
+      const queueEmbedding = (msgId: string, content: string) => {
+        if (embeddingQueueService.isAvailable()) {
+          embeddingQueueService.enqueueEmbedding({
+            userId,
+            sourceType: 'rag_message',
+            sourceId: msgId,
+            operation: 'create',
+          }).catch(() => {});
+        } else {
+          vectorEmbeddingService.updateMessageEmbedding(msgId, content).catch(() => {});
+        }
+      };
+      queueEmbedding(userMsgId, message);
+      queueEmbedding(assistantMsgId, fullResponse);
 
       return {
         conversationId: activeConversationId,

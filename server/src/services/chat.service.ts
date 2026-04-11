@@ -773,7 +773,7 @@ class ChatService {
   }
 
   /**
-   * Add user to community group (YHealth Community)
+   * Add user to community group (Balencia Community)
    */
   async addUserToCommunityGroup(userId: string): Promise<void> {
     // Find community group
@@ -882,6 +882,32 @@ class ChatService {
     );
 
     return parseInt(result.rows[0]?.total || '0', 10);
+  }
+
+  /**
+   * Get total unread counts for multiple users in a single query
+   */
+  async getBatchUnreadCounts(userIds: string[]): Promise<Map<string, number>> {
+    if (userIds.length === 0) return new Map();
+
+    const placeholders = userIds.map((_, i) => `$${i + 1}`).join(',');
+    const result = await query<{ user_id: string; total: string }>(
+      `SELECT user_id, COALESCE(SUM(unread_count), 0) as total
+       FROM chat_participants
+       WHERE user_id IN (${placeholders}) AND left_at IS NULL
+       GROUP BY user_id`,
+      userIds
+    );
+
+    const counts = new Map<string, number>();
+    for (const row of result.rows) {
+      counts.set(row.user_id, parseInt(row.total || '0', 10));
+    }
+    // Ensure all requested userIds have an entry (0 if no rows)
+    for (const id of userIds) {
+      if (!counts.has(id)) counts.set(id, 0);
+    }
+    return counts;
   }
 
   /**

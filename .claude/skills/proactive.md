@@ -542,3 +542,280 @@ I won’t write anything that promotes self-harm or abusive harassment. Here’s
 * “cool insights” requirement: at least 1 cross-domain insight per day when possible
 * guardrails: safety + privacy + non-creepy location logic
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+=====================================
+
+
+You are a **Principal AI Systems Engineer and Architect with 20+ years of experience** in AI systems, event-driven architecture, and health-tech applications.
+
+### Context
+
+We have a **Proactive AI Coach system** that analyzes user data (workouts, nutrition, sleep, schedules, WHOOP data, health metrics, etc.) and **automatically sends coaching messages to users** based on their progress and behavior.
+
+However, the **AI Coach messaging system is not working correctly**.
+
+### Problem
+
+* The **last AI coach message was sent on March 8**
+* Today is **March 16**
+* The AI Coach **should send proactive messages daily or when triggered by user data**
+* Currently **no messages are being generated or delivered**
+
+This indicates a **failure in the proactive messaging pipeline**.
+
+---
+
+# Your Tasks
+
+## 1. Diagnose the Root Cause
+
+Investigate the entire AI Coach pipeline:
+
+1. **Scheduler / Cron jobs**
+2. **Event triggers**
+3. **Message generation logic**
+4. **Database queries**
+5. **AI agent execution**
+6. **Queue workers**
+7. **Notification delivery**
+
+Check for issues such as:
+
+* Scheduler not running
+* Cron misconfiguration
+* Queue worker stopped
+* Failed AI generation
+* Message deduplication bug
+* Database query filtering incorrect dates
+* Job failing silently
+* Rate limiter blocking messages
+* Feature flag disabled
+
+---
+
+# 2. Verify These Critical Components
+
+### AI Coach Scheduler
+
+Check if **daily proactive evaluation job** is running.
+
+Examples:
+
+* cron job
+* background worker
+* queue processor
+* serverless scheduled function
+
+Verify:
+
+```
+evaluateUserProgress()
+generateCoachMessage()
+sendMessageToUser()
+```
+
+---
+
+### User Progress Analyzer
+
+Ensure the system correctly evaluates:
+
+* workout completion
+* calorie intake
+* nutrition quality
+* sleep quality
+* missed goals
+* habit adherence
+
+AI Coach must trigger messages such as:
+
+Example:
+
+**Positive message**
+
+> Great job! You completed 5 workouts this week and improved sleep quality.
+
+**Warning message**
+
+> Your goal is fat loss but you've consumed excess calories and skipped workouts.
+
+**Angry / accountability message**
+
+> You said your goal is fitness, but your activity this week doesn't reflect that.
+
+---
+
+# 3. Fix Proactive Messaging Logic
+
+Implement **event-driven proactive messaging system**.
+
+Triggers should include:
+
+### Daily Review
+
+Run every day
+
+```
+dailyHealthReview()
+```
+
+### Goal Violation
+
+Trigger when user behavior contradicts goal.
+
+Example:
+
+```
+goal = fat_loss
+user_eating = pizza + high calories
+trigger_coach_warning()
+```
+
+### Missed Workout
+
+If user skipped planned workouts.
+
+### Sleep Degradation
+
+If sleep score drops significantly.
+
+---
+
+# 4. Implement Reliable Architecture
+
+Use **production-grade architecture**.
+
+Recommended design:
+
+```
+User Data Sources
+    ↓
+Health Data Aggregator
+    ↓
+User Progress Analyzer
+    ↓
+AI Coach Decision Engine
+    ↓
+Message Generator (LLM)
+    ↓
+Message Queue
+    ↓
+Notification Service
+    ↓
+User Chat
+```
+
+---
+
+# 5. Ensure Message Generation Works
+
+Verify:
+
+```
+generateCoachMessage(userData)
+```
+
+Should include:
+
+* tone (motivational / warning / angry)
+* summary of user behavior
+* actionable recommendation
+
+---
+
+# 6. Add Observability
+
+Add logs for each stage:
+
+```
+AI_COACH_JOB_STARTED
+USER_PROGRESS_ANALYZED
+MESSAGE_GENERATED
+MESSAGE_SENT
+```
+
+Add error tracking:
+
+* Sentry
+* logging
+* retry queue
+
+---
+
+# 7. Add Fail-Safe System
+
+If the AI agent fails:
+
+Fallback message should still send.
+
+Example:
+
+> Your weekly progress review is ready. Please check your health dashboard.
+
+---
+
+# 8. Implement Retry Logic
+
+If message generation fails:
+
+Retry:
+
+```
+3 attempts
+exponential backoff
+```
+
+---
+
+# 9. Add Monitoring Dashboard
+
+Track:
+
+* messages sent per day
+* failed jobs
+* inactive users
+* AI generation errors
+
+---
+
+# Expected Result
+
+After fixes:
+
+The AI Coach should:
+
+* send **daily proactive messages**
+* react to **user behavior**
+* send **motivational / warning / accountability messages**
+* never stay silent for multiple days
+
+---
+
+# Deliverables
+
+Provide:
+
+1. Root cause analysis
+2. Code fixes
+3. Scheduler implementation
+4. Improved proactive messaging logic
+5. Logging and monitoring
+6. Architecture diagram
+
+---
+

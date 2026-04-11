@@ -7,6 +7,7 @@ import { Router, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import { waterIntakeService } from '../services/water-intake.service.js';
+import cache from '../services/cache.service.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 const router = Router();
@@ -114,6 +115,9 @@ router.post(
 
     const log = await waterIntakeService.addWater(userId, amountMl, type);
 
+    // Invalidate cached health metrics so next fetch reflects new water data
+    cache.deleteByPattern(`^enhanced-health-metrics:${userId}:`);
+
     res.json({
       success: true,
       data: { log },
@@ -131,6 +135,9 @@ router.post(
     const userId = req.user!.userId;
 
     const log = await waterIntakeService.addGlass(userId);
+
+    // Invalidate cached health metrics so next fetch reflects new water data
+    cache.deleteByPattern(`^enhanced-health-metrics:${userId}:`);
 
     res.json({
       success: true,
@@ -158,6 +165,9 @@ router.post(
     }
 
     const log = await waterIntakeService.removeWater(userId, amountMl);
+
+    // Invalidate cached health metrics so next fetch reflects updated water data
+    cache.deleteByPattern(`^enhanced-health-metrics:${userId}:`);
 
     res.json({
       success: true,

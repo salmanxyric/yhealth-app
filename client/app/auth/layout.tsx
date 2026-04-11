@@ -318,7 +318,7 @@ export default function AuthLayout({
           </motion.div>
 
           <div className="text-sm text-muted-foreground text-center">
-            &copy; {new Date().getFullYear()} YHealth. All rights reserved.
+            &copy; {new Date().getFullYear()} Balencia. All rights reserved.
           </div>
         </div>
       </motion.div>

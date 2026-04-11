@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "YHealth - AI-Powered Personal Health & Wellness Platform",
-    short_name: "YHealth",
+    name: "Balencia - AI-Powered Personal Health & Wellness Platform",
+    short_name: "Balencia",
     description:
       "AI-driven fitness plans, smart nutrition tracking, mental wellness tools, and personalized coaching.",
     start_url: "/",

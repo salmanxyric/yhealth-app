@@ -1,7 +1,18 @@
 "use client";
 
 import { Suspense, useState, useEffect, useCallback } from "react";
-import { Loader2, Activity, TrendingUp, Brain, ArrowLeft } from "lucide-react";
+import {
+  Loader2,
+  Activity,
+  TrendingUp,
+  Brain,
+  ArrowLeft,
+  ChevronDown,
+  Flame,
+  Heart,
+  BarChart3,
+  Shield,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { format, subDays } from "date-fns";
@@ -14,54 +25,91 @@ import {
   StressAnalytics,
   EmotionAnalytics,
 } from "@/app/(pages)/dashboard/components/wellbeing";
-import { stressService, type StressLog, type StressSummary } from "@/src/shared/services/stress.service";
+import {
+  stressService,
+  type StressLog,
+  type StressSummary,
+} from "@/src/shared/services/stress.service";
 
-function StressLoading() {
+/* ───────── Period Options ───────── */
+
+const PERIODS = [
+  { label: "7 days", value: 7 },
+  { label: "14 days", value: 14 },
+  { label: "30 days", value: 30 },
+];
+
+/* ───────── Inline Components ───────── */
+
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  color: string;
+}) {
   return (
-    <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-      <div className="text-center space-y-4">
-        <Loader2 className="h-12 w-12 animate-spin text-emerald-500 mx-auto" />
-        <p className="text-slate-400">Loading stress data...</p>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-white/[0.06] bg-[#0f0f18] p-4"
+    >
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+            {label}
+          </p>
+          <p className="text-2xl font-bold text-white">{value}</p>
+          {sub && <p className="text-xs text-slate-500">{sub}</p>}
+        </div>
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-lg"
+          style={{ backgroundColor: `${color}18` }}
+        >
+          <Icon className="h-4 w-4" style={{ color }} />
+        </div>
       </div>
+    </motion.div>
+  );
+}
+
+function SectionHeader({
+  icon: Icon,
+  title,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <Icon className="h-4 w-4 text-rose-400" />
+      <h3 className="text-sm font-semibold text-white">{title}</h3>
     </div>
   );
 }
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 30, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.5,
-      ease: [0.4, 0, 0.2, 1] as const,
-    },
-  },
-};
+/* ───────── Main Content ───────── */
 
 function StressContent() {
-  const [showStressCheckIn, setShowStressCheckIn] = useState(false);
+  const [showCheckIn, setShowCheckIn] = useState(false);
   const [stressLogs, setStressLogs] = useState<StressLog[]>([]);
   const [stressSummary, setStressSummary] = useState<StressSummary[]>([]);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState(14);
+  const [periodOpen, setPeriodOpen] = useState(false);
   const router = useRouter();
 
-  const fetchStressData = useCallback(async () => {
-    setAnalyticsLoading(true);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
       const today = new Date();
-      const from = format(subDays(today, 13), "yyyy-MM-dd");
+      const from = format(subDays(today, period - 1), "yyyy-MM-dd");
       const to = format(today, "yyyy-MM-dd");
 
       const [logsResult, summaryResult] = await Promise.all([
@@ -69,155 +117,205 @@ function StressContent() {
         stressService.getSummary(from, to),
       ]);
 
-      if (logsResult.success && logsResult.data) {
-        setStressLogs(logsResult.data);
-      }
-      if (summaryResult.success && summaryResult.data) {
-        setStressSummary(summaryResult.data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch stress data:", error);
+      if (logsResult.success && logsResult.data) setStressLogs(logsResult.data);
+      if (summaryResult.success && summaryResult.data) setStressSummary(summaryResult.data);
+    } catch {
+      // silent
     } finally {
-      setAnalyticsLoading(false);
+      setLoading(false);
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
-    fetchStressData();
-  }, [fetchStressData]);
+    fetchData();
+  }, [fetchData]);
 
   const handleCheckInClose = (open: boolean) => {
-    setShowStressCheckIn(open);
-    if (!open) {
-      fetchStressData();
-    }
+    setShowCheckIn(open);
+    if (!open) fetchData();
   };
+
+  // Compute stats
+  const avgStress =
+    stressLogs.length > 0
+      ? stressLogs.reduce((a, l) => a + (l.stressRating || 0), 0) / stressLogs.length
+      : 0;
+  const highStressDays = stressSummary.filter((s) => s.dailyAvg > 7).length;
+  const totalLogs = stressLogs.length;
 
   return (
     <DashboardLayout activeTab="wellbeing">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="space-y-6"
-        >
-          {/* Back Button */}
-          <motion.div variants={cardVariants}>
-            <motion.button
+      <div className="flex flex-col h-full min-h-screen bg-[#0a0a0f]">
+        {/* ── Sticky Top Bar ── */}
+        <div className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0a0a0f]/80 backdrop-blur-xl px-4 sm:px-6 h-12">
+          <div className="flex items-center gap-3">
+            <button
               onClick={() => router.push("/wellbeing")}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all group mb-4"
-              whileHover={{ x: -4 }}
-              whileTap={{ scale: 0.95 }}
+              className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-white/[0.06] text-slate-400 hover:text-white transition-colors"
             >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-              <span className="font-medium">Back to Wellbeing</span>
-            </motion.button>
-          </motion.div>
-
-          {/* Crisis Banner - Always show at top */}
-          <motion.div variants={cardVariants}>
-            <StressCrisisBanner />
-          </motion.div>
-
-          {/* Evening Prompt - Runs in background */}
-          <motion.div variants={cardVariants}>
-            <StressEveningPrompt />
-          </motion.div>
-
-          {/* Header */}
-          <motion.div
-            variants={cardVariants}
-            className="flex items-center justify-between relative"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/20 via-red-600/20 to-rose-600/20 blur-3xl rounded-full" />
-            <div className="relative flex items-center gap-4 flex-1">
-              <motion.div
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ repeat: Infinity, duration: 2 }}
-                className="p-4 rounded-2xl bg-gradient-to-br from-red-500 via-rose-500 to-pink-500 shadow-lg shadow-red-500/30"
-              >
-                <Activity className="w-8 h-8 text-white" />
-              </motion.div>
-              <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-red-100 to-rose-100 bg-clip-text text-transparent">
-                  Stress Management
-                </h1>
-                <p className="text-slate-400 mt-1 text-lg">
-                  Multi-signal stress detection and management
-                </p>
-              </div>
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-rose-400" />
+              <span className="text-sm font-semibold text-white hidden sm:inline">
+                Stress Management
+              </span>
             </div>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                onClick={() => setShowStressCheckIn(true)}
-                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-500/30 transition-all duration-300 relative overflow-hidden group"
-              >
-                <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                <Activity className="w-4 h-4 mr-2 relative z-10" />
-                <span className="relative z-10">Log Stress</span>
-              </Button>
-            </motion.div>
-          </motion.div>
-
-          {/* Analytics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <motion.div variants={cardVariants}>
-              <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 backdrop-blur-xl shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/5 via-red-600/5 to-rose-600/5" />
-                <div className="relative p-6 sm:p-8">
-                  <div className="flex items-center gap-3 mb-6">
-                    <TrendingUp className="w-5 h-5 text-emerald-400" />
-                    <h2 className="text-xl font-semibold text-white">Stress Analytics</h2>
-                  </div>
-                  <StressAnalytics logs={stressLogs} summary={stressSummary} isLoading={analyticsLoading} onRefresh={fetchStressData} />
-                </div>
-              </div>
-            </motion.div>
-            <motion.div variants={cardVariants}>
-              <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 backdrop-blur-xl shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/5 via-red-600/5 to-rose-600/5" />
-                <div className="relative p-6 sm:p-8">
-                  <div className="flex items-center gap-3 mb-6">
-                    <Brain className="w-5 h-5 text-emerald-400" />
-                    <h2 className="text-xl font-semibold text-white">Emotional Wellbeing</h2>
-                  </div>
-                  <EmotionAnalytics days={14} />
-                </div>
-              </div>
-            </motion.div>
           </div>
 
-          {/* Stress Check-In Modal */}
-          <AnimatePresence>
-            {showStressCheckIn && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-                onClick={() => setShowStressCheckIn(false)}
+          <div className="flex items-center gap-2">
+            {/* Period Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setPeriodOpen(!periodOpen)}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-white/[0.08] bg-white/[0.03] text-xs text-slate-300 hover:bg-white/[0.06] transition-colors"
               >
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <StressCheckIn
-                    open={showStressCheckIn}
-                    onOpenChange={handleCheckInClose}
-                    checkInType="on_demand"
-                    initialMode="light"
-                  />
-                </motion.div>
-              </motion.div>
+                {PERIODS.find((p) => p.value === period)?.label}
+                <ChevronDown className="h-3 w-3 text-slate-500" />
+              </button>
+              <AnimatePresence>
+                {periodOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="absolute right-0 top-9 z-50 w-28 rounded-lg border border-white/[0.08] bg-[#15151f] shadow-xl overflow-hidden"
+                  >
+                    {PERIODS.map((p) => (
+                      <button
+                        key={p.value}
+                        onClick={() => {
+                          setPeriod(p.value);
+                          setPeriodOpen(false);
+                        }}
+                        className={`w-full px-3 py-1.5 text-left text-xs transition-colors ${
+                          p.value === period
+                            ? "bg-rose-500/10 text-rose-400"
+                            : "text-slate-400 hover:bg-white/[0.04] hover:text-white"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={() => setShowCheckIn(true)}
+              className="h-7 px-3 text-xs bg-rose-500/90 hover:bg-rose-500 text-white border-0 rounded-md"
+            >
+              <Activity className="h-3 w-3 mr-1" />
+              Log Stress
+            </Button>
+          </div>
+        </div>
+
+        {/* ── Content ── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 space-y-5">
+            {/* Crisis Banner */}
+            <StressCrisisBanner />
+            <StressEveningPrompt />
+
+            {/* ── Stat Cards ── */}
+            {loading ? (
+              <div className="h-24 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-rose-400" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <StatCard
+                  label="Avg Stress"
+                  value={avgStress.toFixed(1)}
+                  sub="/ 10"
+                  icon={Activity}
+                  color="#f43f5e"
+                />
+                <StatCard
+                  label="Total Logs"
+                  value={totalLogs}
+                  sub={`in ${period}d`}
+                  icon={BarChart3}
+                  color="#06b6d4"
+                />
+                <StatCard
+                  label="High Stress"
+                  value={`${highStressDays}d`}
+                  sub="above 7/10"
+                  icon={Flame}
+                  color="#ef4444"
+                />
+                <StatCard
+                  label="Resilience"
+                  value={avgStress <= 5 ? "Good" : avgStress <= 7 ? "Moderate" : "Low"}
+                  sub="based on avg"
+                  icon={Shield}
+                  color="#10b981"
+                />
+              </div>
             )}
-          </AnimatePresence>
-        </motion.div>
+
+            {/* ── Main Grid ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div className="rounded-xl border border-white/[0.06] bg-[#0f0f18] p-5">
+                <SectionHeader icon={TrendingUp} title="Stress Analytics" />
+                <StressAnalytics
+                  logs={stressLogs}
+                  summary={stressSummary}
+                  isLoading={loading}
+                  onRefresh={fetchData}
+                />
+              </div>
+              <div className="rounded-xl border border-white/[0.06] bg-[#0f0f18] p-5">
+                <SectionHeader icon={Brain} title="Emotional Wellbeing" />
+                <EmotionAnalytics days={period} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Stress Check-In Modal ── */}
+        <AnimatePresence>
+          {showCheckIn && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+              onClick={() => setShowCheckIn(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 12 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 12 }}
+                transition={{ type: "spring", damping: 28, stiffness: 350 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <StressCheckIn
+                  open={showCheckIn}
+                  onOpenChange={handleCheckInClose}
+                  checkInType="on_demand"
+                  initialMode="light"
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </DashboardLayout>
+  );
+}
+
+/* ───────── Export ───────── */
+
+function StressLoading() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-[#0a0a0f]">
+      <Loader2 className="h-6 w-6 animate-spin text-rose-400" />
+    </div>
   );
 }
 
@@ -228,4 +326,3 @@ export default function StressPageContent() {
     </Suspense>
   );
 }
-

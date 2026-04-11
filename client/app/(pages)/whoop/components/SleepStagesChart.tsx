@@ -97,9 +97,9 @@ export function SleepStagesChart() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Date Range Picker */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <DateRangePicker
           dateRange={dateRange}
           onDateRangeChange={setDateRange}
@@ -109,16 +109,16 @@ export function SleepStagesChart() {
       {isLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-[400px] w-full rounded-xl" />
+          <Skeleton className="h-[280px] sm:h-[400px] w-full rounded-xl" />
         </div>
       ) : error ? (
-        <div className="rounded-xl bg-red-500/10 backdrop-blur-sm border border-red-500/20 p-6 transition-all duration-300">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-red-500/10 backdrop-blur-sm border border-red-500/20 p-4 sm:p-6 transition-all duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
               <div>
-                <p className="text-red-400 font-medium">Failed to load sleep data</p>
-                <p className="text-sm text-red-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-red-400 font-medium">Failed to load sleep data</p>
+                <p className="text-[13px] sm:text-[14px] text-red-300/70 mt-1">
                   {error.message || 'Unable to fetch sleep trends. Please check your connection and try again.'}
                 </p>
               </div>
@@ -135,13 +135,13 @@ export function SleepStagesChart() {
           </div>
         </div>
       ) : !data || !data.trends || data.trends.length === 0 ? (
-        <div className="rounded-xl bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 p-6 transition-all duration-300">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 p-4 sm:p-6 transition-all duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
               <div>
-                <p className="text-blue-400 font-medium">No sleep data available</p>
-                <p className="text-sm text-blue-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No sleep data available</p>
+                <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                   No sleep data found for the selected date range. Make sure your WHOOP device is syncing data regularly.
                 </p>
               </div>
@@ -158,9 +158,9 @@ export function SleepStagesChart() {
           </div>
         </div>
       ) : (
-        <div className="rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 p-6 transition-all duration-300 hover:bg-white/10 hover:shadow-lg">
-          <h3 className="text-lg font-semibold text-white mb-4">Sleep Stages</h3>
-          <ResponsiveContainer width="100%" height={400}>
+        <div className="rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 p-4 sm:p-6 transition-all duration-300 hover:bg-white/10 hover:shadow-lg">
+          <h3 className="text-[16px] sm:text-[18px] font-semibold text-white mb-3 sm:mb-4">Sleep Stages</h3>
+          <ResponsiveContainer width="100%" height={280}>
             <BarChart data={data.trends.map((item) => ({
               date: format(parseISO(item.date), 'MMM d'),
               total: Math.round(item.duration_minutes / 60 * 10) / 10,

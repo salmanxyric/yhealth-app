@@ -20,7 +20,7 @@ function FloatingMetricCard({
   className,
   animDelay = 0,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
   color: string;
@@ -38,7 +38,7 @@ function FloatingMetricCard({
           <Icon className="w-5 h-5 text-white" />
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground/80">{label}</p>
           <p className="text-sm font-bold text-white">{value}</p>
         </div>
       </div>
@@ -98,22 +98,46 @@ export function CTASection() {
   const [glowVisible, setGlowVisible] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
 
-  // GSAP scroll-driven container entrance
+  // GSAP word-by-word title reveal
   useGSAP(
     () => {
       if (!containerRef.current) return;
+      gsap.from(".cta-word", {
+        y: "100%",
+        opacity: 0,
+        duration: 0.8,
+        stagger: 0.06,
+        ease: "expo.out",
+        scrollTrigger: {
+          trigger: containerRef.current,
+          start: "top 80%",
+        },
+      });
+    },
+    sectionRef,
+    []
+  );
+
+  // Cinematic dramatic zoom-in entrance
+  useGSAP(
+    () => {
+      if (!containerRef.current || !sectionRef.current) return;
       gsap.fromTo(
         containerRef.current,
-        { opacity: 0, scale: 0.95 },
+        { opacity: 0, scale: 0.75, y: 80, rotateX: 8, filter: "blur(8px)" },
         {
           opacity: 1,
           scale: 1,
-          duration: 0.6,
-          ease: "power2.out",
+          y: 0,
+          rotateX: 0,
+          filter: "blur(0px)",
+          transformPerspective: 1200,
+          ease: "none",
           scrollTrigger: {
-            trigger: containerRef.current,
-            start: "top 85%",
-            toggleActions: "play none none reverse",
+            trigger: sectionRef.current,
+            start: "top 80%",
+            end: "top 20%",
+            scrub: 1.5,
           },
         }
       );
@@ -154,6 +178,49 @@ export function CTASection() {
       <AnimatedGradientMesh intensity={0.25} speed={1} blur={120} />
       <div className="absolute inset-0 animated-gradient opacity-10" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background" />
+
+      {/* Cosmic Void Effect — black hole glow at bottom */}
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full pointer-events-none" aria-hidden="true">
+        {/* Outer glow ring */}
+        <motion.div
+          className="absolute bottom-[-200px] left-1/2 -translate-x-1/2 w-[800px] h-[400px] rounded-[50%]"
+          style={{
+            background: "radial-gradient(ellipse at 50% 100%, hsl(280 80% 50% / 0.35) 0%, hsl(260 90% 40% / 0.15) 30%, transparent 70%)",
+            filter: "blur(60px)",
+          }}
+          animate={{
+            scale: [1, 1.08, 1],
+            opacity: [0.6, 0.9, 0.6],
+          }}
+          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        />
+        {/* Inner bright core */}
+        <motion.div
+          className="absolute bottom-[-120px] left-1/2 -translate-x-1/2 w-[500px] h-[250px] rounded-[50%]"
+          style={{
+            background: "radial-gradient(ellipse at 50% 100%, hsl(270 90% 65% / 0.5) 0%, hsl(280 80% 50% / 0.2) 40%, transparent 70%)",
+            filter: "blur(40px)",
+          }}
+          animate={{
+            scale: [1, 1.12, 1],
+            opacity: [0.7, 1, 0.7],
+          }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+        />
+        {/* Horizontal light streak */}
+        <motion.div
+          className="absolute bottom-[30px] left-1/2 -translate-x-1/2 w-[600px] h-[2px]"
+          style={{
+            background: "linear-gradient(90deg, transparent 0%, hsl(280 80% 70% / 0.6) 30%, hsl(260 90% 80% / 0.8) 50%, hsl(280 80% 70% / 0.6) 70%, transparent 100%)",
+            filter: "blur(1px)",
+          }}
+          animate={{
+            opacity: [0.4, 0.8, 0.4],
+            scaleX: [0.8, 1, 0.8],
+          }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
 
       <div className="container mx-auto px-4 relative z-10">
         <div
@@ -215,16 +282,16 @@ export function CTASection() {
           />
           <FloatingMetricCard
             icon={Footprints}
-            label="Weekly Activity"
-            value="12,847 steps"
+            label="Goals Achieved"
+            value="23 this month"
             color="from-cyan-500 to-blue-500"
             className="bottom-8 left-12"
             animDelay={1.5}
           />
           <FloatingMetricCard
             icon={Trophy}
-            label="Wellness Score"
-            value="97/100"
+            label="Life Score"
+            value="94/100"
             color="from-amber-500 to-orange-500"
             className="top-1/2 -translate-y-1/2 right-8"
             animDelay={0.8}
@@ -240,17 +307,27 @@ export function CTASection() {
             </FadeUp>
 
             <FadeUp delay={0.1}>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
-                Your Healthiest Year{" "}
-                <span className="gradient-text-animated">Starts Today</span>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 overflow-hidden">
+                {["Your", "Best", "Life"].map((word) => (
+                  <span key={word} className="cta-word inline-block mr-[0.3em]">
+                    {word}
+                  </span>
+                ))}{" "}
+                <span className="gradient-text-animated">
+                  {["Starts", "Today"].map((word) => (
+                    <span key={word} className="cta-word inline-block mr-[0.3em]">
+                      {word}
+                    </span>
+                  ))}
+                </span>
               </h2>
             </FadeUp>
 
             <FadeUp delay={0.2}>
               <p className="text-sm sm:text-base md:text-lg text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto">
-                Join 50,000+ members who have improved their fitness, nutrition, and
-                wellbeing with an AI coach that adapts to their life. Average users
-                see measurable results within the first 30 days.
+                Join 50,000+ members who have transformed their fitness, career,
+                relationships, and more with an AI life coach that adapts to you.
+                Average users see measurable results within the first 30 days.
               </p>
             </FadeUp>
 

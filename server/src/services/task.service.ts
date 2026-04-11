@@ -550,7 +550,7 @@ class TaskService {
         try {
           const emailSent = await mailHelper.send({
             email: user.email,
-            subject: `${priorityIcon} Task Reminder: ${task.title} - yHealth`,
+            subject: `${priorityIcon} Task Reminder: ${task.title} - Balencia`,
             template: 'taskReminder',
             data: {
               firstName: user.first_name,

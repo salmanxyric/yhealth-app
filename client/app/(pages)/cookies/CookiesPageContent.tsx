@@ -79,10 +79,10 @@ const cookieTypes = [
     borderColor: "border-emerald-400/20",
     icon: Shield,
     cookies: [
-      { name: "yhealth_session", purpose: "Maintains your login session across page visits", duration: "Session", provider: "YHealth" },
-      { name: "yhealth_access_token", purpose: "Authentication token for API requests", duration: "3 days", provider: "YHealth" },
-      { name: "yhealth_csrf", purpose: "Protects against cross-site request forgery attacks", duration: "Session", provider: "YHealth" },
-      { name: "cookie_consent", purpose: "Stores your cookie preference choices", duration: "1 year", provider: "YHealth" },
+      { name: "balencia_session", purpose: "Maintains your login session across page visits", duration: "Session", provider: "Balencia" },
+      { name: "balencia_access_token", purpose: "Authentication token for API requests", duration: "3 days", provider: "Balencia" },
+      { name: "balencia_csrf", purpose: "Protects against cross-site request forgery attacks", duration: "Session", provider: "Balencia" },
+      { name: "cookie_consent", purpose: "Stores your cookie preference choices", duration: "1 year", provider: "Balencia" },
     ],
   },
   {
@@ -93,10 +93,10 @@ const cookieTypes = [
     borderColor: "border-blue-400/20",
     icon: Settings,
     cookies: [
-      { name: "yhealth_theme", purpose: "Remembers your dark/light mode preference", duration: "1 year", provider: "YHealth" },
-      { name: "yhealth_locale", purpose: "Stores your language and region preference", duration: "1 year", provider: "YHealth" },
-      { name: "yhealth_units", purpose: "Remembers metric or imperial measurement preference", duration: "1 year", provider: "YHealth" },
-      { name: "yhealth_dashboard", purpose: "Saves your dashboard layout customizations", duration: "1 year", provider: "YHealth" },
+      { name: "balencia_theme", purpose: "Remembers your dark/light mode preference", duration: "1 year", provider: "Balencia" },
+      { name: "balencia_locale", purpose: "Stores your language and region preference", duration: "1 year", provider: "Balencia" },
+      { name: "balencia_units", purpose: "Remembers metric or imperial measurement preference", duration: "1 year", provider: "Balencia" },
+      { name: "balencia_dashboard", purpose: "Saves your dashboard layout customizations", duration: "1 year", provider: "Balencia" },
     ],
   },
   {
@@ -204,7 +204,7 @@ export default function CookiesPageContent() {
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={heroInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5, delay: 0.2 }}>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                We use cookies to make YHealth work smoothly and improve your experience.
+                We use cookies to make Balencia work smoothly and improve your experience.
                 Here&apos;s exactly what we use, why, and how you can control them.
               </p>
             </motion.div>
@@ -238,7 +238,7 @@ export default function CookiesPageContent() {
         </div>
 
         <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto flex gap-10">
+          <div className="max-w-8xl mx-auto flex gap-10">
             {/* TOC */}
             <motion.aside initial={{ opacity: 0, x: -30 }} animate={contentInView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.5 }} className="hidden lg:block w-64 flex-shrink-0">
               <div className="sticky top-24 glass-card rounded-2xl p-5">
@@ -274,7 +274,7 @@ export default function CookiesPageContent() {
                       {[
                         { title: "Session Cookies", desc: "Temporary cookies deleted when you close your browser" },
                         { title: "Persistent Cookies", desc: "Remain on your device for a set period or until you delete them" },
-                        { title: "Third-Party Cookies", desc: "Set by services other than YHealth that we integrate with" },
+                        { title: "Third-Party Cookies", desc: "Set by services other than Balencia that we integrate with" },
                       ].map((item) => (
                         <div key={item.title} className="p-4 rounded-xl bg-white/5 border border-white/5">
                           <h4 className="text-sm font-semibold text-foreground mb-1">{item.title}</h4>
@@ -293,7 +293,7 @@ export default function CookiesPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      Below is a comprehensive list of all cookies used on the YHealth platform, organized by category. Essential cookies cannot be disabled as they are necessary for the Platform to function.
+                      Below is a comprehensive list of all cookies used on the Balencia platform, organized by category. Essential cookies cannot be disabled as they are necessary for the Platform to function.
                     </p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {cookieTypes.map((type) => (
@@ -385,8 +385,8 @@ export default function CookiesPageContent() {
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {[
-                        { title: "Cookie Banner", desc: "When you first visit YHealth, our cookie banner lets you accept or customize which cookie categories you consent to." },
-                        { title: "Platform Settings", desc: "Visit Settings > Privacy in your YHealth account to update your cookie preferences at any time." },
+                        { title: "Cookie Banner", desc: "When you first visit Balencia, our cookie banner lets you accept or customize which cookie categories you consent to." },
+                        { title: "Platform Settings", desc: "Visit Settings > Privacy in your Balencia account to update your cookie preferences at any time." },
                         { title: "Browser Settings", desc: "Most browsers allow you to block or delete cookies through their privacy settings. Note: blocking essential cookies may break core functionality." },
                         { title: "Opt-Out Links", desc: "For analytics cookies, you can use tools like Google Analytics Opt-out Browser Add-on or NAI Consumer Opt-out." },
                       ].map((item) => (
@@ -423,8 +423,8 @@ export default function CookiesPageContent() {
                       If you have questions about our use of cookies or this policy, contact us:
                     </p>
                     <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
-                      <p className="text-xs text-muted-foreground mb-1">Email: <a href="mailto:privacy@yhealth.app" className="text-primary hover:underline">privacy@yhealth.app</a></p>
-                      <p className="text-xs text-muted-foreground">YHealth Inc. | 123 Health Innovation Blvd | San Francisco, CA 94105, USA</p>
+                      <p className="text-xs text-muted-foreground mb-1">Email: <a href="mailto:privacy@balencia.app" className="text-primary hover:underline">privacy@balencia.app</a></p>
+                      <p className="text-xs text-muted-foreground">Balencia Inc. | 123 Health Innovation Blvd | San Francisco, CA 94105, USA</p>
                     </div>
                   </div>
                 </div>

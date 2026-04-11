@@ -5,10 +5,35 @@
  */
 
 import { aiProviderService } from './ai-provider.service.js';
+import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { query } from '../database/pg.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
 import { JobPriorities } from '../config/queue.config.js';
+
+// Server-side question text lookup for DB-loaded assessments (client sends questionText, DB stores only questionId)
+const QUESTION_TEXT_MAP: Record<string, string> = {
+  activity_level: 'How many days per week are you currently active?',
+  sleep_quality: 'How would you rate your sleep quality?',
+  stress_level: 'What is your current stress level?',
+  meals_per_day: 'How many meals do you typically eat per day?',
+  biggest_challenge: 'What is your biggest health challenge?',
+  water_intake: 'How many glasses of water do you drink per day?',
+  workout_experience: 'How would you describe your workout experience?',
+  workout_location: 'Where do you prefer to work out?',
+  workout_duration: 'How long can you dedicate to each workout?',
+  dietary_restrictions: 'Do you have any dietary restrictions?',
+  energy_level: 'How would you rate your daily energy levels?',
+  fitness_goal_timeline: 'When do you want to achieve your goal?',
+  motivation_source: 'What motivates you to improve your health?',
+  previous_attempts: 'Have you tried fitness programs before?',
+  available_equipment: 'What equipment do you have access to?',
+  cooking_skill: 'How would you rate your cooking skills?',
+  food_prep_time: 'How much time can you spend on meal prep daily?',
+  supplement_usage: 'Do you currently take any supplements?',
+  injury_history: 'Do you have any injuries or physical limitations?',
+  health_conditions: 'Do you have any health conditions we should know about?',
+};
 
 // Local type for generated workout schedule (matches GeneratedWorkoutPlan.weeklySchedule)
 type GeneratedDayWorkout = {
@@ -184,9 +209,11 @@ class OnboardingAIService {
       const response = await aiProviderService.generateCompletion({
         systemPrompt: this.getSystemPrompt(),
         userPrompt: analysisPrompt,
-        maxTokens: 4000,
-        temperature: 0.7,
-        timeout: 120000, // 2 minutes timeout for onboarding (large prompts)
+        maxTokens: 8192,
+        temperature: 0.3,
+        timeout: 180000, // 3 minutes — pro model needs more time for deep analysis
+        model: env.gemini.reasoningModel, // Use gemini-2.5-pro for best plan quality
+        jsonMode: true, // Native JSON output — no markdown wrapping
       });
 
       // Parse the response
@@ -327,8 +354,8 @@ class OnboardingAIService {
         bodyStats: assessment?.body_stats || {},
         assessmentResponses: (assessment?.responses || []).map(r => ({
           questionId: r.questionId,
-          questionText: '', // Will be filled from question library
-          answer: r.answer,
+          questionText: QUESTION_TEXT_MAP[r.questionId] || r.questionId,
+          answer: r.answer ?? (r as Record<string, unknown>).value,
         })),
         bodyImagesAnalysis: imagesResult.rows.length > 0 ? {
           hasImages: true,
@@ -361,7 +388,7 @@ class OnboardingAIService {
         },
         userProfile: {
           gender: user.gender ?? undefined,
-          dateOfBirth: user.date_of_birth?.toISOString().split('T')[0],
+          dateOfBirth: user.date_of_birth ? (user.date_of_birth instanceof Date ? user.date_of_birth.toISOString().split('T')[0] : String(user.date_of_birth).split('T')[0]) : undefined,
           age,
         },
       };
@@ -397,7 +424,7 @@ class OnboardingAIService {
 
         data.userProfile = {
           gender: user.gender ?? undefined,
-          dateOfBirth: user.date_of_birth?.toISOString().split('T')[0],
+          dateOfBirth: user.date_of_birth ? (user.date_of_birth instanceof Date ? user.date_of_birth.toISOString().split('T')[0] : String(user.date_of_birth).split('T')[0]) : undefined,
           age,
         };
 
@@ -681,16 +708,6 @@ class OnboardingAIService {
         });
       });
 
-    // Create meal logs from weekly meals (async, non-blocking)
-    this.createMealLogsFromWeeklyMeals(userId, dietPlanId, dietPlan, startDateStr, planDuration)
-      .catch((error) => {
-        logger.error('[OnboardingAI] Failed to create meal logs from weekly meals', {
-          userId,
-          dietPlanId,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
-      });
-
     return {
       userPlanId,
       dietPlanId,
@@ -730,35 +747,35 @@ class OnboardingAIService {
         eatenAt: string;
       }> = [];
 
-      // Day name to day of week index mapping
-      const dayNameToIndex: Record<string, number> = {
-        monday: 0,
-        tuesday: 1,
-        wednesday: 2,
-        thursday: 3,
-        friday: 4,
-        saturday: 5,
-        sunday: 6,
-      };
-
       const startDateObj = new Date(startDate);
       const mealTimes = dietPlan.mealTimes || {};
 
-      // Generate meal logs for each week
-      for (let week = 0; week < durationWeeks; week++) {
-        // For each day in weekly meals
-        for (const [dayName, dayMeals] of Object.entries(dietPlan.weeklyMeals)) {
-          const dayIndex = dayNameToIndex[dayName.toLowerCase()];
-          if (dayIndex === undefined) continue;
+      // Generate meal logs for TODAY only (not entire plan duration)
+      // Future meals are created day-by-day as the user progresses via daily scheduling
+      const todayDayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][startDateObj.getDay()];
+      const todayMealsEntries = Object.entries(dietPlan.weeklyMeals).filter(
+        ([dayName]) => dayName.toLowerCase() === todayDayName
+      );
 
-          // Calculate the date for this day in this week
+      // If no meals for today's day name, use the first available day
+      const mealsToCreate = todayMealsEntries.length > 0
+        ? todayMealsEntries
+        : Object.entries(dietPlan.weeklyMeals).slice(0, 1);
+
+      // Only create meals for the 3 core meal types with fixed times
+      const ALLOWED_MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
+      const DEFAULT_MEAL_TIMES: Record<string, string> = { breakfast: '08:00', lunch: '13:00', dinner: '19:00' };
+      const seenMealNames = new Set<string>();
+
+      for (const [_dayName, dayMeals] of mealsToCreate) {
           const dayDate = new Date(startDateObj);
-          dayDate.setDate(startDateObj.getDate() + week * 7 + dayIndex);
 
-          // Process each meal type (breakfast, lunch, dinner, snacks)
+          // Process ONLY breakfast, lunch, dinner (skip snacks and extras)
           if (typeof dayMeals === 'object' && dayMeals !== null) {
             for (const [mealType, mealData] of Object.entries(dayMeals)) {
               if (!mealData) continue;
+              // Skip non-core meal types (snacks, extras, etc.)
+              if (!ALLOWED_MEAL_TYPES.includes(mealType.toLowerCase().replace(/[_\s\d]/g, ''))) continue;
 
               // Parse meal data - could be string or object
               let mealName = '';
@@ -788,17 +805,23 @@ class OnboardingAIService {
               }
 
               // Get meal time for this meal type
-              const mealTime = mealTimes[mealType] || '12:00';
+              // Use default times if not specified in plan
+              const mealTime = mealTimes[mealType] || DEFAULT_MEAL_TIMES[mealType] || '12:00';
               const [hours, minutes] = mealTime.split(':');
               const eatenAt = new Date(dayDate);
               eatenAt.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+
+              // Skip duplicate meal names (AI sometimes generates the same meal twice)
+              const dedupeKey = `${mealType}:${mealName.toLowerCase().trim()}`;
+              if (seenMealNames.has(dedupeKey)) continue;
+              seenMealNames.add(dedupeKey);
 
               mealLogs.push({
                 userId,
                 dietPlanId,
                 mealType,
-                mealName,
-                description,
+                mealName: mealName.slice(0, 200),
+                description: description.slice(0, 2000),
                 calories,
                 proteinGrams: protein,
                 carbsGrams: carbs,
@@ -810,7 +833,6 @@ class OnboardingAIService {
             }
           }
         }
-      }
 
       // Batch insert meal logs (in chunks of 50 to avoid query size limits)
       const chunkSize = 50;
@@ -1054,30 +1076,38 @@ class OnboardingAIService {
   }
 
   private getSystemPrompt(): string {
-    return `You are an expert health and fitness coach with deep knowledge in nutrition science, exercise physiology, and behavioral psychology. Your task is to analyze a user's complete onboarding data and create personalized, evidence-based diet and workout plans.
+    return `You are an elite-level health and fitness coach with board-certified expertise in:
+- Clinical nutrition science (ISSN-certified) — TDEE calculation, macro periodization, nutrient timing
+- Exercise physiology (CSCS-level) — progressive overload, periodization, movement patterns
+- Behavioral psychology — habit formation (BJ Fogg's Tiny Habits), motivation science, adherence optimization
+- Sports medicine — injury prevention, recovery protocols, contraindicated exercises
 
-IMPORTANT: Your response must be a valid JSON object with no markdown formatting, code blocks, or additional text.
+Your task: Perform a DEEP analysis of the user's complete onboarding data and generate highly personalized, evidence-based plans.
 
-You will analyze:
-1. User goals and motivations
-2. Body measurements and composition
-3. Assessment responses (lifestyle, habits, preferences)
-4. Body image analysis (if available)
-5. Dietary preferences and restrictions
-6. Available time and equipment
+## Analysis Protocol
 
-Create plans that are:
-- Personalized to the user's specific situation
-- Realistic and sustainable
-- Progressive (starting easier, building over time)
-- Aligned with evidence-based practices
-- Sensitive to any health risks or limitations
+1. **Goal Deep-Dive**: Examine primary + secondary goals, user's stated motivation, and confidence level (1-10). Low confidence (1-4) = simpler entry-level plans with quick wins. High confidence (7-10) = more ambitious programming.
 
-Response format must be exactly:
+2. **Body Composition Analysis**: Calculate BMI from weight/height. Estimate TDEE using Mifflin-St Jeor equation × activity multiplier derived from assessment responses. For weight loss: 300-500 kcal deficit. For muscle building: 200-400 kcal surplus. For maintenance goals: match TDEE.
+
+3. **Lifestyle Pattern Analysis**: Extract sleep patterns, stress levels, activity level, time availability, and constraints from assessment responses. Tailor workout duration and meal complexity to realistic lifestyle capacity.
+
+4. **Risk Factor Assessment**: Flag any concerning BMI ranges (<18.5 or >35), extreme calorie targets, or age-related considerations. Recommend medical consultation where appropriate.
+
+5. **Progressive Programming**: Week 1-2 = adaptation phase (60-70% intensity). Week 3-4 = building phase. Week 5+ = progression phase. Never start at maximum intensity.
+
+6. **Meal Specificity**: Provide SPECIFIC meal descriptions with actual food items and approximate portions (e.g., "200g grilled chicken breast with 150g brown rice and steamed broccoli" not just "protein with carbs and vegetables"). Respect all dietary restrictions, allergies, and excluded foods.
+
+7. **Exercise Precision**: Include 2-3 form cues per exercise in instructions. Specify rest periods based on goal (30-60s for fat loss, 90-180s for strength). Use proper periodization (not random exercises).
+
+## Output Requirements
+
+Respond with a JSON object containing dietPlan, workoutPlan, and overallAnalysis. Fill ALL 7 days in weeklyMeals and weeklySchedule (rest days should have dayOfWeek and workoutName: "Rest Day" with exercises as empty array).
+
 {
   "dietPlan": {
-    "name": "string",
-    "description": "string",
+    "name": "string (creative, motivating name)",
+    "description": "string (2-3 sentences explaining the nutritional strategy)",
     "goalCategory": "weight_loss|muscle_building|sleep_improvement|stress_wellness|energy_productivity|event_training|health_condition|habit_building|overall_optimization|custom",
     "dailyCalories": number,
     "proteinGrams": number,
@@ -1088,20 +1118,24 @@ Response format must be exactly:
     "snacksPerDay": number,
     "mealTimes": {"breakfast": "HH:MM", "lunch": "HH:MM", "dinner": "HH:MM"},
     "weeklyMeals": {
-      "monday": {"breakfast": "description", "lunch": "description", "dinner": "description"},
-      "tuesday": {...},
-      ...
+      "monday": {"breakfast": "specific meal with portions", "lunch": "specific meal", "dinner": "specific meal"},
+      "tuesday": {"breakfast": "...", "lunch": "...", "dinner": "..."},
+      "wednesday": {"breakfast": "...", "lunch": "...", "dinner": "..."},
+      "thursday": {"breakfast": "...", "lunch": "...", "dinner": "..."},
+      "friday": {"breakfast": "...", "lunch": "...", "dinner": "..."},
+      "saturday": {"breakfast": "...", "lunch": "...", "dinner": "..."},
+      "sunday": {"breakfast": "...", "lunch": "...", "dinner": "..."}
     },
     "dietaryPreferences": ["string"],
     "allergies": ["string"],
     "excludedFoods": ["string"],
-    "tips": ["string"],
-    "aiRationale": "string explaining why this plan suits the user"
+    "tips": ["5 specific, actionable nutrition tips tailored to user's goal"],
+    "aiRationale": "string — explain the caloric target calculation (TDEE - deficit or + surplus), macro ratio reasoning, and why this specific meal plan suits this user's lifestyle and goals"
   },
   "workoutPlan": {
-    "name": "string",
-    "description": "string",
-    "goalCategory": "weight_loss|muscle_building|sleep_improvement|stress_wellness|energy_productivity|event_training|health_condition|habit_building|overall_optimization|custom",
+    "name": "string (creative, motivating name)",
+    "description": "string (2-3 sentences explaining the training philosophy)",
+    "goalCategory": "same as dietPlan",
     "durationWeeks": number,
     "workoutsPerWeek": number,
     "workoutLocation": "gym|home|outdoor",
@@ -1110,24 +1144,23 @@ Response format must be exactly:
       "monday": {
         "dayOfWeek": "monday",
         "workoutName": "string",
-        "focusArea": "string",
+        "focusArea": "string (e.g., Upper Body Push, HIIT Cardio, Active Recovery)",
         "exercises": [
-          {"name": "string", "sets": number, "reps": number, "restSeconds": number, "instructions": ["string"]}
+          {"name": "string", "sets": number, "reps": number, "restSeconds": number, "instructions": ["form cue 1", "form cue 2"]}
         ],
-        "estimatedDuration": number,
+        "estimatedDuration": number (minutes),
         "estimatedCalories": number
-      },
-      ...
+      }
     },
     "availableEquipment": ["string"],
-    "tips": ["string"],
-    "aiRationale": "string explaining why this plan suits the user"
+    "tips": ["5 specific training tips for this user's level and goal"],
+    "aiRationale": "string — explain the split choice, progression strategy, and how this program addresses the user's specific goals and constraints"
   },
   "overallAnalysis": {
-    "healthScore": number (1-100),
-    "riskFactors": ["string"],
-    "recommendations": ["string"],
-    "motivationalMessage": "string"
+    "healthScore": number (1-100, based on BMI, activity level, goal realism),
+    "riskFactors": ["any health concerns identified from the data"],
+    "recommendations": ["3-5 personalized lifestyle recommendations beyond diet and exercise"],
+    "motivationalMessage": "string — personalized, referencing the user's specific goals and motivation"
   }
 }`;
   }
@@ -1135,46 +1168,95 @@ Response format must be exactly:
   private buildAnalysisPrompt(data: OnboardingData): string {
     const sections: string[] = [];
 
-    // User Profile (handle undefined userProfile)
+    // User Profile
     sections.push(`## USER PROFILE
 - Gender: ${data.userProfile?.gender || 'Not specified'}
 - Age: ${data.userProfile?.age || 'Not specified'} years old`);
 
-    // Goals
+    // Goals — with confidence interpretation
+    const avgConfidence = data.confirmedGoals.length > 0
+      ? data.confirmedGoals.reduce((sum, g) => sum + (g.confidenceLevel || 5), 0) / data.confirmedGoals.length
+      : 5;
+    const confidenceLevel = avgConfidence <= 4 ? 'LOW' : avgConfidence >= 7 ? 'HIGH' : 'MODERATE';
+
     sections.push(`## GOALS
 Primary Goal: ${data.selectedGoal}
 ${data.customGoalText ? `Custom Goal Text: ${data.customGoalText}` : ''}
 Plan Duration: ${data.planDurationWeeks} weeks
+Average Confidence Level: ${avgConfidence.toFixed(1)}/10 (${confidenceLevel})
+${confidenceLevel === 'LOW' ? '→ IMPORTANT: Low confidence — create simple, achievable plans with quick wins to build momentum.' : ''}
+${confidenceLevel === 'HIGH' ? '→ High confidence — user is motivated for an ambitious but safe program.' : ''}
 
 Confirmed Goals:
 ${data.confirmedGoals.map(g =>
-  `- ${g.title} (${g.category}): ${g.description}
+  `- ${g.title} (${g.category}, pillar: ${g.pillar || 'general'}): ${g.description}
    Motivation: ${g.motivation || 'Not specified'}
    Confidence: ${g.confidenceLevel || 'Not specified'}/10`
 ).join('\n')}`);
 
-    // Body Stats
+    // Body Stats with TDEE estimation
     if (data.bodyStats && Object.keys(data.bodyStats).length > 0) {
-      sections.push(`## BODY MEASUREMENTS
-- Weight: ${data.bodyStats.weightKg || 'N/A'} kg
-- Height: ${data.bodyStats.heightCm || 'N/A'} cm
+      const weight = data.bodyStats.weightKg;
+      const height = data.bodyStats.heightCm;
+      const age = data.userProfile?.age;
+      const gender = data.userProfile?.gender;
+
+      let bmi: string = 'N/A';
+      let bmr: string = 'N/A';
+      let tdeeEstimate: string = 'N/A';
+
+      if (weight && height) {
+        const bmiVal = weight / ((height / 100) ** 2);
+        bmi = bmiVal.toFixed(1);
+
+        // Mifflin-St Jeor BMR estimation
+        if (age) {
+          const bmrVal = gender?.toLowerCase() === 'female'
+            ? 10 * weight + 6.25 * height - 5 * age - 161
+            : 10 * weight + 6.25 * height - 5 * age + 5;
+          bmr = `${Math.round(bmrVal)} kcal/day`;
+          // Assume lightly active (1.375) as default — LLM should adjust based on assessment
+          tdeeEstimate = `~${Math.round(bmrVal * 1.375)} kcal/day (lightly active estimate — adjust based on assessment responses)`;
+        }
+      }
+
+      sections.push(`## BODY MEASUREMENTS & METABOLIC ESTIMATES
+- Weight: ${weight || 'N/A'} kg
+- Height: ${height || 'N/A'} cm
 - Target Weight: ${data.bodyStats.targetWeightKg || 'N/A'} kg
 - Body Fat: ${data.bodyStats.bodyFatPercentage || 'N/A'}%
 - Waist: ${data.bodyStats.waistCm || 'N/A'} cm
 - Hip: ${data.bodyStats.hipCm || 'N/A'} cm
 - Chest: ${data.bodyStats.chestCm || 'N/A'} cm
+- BMI: ${bmi}
+- Estimated BMR (Mifflin-St Jeor): ${bmr}
+- Estimated TDEE: ${tdeeEstimate}
 
-BMI: ${data.bodyStats.weightKg && data.bodyStats.heightCm
-  ? (data.bodyStats.weightKg / ((data.bodyStats.heightCm / 100) ** 2)).toFixed(1)
-  : 'N/A'}`);
+Use these values to calculate precise caloric targets. Adjust the activity multiplier based on the assessment responses below.`);
     }
+
+    // Goal-specific coaching directive
+    const goalDirectives: Record<string, string> = {
+      weight_loss: 'Create a 300-500 kcal deficit from TDEE. Prioritize protein (1.6-2.2g/kg) to preserve muscle. Include 3-4 resistance training days + 2 cardio sessions.',
+      muscle_building: 'Create a 200-400 kcal surplus from TDEE. Protein at 1.8-2.4g/kg. Focus on compound movements with progressive overload. 4-5 training days.',
+      sleep_improvement: 'Focus on circadian-friendly meal timing (no heavy meals 3h before bed). Include evening wind-down routines. Moderate exercise intensity, no late workouts.',
+      stress_wellness: 'Prioritize anti-inflammatory foods, adequate magnesium and omega-3s. Include yoga, meditation, and low-intensity steady-state cardio. Avoid overtraining.',
+      energy_productivity: 'Balance blood sugar with regular protein-rich meals. Include morning movement for energy. Mix HIIT and steady-state for metabolic flexibility.',
+      event_training: 'Periodize training toward event date. Taper in final 1-2 weeks. Fuel for performance, not restriction.',
+      overall_optimization: 'Balanced approach across all domains. Moderate deficit if overweight, maintenance if healthy weight. Full-body training 3-4x/week.',
+    };
+    const directive = goalDirectives[data.selectedGoal] || goalDirectives['overall_optimization'];
+    sections.push(`## GOAL-SPECIFIC COACHING DIRECTIVE
+${directive}`);
 
     // Assessment Responses
     if (data.assessmentResponses && data.assessmentResponses.length > 0) {
       sections.push(`## ASSESSMENT RESPONSES (Lifestyle & Habits)
+These reveal the user's current habits, constraints, and readiness. Use them to calibrate plan difficulty and meal complexity.
+
 ${data.assessmentResponses.map(r =>
   `Q: ${r.questionText || r.questionId}
-A: ${Array.isArray(r.answer) ? r.answer.join(', ') : r.answer}`
+A: ${Array.isArray(r.answer) ? r.answer.join(', ') : r.answer}${r.category ? ` [Category: ${r.category}]` : ''}`
 ).join('\n\n')}`);
     }
 
@@ -1182,50 +1264,48 @@ A: ${Array.isArray(r.answer) ? r.answer.join(', ') : r.answer}`
     if (data.bodyImagesAnalysis?.hasImages) {
       const imageTypes = data.bodyImagesAnalysis.imageTypes?.join(', ') || 'Various';
       const analysis = data.bodyImagesAnalysis.aiAnalysis;
-      
+
       if (analysis && Object.keys(analysis).length > 0) {
         sections.push(`## BODY IMAGES ANALYSIS
 User has uploaded body images: ${imageTypes}
 
 AI Analysis Results:
-${Object.entries(analysis).map(([type, result]) => 
+${Object.entries(analysis).map(([type, result]) =>
   `${type.toUpperCase()} View:
 ${JSON.stringify(result, null, 2)}`
 ).join('\n\n')}
 
-Use these visual insights to:
-- Adjust workout plans based on body composition
-- Provide specific form corrections if needed
-- Tailor nutrition recommendations based on body type
-- Set realistic expectations for progress`);
+Use these visual insights to adjust workout plans based on body composition, identify muscle imbalances, and set realistic progress expectations.`);
       } else {
         sections.push(`## BODY IMAGES
 User has uploaded body images: ${imageTypes}
-Note: Images are uploaded but analysis is pending. Use general guidelines based on goals and stats.`);
+Note: Images uploaded but analysis pending. Use general guidelines based on goals and stats.`);
       }
     }
 
-    // Diet Preferences (with safe defaults)
+    // Diet Preferences
     const dietPrefs = data.dietPreferences || {};
     sections.push(`## DIET PREFERENCES
 - Diet Type: ${dietPrefs.dietType || 'Standard'}
 - Allergies: ${dietPrefs.allergies?.length > 0 ? dietPrefs.allergies.join(', ') : 'None'}
 - Excluded Foods: ${dietPrefs.excludedFoods?.length > 0 ? dietPrefs.excludedFoods.join(', ') : 'None'}
 - Meals Per Day: ${dietPrefs.mealsPerDay || 3}
-- Meal Times: Breakfast at ${dietPrefs.mealTimes?.breakfast || '08:00'}, Lunch at ${dietPrefs.mealTimes?.lunch || '12:30'}, Dinner at ${dietPrefs.mealTimes?.dinner || '19:00'}`);
+- Meal Times: Breakfast at ${dietPrefs.mealTimes?.breakfast || '08:00'}, Lunch at ${dietPrefs.mealTimes?.lunch || '12:30'}, Dinner at ${dietPrefs.mealTimes?.dinner || '19:00'}
 
-    // Preferences (with safe defaults)
+CRITICAL: All meal suggestions MUST respect allergies and excluded foods. Never suggest excluded items.`);
+
+    // Preferences
     const prefs = data.preferences || {};
     sections.push(`## USER PREFERENCES
 - Coaching Style: ${prefs.coachingStyle || 'Supportive'}
 - Preferred Workout Time: ${prefs.preferredWorkoutTime || 'Morning'}
 - Notification Frequency: ${prefs.notificationFrequency || 'Daily'}`);
 
-    return `Analyze the following user data and generate personalized diet and workout plans:
+    return `Analyze the following user data comprehensively and generate highly personalized diet and workout plans. Think step-by-step: first calculate metabolic needs, then design nutrition to match, then build a training program that complements the nutrition strategy.
 
 ${sections.join('\n\n')}
 
-Based on all this information, create comprehensive, personalized diet and workout plans that will help this user achieve their goals safely and effectively.`;
+Generate the JSON response with SPECIFIC meals (real food items with approximate portions), SPECIFIC exercises (with form cues in instructions), and a DETAILED rationale explaining your reasoning for caloric targets and programming choices.`;
   }
 
   private parseAIResponse(content: string, goalCategory: string = 'overall_optimization', planDuration: number = 4): OnboardingAnalysisResult {

@@ -118,12 +118,14 @@ export function AICoachTab() {
       const result = await ragChatService.getConversation(conversationId, 100);
       setActiveConversationId(conversationId);
       setMessages(
-        (result.messages || []).map((msg: RAGChatMessage) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.createdAt),
-        }))
+        (result.messages || [])
+          .filter((msg: RAGChatMessage) => (msg.role as string) !== 'system')
+          .map((msg: RAGChatMessage) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.createdAt),
+          }))
       );
       // Close sidebar on mobile/tablet when conversation is loaded
       if (window.innerWidth < 1024) {
@@ -192,13 +194,17 @@ export function AICoachTab() {
         }
       }
 
-      // Parse and execute actions from response
-      const actions = response.actions || parseActionsFromResponse(response.message);
-      if (actions && actions.length > 0) {
-        // Execute actions after a short delay to let message render
-        setTimeout(() => {
-          executeActionsAsync(actions);
-        }, 500);
+      // Parse and execute actions from response — filter out navigate actions
+      // that would redirect the user away from the chat page
+      const rawActions = response.actions || parseActionsFromResponse(response.message);
+      if (rawActions && rawActions.length > 0) {
+        // Filter out navigate actions (user is already in chat, don't redirect them)
+        const safeActions = rawActions.filter(a => a.type !== 'navigate');
+        if (safeActions.length > 0) {
+          setTimeout(() => {
+            executeActionsAsync(safeActions);
+          }, 500);
+        }
       }
     } catch (error) {
       // Check if it's a network error
@@ -642,10 +648,12 @@ export function AICoachTab() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-white truncate">
-                        {conv.title || "New Conversation"}
+                        {conv.title || conv.lastMessagePreview || (conv.messageCount > 0 ? `Chat (${conv.messageCount})` : "New Chat")}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        {conv.messageCount} messages
+                      <p className="text-xs text-slate-500 truncate">
+                        {conv.lastMessagePreview
+                          ? `${conv.lastMessageRole === 'assistant' ? 'Aurea: ' : 'You: '}${conv.lastMessagePreview}`
+                          : `${conv.messageCount} messages`}
                       </p>
                     </div>
                     <div className="relative">

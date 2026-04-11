@@ -47,6 +47,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
   const { toast } = useToast();
   const toastRef = useRef(toast);
   const [chat, setChat] = useState<Chat | null>(null);
+  const isAiChatRef = useRef(false);
   const [messages, setMessages] = useState<ChatMessageItemData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -90,7 +91,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
       setChat(chatData);
       // Backend already returns messages in chronological order (oldest first)
       const adaptedMessages = messagesData
-        .map((msg) => adaptMessageToChatMessageItem(msg, user?.id));
+        .map((msg) => adaptMessageToChatMessageItem(msg, user?.id, isAiChatRef.current));
       setMessages(adaptedMessages);
     } catch (error) {
       console.error('Failed to reload messages:', error);
@@ -121,10 +122,15 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
 
         setChat(chatData);
 
+        // Detect AI Coach chat (other participant has system email)
+        isAiChatRef.current = !chatData.isGroupChat && !!chatData.participants?.some(
+          (p) => p.user?.email?.includes('ai-coach') || p.user?.email?.includes('balencia.system')
+        );
+
         // Convert messages to ChatMessageItemData format
         // Backend already returns messages in chronological order (oldest first)
         const adaptedMessages = messagesData
-          .map((msg) => adaptMessageToChatMessageItem(msg, user?.id));
+          .map((msg) => adaptMessageToChatMessageItem(msg, user?.id, isAiChatRef.current));
 
         setMessages(adaptedMessages);
 
@@ -169,7 +175,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           const messagesData = await chatService.getMessages(chatId, { limit: 50 });
           // Backend already returns messages in chronological order (oldest first)
           const adaptedMessages = messagesData
-            .map((msg) => adaptMessageToChatMessageItem(msg, user.id));
+            .map((msg) => adaptMessageToChatMessageItem(msg, user.id, isAiChatRef.current));
           setMessages(adaptedMessages);
         } catch (error) {
           console.error('Failed to reload messages after new message event:', error);
@@ -181,7 +187,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           const messagesData = await chatService.getMessages(chatId, { limit: 50 });
           // Backend already returns messages in chronological order (oldest first)
           const adaptedMessages = messagesData
-            .map((msg) => adaptMessageToChatMessageItem(msg, user.id));
+            .map((msg) => adaptMessageToChatMessageItem(msg, user.id, isAiChatRef.current));
           setMessages(adaptedMessages);
         } catch (error) {
           console.error('Failed to reload messages after edit event:', error);
@@ -203,7 +209,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           const messagesData = await chatService.getMessages(chatId, { limit: 50 });
           // Backend already returns messages in chronological order (oldest first)
           const adaptedMessages = messagesData
-            .map((msg) => adaptMessageToChatMessageItem(msg, user.id));
+            .map((msg) => adaptMessageToChatMessageItem(msg, user.id, isAiChatRef.current));
           setMessages(adaptedMessages);
         } catch (error) {
           console.error('Failed to reload messages after reaction event:', error);
@@ -245,13 +251,29 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           // Reload messages to show the new system message
           const messagesData = await chatService.getMessages(chatId, { limit: 50 });
           const adaptedMessages = messagesData
-            .map((msg) => adaptMessageToChatMessageItem(msg, user.id));
+            .map((msg) => adaptMessageToChatMessageItem(msg, user.id, isAiChatRef.current));
           setMessages(adaptedMessages);
           // Reload chat to get updated participant list
           const chatData = await chatService.getChatById(chatId);
           setChat(chatData);
         } catch (error) {
           console.error('Failed to reload chat after user joined event:', error);
+        }
+      },
+      onMessagesRead: (data) => {
+        // When another user reads messages, update readBy on all user's sent messages
+        if (data.userId && data.userId !== user?.id) {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.role === 'user' && msg.senderId === user?.id) {
+                const currentReadBy = msg.readBy || [];
+                if (!currentReadBy.includes(data.userId)) {
+                  return { ...msg, readBy: [...currentReadBy, data.userId] };
+                }
+              }
+              return msg;
+            })
+          );
         }
       },
       onViewOnceOpened: (data) => {
@@ -446,8 +468,8 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
   }, [reloadMessages]);
 
   const handleSendMessage = useCallback(
-    async (message: string, options?: { mediaFiles?: File[]; repliedToId?: string; isViewOnce?: boolean }) => {
-      if (!chatId || (!message.trim() && !options?.mediaFiles?.length)) return;
+    async (message: string, options?: { mediaFiles?: File[]; repliedToId?: string; isViewOnce?: boolean; gifUrl?: string }) => {
+      if (!chatId || (!message.trim() && !options?.mediaFiles?.length && !options?.gifUrl)) return;
 
       try {
         setIsSending(true);
@@ -456,6 +478,12 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
         let mediaThumbnail: string | undefined;
         let mediaSize: number | undefined;
         let contentType: string = 'text';
+
+        // Handle GIF sending (no upload needed — direct URL)
+        if (options?.gifUrl) {
+          contentType = 'gif';
+          mediaUrl = options.gifUrl;
+        }
 
         // Handle media upload if files are provided
         if (options?.mediaFiles && options.mediaFiles.length > 0) {
@@ -551,7 +579,7 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
         const sentMessage = await chatService.sendMessage(messagePayload);
 
         // Convert and add to messages
-        const adaptedMessage = adaptMessageToChatMessageItem(sentMessage, user?.id);
+        const adaptedMessage = adaptMessageToChatMessageItem(sentMessage, user?.id, isAiChatRef.current);
         setMessages((prev) => [...prev, adaptedMessage]);
 
         setReplyTo(null);

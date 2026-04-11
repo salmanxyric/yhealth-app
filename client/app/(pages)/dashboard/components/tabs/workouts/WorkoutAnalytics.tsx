@@ -189,7 +189,7 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
     const isDaily = chartData.length > 0 && 'date' in chartData[0];
     const commonProps = {
       data: chartData,
-      margin: { top: 5, right: 30, left: 20, bottom: 5 },
+      margin: { top: 5, right: 10, left: 0, bottom: 5 },
     };
 
     switch (mode) {
@@ -206,8 +206,8 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
             <YAxis 
               domain={[0, 100]}
               stroke="#9ca3af"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              label={{ value: 'Completion %', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+              tick={{ fill: '#9ca3af', fontSize: 10 }}
+              width={35}
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
@@ -246,8 +246,8 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
             <YAxis 
               domain={[0, 100]}
               stroke="#9ca3af"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              label={{ value: 'Completion %', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+              tick={{ fill: '#9ca3af', fontSize: 10 }}
+              width={35}
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
@@ -284,8 +284,8 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
             <YAxis 
               domain={[0, 100]}
               stroke="#9ca3af"
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              label={{ value: 'Completion %', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+              tick={{ fill: '#9ca3af', fontSize: 10 }}
+              width={35}
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
@@ -314,106 +314,106 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header with Time Range Selector */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-orange-500/20">
-            <BarChart3 className="w-6 h-6 text-orange-400" />
+            <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Workout Analytics</h2>
-            <p className="text-sm text-slate-400">Track your fitness progress and performance</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-white">Workout Analytics</h2>
+            <p className="text-xs sm:text-sm text-slate-400">Track your fitness progress and performance</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 sm:gap-2 w-full sm:w-auto">
           {(['7d', '30d', '90d', '1y'] as const).map((range) => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                 timeRange === range
                   ? 'bg-orange-500 text-white'
                   : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700/50'
               }`}
             >
-              {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : range === '90d' ? '90 Days' : '1 Year'}
+              {range === '7d' ? '7D' : range === '30d' ? '30D' : range === '90d' ? '90D' : '1Y'}
             </button>
           ))}
         </div>
       </div>
 
       {/* Performance Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-xl p-6 border border-orange-500/30"
+          className="bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-xl p-3 sm:p-6 border border-orange-500/30"
         >
-          <div className="flex items-center justify-between mb-2">
-            <Activity className="w-5 h-5 text-orange-400" />
-            <TrendingUp className="w-4 h-4 text-green-400" />
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
+            <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
           </div>
-          <p className="text-2xl font-bold text-white">{data.performanceMetrics.averageCompletionRate}%</p>
-          <p className="text-sm text-slate-400">Avg Completion Rate</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{data.performanceMetrics.averageCompletionRate}%</p>
+          <p className="text-[10px] sm:text-sm text-slate-400">Avg Completion</p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl p-6 border border-blue-500/30"
+          className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl p-3 sm:p-6 border border-blue-500/30"
         >
-          <div className="flex items-center justify-between mb-2">
-            <Dumbbell className="w-5 h-5 text-blue-400" />
-            <Award className="w-4 h-4 text-yellow-400" />
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <Dumbbell className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
+            <Award className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
           </div>
-          <p className="text-2xl font-bold text-white">{data.performanceMetrics.totalWorkouts}</p>
-          <p className="text-sm text-slate-400">Total Workouts</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{data.performanceMetrics.totalWorkouts}</p>
+          <p className="text-[10px] sm:text-sm text-slate-400">Total Workouts</p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-xl p-6 border border-purple-500/30"
+          className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-xl p-3 sm:p-6 border border-purple-500/30"
         >
-          <div className="flex items-center justify-between mb-2">
-            <Award className="w-5 h-5 text-purple-400" />
-            <TrendingUp className="w-4 h-4 text-green-400" />
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <Award className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
+            <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
           </div>
-          <p className="text-2xl font-bold text-white">{data.performanceMetrics.currentStreak}</p>
-          <p className="text-sm text-slate-400">Current Streak</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{data.performanceMetrics.currentStreak}</p>
+          <p className="text-[10px] sm:text-sm text-slate-400">Current Streak</p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl p-6 border border-emerald-500/30"
+          className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl p-3 sm:p-6 border border-emerald-500/30"
         >
-          <div className="flex items-center justify-between mb-2">
-            <Clock className="w-5 h-5 text-emerald-400" />
-            <Zap className="w-4 h-4 text-yellow-400" />
+          <div className="flex items-center justify-between mb-1 sm:mb-2">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+            <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-400" />
           </div>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-lg sm:text-2xl font-bold text-white">
             {Math.round(data.performanceMetrics.totalDuration / 60)}h {data.performanceMetrics.totalDuration % 60}m
           </p>
-          <p className="text-sm text-slate-400">Total Duration</p>
+          <p className="text-[10px] sm:text-sm text-slate-400">Total Duration</p>
         </motion.div>
       </div>
 
       {/* Charts Grid - Only 2 Charts */}
-      <div className="grid grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6">
         {/* Daily Progress Chart */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-slate-900/50 rounded-xl p-6 border border-slate-700/50 backdrop-blur-sm"
+          className="bg-slate-900/50 rounded-xl p-3 sm:p-6 border border-slate-700/50 backdrop-blur-sm"
         >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-400" />
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h3 className="text-sm sm:text-lg font-semibold text-white flex items-center gap-2">
+              <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
               Daily Progress
             </h3>
             <div className="flex gap-1 bg-slate-800/50 rounded-lg p-1">
@@ -435,7 +435,7 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={220} className="sm:!h-[300px]">
             {renderChart(data.dailyProgress, dailyChartMode, 'completionRate', '#3b82f6')}
           </ResponsiveContainer>
         </motion.div>
@@ -445,11 +445,11 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-slate-900/50 rounded-xl p-6 border border-slate-700/50 backdrop-blur-sm"
+          className="bg-slate-900/50 rounded-xl p-3 sm:p-6 border border-slate-700/50 backdrop-blur-sm"
         >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-orange-400" />
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h3 className="text-sm sm:text-lg font-semibold text-white flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
               Weekly Progress
             </h3>
             <div className="flex gap-1 bg-slate-800/50 rounded-lg p-1">
@@ -471,7 +471,7 @@ export function WorkoutAnalytics({ selectedWorkoutId, workouts = [] }: WorkoutAn
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={220} className="sm:!h-[300px]">
             {renderChart(data.weeklyProgress, weeklyChartMode, 'completionRate', '#f97316')}
           </ResponsiveContainer>
         </motion.div>

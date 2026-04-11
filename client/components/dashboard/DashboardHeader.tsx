@@ -280,7 +280,7 @@ export function DashboardHeader() {
                 >
                   <div className="flex items-center gap-2.5">
                     <Avatar className="h-8 w-8 ring-2 ring-cyan-500/30">
-                      <AvatarImage src={user?.avatarUrl || undefined} />
+                      <AvatarImage src={user?.avatarUrl || '/avatar.jpg'} />
                       <AvatarFallback className="bg-gradient-to-br from-cyan-500 via-teal-500 to-sky-500 text-white text-xs font-semibold">
                         {getInitials()}
                       </AvatarFallback>

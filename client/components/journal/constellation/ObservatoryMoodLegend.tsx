@@ -1,5 +1,7 @@
 "use client";
 
+import { List } from "lucide-react";
+
 interface Props {
   starCount: number;
   onSwitchToList: () => void;
@@ -15,48 +17,64 @@ const MOODS = [
 export function ObservatoryMoodLegend({ starCount, onSwitchToList }: Props) {
   return (
     <div
-      className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-6 px-6 py-4"
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4"
       style={{ zIndex: 30 }}
     >
-      {/* Mood dots */}
-      <div className="flex items-center gap-4">
+      <div
+        className="flex items-center gap-5 px-5 py-2.5 rounded-full"
+        style={{
+          background: "rgba(255, 255, 255, 0.05)",
+          backdropFilter: "blur(16px)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)",
+        }}
+      >
+        {/* Mood dots */}
         {MOODS.map((mood) => (
-          <div key={mood.label} className="flex items-center gap-1.5">
+          <div key={mood.label} className="flex items-center gap-2">
             <div
               className="rounded-full"
               style={{
-                width: 6,
-                height: 6,
+                width: 8,
+                height: 8,
                 backgroundColor: mood.color,
-                boxShadow: `0 0 6px 2px ${mood.color}40`,
+                boxShadow: `0 0 8px 2px ${mood.color}50`,
               }}
             />
             <span
-              className="observatory-font-display text-white/40"
-              style={{ fontSize: 8, letterSpacing: "0.1em" }}
+              className="observatory-font-display text-white/50"
+              style={{ fontSize: 10, letterSpacing: "0.08em" }}
             >
-              {mood.label.toUpperCase()}
+              {mood.label}
             </span>
           </div>
         ))}
-      </div>
 
-      {/* Star count badge */}
-      <div
-        className="observatory-font-display px-3 py-1 rounded-full border border-white/10 text-white/40"
-        style={{ fontSize: 8, letterSpacing: "0.12em" }}
-      >
-        {starCount} STARS MAPPED
-      </div>
+        {/* Divider */}
+        <div className="w-px h-4 bg-white/10" />
 
-      {/* List View toggle */}
-      <button
-        onClick={onSwitchToList}
-        className="observatory-font-display px-3 py-1 rounded-full border border-white/10 text-white/30 hover:text-white/50 hover:bg-white/5 transition-all duration-200"
-        style={{ fontSize: 8, letterSpacing: "0.12em" }}
-      >
-        LIST VIEW
-      </button>
+        {/* Star count badge */}
+        <span
+          className="observatory-font-display text-white/40"
+          style={{ fontSize: 10, letterSpacing: "0.1em" }}
+        >
+          {starCount} stars
+        </span>
+
+        {/* List View toggle */}
+        <button
+          onClick={onSwitchToList}
+          className="observatory-font-display flex items-center gap-1.5 px-3 py-1 rounded-full text-white/40 hover:text-white/60 hover:bg-white/5 transition-all duration-200"
+          style={{
+            fontSize: 10,
+            letterSpacing: "0.1em",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+          }}
+        >
+          <List className="w-3 h-3" />
+          List
+        </button>
+      </div>
     </div>
   );
 }

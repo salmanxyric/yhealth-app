@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -31,13 +30,15 @@ export function LenisProvider({ children }: LenisProviderProps) {
 
     const lenisInstance = new Lenis({
       autoRaf: false, // We drive RAF via gsap.ticker for perfect GSAP sync
-      duration: 1.2,
-      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      touchMultiplier: 2,
+      lerp: 0.1, // Direct interpolation — tighter than duration
+      smoothWheel: true,
+      syncTouch: true, // Smooth touch scrolling
+      touchMultiplier: 2.0,
+      wheelMultiplier: 1.2,
       infinite: false,
     });
 
-    setLenis(lenisInstance);
+    setLenis(lenisInstance); // eslint-disable-line react-hooks/set-state-in-effect -- initialization pattern
 
     // Sync Lenis scroll position with GSAP ScrollTrigger
     lenisInstance.on("scroll", ScrollTrigger.update);

@@ -3,14 +3,15 @@
  * @description Automatically detects and extracts wellbeing information from user messages
  */
 
-import { ChatAnthropic } from '@langchain/anthropic';
-import { env } from '../config/env.config.js';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { modelFactory } from './model-factory.service.js';
 import { logger } from './logger.service.js';
 import { moodService } from './wellbeing/mood.service.js';
 import { stressService, type StressTrigger } from './stress.service.js';
 import { energyService } from './wellbeing/energy.service.js';
 import { journalService } from './wellbeing/journal.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
+import { parseLlmJson } from '../helper/llm-json-parser.js';
 
 // ============================================
 // TYPES
@@ -208,13 +209,13 @@ function mapTriggersToValidValues(triggers: string[]): { triggers: StressTrigger
 // ============================================
 
 class WellbeingAutoTrackerService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'light',
       temperature: 0.3,
+      maxTokens: 2000,
     });
   }
 
@@ -283,23 +284,19 @@ Return a JSON object with this structure:
 
 Only include fields where information was detected. Be conservative - only extract if you're reasonably confident.`;
 
-      const response = await this.llm.invoke(extractionPrompt);
+      const { result: response, llm: updatedLlm } = await modelFactory.invokeWithFallback(
+        this.llm,
+        [extractionPrompt],
+        { tier: 'light', temperature: 0.3, maxTokens: 2000 },
+      );
+      this.llm = updatedLlm; // Update to whichever model succeeded
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-      
-      // Parse JSON from response (may be wrapped in markdown code blocks)
-      let extracted: any;
-      try {
-        // Try to extract JSON from markdown code blocks
-        const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) || content.match(/(\{[\s\S]*\})/);
-        if (jsonMatch) {
-          extracted = JSON.parse(jsonMatch[1]);
-        } else {
-          extracted = JSON.parse(content);
-        }
-      } catch (parseError) {
+
+      // Parse JSON from response (handles markdown fences, truncated output, etc.)
+      const extracted = parseLlmJson<any>(content);
+      if (!extracted) {
         logger.warn('[WellbeingAutoTracker] Failed to parse LLM response', {
           content: content.substring(0, 200),
-          error: parseError,
         });
         return { entries: [], suggestions: [] };
       }
@@ -429,6 +426,17 @@ Only include fields where information was detected. Be conservative - only extra
 
       return result;
     } catch (error) {
+      // If provider error (503, billing, etc.), refresh model for next call
+      if (modelFactory.handleProviderError(error)) {
+        try {
+          this.llm = modelFactory.getModel({ tier: 'light', temperature: 0.3, maxTokens: 2000 });
+          logger.info('[WellbeingAutoTracker] Refreshed LLM after provider error', {
+            newProvider: modelFactory.getLastProviderUsed(),
+          });
+        } catch {
+          // No providers available — will retry on next message
+        }
+      }
       logger.error('[WellbeingAutoTracker] Failed to extract wellbeing info', {
         userId,
         message: message.substring(0, 100),
@@ -634,28 +642,22 @@ Only include fields where information was detected. Be conservative - only extra
         hasJson: content.includes('{'),
       });
       
-      // Parse JSON from response
-      let extracted: any;
-      try {
-        const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/) || content.match(/(\{[\s\S]*\})/);
-        if (jsonMatch) {
-          extracted = JSON.parse(jsonMatch[1]);
-          logger.debug('[WellbeingAutoTracker] Successfully parsed JSON from LLM response', {
-            userId,
-            hasMood: !!extracted.mood,
-            hasEnergy: !!extracted.energy,
-            hasStress: !!extracted.stress,
-            hasJournal: !!extracted.journal,
-          });
-        } else {
-          extracted = JSON.parse(content);
-        }
-      } catch (parseError) {
+      // Parse JSON from response (handles markdown fences, truncated output, etc.)
+      const extracted = parseLlmJson<any>(content);
+      if (extracted) {
+        logger.debug('[WellbeingAutoTracker] Successfully parsed JSON from LLM response', {
+          userId,
+          hasMood: !!(extracted as any).mood,
+          hasEnergy: !!(extracted as any).energy,
+          hasStress: !!(extracted as any).stress,
+          hasJournal: !!(extracted as any).journal,
+        });
+      }
+      if (!extracted) {
         logger.warn('[WellbeingAutoTracker] Failed to parse image analysis extraction', {
           userId,
           imageType,
           content: content.substring(0, 200),
-          error: parseError instanceof Error ? parseError.message : 'Unknown parse error',
         });
         return { entries: [], suggestions: [] };
       }

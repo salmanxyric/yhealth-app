@@ -94,7 +94,7 @@ function PlaceholderCard({
 }: {
   title: string;
   description: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
     <motion.div
@@ -138,6 +138,9 @@ function JournalHubContent() {
   const [selectedMode, setSelectedMode] = useState<JournalingMode | null>(null);
   const [editorText, setEditorText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [entryDate, setEntryDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
 
   // Editing existing entry state
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
@@ -173,6 +176,7 @@ function JournalHubContent() {
     setNewEntryStep("select_mode");
     setSelectedMode(null);
     setEditorText("");
+    setEntryDate(new Date().toISOString().split("T")[0]);
   }, []);
 
   const handleSelectMode = useCallback((mode: JournalingMode) => {
@@ -193,11 +197,18 @@ function JournalHubContent() {
 
     setIsSubmitting(true);
     try {
+      // Build logged_at from selected date (use noon to avoid timezone issues)
+      const today = new Date().toISOString().split("T")[0];
+      const logged_at = entryDate !== today
+        ? `${entryDate}T12:00:00.000Z`
+        : undefined;
+
       const result = await journalService.createEntry({
         prompt: "Free reflection",
         entry_text: editorText.trim(),
         mode: "deep",
         journaling_mode: selectedMode,
+        ...(logged_at ? { logged_at } : {}),
       });
 
       if (result.success) {
@@ -211,7 +222,7 @@ function JournalHubContent() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [editorText, selectedMode, handleCloseNewEntry]);
+  }, [editorText, selectedMode, entryDate, handleCloseNewEntry]);
 
   // ---------------------------------------------------------------------------
   // Edit entry handlers
@@ -220,6 +231,7 @@ function JournalHubContent() {
     setEditingEntry(entry);
     setSelectedMode(entry.journalingMode || "free_write");
     setEditorText(entry.entryText);
+    setEntryDate(entry.loggedAt.split("T")[0]);
     setShowNewEntry(true);
     setNewEntryStep("write");
   }, []);
@@ -282,7 +294,7 @@ function JournalHubContent() {
       {/* LIST VIEW                                                          */}
       {/* ================================================================= */}
       {viewMode === "list" && (
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
           <motion.div
             variants={containerVariants}
             initial="hidden"
@@ -539,6 +551,8 @@ function JournalHubContent() {
             onClose={handleCloseNewEntry}
             onSubmit={editingEntry ? handleSubmitEdit : handleSubmitEntry}
             isSubmitting={isSubmitting}
+            entryDate={entryDate}
+            onDateChange={!editingEntry ? setEntryDate : undefined}
           />
         )}
       </AnimatePresence>

@@ -28,7 +28,7 @@ const PHOTO_TYPES: {
   id: BodyImageType;
   label: string;
   description: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   guidance: string;
 }[] = [
   {
@@ -236,7 +236,7 @@ export function BodyImageUploadStep() {
         animate={{ opacity: 1, y: 0 }}
       >
         <motion.div
-          className="w-14 h-14 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20"
+          className="w-14 h-14 mx-auto mb-5 rounded-2xl bg-sky-600 flex items-center justify-center shadow-lg shadow-sky-600/20"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', delay: 0.2 }}
@@ -265,7 +265,7 @@ export function BodyImageUploadStep() {
         </div>
         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
           <motion.div
-            className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full"
+            className="h-full bg-gradient-to-r from-sky-500 to-teal-400 rounded-full"
             initial={{ width: 0 }}
             animate={{ width: `${(uploadedCount / 4) * 100}%` }}
             transition={{ duration: 0.5 }}
@@ -299,7 +299,7 @@ export function BodyImageUploadStep() {
               return (
                 <div className="text-center mb-6">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-800 flex items-center justify-center">
-                    <Icon className="w-8 h-8 text-violet-400" />
+                    <Icon className="w-8 h-8 text-sky-400" />
                   </div>
                   <h2 className="text-xl font-semibold text-white mb-1">
                     {photoType.label} Photo
@@ -320,7 +320,7 @@ export function BodyImageUploadStep() {
               className={`
                 relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer
                 ${isDragging
-                  ? 'border-violet-500 bg-violet-500/10'
+                  ? 'border-emerald-600 bg-emerald-600/10'
                   : 'border-slate-700 hover:border-slate-600 bg-slate-900/50'
                 }
               `}
@@ -329,10 +329,10 @@ export function BodyImageUploadStep() {
               <div className="space-y-4">
                 <div
                   className={`w-14 h-14 mx-auto rounded-xl flex items-center justify-center transition-colors ${
-                    isDragging ? 'bg-violet-500/20' : 'bg-slate-800'
+                    isDragging ? 'bg-emerald-600/20' : 'bg-slate-800'
                   }`}
                 >
-                  <ImagePlus className={`w-7 h-7 ${isDragging ? 'text-violet-400' : 'text-slate-500'}`} />
+                  <ImagePlus className={`w-7 h-7 ${isDragging ? 'text-emerald-400' : 'text-slate-500'}`} />
                 </div>
                 <div>
                   <p className="text-white font-medium mb-1">
@@ -351,7 +351,7 @@ export function BodyImageUploadStep() {
                         setTimeout(() => fileInputRef.current?.removeAttribute('capture'), 100);
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition-colors"
                   >
                     <Camera className="w-4 h-4" />
                     Take Photo
@@ -394,7 +394,7 @@ export function BodyImageUploadStep() {
                     relative flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer group
                     ${hasImage
                       ? 'bg-slate-800/50 border-slate-700'
-                      : 'bg-slate-900/50 border-slate-800 hover:border-violet-500/50 hover:bg-slate-800/30'
+                      : 'bg-slate-900/50 border-slate-800 hover:border-emerald-600/50 hover:bg-slate-800/30'
                     }
                   `}
                   onClick={() => !hasImage && setSelectedType(photoType.id)}
@@ -444,7 +444,7 @@ export function BodyImageUploadStep() {
                   {/* Action */}
                   {!hasImage && (
                     <div className="flex-shrink-0">
-                      <div className="w-10 h-10 rounded-xl bg-slate-800 group-hover:bg-violet-500 flex items-center justify-center transition-colors">
+                      <div className="w-10 h-10 rounded-xl bg-slate-800 group-hover:bg-sky-600 flex items-center justify-center transition-colors">
                         <Camera className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
                       </div>
                     </div>
@@ -472,13 +472,13 @@ export function BodyImageUploadStep() {
                 onChange={(e) => setBodyImagesConsent(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-5 h-5 rounded-md border-2 border-slate-600 peer-checked:border-violet-500 peer-checked:bg-violet-500 transition-colors flex items-center justify-center">
+              <div className="w-5 h-5 rounded-md border-2 border-slate-600 peer-checked:border-emerald-600 peer-checked:bg-emerald-600 transition-colors flex items-center justify-center">
                 {bodyImages.privacyConsent && <Check className="w-3 h-3 text-white" />}
               </div>
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <Shield className="w-4 h-4 text-violet-400" />
+                <Shield className="w-4 h-4 text-emerald-400" />
                 <span className="text-sm font-medium text-white">Privacy Agreement</span>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -505,7 +505,7 @@ export function BodyImageUploadStep() {
             className={`
               w-full py-4 rounded-xl font-semibold text-base transition-all flex items-center justify-center gap-3
               ${canProceed && uploadingImages.size === 0 && !isUploading
-                ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:shadow-lg hover:shadow-violet-500/25'
+                ? 'bg-sky-600 text-white border border-white/20 hover:shadow-lg hover:shadow-sky-600/20'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }
             `}

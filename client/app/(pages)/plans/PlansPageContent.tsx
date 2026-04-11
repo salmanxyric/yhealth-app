@@ -108,7 +108,7 @@ export default function PlansPageContent() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.08\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-90" />
         <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-white/10 blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-80 h-80 rounded-full bg-sky-400/20 blur-3xl" />
-        <div className="container relative mx-auto max-w-6xl text-center">
+        <div className="container relative mx-auto max-w-8xl text-center">
           <motion.span
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -139,7 +139,7 @@ export default function PlansPageContent() {
       {/* Plans grid — elevated cards with emerald/sky accents */}
       <section className="relative px-6 py-16 md:py-24">
         <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950" />
-        <div className="container relative mx-auto max-w-6xl">
+        <div className="container relative mx-auto max-w-8xl">
           <PricingSection
             plans={plans}
             loading={loading}
@@ -152,7 +152,7 @@ export default function PlansPageContent() {
 
       {/* Trust line */}
       <section className="border-t border-slate-800 bg-slate-900/60 px-6 py-10 backdrop-blur-sm">
-        <div className="container mx-auto max-w-6xl text-center">
+        <div className="container mx-auto max-w-8xl text-center">
           <p className="text-sm text-slate-400">
             Cancel anytime · Secure payment via Stripe ·{' '}
             <a href="/contact" className="font-medium text-sky-400 hover:text-sky-300 hover:underline">

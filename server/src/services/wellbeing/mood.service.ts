@@ -6,7 +6,7 @@
 import { query } from '../../database/pg.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../logger.service.js';
-import type { MoodLog, WellbeingMode, MoodEmoji, EmotionTag } from '@shared/types/domain/wellbeing.js';
+import type { MoodLog, WellbeingMode, MoodEmoji, EmotionTag, TriggerCategory } from '@shared/types/domain/wellbeing.js';
 import { detectTimeOfDayPattern } from './utils/pattern-detection.js';
 
 // Valid emotion tags matching the database enum
@@ -103,6 +103,27 @@ export interface CreateMoodLogInput {
   contextNote?: string;
   mode: WellbeingMode;
   loggedAt?: string;
+  // Mood arc / transition tracking
+  transitionTrigger?: string;
+  triggerCategory?: TriggerCategory;
+}
+
+export interface MoodTransition {
+  id: string;
+  moodEmoji?: MoodEmoji;
+  happinessRating?: number;
+  transitionTrigger?: string;
+  triggerCategory?: TriggerCategory;
+  loggedAt: string;
+  previousMoodLogId?: string;
+}
+
+export interface TransitionPatternResult {
+  triggerCategory: TriggerCategory;
+  totalOccurrences: number;
+  averageMoodAfter: number;
+  averageMoodBefore: number;
+  moodDelta: number;
 }
 
 export interface MoodTimelineData {
@@ -140,6 +161,9 @@ interface MoodLogRow {
   emotion_tags: EmotionTag[];
   context_note: string | null;
   mode: WellbeingMode;
+  transition_trigger: string | null;
+  trigger_category: TriggerCategory | null;
+  previous_mood_log_id: string | null;
   logged_at: Date;
   created_at: Date;
   updated_at: Date;
@@ -209,12 +233,28 @@ class MoodService {
       });
     }
 
+    // Auto-detect previous mood log for transition tracking
+    let previousMoodLogId: string | null = null;
+    if (input.transitionTrigger || input.triggerCategory) {
+      const todayStart = loggedAt.split('T')[0];
+      const prevResult = await query<{ id: string }>(
+        `SELECT id FROM mood_logs
+         WHERE user_id = $1 AND DATE(logged_at) = $2
+         ORDER BY logged_at DESC LIMIT 1`,
+        [userId, todayStart]
+      );
+      if (prevResult.rows.length > 0) {
+        previousMoodLogId = prevResult.rows[0].id;
+      }
+    }
+
     const result = await query<MoodLogRow>(
       `INSERT INTO mood_logs (
         user_id, mood_emoji, descriptor,
         happiness_rating, energy_rating, stress_rating, anxiety_rating,
-        emotion_tags, context_note, mode, logged_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        emotion_tags, context_note, mode, logged_at,
+        transition_trigger, trigger_category, previous_mood_log_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         userId,
@@ -224,14 +264,38 @@ class MoodService {
         input.energyRating || null,
         input.stressRating || null,
         input.anxietyRating || null,
-        validEmotionTags.length > 0 ? validEmotionTags : [], // Ensure it's always an array, never null
+        validEmotionTags.length > 0 ? validEmotionTags : [],
         input.contextNote || null,
         input.mode,
         loggedAt,
+        input.transitionTrigger || null,
+        input.triggerCategory || null,
+        previousMoodLogId,
       ]
     );
 
-    return this.mapRowToMoodLog(result.rows[0]);
+    const moodLog = this.mapRowToMoodLog(result.rows[0]);
+
+    // Fire-and-forget: embed mood check-in in life history timeline
+    const moodContent = `Mood: ${input.moodEmoji || ''} ${input.descriptor || ''}. Happiness: ${input.happinessRating ?? 'N/A'}/10. Energy: ${input.energyRating ?? 'N/A'}/10.${input.contextNote ? ` Note: ${input.contextNote}` : ''}${input.emotionTags?.length ? ` Emotions: ${input.emotionTags.join(', ')}` : ''}`;
+    import('../life-history-embedding.service.js').then(({ lifeHistoryEmbeddingService }) =>
+      lifeHistoryEmbeddingService.embedLifeEvent({
+        userId,
+        eventDate: new Date().toISOString().slice(0, 10),
+        entryType: 'emotional_checkin',
+        category: 'wellbeing',
+        content: moodContent,
+        metadata: { mood: input.happinessRating, energy: input.energyRating, stress: input.stressRating, anxiety: input.anxietyRating },
+        sourceIds: [moodLog.id],
+      })
+    ).catch(() => {});
+
+    // Record for unified streak system
+    import('./../../services/streak.service.js').then(({ streakService }) =>
+      streakService.recordActivity(userId, 'mood_checkin', moodLog.id)
+    ).catch(() => {});
+
+    return moodLog;
   }
 
   /**
@@ -298,15 +362,24 @@ class MoodService {
    */
   private emojiToRating(emoji: MoodEmoji | null): number | null {
     if (!emoji) return null;
-    const emojiMap: Record<MoodEmoji, number> = {
+    const emojiMap: Record<string, number> = {
+      // Legacy emojis
       '😊': 9,  // Great
       '😐': 6,  // Okay
       '😟': 4,  // Low
       '😡': 3,  // Angry
       '😰': 3,  // Anxious
       '😴': 5,  // Tired
+      // Expanded 9-state model
+      '😌': 8,  // Calm
+      '😎': 9,  // Confident
+      '🎯': 8,  // Focused
+      '🤩': 9,  // Euphoric
+      '🤔': 5,  // Distracted
+      '😨': 2,  // Fearful
+      '😤': 3,  // Frustrated
     };
-    return emojiMap[emoji] || null;
+    return emojiMap[emoji] ?? null;
   }
 
   /**
@@ -404,16 +477,7 @@ class MoodService {
     const ratings = result.rows.map((r) => {
       // Use happiness rating or convert emoji to number
       if (r.happiness_rating) return r.happiness_rating;
-      // Map emojis to approximate ratings
-      const emojiMap: Record<MoodEmoji, number> = {
-        '😊': 9,
-        '😐': 6,
-        '😟': 4,
-        '😡': 3,
-        '😰': 3,
-        '😴': 5,
-      };
-      return r.mood_emoji ? emojiMap[r.mood_emoji] : 6;
+      return r.mood_emoji ? (this.emojiToRating(r.mood_emoji) ?? 6) : 6;
     });
 
     const timePatterns = detectTimeOfDayPattern(timestamps, ratings);
@@ -479,6 +543,80 @@ class MoodService {
   /**
    * Map database row to MoodLog interface
    */
+  // ============================================
+  // MOOD ARC / TRANSITION METHODS
+  // ============================================
+
+  /**
+   * Get mood transitions for a specific day (mood arc)
+   */
+  async getMoodTransitions(userId: string, date: string): Promise<MoodTransition[]> {
+    const result = await query<MoodLogRow>(
+      `SELECT * FROM mood_logs
+       WHERE user_id = $1 AND DATE(logged_at) = $2
+       ORDER BY logged_at ASC`,
+      [userId, date]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      moodEmoji: row.mood_emoji || undefined,
+      happinessRating: row.happiness_rating || undefined,
+      transitionTrigger: row.transition_trigger || undefined,
+      triggerCategory: row.trigger_category || undefined,
+      loggedAt: row.logged_at.toISOString(),
+      previousMoodLogId: row.previous_mood_log_id || undefined,
+    }));
+  }
+
+  /**
+   * Analyze trigger → mood correlations over a time window
+   */
+  async getTransitionPatterns(userId: string, days: number = 30): Promise<TransitionPatternResult[]> {
+    const result = await query<{
+      trigger_category: TriggerCategory;
+      total: string;
+      avg_mood_after: string;
+      avg_mood_before: string;
+    }>(
+      `WITH triggered_logs AS (
+        SELECT
+          ml.trigger_category,
+          ml.mood_emoji,
+          ml.happiness_rating,
+          prev.mood_emoji AS prev_emoji,
+          prev.happiness_rating AS prev_happiness
+        FROM mood_logs ml
+        LEFT JOIN mood_logs prev ON ml.previous_mood_log_id = prev.id
+        WHERE ml.user_id = $1
+          AND ml.trigger_category IS NOT NULL
+          AND ml.logged_at >= NOW() - INTERVAL '1 day' * $2
+      )
+      SELECT
+        trigger_category,
+        COUNT(*) AS total,
+        AVG(COALESCE(happiness_rating, 6)) AS avg_mood_after,
+        AVG(COALESCE(prev_happiness, 6)) AS avg_mood_before
+      FROM triggered_logs
+      GROUP BY trigger_category
+      HAVING COUNT(*) >= 2
+      ORDER BY COUNT(*) DESC`,
+      [userId, days]
+    );
+
+    return result.rows.map((row) => ({
+      triggerCategory: row.trigger_category,
+      totalOccurrences: parseInt(row.total, 10),
+      averageMoodAfter: parseFloat(row.avg_mood_after),
+      averageMoodBefore: parseFloat(row.avg_mood_before),
+      moodDelta: parseFloat(row.avg_mood_after) - parseFloat(row.avg_mood_before),
+    }));
+  }
+
+  // ============================================
+  // MAPPING
+  // ============================================
+
   private mapRowToMoodLog(row: MoodLogRow): MoodLog {
     return {
       id: row.id,
@@ -492,6 +630,9 @@ class MoodService {
       emotionTags: row.emotion_tags || [],
       contextNote: row.context_note || undefined,
       mode: row.mode,
+      transitionTrigger: row.transition_trigger || undefined,
+      triggerCategory: row.trigger_category || undefined,
+      previousMoodLogId: row.previous_mood_log_id || undefined,
       loggedAt: row.logged_at.toISOString(),
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),

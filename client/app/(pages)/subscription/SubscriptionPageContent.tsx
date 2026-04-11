@@ -394,7 +394,7 @@ function SubscriptionPageContentInner() {
           animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
           transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
         />
-        <div className="container relative mx-auto max-w-6xl z-10">
+        <div className="container relative mx-auto max-w-8xl z-10">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -453,7 +453,7 @@ function SubscriptionPageContentInner() {
         </div>
       </section>
 
-      <div className="container mx-auto max-w-6xl px-6 py-10">
+      <div className="container mx-auto max-w-8xl px-6 py-10">
         {/* Current subscription card */}
         {isAuthenticated && (
           <motion.section

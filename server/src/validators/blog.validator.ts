@@ -150,7 +150,7 @@ export const listBlogsQuerySchema = z.object({
     .string()
     .regex(/^\d+$/, 'Limit must be a number')
     .transform((val) => parseInt(val, 10))
-    .pipe(z.number().int().min(1).max(100))
+    .pipe(z.number().int().min(1).max(500))
     .optional()
     .default('10'),
   status: blogStatusSchema.optional(),

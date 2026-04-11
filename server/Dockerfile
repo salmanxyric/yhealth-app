@@ -67,6 +67,10 @@ COPY --from=builder --chown=nodejs:nodejs /app/server/package.json ./package.jso
 # Copy email templates (EJS files needed at runtime)
 COPY --from=builder --chown=nodejs:nodejs /app/server/src/mails ./src/mails
 
+# Copy database table SQL files (needed by auto-migrate at runtime)
+COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/tables ./dist/server/src/database/tables
+COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/migrations ./dist/server/src/database/migrations
+
 # Symlink email templates to where compiled JS expects them (__dirname + '../mails')
 RUN mkdir -p dist/server/src && \
     ln -s /app/src/mails dist/server/src/mails

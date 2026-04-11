@@ -40,6 +40,7 @@ import {
   createMicroExpressionEngine,
   type MicroExpressionEngine,
 } from "@/lib/avatar/microExpressions";
+import { GesturePlayer, type GestureType } from "@/lib/avatar/gestureSystem";
 
 // ============================================
 // CAMERA CONSTANTS
@@ -86,6 +87,8 @@ export interface UseThreeVrmReturn {
   loadVrm: (url: string) => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  /** Queue a named discrete gesture (wave, point, shrug, etc.). */
+  queueGesture: (type: GestureType) => void;
 }
 
 // ============================================
@@ -137,6 +140,10 @@ export function useThreeVrm({
 
   // Micro-expression engine for brief emotional flashes
   const microExprEngineRef = useRef<MicroExpressionEngine>(createMicroExpressionEngine());
+  const gesturePlayerRef = useRef<GesturePlayer>(new GesturePlayer());
+
+  // Auto-gesture: cycles through conversational gestures during speaking state
+  const nextAutoGestureRef = useRef<number>(0);
 
   // Breathing phase offset for smooth emotion-based breathing
   const breathingPhaseRef = useRef<number>(0);
@@ -144,7 +151,7 @@ export function useThreeVrm({
   // Reusable temporaries (allocated once, reused each frame)
   const tempQuatRef = useRef(new THREE.Quaternion());
   const tempEulerRef = useRef(new THREE.Euler());
-  const tempVec3Ref = useRef(new THREE.Vector3());
+  const _tempVec3Ref = useRef(new THREE.Vector3());
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -573,16 +580,32 @@ export function useThreeVrm({
           // Gesture phase drift — slowly shifts patterns for natural variety (~7s cycle)
           const gesturePhaseShift = elapsed * 0.15;
 
-          // Apply gesture channels modulated by emotion (gestureScale/gestureSpeed)
+          // Apply base speaking channels (reduced amplitude when discrete gesture is active)
+          const baseGestureScale = gesturePlayerRef.current.isPlaying
+            ? effectiveMod.gestureScale * 0.35  // Reduce base when discrete gesture playing
+            : effectiveMod.gestureScale;
           applyChannelsModulated(
             vrm, SPEAKING_GESTURE_CHANNELS,
             elapsed + gesturePhaseShift,
-            effectiveMod.gestureScale, effectiveMod.gestureSpeed,
+            baseGestureScale, effectiveMod.gestureSpeed,
           );
           applyChannelsModulated(
             vrm, SPEAKING_FINGER_CHANNELS, elapsed,
-            effectiveMod.gestureScale, effectiveMod.gestureSpeed,
+            baseGestureScale, effectiveMod.gestureSpeed,
           );
+
+          // 5a-auto. Auto-trigger discrete gestures every 2-4s during speech
+          // Produces natural hand movement variety beyond sine waves
+          if (elapsed >= nextAutoGestureRef.current && !gesturePlayerRef.current.isPlaying) {
+            const speakingGestures: GestureType[] = [
+              'open_palm_up', 'both_hands_out', 'point_forward', 'soft_nod',
+              'reach_out', 'counting_fingers', 'hands_together',
+            ];
+            const pick = speakingGestures[Math.floor(Math.random() * speakingGestures.length)];
+            gesturePlayerRef.current.play(pick);
+            // Next auto-gesture in 2.5-4.5s (randomized)
+            nextAutoGestureRef.current = elapsed + 2.5 + Math.random() * 2.0;
+          }
 
           // 5b. Occasionally trigger micro-expressions during speech
           if (Math.random() < 0.01) {
@@ -606,7 +629,27 @@ export function useThreeVrm({
           }
         }
 
-        // 5b. Arm rotation clamping — prevent unnatural poses after all gesture layers
+        // 5b. Discrete gesture layer — named gestures from ConversationDirector
+        // Upper arms and shoulders use premultiply (parent space) because their
+        // rest pose has large Z rotations — local-space multiply would push arms backward.
+        const PARENT_SPACE_GESTURE_BONES = new Set([
+          'leftUpperArm', 'rightUpperArm', 'leftShoulder', 'rightShoulder',
+        ]);
+        const gestureOffsets = gesturePlayerRef.current.tick(delta);
+        for (const boneName in gestureOffsets) {
+          const bone = vrm.humanoid?.getNormalizedBoneNode(boneName as VRMHumanBoneName);
+          if (bone) {
+            const offset = gestureOffsets[boneName];
+            tempQuatRef.current.set(offset[0], offset[1], offset[2], offset[3]);
+            if (PARENT_SPACE_GESTURE_BONES.has(boneName)) {
+              bone.quaternion.premultiply(tempQuatRef.current);
+            } else {
+              bone.quaternion.multiply(tempQuatRef.current);
+            }
+          }
+        }
+
+        // 5c. Arm rotation clamping — prevent unnatural poses after all gesture layers
         if (currentState === "speaking" || currentState === "listening") {
           const clampEuler = tempEulerRef.current;
           for (const side of ["left", "right"] as const) {
@@ -762,5 +805,9 @@ export function useThreeVrm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { vrmRef, loadVrm, isLoading, error };
+  const queueGesture = useCallback((type: GestureType) => {
+    gesturePlayerRef.current.play(type);
+  }, []);
+
+  return { vrmRef, loadVrm, isLoading, error, queueGesture };
 }

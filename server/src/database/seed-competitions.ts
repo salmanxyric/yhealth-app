@@ -56,7 +56,7 @@ const COMPETITIONS: CompetitionSeed[] = [
     },
     prize_metadata: {
       badges: ['February Champion', 'Fitness Warrior'],
-      rewards: ['Premium Subscription (1 month)', 'YHealth Merchandise'],
+      rewards: ['Premium Subscription (1 month)', 'Balencia Merchandise'],
       top_n: 10,
     },
   },

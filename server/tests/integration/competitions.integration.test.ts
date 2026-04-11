@@ -36,6 +36,14 @@ jest.unstable_mockModule('../../src/services/competition.service.js', () => ({
 jest.unstable_mockModule('../../src/services/ai-scoring.service.js', () => ({
   aiScoringService: mockAiScoringService,
   default: mockAiScoringService,
+  normalizeComponentScores: (raw: Record<string, number>) => ({
+    workout: raw.workout ?? 0,
+    nutrition: raw.nutrition ?? 0,
+    sleep: raw.sleep ?? 0,
+    mindfulness: raw.mindfulness ?? 0,
+    engagement: raw.engagement ?? raw.participation ?? 0,
+    consistency: raw.consistency ?? 0,
+  }),
 }));
 
 jest.unstable_mockModule('../../src/services/logger.service.js', () => ({

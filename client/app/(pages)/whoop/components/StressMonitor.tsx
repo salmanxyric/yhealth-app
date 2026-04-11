@@ -169,29 +169,18 @@ export function StressMonitor() {
     : '/whoop/analytics/stress';
 
   // Fetch stress data
-  const { data, isLoading, error, refetch, reset } = useFetch<StressAnalysis>(endpoint, {
+  const { data, isLoading, error, refetch } = useFetch<StressAnalysis>(endpoint, {
     immediate: true,
     deps: [dateRange.from?.toISOString(), dateRange.to?.toISOString()],
   });
 
-  // Initial fetch
+  // Listen for refresh events from parent
   useEffect(() => {
-    reset();
-    refetch(); // Fetch immediately
+    const handleRefresh = () => refetch();
+    window.addEventListener('whoop-refresh-requested', handleRefresh);
+    return () => window.removeEventListener('whoop-refresh-requested', handleRefresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Listen for tab changes
-  useEffect(() => {
-    const handleTabChange = (event: CustomEvent<{ tab: string }>) => {
-      if (event.detail.tab === 'stress') {
-        refetch();
-      }
-    };
-
-    window.addEventListener('whoop-tab-changed', handleTabChange as EventListener);
-    return () => window.removeEventListener('whoop-tab-changed', handleTabChange as EventListener);
-  }, [refetch]);
 
   // Sync mutation
   const { mutate: triggerSync, isLoading: isSyncing } = useApiMutation({
@@ -232,13 +221,13 @@ export function StressMonitor() {
   // Error state
   if (error) {
     return (
-      <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-6 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
+      <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 sm:p-6 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400" />
+            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
             <div>
-              <p className="text-red-400 font-medium">Failed to load stress analysis</p>
-              <p className="text-sm text-red-300/70 mt-1">{error.message}</p>
+              <p className="text-[13px] sm:text-[14px] text-red-400 font-medium">Failed to load stress analysis</p>
+              <p className="text-[13px] sm:text-[14px] text-red-300/70 mt-1">{error.message}</p>
             </div>
           </div>
           <Button
@@ -258,13 +247,13 @@ export function StressMonitor() {
   // No data state
   if (!data) {
     return (
-      <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-6 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
+      <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-4 sm:p-6 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Brain className="w-5 h-5 text-blue-400" />
+            <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
             <div>
-              <p className="text-blue-400 font-medium">No stress data available</p>
-              <p className="text-sm text-blue-300/70 mt-1">
+              <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No stress data available</p>
+              <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                 Connect your WHOOP device and sync data to see stress analysis.
               </p>
             </div>
@@ -289,9 +278,9 @@ export function StressMonitor() {
   const LoadTypeIcon = LOAD_TYPE_ICONS[current.loadType.type];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header with Date Picker */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <DateRangePicker dateRange={dateRange} onDateRangeChange={handleDateRangeChange} />
         <div className="flex items-center gap-2">
           <Button
@@ -341,7 +330,7 @@ export function StressMonitor() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${levelColors.bg} backdrop-blur-xl border ${levelColors.border} p-8`}
+        className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${levelColors.bg} backdrop-blur-xl border ${levelColors.border} p-5 sm:p-8`}
         style={{ boxShadow: `0 0 60px ${levelColors.glow}` }}
       >
         {/* Background Pattern */}
@@ -354,7 +343,7 @@ export function StressMonitor() {
         />
 
         <div className="relative z-10">
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex items-start justify-between mb-4 sm:mb-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <motion.div
@@ -365,7 +354,7 @@ export function StressMonitor() {
                   <Brain className={`w-7 h-7 ${levelColors.text}`} />
                 </motion.div>
                 <div>
-                  <h3 className="text-xl font-bold text-white">Stress Level</h3>
+                  <h3 className="text-[16px] sm:text-xl font-bold text-white">Stress Level</h3>
                   <p className="text-xs text-slate-400">Based on physiological signals</p>
                 </div>
               </div>
@@ -379,10 +368,10 @@ export function StressMonitor() {
           </div>
 
           {/* Stress Score Display */}
-          <div className="flex items-center justify-center mb-8">
+          <div className="flex items-center justify-center mb-5 sm:mb-8">
             <div className="relative">
               {/* Circular Progress */}
-              <svg className="w-48 h-48 -rotate-90" viewBox="0 0 100 100">
+              <svg className="w-32 h-32 sm:w-48 sm:h-48 -rotate-90" viewBox="0 0 100 100">
                 <circle
                   cx="50"
                   cy="50"
@@ -409,20 +398,20 @@ export function StressMonitor() {
               {/* Center Content */}
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <motion.span
-                  className={`text-5xl font-black ${levelColors.text}`}
+                  className={`text-3xl sm:text-5xl font-black ${levelColors.text}`}
                   initial={{ scale: 0.8 }}
                   animate={{ scale: 1 }}
                 >
                   {current.level.level}
                 </motion.span>
-                <span className={`text-lg font-semibold ${levelColors.text}`}>{current.level.label}</span>
+                <span className={`text-[16px] sm:text-lg font-semibold ${levelColors.text}`}>{current.level.label}</span>
                 <span className="text-xs text-slate-400 mt-1">{current.level.score}/100</span>
               </div>
             </div>
           </div>
 
           {/* Description */}
-          <p className="text-center text-sm text-slate-300 max-w-md mx-auto">{current.level.description}</p>
+          <p className="text-center text-[13px] sm:text-[14px] text-slate-300 max-w-md mx-auto">{current.level.description}</p>
 
           {/* Signal Confidence */}
           <div className="mt-6 flex justify-center">
@@ -445,19 +434,19 @@ export function StressMonitor() {
       </motion.div>
 
       {/* Signals Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {/* HRV */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="rounded-xl bg-gradient-to-br from-purple-500/10 to-violet-600/10 border border-purple-500/20 p-4"
+          className="rounded-xl bg-gradient-to-br from-purple-500/10 to-violet-600/10 border border-purple-500/20 p-3 sm:p-4"
         >
           <div className="flex items-center gap-2 mb-2">
             <Heart className="w-4 h-4 text-purple-400" />
             <span className="text-xs text-slate-400">HRV</span>
           </div>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-[18px] sm:text-xl font-bold text-white">
             {current.signals.hrv ? `${current.signals.hrv.toFixed(0)}ms` : '--'}
           </p>
           {current.signals.hrvDeviation !== null && (
@@ -477,13 +466,13 @@ export function StressMonitor() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="rounded-xl bg-gradient-to-br from-red-500/10 to-rose-600/10 border border-red-500/20 p-4"
+          className="rounded-xl bg-gradient-to-br from-red-500/10 to-rose-600/10 border border-red-500/20 p-3 sm:p-4"
         >
           <div className="flex items-center gap-2 mb-2">
             <Activity className="w-4 h-4 text-red-400" />
             <span className="text-xs text-slate-400">Resting HR</span>
           </div>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-[18px] sm:text-xl font-bold text-white">
             {current.signals.rhr ? `${current.signals.rhr} bpm` : '--'}
           </p>
           {current.signals.rhrDeviation !== null && (
@@ -503,13 +492,13 @@ export function StressMonitor() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-green-600/10 border border-emerald-500/20 p-4"
+          className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-green-600/10 border border-emerald-500/20 p-3 sm:p-4"
         >
           <div className="flex items-center gap-2 mb-2">
             <Zap className="w-4 h-4 text-emerald-400" />
             <span className="text-xs text-slate-400">Recovery</span>
           </div>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-[18px] sm:text-xl font-bold text-white">
             {current.signals.recoveryScore !== null ? `${current.signals.recoveryScore}%` : '--'}
           </p>
           {baseline.recoveryAvg !== null && (
@@ -522,13 +511,13 @@ export function StressMonitor() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-600/10 border border-amber-500/20 p-4"
+          className="rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-600/10 border border-amber-500/20 p-3 sm:p-4"
         >
           <div className="flex items-center gap-2 mb-2">
             <Activity className="w-4 h-4 text-amber-400" />
             <span className="text-xs text-slate-400">Strain</span>
           </div>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-[18px] sm:text-xl font-bold text-white">
             {current.signals.strain !== null ? current.signals.strain.toFixed(1) : '--'}
           </p>
           <p className="text-xs mt-1 text-slate-400">/ 21.0</p>
@@ -541,41 +530,41 @@ export function StressMonitor() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-6"
+          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-4 sm:p-6"
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-white">Stress Trends</h3>
+              <h3 className="text-[16px] sm:text-[18px] font-semibold text-white">Stress Trends</h3>
               <div className="flex items-center gap-2 mt-1">
                 {trends.trend === 'improving' && (
                   <>
                     <TrendingDown className="w-4 h-4 text-emerald-400" />
-                    <span className="text-sm text-emerald-400">Improving</span>
+                    <span className="text-[13px] sm:text-[14px] text-emerald-400">Improving</span>
                   </>
                 )}
                 {trends.trend === 'worsening' && (
                   <>
                     <TrendingUp className="w-4 h-4 text-red-400" />
-                    <span className="text-sm text-red-400">Elevated</span>
+                    <span className="text-[13px] sm:text-[14px] text-red-400">Elevated</span>
                   </>
                 )}
                 {trends.trend === 'stable' && (
                   <>
                     <Minus className="w-4 h-4 text-slate-400" />
-                    <span className="text-sm text-slate-400">Stable</span>
+                    <span className="text-[13px] sm:text-[14px] text-slate-400">Stable</span>
                   </>
                 )}
               </div>
             </div>
             {trends.weeklyAvg !== null && (
               <div className="text-right">
-                <p className="text-sm text-slate-400">Weekly Average</p>
-                <p className="text-xl font-bold text-white">{trends.weeklyAvg}</p>
+                <p className="text-[13px] sm:text-[14px] text-slate-400">Weekly Average</p>
+                <p className="text-[16px] sm:text-xl font-bold text-white">{trends.weeklyAvg}</p>
               </div>
             )}
           </div>
 
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="stressGradient" x1="0" y1="0" x2="0" y2="1">
@@ -624,15 +613,15 @@ export function StressMonitor() {
       )}
 
       {/* Insights & Suggestions */}
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
         {/* Insights */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
-          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-6"
+          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-4 sm:p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Insights</h3>
+          <h3 className="text-[16px] sm:text-[18px] font-semibold text-white mb-3 sm:mb-4">Insights</h3>
           <div className="space-y-3">
             {insights.map((insight, idx) => (
               <div
@@ -654,7 +643,7 @@ export function StressMonitor() {
                       : 'bg-slate-400'
                   }`}
                 />
-                <p className="text-sm text-slate-300">{insight.message}</p>
+                <p className="text-[13px] sm:text-[14px] text-slate-300">{insight.message}</p>
               </div>
             ))}
           </div>
@@ -665,9 +654,9 @@ export function StressMonitor() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-6"
+          className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 p-4 sm:p-6"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Suggested Actions</h3>
+          <h3 className="text-[16px] sm:text-[18px] font-semibold text-white mb-3 sm:mb-4">Suggested Actions</h3>
           <div className="space-y-3">
             {suggestions.map((suggestion, idx) => (
               <div
@@ -675,7 +664,7 @@ export function StressMonitor() {
                 className="flex items-start gap-3 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20"
               >
                 <ChevronRight className="w-4 h-4 text-purple-400 mt-0.5" />
-                <p className="text-sm text-slate-300">{suggestion}</p>
+                <p className="text-[13px] sm:text-[14px] text-slate-300">{suggestion}</p>
               </div>
             ))}
           </div>
@@ -687,31 +676,31 @@ export function StressMonitor() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.45 }}
-        className="rounded-xl bg-slate-800/30 border border-slate-700/30 p-4"
+        className="rounded-xl bg-slate-800/30 border border-slate-700/30 p-3 sm:p-4"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-400">14-Day Personal Baseline</span>
+            <span className="text-[13px] sm:text-[14px] text-slate-400">14-Day Personal Baseline</span>
           </div>
           <span className="text-xs text-slate-500">{baseline.daysOfData} days of data</span>
         </div>
-        <div className="grid grid-cols-3 gap-4 mt-3">
+        <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-3">
           <div>
             <p className="text-xs text-slate-500">HRV Median</p>
-            <p className="text-sm font-medium text-slate-300">
+            <p className="text-[13px] sm:text-[14px] font-medium text-slate-300">
               {baseline.hrvMedian ? `${baseline.hrvMedian.toFixed(0)}ms` : '--'}
             </p>
           </div>
           <div>
             <p className="text-xs text-slate-500">RHR Median</p>
-            <p className="text-sm font-medium text-slate-300">
+            <p className="text-[13px] sm:text-[14px] font-medium text-slate-300">
               {baseline.rhrMedian ? `${baseline.rhrMedian.toFixed(0)} bpm` : '--'}
             </p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Recovery Avg</p>
-            <p className="text-sm font-medium text-slate-300">
+            <p className="text-[13px] sm:text-[14px] font-medium text-slate-300">
               {baseline.recoveryAvg ? `${baseline.recoveryAvg}%` : '--'}
             </p>
           </div>

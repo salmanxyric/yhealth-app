@@ -133,6 +133,12 @@ class WaterIntakeService {
       // Update streak
       await gamificationService.updateStreak(userId);
 
+      // Record for unified streak system
+      try {
+        const { streakService } = await import('./streak.service.js');
+        await streakService.recordActivity(userId, 'water', log.id);
+      } catch { /* streak recording is non-blocking */ }
+
       logger.info(`User ${userId} achieved water goal: ${newMlConsumed}ml`);
     }
 

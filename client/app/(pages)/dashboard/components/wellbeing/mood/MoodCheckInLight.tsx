@@ -1,25 +1,44 @@
 /**
  * @file MoodCheckInLight Component
- * @description Quick emoji-based mood check-in for light mode
+ * @description Quick emoji-based mood check-in with 9-state emotional model and trigger tracking
  */
 
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Smile } from "lucide-react";
 import { moodService, type CreateMoodLogRequest } from "@/src/shared/services/wellbeing.service";
-import type { MoodEmoji } from "@shared/types/domain/wellbeing";
+import type { MoodEmoji, TriggerCategory } from "@shared/types/domain/wellbeing";
 
 const MOOD_EMOJIS: Array<{ emoji: MoodEmoji; label: string; color: string }> = [
-  { emoji: "😊", label: "Great", color: "from-green-500 to-emerald-500" },
-  { emoji: "😐", label: "Okay", color: "from-gray-400 to-slate-500" },
-  { emoji: "😟", label: "Low", color: "from-yellow-500 to-orange-500" },
-  { emoji: "😡", label: "Angry", color: "from-red-500 to-rose-500" },
-  { emoji: "😰", label: "Anxious", color: "from-purple-500 to-pink-500" },
-  { emoji: "😴", label: "Tired", color: "from-blue-400 to-indigo-500" },
+  // Row 1: Positive
+  { emoji: "😌", label: "Calm", color: "from-blue-400 to-blue-600" },
+  { emoji: "😎", label: "Confident", color: "from-green-400 to-green-600" },
+  { emoji: "🎯", label: "Focused", color: "from-purple-400 to-purple-600" },
+  // Row 2: Neutral / Mixed
+  { emoji: "😐", label: "Neutral", color: "from-gray-400 to-gray-600" },
+  { emoji: "🤔", label: "Distracted", color: "from-yellow-400 to-yellow-600" },
+  { emoji: "🤩", label: "Euphoric", color: "from-pink-400 to-pink-600" },
+  // Row 3: Negative
+  { emoji: "😰", label: "Anxious", color: "from-orange-400 to-orange-600" },
+  { emoji: "😤", label: "Frustrated", color: "from-red-400 to-red-600" },
+  { emoji: "😨", label: "Fearful", color: "from-red-700 to-rose-800" },
+];
+
+const TRIGGER_CATEGORIES: Array<{ value: TriggerCategory; label: string }> = [
+  { value: "work", label: "Work" },
+  { value: "exercise", label: "Exercise" },
+  { value: "social", label: "Social" },
+  { value: "food", label: "Food" },
+  { value: "sleep", label: "Sleep" },
+  { value: "meditation", label: "Meditation" },
+  { value: "conflict", label: "Conflict" },
+  { value: "news", label: "News" },
+  { value: "weather", label: "Weather" },
+  { value: "other", label: "Other" },
 ];
 
 interface MoodCheckInLightProps {
@@ -30,6 +49,9 @@ interface MoodCheckInLightProps {
 export function MoodCheckInLight({ onSuccess, onCancel }: MoodCheckInLightProps) {
   const [selectedEmoji, setSelectedEmoji] = useState<MoodEmoji | null>(null);
   const [descriptor, setDescriptor] = useState("");
+  const [transitionTrigger, setTransitionTrigger] = useState("");
+  const [triggerCategory, setTriggerCategory] = useState<TriggerCategory | "">("");
+  const [showTrigger, setShowTrigger] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +69,8 @@ export function MoodCheckInLight({ onSuccess, onCancel }: MoodCheckInLightProps)
         mode: "light",
         mood_emoji: selectedEmoji,
         ...(descriptor.trim() && { descriptor: descriptor.trim() }),
+        ...(transitionTrigger.trim() && { transition_trigger: transitionTrigger.trim() }),
+        ...(triggerCategory && { trigger_category: triggerCategory }),
       };
 
       const response = await moodService.createLog(data);
@@ -65,18 +89,21 @@ export function MoodCheckInLight({ onSuccess, onCancel }: MoodCheckInLightProps)
 
   return (
     <div className="space-y-6">
-      {/* Mood Emoji Selection */}
+      {/* Mood Emoji Selection — 3×3 grid */}
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-4">
           How are you feeling?
         </label>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           {MOOD_EMOJIS.map((mood) => (
             <motion.button
               key={mood.emoji}
-              onClick={() => setSelectedEmoji(mood.emoji)}
+              onClick={() => {
+                setSelectedEmoji(mood.emoji);
+                setShowTrigger(true);
+              }}
               className={`
-                relative p-6 rounded-2xl border-2 transition-all
+                relative p-4 rounded-2xl border-2 transition-all
                 ${selectedEmoji === mood.emoji
                   ? `bg-gradient-to-br ${mood.color} border-white shadow-lg scale-105`
                   : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
@@ -85,9 +112,9 @@ export function MoodCheckInLight({ onSuccess, onCancel }: MoodCheckInLightProps)
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <div className="text-5xl mb-2">{mood.emoji}</div>
+              <div className="text-4xl mb-1">{mood.emoji}</div>
               <div
-                className={`text-sm font-medium ${
+                className={`text-xs font-medium ${
                   selectedEmoji === mood.emoji ? "text-white" : "text-slate-400"
                 }`}
               >
@@ -95,18 +122,57 @@ export function MoodCheckInLight({ onSuccess, onCancel }: MoodCheckInLightProps)
               </div>
               {selectedEmoji === mood.emoji && (
                 <motion.div
-                  className="absolute top-2 right-2 w-6 h-6 bg-white rounded-full flex items-center justify-center"
+                  className="absolute top-1.5 right-1.5 w-5 h-5 bg-white rounded-full flex items-center justify-center"
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 500 }}
                 >
-                  <div className="w-2 h-2 bg-emerald-600 rounded-full" />
+                  <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full" />
                 </motion.div>
               )}
             </motion.button>
           ))}
         </div>
       </div>
+
+      {/* Trigger Input — shown after emoji selection */}
+      <AnimatePresence>
+        {showTrigger && selectedEmoji && (
+          <motion.div
+            className="space-y-3"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <label className="block text-sm font-medium text-slate-300">
+              What triggered this mood? <span className="text-slate-500">(optional)</span>
+            </label>
+            <Input
+              type="text"
+              placeholder="e.g., stressful meeting, good workout..."
+              value={transitionTrigger}
+              onChange={(e) => setTransitionTrigger(e.target.value)}
+              maxLength={100}
+              className="bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+            />
+            <div className="flex flex-wrap gap-2">
+              {TRIGGER_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.value}
+                  onClick={() => setTriggerCategory(triggerCategory === cat.value ? "" : cat.value)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                    triggerCategory === cat.value
+                      ? "bg-emerald-500/30 text-emerald-300 border border-emerald-500/50"
+                      : "bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Optional Descriptor */}
       <div>
@@ -167,4 +233,3 @@ export function MoodCheckInLight({ onSuccess, onCancel }: MoodCheckInLightProps)
     </div>
   );
 }
-

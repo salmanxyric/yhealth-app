@@ -1,0 +1,133 @@
+---
+alwaysApply: false
+---
+Create a **premium futuristic Wellness Orbit Dashboard** using **React + Three.js (React Three Fiber)** for an AI fitness SaaS application.
+
+Reference Concept:
+A cinematic **sci-fi wellness radar/orbit interface** where a glowing energy core sits in the center and **six wellness pillars orbit around it**. Each pillar is represented by a **high-quality 3D glowing icon instead of text labels**.
+
+Core Layout:
+
+* Center: animated organic **energy sphere / holographic wellness core**
+* Around it: **6 orbit nodes arranged in a circular orbit**
+* Each node uses a **high-level icon (no text)**
+
+Icons to Use (Premium / Minimal / Futuristic style):
+
+* Fitness → **Dumbbell icon**
+* Nutrition → **Apple / Leaf icon**
+* Mindfulness → **Brain / Lotus icon**
+* Journaling → **Notebook / Book icon**
+* Habits → **Target / Radar icon**
+* Relationships → **Heart / Connection icon**
+
+Icon Design Requirements:
+
+* Icons should look **premium, glowing, and holographic**
+* Use **SVG or 3D icon meshes**
+* Add **soft bloom glow around icons**
+* Icons sit inside **glassmorphism floating panels**
+* Add subtle **hover pulse animation**
+* Each icon has a **distinct color energy aura**
+
+Color System:
+Fitness → Orange glow
+Nutrition → Green glow
+Mindfulness → Purple glow
+Journaling → Gold glow
+Habits → Cyan glow
+Relationships → Pink glow
+
+Scene Visual Design:
+
+* Dark **deep-space gradient background**
+* Animated **particles / cosmic dust**
+* Thin **orbit rings with glow**
+* Radial **scanner lines**
+* Rotating **arc segments like a sci-fi HUD**
+* Ambient **light fog and bloom**
+
+Center Object:
+Create an **animated organic blob / sphere**:
+
+* Use **Perlin noise shader**
+* Soft **liquid breathing motion**
+* Pulsing glow
+* Transparent layered radar rings
+* Looks like a **biometric AI energy core**
+
+Motion & Interaction:
+
+1. Default Motion
+
+* Entire orbit slowly **auto-rotates continuously**
+* Nodes gently **float and drift**
+* Particles move subtly
+
+2. Scroll Animation
+   When section enters viewport:
+
+* Dramatic **fade + scale reveal**
+* Orbit system **starts rotating based on scroll**
+* Rotation continues smoothly even after scroll stops
+* Scroll controls:
+
+  * orbit rotation
+  * glow intensity
+  * particle speed
+  * slight camera parallax
+
+3. Hover Interaction
+   Hovering an icon node should:
+
+* increase glow
+* scale icon slightly
+* trigger **energy pulse from center to node**
+* highlight orbit segment
+* show small **floating tooltip panel**
+
+Science Fiction Effects:
+
+* holographic UI glow
+* animated energy pulses along orbit paths
+* neon edge lighting
+* particle trails
+* subtle chromatic bloom
+* scanner sweep animation
+* layered circular radar grids
+
+Technical Stack:
+
+* React
+* Three.js
+* React Three Fiber
+* Framer Motion or GSAP (scroll animation)
+* Drei helpers
+* Postprocessing bloom
+* ShaderMaterial for animated core
+
+Performance:
+
+* Use instanced particles
+* Keep animations GPU friendly
+* Smooth 60fps rendering
+
+Component Structure:
+WellnessOrbitSection
+├ OrbitScene
+├ WellnessCore (animated sphere)
+├ OrbitRing
+├ WellnessNode (icon nodes)
+├ ParticleField
+├ ScrollController
+
+Design Style:
+
+* Apple-level polish
+* futuristic health-tech interface
+* minimal but cinematic
+* high contrast dark UI
+* elegant glow, not excessive neon
+
+Goal:
+The final result should feel like a **luxury AI wellness control center** where icons orbit around an intelligent energy core, with **smooth scroll-driven rotation, holographic effects, glowing icons, and sci-fi UI animations**.

@@ -267,7 +267,7 @@ async function sendAlarmEmail(
     // Send email using the mail helper
     await mailHelper.send({
       email: user.email,
-      subject: `⏰ ${title} - yHealth`,
+      subject: `⏰ ${title} - Balencia`,
       html: `
         <!DOCTYPE html>
         <html>

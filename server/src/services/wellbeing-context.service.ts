@@ -72,11 +72,24 @@ export interface WellbeingContext {
 // ============================================
 
 class WellbeingContextService {
+  /** In-memory cache for wellbeing context (5-min TTL, only for non-queryText calls) */
+  private contextCache: Map<string, { data: WellbeingContext; expiresAt: number }> = new Map();
+  private static readonly CONTEXT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
   /**
    * Get comprehensive wellbeing context for AI assistant
    */
   async getWellbeingContext(userId: string, queryText?: string): Promise<WellbeingContext> {
     try {
+      // Use cache for non-queryText calls (e.g., from getComprehensiveContext)
+      if (!queryText) {
+        const cached = this.contextCache.get(userId);
+        if (cached && cached.expiresAt > Date.now()) {
+          logger.debug('[WellbeingContext] Cache hit', { userId });
+          return cached.data;
+        }
+      }
+
       const context: WellbeingContext = {};
       const today = new Date().toISOString().split('T')[0];
       const todayStart = new Date(today);
@@ -272,6 +285,14 @@ class WellbeingContextService {
         } catch (error) {
           logger.warn('[WellbeingContext] Failed to get relevant history', { userId, error });
         }
+      }
+
+      // Cache the result for non-queryText calls
+      if (!queryText) {
+        this.contextCache.set(userId, {
+          data: context,
+          expiresAt: Date.now() + WellbeingContextService.CONTEXT_CACHE_TTL,
+        });
       }
 
       return context;

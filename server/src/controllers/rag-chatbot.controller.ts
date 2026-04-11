@@ -12,6 +12,20 @@ import { logger } from '../services/logger.service.js';
 import { query } from '../database/pg.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
+/**
+ * Skip emotion detection for short action commands that don't carry emotional content.
+ * This saves 2-5s and avoids unnecessary OpenAI/Gemini/TensorFlow API calls.
+ */
+const ACTION_PATTERNS = /^(play|stop|pause|skip|next|log|add|create|show|open|go to|navigate|set|toggle|refresh|sync|search)\b/i;
+
+function shouldSkipEmotionDetection(message: string): boolean {
+  // Very short messages are usually commands, not emotional expressions
+  if (message.length < 20) return true;
+  // Action-oriented messages
+  if (ACTION_PATTERNS.test(message)) return true;
+  return false;
+}
+
 class RAGChatbotController {
   chat = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.userId;
@@ -24,8 +38,10 @@ class RAGChatbotController {
 
     const trimmedMessage = message.trim();
 
-    // Detect emotion from user message
+    // Detect emotion from user message — skip for short action commands
     let emotionDetected: EmotionDetection | null = null;
+    const skipEmotion = shouldSkipEmotionDetection(trimmedMessage);
+    if (!skipEmotion) {
     try {
       // Get conversation context if available
       let conversationContext = undefined;
@@ -60,6 +76,7 @@ class RAGChatbotController {
       logger.warn('[RAGChatbotController] Error detecting emotion', { error });
       // Continue without emotion detection
     }
+    } // end if (!skipEmotion)
 
     // Detect crisis keywords
     let crisisDetected = false;
@@ -129,7 +146,7 @@ class RAGChatbotController {
     const userId = req.user?.userId;
     if (!userId) throw new ApiError(401, 'Authentication required');
 
-    const { message, conversationId, callId, callPurpose } = req.body;
+    const { message, conversationId, callId, callPurpose, imageBase64 } = req.body;
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       throw new ApiError(400, 'Message is required');
     }
@@ -160,9 +177,10 @@ class RAGChatbotController {
     res.flushHeaders();
 
     try {
-      // Detect emotion from user message (async, non-blocking)
+      // Detect emotion from user message (async, non-blocking) — skip for short action commands
       let emotionDetected: EmotionDetection | null = null;
-      const detectEmotionPromise = (async () => {
+      const skipEmotion = shouldSkipEmotionDetection(trimmedMessage);
+      const detectEmotionPromise = skipEmotion ? Promise.resolve() : (async () => {
         try {
           let conversationContext = undefined;
           if (conversationId) {
@@ -244,6 +262,7 @@ class RAGChatbotController {
         conversationId,
         callId,
         callPurpose: effectiveCallPurpose,
+        imageBase64,
         onToken: (token: string) => {
           try {
             res.write(`data: ${JSON.stringify({ token })}\n\n`);

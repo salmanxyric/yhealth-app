@@ -192,7 +192,7 @@ export function WhoopAgeWidget({ whoopAge, chronologicalAge, isLoading }: WhoopA
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
-              className="text-6xl font-bold text-white mb-1 drop-shadow-lg"
+              className="text-2xl sm:text-3xl font-bold text-white mb-1 drop-shadow-lg"
               style={{ textShadow: '0 0 20px rgba(16, 185, 129, 0.5)' }}
             >
               {displayAge.toFixed(1)}

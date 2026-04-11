@@ -225,33 +225,46 @@ export function WorkoutCalendar({
   return (
     <div className="space-y-4">
       {/* Month Overview Card */}
-      <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-2xl border border-slate-700/50 p-6 backdrop-blur-xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-1">
-              {MONTH_NAMES[currentMonth]} {currentYear}
-            </h2>
-            <p className="text-slate-400">
-              {monthStats.completedWorkouts} of {monthStats.totalWorkouts} workouts completed
-            </p>
+      <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-2xl border border-slate-700/50 p-4 sm:p-6 backdrop-blur-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 sm:gap-0 w-full sm:w-auto">
+            {/* Mobile-only progress circle */}
+            <div className="sm:hidden">
+              <CircularProgress
+                percentage={monthStats.percentage}
+                size={56}
+                strokeWidth={6}
+                labelSize="sm"
+              />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">
+                {MONTH_NAMES[currentMonth]} {currentYear}
+              </h2>
+              <p className="text-sm sm:text-base text-slate-400">
+                {monthStats.completedWorkouts} of {monthStats.totalWorkouts} workouts completed
+              </p>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-6">
-            {/* Month Progress */}
-            <CircularProgress
-              percentage={monthStats.percentage}
-              size={90}
-              strokeWidth={8}
-              labelSize="lg"
-            />
-            
+
+          <div className="flex items-center gap-3 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end">
+            {/* Desktop progress circle */}
+            <div className="hidden sm:block">
+              <CircularProgress
+                percentage={monthStats.percentage}
+                size={90}
+                strokeWidth={8}
+                labelSize="lg"
+              />
+            </div>
+
             {/* Navigation */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={goToToday}
-                className="px-4 py-2 text-sm font-medium text-emerald-400 bg-emerald-500/10 rounded-xl hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-emerald-400 bg-emerald-500/10 rounded-xl hover:bg-emerald-500/20 transition-colors border border-emerald-500/20"
               >
                 Today
               </motion.button>
@@ -259,17 +272,17 @@ export function WorkoutCalendar({
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={goToPreviousMonth}
-                className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-colors"
+                className="p-2 sm:p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-colors"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={goToNextMonth}
-                className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-colors"
+                className="p-2 sm:p-2.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-colors"
               >
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
               </motion.button>
             </div>
           </div>
@@ -278,13 +291,13 @@ export function WorkoutCalendar({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Calendar Grid */}
-        <div className="lg:col-span-2 bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4 backdrop-blur-xl">
+        <div className="lg:col-span-2 bg-slate-800/50 rounded-2xl border border-slate-700/50 p-2 sm:p-4 backdrop-blur-xl">
           {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-2">
             {WEEKDAY_LABELS.map((day) => (
               <div
                 key={day}
-                className="text-center text-xs font-semibold text-slate-500 py-3 uppercase tracking-wider"
+                className="text-center text-[10px] sm:text-xs font-semibold text-slate-500 py-1.5 sm:py-3 uppercase tracking-wider"
               >
                 {day}
               </div>
@@ -292,7 +305,7 @@ export function WorkoutCalendar({
           </div>
 
           {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             <AnimatePresence mode="wait">
               {calendarDays.map((day, index) => {
                 const isCurrentMonth = new Date(day.date).getMonth() === currentMonth;
@@ -352,14 +365,14 @@ export function WorkoutCalendar({
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-2xl border border-slate-700/50 p-5 backdrop-blur-xl"
+              className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-2xl border border-slate-700/50 p-4 sm:p-5 backdrop-blur-xl"
             >
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-sm text-slate-400">
                     {new Date(selectedDay.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                   </p>
-                  <h3 className="text-lg font-bold text-white">
+                  <h3 className="text-base sm:text-lg font-bold text-white truncate">
                     {selectedDay.workout.workoutName}
                   </h3>
                 </div>
@@ -370,20 +383,20 @@ export function WorkoutCalendar({
                 />
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 rounded-lg">
-                    <Dumbbell className="w-4 h-4 text-cyan-400" />
+              <div className="space-y-2 sm:space-y-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+                  <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-700/50 rounded-lg">
+                    <Dumbbell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
                     <span className="text-slate-300">{selectedDay.workout.exercises?.length || 0} exercises</span>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 rounded-lg">
-                    <Clock className="w-4 h-4 text-amber-400" />
+                  <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-700/50 rounded-lg">
+                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
                     <span className="text-slate-300">{selectedDay.workout.estimatedDuration} min</span>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 rounded-lg w-fit">
-                  <Flame className="w-4 h-4 text-orange-400" />
-                  <span className="text-slate-300">{selectedDay.workout.estimatedCalories} calories</span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-700/50 rounded-lg">
+                    <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400" />
+                    <span className="text-slate-300">{selectedDay.workout.estimatedCalories} cal</span>
+                  </div>
                 </div>
               </div>
 
@@ -428,16 +441,16 @@ export function WorkoutCalendar({
           </div>
 
           {/* Quick Stats */}
-          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4 backdrop-blur-xl">
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-3 sm:p-4 backdrop-blur-xl">
             <h4 className="text-sm font-semibold text-white mb-3">This Month</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 bg-slate-700/30 rounded-xl">
-                <p className="text-2xl font-bold text-emerald-400">{monthStats.completedWorkouts}</p>
-                <p className="text-xs text-slate-400">Completed</p>
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <div className="text-center p-2 sm:p-3 bg-slate-700/30 rounded-xl">
+                <p className="text-xl sm:text-2xl font-bold text-emerald-400">{monthStats.completedWorkouts}</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">Completed</p>
               </div>
-              <div className="text-center p-3 bg-slate-700/30 rounded-xl">
-                <p className="text-2xl font-bold text-slate-300">{monthStats.totalWorkouts - monthStats.completedWorkouts}</p>
-                <p className="text-xs text-slate-400">Remaining</p>
+              <div className="text-center p-2 sm:p-3 bg-slate-700/30 rounded-xl">
+                <p className="text-xl sm:text-2xl font-bold text-slate-300">{monthStats.totalWorkouts - monthStats.completedWorkouts}</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">Remaining</p>
               </div>
             </div>
           </div>

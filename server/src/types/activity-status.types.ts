@@ -60,3 +60,65 @@ export interface StatusStats {
   streakDays: number;
 }
 
+// ─── Status Intent Classification ───────────────────────────────────────────
+
+export interface StatusDetection {
+  detected: boolean;
+  status?: ActivityStatus;
+  confidence: number;
+  duration?: {
+    days?: number;
+    endDate?: string;
+  };
+  reason?: string;
+  layer: 'explicit' | 'inferred';
+}
+
+// ─── Plan Status Overrides ──────────────────────────────────────────────────
+
+export type WorkoutOverride = 'skip_all' | 'skip_affected' | 'suggest_alternatives' | 'optional_only' | 'none';
+export type NutritionOverride = 'comfort_foods' | 'flexible' | 'anti_inflammatory' | 'none';
+export type GoalOverride = 'pause_fitness' | 'extend_deadlines' | 'reduce_intensity' | 'none';
+
+export interface PlanStatusOverride {
+  status: ActivityStatus;
+  appliedAt: string;
+  expiresAt?: string;
+  workoutOverride: WorkoutOverride;
+  nutritionOverride: NutritionOverride;
+  goalOverride: GoalOverride;
+  adjustmentDetails?: string;
+  userConfirmed: boolean;
+}
+
+// ─── Status Patterns ────────────────────────────────────────────────────────
+
+export type StatusPatternType = 'day_of_week' | 'post_event' | 'streak_disruption';
+
+export interface StatusPattern {
+  type: StatusPatternType;
+  pattern: string;
+  confidence: number;
+  frequency: number;
+  firstObserved: string;
+  lastConfirmed: string;
+  suggestion: string;
+}
+
+// ─── Activity Status Context (for ComprehensiveUserContext) ─────────────────
+
+export interface ActivityStatusContext {
+  current: ActivityStatus;
+  since: string;
+  source: string;
+  expectedEndDate?: string;
+  recentHistory: Array<{
+    date: string;
+    status: ActivityStatus;
+    mood?: number;
+  }>;
+  patterns: StatusPattern[];
+  activeOverrides: boolean;
+  daysSinceLastWorkingStatus: number;
+}
+

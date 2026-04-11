@@ -3,9 +3,9 @@
  * @description Handles emotional check-in screening conversations with LLM-powered question generation
  */
 
-import { ChatAnthropic } from '@langchain/anthropic';
-import { env } from '../config/env.config.js';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { logger } from './logger.service.js';
+import { modelFactory } from './model-factory.service.js';
 import { query } from '../database/pg.js';
 import { ApiError } from '../utils/ApiError.js';
 import { crisisDetectionService } from './crisis-detection.service.js';
@@ -113,7 +113,7 @@ interface RoutingContext {
 // SYSTEM PROMPT
 // ============================================
 
-const EMOTIONAL_CHECKIN_SYSTEM_PROMPT = `You are YHealth's Emotional Check-In AI — a calm, empathetic wellness guide that helps users reflect on anxiety and low-mood patterns through short, evidence-inspired screening conversations.
+const EMOTIONAL_CHECKIN_SYSTEM_PROMPT = `You are Balencia's Emotional Check-In AI — a calm, empathetic wellness guide that helps users reflect on anxiety and low-mood patterns through short, evidence-inspired screening conversations.
 
 ## Your Role
 - You are NOT a clinician and must NEVER diagnose, label, or prescribe
@@ -181,12 +181,11 @@ When generating a question, respond with JSON:
 // ============================================
 
 class EmotionalCheckInService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'default',
       temperature: 0.7,
     });
   }

@@ -15,7 +15,6 @@ import {
   ChevronDown,
   Rocket,
   Target,
-  Bell,
   Calendar,
   Shield,
 } from "lucide-react";
@@ -32,6 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Logo } from "@/components/common/logo";
 import { useAuth } from "@/app/context/AuthContext";
 import { StatusIndicator } from "@/app/components/activity/StatusIndicator";
+import { NotificationDropdown } from "@/components/notifications/NotificationDropdown";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -39,7 +39,7 @@ const navLinks = [
   { href: "#how-it-works", label: "How it Works" },
   { href: "#testimonials", label: "Testimonials" },
   { href: "/plans", label: "Pricing" },
-  { href: "#faq", label: "FAQ" },
+  { href: "/faq", label: "FAQ" },
 ];
 
 export function Header() {
@@ -192,17 +192,8 @@ export function Header() {
                     <StatusIndicator />
                   </div>
 
-                  {/* Notification Bell */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    asChild
-                    className="relative rounded-full hover:bg-primary/10 transition-colors"
-                  >
-                    <Link href="/notifications">
-                      <Bell className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
-                    </Link>
-                  </Button>
+                  {/* Notification Bell with Dropdown */}
+                  <NotificationDropdown />
 
                   <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -214,7 +205,7 @@ export function Header() {
                         <div className="relative">
                           <Avatar className="h-9 w-9 ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
                             <AvatarImage
-                              src={user.avatarUrl || undefined}
+                              src={user.avatarUrl || '/avatar.jpg'}
                               alt={getDisplayName()}
                             />
                             <AvatarFallback className="bg-gradient-to-br from-primary to-purple-500 text-white font-semibold text-sm">
@@ -240,7 +231,7 @@ export function Header() {
                         <div className="flex items-center gap-3">
                           <Avatar className="h-12 w-12 ring-2 ring-primary/30 shadow-lg">
                             <AvatarImage
-                              src={user.avatarUrl || undefined}
+                              src={user.avatarUrl || '/avatar.jpg'}
                               alt={getDisplayName()}
                             />
                             <AvatarFallback className="bg-gradient-to-br from-primary to-purple-500 text-white font-bold text-base">
@@ -532,7 +523,7 @@ export function Header() {
                       <div className="flex items-center gap-3 p-3 glass rounded-xl border border-white/10">
                         <Avatar className="h-12 w-12 ring-2 ring-primary/20">
                           <AvatarImage
-                            src={user.avatarUrl || undefined}
+                            src={user.avatarUrl || '/avatar.jpg'}
                             alt={getDisplayName()}
                           />
                           <AvatarFallback className="bg-gradient-to-br from-primary to-purple-500 text-white font-semibold">

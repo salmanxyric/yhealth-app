@@ -10,6 +10,7 @@ import { ApiError } from '../utils/ApiError.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { whoopAnalyticsService } from '../services/whoop-analytics.service.js';
 import { whoopStressService } from '../services/whoop-stress.service.js';
+import cache from '../services/cache.service.js';
 
 /**
  * GET /api/whoop/analytics/overview
@@ -59,8 +60,15 @@ export const getWhoopOverview = asyncHandler(
       endDate.setHours(23, 59, 59, 999);
     }
 
-    const overview = await whoopAnalyticsService.getWhoopOverview(targetUserId, startDate, endDate);
+    // Cache for 30 seconds per user — avoids 7 DB queries on repeat calls
+    const startStr = startDate?.toISOString().split('T')[0] || 'today';
+    const endStr = endDate?.toISOString().split('T')[0] || 'today';
+    const cacheKey = `whoop-overview:${targetUserId}:${startStr}:${endStr}`;
+    const overview = await cache.getOrSet(cacheKey, async () => {
+      return whoopAnalyticsService.getWhoopOverview(targetUserId, startDate, endDate);
+    }, 30);
 
+    res.set('Cache-Control', 'private, max-age=30');
     ApiResponse.success(res, overview, 'WHOOP overview retrieved successfully');
   }
 );

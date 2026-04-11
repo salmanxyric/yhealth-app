@@ -608,6 +608,8 @@ export const nutritionService = {
     if (options?.date) params.append('date', options.date);
     if (options?.startDate) params.append('startDate', options.startDate);
     if (options?.endDate) params.append('endDate', options.endDate);
+    // Send user timezone so server filters by local date, not UTC
+    try { params.append('tz', Intl.DateTimeFormat().resolvedOptions().timeZone); } catch { /* fallback to UTC on server */ }
     const queryString = params.toString();
     return api.get<MealLogsResponse>(`/diet-plans/meals${queryString ? `?${queryString}` : ''}`);
   },

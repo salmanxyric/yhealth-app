@@ -72,6 +72,13 @@ import exercisesRoutes from './exercises.routes.js';
 import adminExerciseRoutes from './admin-exercise.routes.js';
 import adminTestimonialRoutes from './admin-testimonial.routes.js';
 import testimonialRoutes from './testimonial.routes.js';
+import intelligenceRoutes from './intelligence.routes.js';
+import spotifyRoutes from './spotify.routes.js';
+import youtubeRoutes from './youtube.routes.js';
+import emailRoutes from './email.routes.js';
+import adminWhoopRoutes from './admin-whoop.routes.js';
+import financeRoutes from './finance.routes.js';
+import streakRoutes from './streak.routes.js';
 import { env } from '../config/env.config.js';
 
 const router = Router();
@@ -79,7 +86,7 @@ const router = Router();
 // API info endpoint
 router.get('/', (_req, res) => {
   res.json({
-    name: 'YHealth API',
+    name: 'Balencia API',
     version: env.api.version,
     status: 'running',
     timestamp: new Date().toISOString(),
@@ -114,6 +121,7 @@ router.get('/', (_req, res) => {
       tts: '/api/tts',
       chats: '/api/chats',
       messages: '/api/messages',
+      intelligence: '/api/v1/intelligence',
       wellbeing: '/api/v1/wellbeing',
       schedules: '/api/v1/schedules',
       nutritionAdaptive: '/api/nutrition',
@@ -125,6 +133,10 @@ router.get('/', (_req, res) => {
       help: '/api/help',
       community: '/api/community',
       webinars: '/api/webinars',
+      spotify: '/api/spotify',
+      youtube: '/api/youtube',
+      email: '/api/email',
+      streaks: '/api/streaks',
     },
   });
 });
@@ -244,6 +256,9 @@ router.use('/chats', chatRoutes);
 // Message routes (Message operations)
 router.use('/messages', messageRoutes);
 
+// Intelligence routes (Epic 08 - Cross-Domain Intelligence)
+router.use('/v1/intelligence', intelligenceRoutes);
+
 // Wellbeing routes (Epic 07 - Wellbeing Pillar)
 router.use('/v1/wellbeing', wellbeingRoutes);
 
@@ -341,5 +356,23 @@ router.use('/testimonials', testimonialRoutes);
 
 // Admin testimonial routes (Admin testimonial/review management)
 router.use('/admin/testimonials', adminTestimonialRoutes);
+
+// Spotify routes (Music integration — playlists, playback, recommendations)
+router.use('/spotify', spotifyRoutes);
+
+// YouTube routes (Video search for yoga poses)
+router.use('/youtube', youtubeRoutes);
+
+// Email engine routes (Preferences, unsubscribe, analytics)
+router.use('/email', emailRoutes);
+
+// Admin WHOOP routes (Manual sync, backfill, monitoring)
+router.use('/admin/whoop', adminWhoopRoutes);
+
+// Finance & Money Management module
+router.use('/finance', financeRoutes);
+
+// Streak tracking routes (status, history, calendar, leaderboard, rewards, freezes)
+router.use('/streaks', streakRoutes);
 
 export default router;

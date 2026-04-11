@@ -1,17 +1,17 @@
 /**
  * @file WorkflowNode Component
- * @description n8n-style custom node component for React Flow
+ * @description Clean n8n-style node card for React Flow schedule workflow
  */
 
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { motion } from "framer-motion";
-import { Edit2, Trash2, Calendar as CalendarIcon } from "lucide-react";
+import { Edit2, Trash2, Clock, GripVertical } from "lucide-react";
 import type { ScheduleItem } from "@/src/shared/services/schedule.service";
 
-// Helper function to convert hex to rgba with opacity
+/* ─────────── Helpers ─────────── */
+
 const hexToRgba = (hex: string, opacity: number): string => {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -19,32 +19,36 @@ const hexToRgba = (hex: string, opacity: number): string => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
-// Helper function to format time for display
-const formatTimeForDisplay = (time: string): string => {
-  if (!time) return '';
-  const [hours, minutes] = time.split(':').map(Number);
+const formatTime12h = (time: string): string => {
+  if (!time) return "";
+  const [hours, minutes] = time.split(":").map(Number);
   if (isNaN(hours) || isNaN(minutes)) return time;
-  
   const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+  const ampm = hours >= 12 ? "PM" : "AM";
+  return `${hour12}:${minutes.toString().padStart(2, "0")} ${ampm}`;
 };
 
-// Helper function to calculate duration
-const calculateDuration = (startTime: string, endTime?: string, durationMinutes?: number): number | null => {
+const getDuration = (
+  startTime: string,
+  endTime?: string,
+  durationMinutes?: number
+): string | null => {
+  let mins = durationMinutes || 0;
   if (endTime) {
-    const timeToMinutes = (time: string): number => {
-      if (!time) return 0;
-      const [hours, minutes] = time.split(':').map(Number);
-      return (hours || 0) * 60 + (minutes || 0);
+    const toMin = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return (h || 0) * 60 + (m || 0);
     };
-    const start = timeToMinutes(startTime);
-    const end = timeToMinutes(endTime);
-    const duration = end - start;
-    return duration > 0 ? duration : null;
+    const diff = toMin(endTime) - toMin(startTime);
+    if (diff > 0) mins = diff;
   }
-  return durationMinutes || null;
+  if (!mins || mins <= 0) return null;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
 };
+
+/* ─────────── Types ─────────── */
 
 export interface WorkflowNodeData {
   item: ScheduleItem;
@@ -53,226 +57,211 @@ export interface WorkflowNodeData {
   connectionCount: number;
 }
 
+/* ─────────── Component ─────────── */
+
 function WorkflowNode(props: NodeProps): React.JSX.Element {
   const { data, selected } = props;
   const nodeData = data as unknown as WorkflowNodeData;
   const { item, onEdit, onDelete, connectionCount } = nodeData;
+  const [isHovered, setIsHovered] = useState(false);
 
-  const handleEdit = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onEdit(item);
-  }, [item, onEdit]);
+  const handleEdit = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onEdit(item);
+    },
+    [item, onEdit]
+  );
 
-  const handleDelete = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDelete();
-  }, [onDelete]);
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onDelete();
+    },
+    [onDelete]
+  );
 
-  const duration = calculateDuration(item.startTime, item.endTime, item.durationMinutes);
-  const displayDuration = duration && duration > 0
-    ? (() => {
-        const hours = Math.floor(duration / 60);
-        const minutes = duration % 60;
-        return hours > 0 
-          ? minutes > 0 
-            ? `${hours}h ${minutes}m`
-            : `${hours}h`
-          : `${minutes}m`;
-      })()
-    : null;
-
-  // Enhanced color system with gradients
-  const nodeColor = item.color || "#10b981";
-  const borderColor = selected ? hexToRgba(nodeColor, 0.9) : hexToRgba(nodeColor, 0.6);
-  const iconBgColor = hexToRgba(nodeColor, 0.3);
-  const iconBorderColor = hexToRgba(nodeColor, 0.5);
-  const glowColor = hexToRgba(nodeColor, 0.3);
-
-  // Create gradient background
+  const duration = getDuration(
+    item.startTime,
+    item.endTime,
+    item.durationMinutes
+  );
+  const color = item.color || "#10b981";
+  const showActions = isHovered || selected;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.85, y: 10 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.85, y: -10 }}
-      transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
-      className="workflow-node-wrapper"
+    <div
+      className="group relative"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Input Handle */}
       <Handle
         type="target"
         position={Position.Left}
-        className="workflow-handle workflow-handle-input"
         style={{
-          background: `radial-gradient(circle, ${hexToRgba(nodeColor, 0.8)} 0%, ${hexToRgba(nodeColor, 0.6)} 100%)`,
-          border: `2px solid ${hexToRgba(nodeColor, 0.9)}`,
-          width: '14px',
-          height: '14px',
-          boxShadow: `0 0 8px ${glowColor}, 0 0 4px ${hexToRgba(nodeColor, 0.5)}`,
+          width: 10,
+          height: 10,
+          background: color,
+          border: "2px solid rgba(13, 13, 20, 0.8)",
+          boxShadow: selected ? `0 0 6px ${hexToRgba(color, 0.6)}` : "none",
+          transition: "all 0.15s ease",
         }}
       />
 
-      {/* Node Content */}
-      <motion.div
-        className={`workflow-node ${selected ? 'workflow-node-selected' : ''}`}
+      {/* Node Card */}
+      <div
+        className="relative rounded-xl overflow-hidden transition-all duration-150"
         style={{
-          background: `linear-gradient(135deg, ${hexToRgba(nodeColor, 0.2)} 0%, ${hexToRgba(nodeColor, 0.08)} 50%, ${hexToRgba(nodeColor, 0.15)} 100%)`,
-          borderColor: borderColor,
-          borderWidth: selected ? '2px' : '1.5px',
-          backdropFilter: 'blur(12px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+          width: 240,
+          background: "rgba(20, 20, 30, 0.92)",
+          backdropFilter: "blur(8px)",
+          border: `1.5px solid ${selected ? hexToRgba(color, 0.7) : "rgba(255, 255, 255, 0.08)"}`,
           boxShadow: selected
-            ? `0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 0 40px ${glowColor}, 0 0 20px ${hexToRgba(nodeColor, 0.4)}`
-            : `0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 0 20px ${hexToRgba(nodeColor, 0.15)}`,
+            ? `0 0 0 1px ${hexToRgba(color, 0.15)}, 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px ${hexToRgba(color, 0.12)}`
+            : isHovered
+              ? "0 8px 24px rgba(0, 0, 0, 0.4)"
+              : "0 2px 12px rgba(0, 0, 0, 0.3)",
+          transform: isHovered ? "translateY(-1px)" : "none",
         }}
-        whileHover={{ 
-          scale: 1.03,
-          boxShadow: `0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.12) inset, 0 0 50px ${glowColor}, 0 0 30px ${hexToRgba(nodeColor, 0.3)}`,
-        }}
-        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
       >
-        {/* Node Header */}
-        <div className="flex items-center gap-3 mb-3 relative z-30">
-          <motion.div 
-            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border-2 relative overflow-hidden"
-            style={{
-              background: `linear-gradient(135deg, ${iconBgColor} 0%, ${hexToRgba(nodeColor, 0.4)} 100%)`,
-              borderColor: iconBorderColor,
-              boxShadow: `0 4px 12px ${hexToRgba(nodeColor, 0.3)}, inset 0 1px 0 rgba(255, 255, 255, 0.2)`,
-            }}
-            whileHover={{ scale: 1.1, rotate: 5 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div 
-              className="absolute inset-0 opacity-20"
+        {/* Color accent bar */}
+        <div
+          className="h-[3px] w-full"
+          style={{ background: color }}
+        />
+
+        {/* Content */}
+        <div className="px-3.5 py-3">
+          {/* Header row */}
+          <div className="flex items-start gap-2.5 mb-2">
+            {/* Icon */}
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
               style={{
-                background: `radial-gradient(circle at 30% 30%, ${hexToRgba(nodeColor, 0.6)}, transparent 70%)`,
+                background: hexToRgba(color, 0.12),
+                border: `1px solid ${hexToRgba(color, 0.2)}`,
               }}
-            />
-            {item.icon ? (
-              <span className="text-lg leading-none relative z-10">{item.icon}</span>
-            ) : (
-              <CalendarIcon 
-                className="w-5 h-5 relative z-10" 
-                style={{ color: hexToRgba(nodeColor, 1) }}
-              />
-            )}
-          </motion.div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white leading-tight truncate mb-0.5" style={{ fontSize: '15px', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
-              {item.title}
-            </h3>
-            {item.category && (
-              <p className="text-slate-300 truncate leading-tight font-medium" style={{ fontSize: '11px', textShadow: '0 1px 1px rgba(0, 0, 0, 0.2)' }}>
-                {item.category}
-              </p>
+            >
+              {item.icon ? (
+                <span className="text-base leading-none">{item.icon}</span>
+              ) : (
+                <GripVertical
+                  className="w-4 h-4"
+                  style={{ color: hexToRgba(color, 0.8) }}
+                />
+              )}
+            </div>
+
+            {/* Title & Category */}
+            <div className="flex-1 min-w-0">
+              <h3 className="text-[13px] font-semibold text-white leading-tight truncate">
+                {item.title}
+              </h3>
+              {item.category && (
+                <span
+                  className="text-[10px] font-medium leading-tight"
+                  style={{ color: hexToRgba(color, 0.9) }}
+                >
+                  {item.category}
+                </span>
+              )}
+            </div>
+
+            {/* Connection badge */}
+            {connectionCount > 0 && (
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                style={{
+                  background: hexToRgba(color, 0.15),
+                  border: `1px solid ${hexToRgba(color, 0.3)}`,
+                }}
+              >
+                <span
+                  className="text-[9px] font-bold"
+                  style={{ color: hexToRgba(color, 0.9) }}
+                >
+                  {connectionCount}
+                </span>
+              </div>
             )}
           </div>
-          {/* Action Buttons */}
-          <div className="flex gap-1.5 flex-shrink-0 z-40">
-            <motion.button
+
+          {/* Description */}
+          {item.description && (
+            <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed mb-2">
+              {item.description}
+            </p>
+          )}
+
+          {/* Footer: Time + Duration */}
+          <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span className="font-medium">
+                {formatTime12h(item.startTime)}
+              </span>
+              {item.endTime && (
+                <>
+                  <span className="text-slate-600">-</span>
+                  <span className="font-medium">
+                    {formatTime12h(item.endTime)}
+                  </span>
+                </>
+              )}
+            </div>
+            {duration && (
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                style={{
+                  background: hexToRgba(color, 0.12),
+                  color: hexToRgba(color, 0.9),
+                }}
+              >
+                {duration}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Hover Actions Overlay */}
+        {showActions && (
+          <div className="absolute top-[3px] right-0 flex gap-1 p-1.5 z-30">
+            <button
               onClick={handleEdit}
               onMouseDown={(e) => e.stopPropagation()}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all border border-white/20 hover:border-white/30 backdrop-blur-sm"
-              title="Edit activity"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
+              className="w-6 h-6 rounded-md flex items-center justify-center bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+              title="Edit"
             >
-              <Edit2 className="w-3.5 h-3.5" />
-            </motion.button>
-            <motion.button
+              <Edit2 className="w-3 h-3" />
+            </button>
+            <button
               onClick={handleDelete}
               onMouseDown={(e) => e.stopPropagation()}
-              className="p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 transition-all border border-red-500/30 hover:border-red-500/50 backdrop-blur-sm"
-              title="Delete activity"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
+              className="w-6 h-6 rounded-md flex items-center justify-center bg-red-500/15 hover:bg-red-500/25 text-red-400 hover:text-red-300 transition-colors"
+              title="Delete"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-            </motion.button>
+              <Trash2 className="w-3 h-3" />
+            </button>
           </div>
-        </div>
-
-        {/* Description */}
-        {item.description && (
-          <p className="text-slate-300 mb-3 line-clamp-2 leading-relaxed font-medium" style={{ fontSize: '12px', textShadow: '0 1px 1px rgba(0, 0, 0, 0.2)' }}>
-            {item.description}
-          </p>
         )}
-
-        {/* Time and Duration */}
-        <div className="flex items-center justify-between pt-3 border-t relative z-30" style={{ borderColor: hexToRgba(nodeColor, 0.3) }}>
-          <span className="flex items-center gap-2" style={{ fontSize: '12px' }}>
-            <div 
-              className="p-1 rounded-md"
-              style={{
-                background: hexToRgba(nodeColor, 0.2),
-                border: `1px solid ${hexToRgba(nodeColor, 0.3)}`,
-              }}
-            >
-              <CalendarIcon className="w-3 h-3 shrink-0" style={{ color: hexToRgba(nodeColor, 0.9) }} />
-            </div>
-            <span className="font-semibold text-slate-200">{formatTimeForDisplay(item.startTime)}</span>
-            {item.endTime && (
-              <>
-                <span className="text-slate-500 mx-1">→</span>
-                <span className="font-semibold text-slate-200">{formatTimeForDisplay(item.endTime)}</span>
-              </>
-            )}
-          </span>
-          {displayDuration && (
-            <span 
-              className="px-2.5 py-1 rounded-lg font-bold backdrop-blur-sm border"
-              style={{ 
-                fontSize: '11px',
-                background: hexToRgba(nodeColor, 0.25),
-                borderColor: hexToRgba(nodeColor, 0.4),
-                color: hexToRgba(nodeColor, 1),
-                textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                boxShadow: `0 2px 8px ${hexToRgba(nodeColor, 0.2)}`,
-              }}
-            >
-              {displayDuration}
-            </span>
-          )}
-        </div>
-
-        {/* Connection Count Badge */}
-        {connectionCount > 0 && (
-          <motion.div 
-            className="absolute -top-2 -right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center backdrop-blur-sm"
-            style={{
-              background: `linear-gradient(135deg, ${hexToRgba(nodeColor, 0.9)} 0%, ${hexToRgba(nodeColor, 0.7)} 100%)`,
-              borderColor: hexToRgba(nodeColor, 1),
-              boxShadow: `0 4px 12px ${glowColor}, 0 0 0 2px rgba(0, 0, 0, 0.2)`,
-            }}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-          >
-            <span className="text-[9px] font-extrabold text-white" style={{ textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)' }}>
-              {connectionCount}
-            </span>
-          </motion.div>
-        )}
-      </motion.div>
+      </div>
 
       {/* Output Handle */}
       <Handle
         type="source"
         position={Position.Right}
-        className="workflow-handle workflow-handle-output"
         style={{
-          background: `radial-gradient(circle, ${hexToRgba(nodeColor, 0.8)} 0%, ${hexToRgba(nodeColor, 0.6)} 100%)`,
-          border: `2px solid ${hexToRgba(nodeColor, 0.9)}`,
-          width: '14px',
-          height: '14px',
-          boxShadow: `0 0 8px ${glowColor}, 0 0 4px ${hexToRgba(nodeColor, 0.5)}`,
+          width: 10,
+          height: 10,
+          background: color,
+          border: "2px solid rgba(13, 13, 20, 0.8)",
+          boxShadow: selected ? `0 0 6px ${hexToRgba(color, 0.6)}` : "none",
+          transition: "all 0.15s ease",
         }}
       />
-    </motion.div>
+    </div>
   );
 }
 
 export default WorkflowNode;
-

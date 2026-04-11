@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yhealth.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://balencia.app";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 async function fetchSlugs(endpoint: string, slugField = "slug"): Promise<string[]> {

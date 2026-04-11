@@ -199,7 +199,7 @@ function PodiumEntry({
       </motion.p>
 
       {/* Username / label */}
-      <p className="text-gray-500 text-[10px] sm:text-xs">@yhealth</p>
+      <p className="text-gray-500 text-[10px] sm:text-xs">@balencia</p>
 
       {/* Podium bar */}
       <motion.div

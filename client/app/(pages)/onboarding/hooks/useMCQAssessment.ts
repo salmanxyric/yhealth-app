@@ -61,7 +61,7 @@ export function useMCQAssessment({
   const [error, setError] = useState<string | null>(null);
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const [language, setLanguage] = useState<SupportedLanguage>('en');
-  const [previousAnswers, setPreviousAnswers] = useState<{ questionId: string; selectedOptions: string[] }[]>([]);
+  const [previousAnswers, setPreviousAnswers] = useState<{ questionId: string; questionText?: string; selectedOptions: string[] }[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   const hasInitializedRef = useRef(false);
@@ -155,7 +155,7 @@ export function useMCQAssessment({
     setError(null);
 
     try {
-      // Process the answer to extract insights
+      // Process the answer to extract insights (fast, no AI call)
       const answerResponse = await aiCoachService.processMCQAnswer({
         questionId: currentQuestion.id,
         selectedOptions,
@@ -169,6 +169,7 @@ export function useMCQAssessment({
       // Record the answer
       const newAnswer = {
         questionId: currentQuestion.id,
+        questionText: currentQuestion.question,
         selectedOptions: selectedOptions.map((o) => o.text),
       };
       const updatedAnswers = [...previousAnswers, newAnswer];
@@ -180,24 +181,20 @@ export function useMCQAssessment({
         value: selectedOptions.map((o) => o.text),
       });
 
-      // Save Q&A to session for chat history
+      // Clear selection immediately for snappier UX
+      setSelectedOptions([]);
+      setIsLoading(true);
+
+      // Fire-and-forget: persist to chat history (non-blocking)
       if (sessionId) {
-        try {
-          await aiCoachService.chat(
-            `[MCQ Answer] ${selectedOptions.map((o) => o.text).join(', ')}`,
-            apiGoal,
-            sessionId
-          );
-        } catch (chatErr) {
-          console.warn('Failed to persist MCQ to chat history:', chatErr);
-        }
+        aiCoachService.chat(
+          `[MCQ Answer] Q: ${currentQuestion.question} → ${selectedOptions.map((o) => o.text).join(', ')}`,
+          apiGoal,
+          sessionId
+        ).catch((chatErr) => console.warn('Failed to persist MCQ to chat history:', chatErr));
       }
 
-      // Clear selection
-      setSelectedOptions([]);
-
-      // Generate next question
-      setIsLoading(true);
+      // Critical path: generate next question (this is what the user waits for)
       const nextResponse = await aiCoachService.generateMCQQuestion({
         goal: apiGoal,
         phase: currentPhase,

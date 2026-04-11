@@ -121,7 +121,7 @@ describe("ProductTour", () => {
     mockContextValue.currentStep = 0;
     render(<ProductTour />);
 
-    expect(screen.getByText("Welcome to yHealth, Alex!")).toBeInTheDocument();
+    expect(screen.getByText("Welcome to Balencia, Alex!")).toBeInTheDocument();
     expect(screen.getByText("Start Tour")).toBeInTheDocument();
     expect(screen.getByText("Skip for now")).toBeInTheDocument();
   });
@@ -253,7 +253,7 @@ describe("ProductTour", () => {
     mockContextValue.currentStep = 0;
     render(<ProductTour />);
 
-    expect(screen.getByText("Welcome to yHealth, there!")).toBeInTheDocument();
+    expect(screen.getByText("Welcome to Balencia, there!")).toBeInTheDocument();
 
     // Restore
     authMock.useAuth = originalUseAuth;

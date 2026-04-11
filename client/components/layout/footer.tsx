@@ -341,7 +341,7 @@ export function Footer() {
             {/* Contact Info */}
             <div className="space-y-3 text-sm text-muted-foreground mb-8">
               {[
-                { icon: Mail, text: "hello@yhealth.app", color: "group-hover:bg-primary/10" },
+                { icon: Mail, text: "hello@balencia.app", color: "group-hover:bg-primary/10" },
                 { icon: Phone, text: "+1 (555) 123-4567", color: "group-hover:bg-purple-500/10" },
                 { icon: MapPin, text: "San Francisco, CA", color: "group-hover:bg-pink-500/10" },
               ].map((item) => (
@@ -433,7 +433,7 @@ export function Footer() {
               className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6"
             >
               <p className="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} yHealth. All rights reserved.
+                &copy; {new Date().getFullYear()} Balencia. All rights reserved.
               </p>
               <div className="hidden sm:block w-1 h-1 rounded-full bg-muted-foreground/30" />
               <div className="flex items-center gap-4 text-xs text-muted-foreground/70">

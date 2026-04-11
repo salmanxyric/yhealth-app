@@ -39,7 +39,7 @@ export function SleepWidget({ hours, quality, target, isLoading }: SleepWidgetPr
             </div>
             <div>
               <h3 className="text-sm font-medium text-slate-400">Sleep</h3>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-lg font-bold text-white">
                 {isLoading ? '—' : hours ? `${hours.toFixed(1)}h` : '0h'}
               </p>
               <p className="text-xs text-slate-400">

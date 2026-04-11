@@ -11,6 +11,8 @@ const goalCategoryEnum = z.enum([
   'health_condition',
   'habit_building',
   'overall_optimization',
+  'nutrition',
+  'fitness',
   'custom',
 ]);
 

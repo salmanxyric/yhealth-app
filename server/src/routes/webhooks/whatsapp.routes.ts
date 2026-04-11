@@ -67,7 +67,7 @@ router.get('/verify', (req: Request, res: Response) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  const verifyToken = process.env['WHATSAPP_VERIFY_TOKEN'] || 'yhealth_verify_token';
+  const verifyToken = process.env['WHATSAPP_VERIFY_TOKEN'] || 'balencia_verify_token';
 
   if (mode === 'subscribe' && token === verifyToken) {
     logger.info('[WhatsAppWebhook] Verification successful');

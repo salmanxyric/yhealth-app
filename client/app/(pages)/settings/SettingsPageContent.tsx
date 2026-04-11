@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { motion } from "framer-motion";
@@ -501,6 +502,24 @@ function SettingsPageInner() {
   const [showCredentials, setShowCredentials] = useState({ clientId: false, clientSecret: false });
   const [isSavingCredentials, setIsSavingCredentials] = useState(false);
 
+  // Spotify state
+  const [spotifyStatus, setSpotifyStatus] = useState<{
+    isConnected: boolean;
+    isConfigured: boolean;
+    hasCredentials: boolean;
+    clientIdMasked?: string;
+    credentialSource?: 'user' | 'env';
+    displayName?: string;
+    accountType?: string;
+    connectedAt?: string;
+    avatarUrl?: string;
+  } | null>(null);
+  const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  const [showSpotifyCredentialsModal, setShowSpotifyCredentialsModal] = useState(false);
+  const [spotifyCredentialsData, setSpotifyCredentialsData] = useState({ clientId: '', clientSecret: '' });
+  const [showSpotifyCredentials, setShowSpotifyCredentials] = useState({ clientId: false, clientSecret: false });
+  const [isSavingSpotifyCredentials, setIsSavingSpotifyCredentials] = useState(false);
+
   // Dashboard sidebar state
   const [sidebarActiveTab, setSidebarActiveTab] = useState("settings");
 
@@ -569,6 +588,56 @@ function SettingsPageInner() {
     }
   }, [isAuthenticated, authLoading, router]);
 
+  // Handle Spotify OAuth callback
+  useEffect(() => {
+    const callback = searchParams.get('callback');
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+
+    if (callback === 'spotify' && code && state) {
+      (async () => {
+        try {
+          setIsSpotifyConnecting(true);
+          setActiveSection('integrations');
+          const response = await api.post<{
+            isConnected: boolean;
+            displayName?: string;
+            accountType?: string;
+            connectedAt?: string;
+            avatarUrl?: string;
+          }>('/spotify/auth/callback', { code, state });
+
+          if (response.success && response.data) {
+            setSpotifyStatus(prev => ({
+              isConnected: response.data?.isConnected ?? true,
+              isConfigured: true,
+              hasCredentials: prev?.hasCredentials ?? true,
+              displayName: response.data?.displayName,
+              accountType: response.data?.accountType,
+              connectedAt: response.data?.connectedAt,
+              avatarUrl: response.data?.avatarUrl,
+              clientIdMasked: prev?.clientIdMasked,
+              credentialSource: prev?.credentialSource,
+            }));
+            toast.success(`Spotify connected as ${response.data.displayName || 'user'}`);
+          }
+        } catch (err) {
+          console.error('Spotify OAuth callback failed:', err);
+          toast.error('Failed to connect Spotify. Please try again.');
+        } finally {
+          setIsSpotifyConnecting(false);
+          // Clean URL params
+          const params = new URLSearchParams(searchParams.toString());
+          params.delete('callback');
+          params.delete('code');
+          params.delete('state');
+          const cleanUrl = params.toString() ? `/settings?${params.toString()}` : '/settings';
+          router.replace(cleanUrl);
+        }
+      })();
+    }
+  }, [searchParams, router]);
+
   // Fetch preferences
   const fetchPreferences = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -625,6 +694,28 @@ function SettingsPageInner() {
         // WHOOP not configured yet or error fetching status
         console.error("Failed to fetch WHOOP status:", err);
         setWhoopStatus({ isConnected: false, hasCredentials: false });
+      }
+
+      // Fetch Spotify status
+      try {
+        const spotifyResponse = await api.get<{
+          isConnected: boolean;
+          isConfigured: boolean;
+          hasCredentials: boolean;
+          clientIdMasked?: string;
+          credentialSource?: 'user' | 'env';
+          displayName?: string;
+          accountType?: string;
+          connectedAt?: string;
+          avatarUrl?: string;
+        }>("/spotify/auth/status");
+        if (spotifyResponse.success && spotifyResponse.data) {
+          setSpotifyStatus(spotifyResponse.data);
+        } else {
+          setSpotifyStatus({ isConnected: false, isConfigured: false, hasCredentials: false });
+        }
+      } catch {
+        setSpotifyStatus({ isConnected: false, isConfigured: false, hasCredentials: false });
       }
 
       // Fetch token info if connected
@@ -766,24 +857,90 @@ function SettingsPageInner() {
 
   if (authLoading || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-white animate-spin" />
-            </div>
-            <motion.div
-              className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-purple-500/20 to-pink-600/20 blur-xl"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
+      <div className="min-h-screen bg-slate-950">
+        {/* Sidebar placeholder - Desktop */}
+        <div className="hidden md:block">
+          <DashboardSidebar activeTab={sidebarActiveTab} onTabChange={handleTabChange} />
+        </div>
+        <MobileBottomNav activeTab={sidebarActiveTab} onTabChange={handleTabChange} />
+
+        <div className="md:ml-64 min-h-screen pb-20 md:pb-0 overflow-x-hidden">
+          {/* Background blurs */}
+          <div className="fixed inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+            <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
           </div>
-          <p className="text-slate-400">Loading settings...</p>
-        </motion.div>
+
+          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-pulse">
+            {/* Header skeleton */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="h-8 w-32 bg-white/10 rounded-lg" />
+                  <div className="h-4 w-56 bg-white/5 rounded-lg mt-2" />
+                </div>
+                <div className="h-10 w-36 bg-white/10 rounded-xl" />
+              </div>
+            </div>
+
+            <div className="flex flex-col lg:flex-row gap-8">
+              {/* Section sidebar skeleton */}
+              <nav className="lg:w-64 shrink-0">
+                <div className="sticky top-8 space-y-1">
+                  {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-xl">
+                      <div className="w-5 h-5 bg-white/10 rounded" />
+                      <div className="h-4 bg-white/10 rounded" style={{ width: `${60 + i * 10}px` }} />
+                    </div>
+                  ))}
+                </div>
+              </nav>
+
+              {/* Main content skeleton */}
+              <main className="flex-1 min-w-0 space-y-6">
+                {/* Section card */}
+                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-white/10 rounded-xl" />
+                    <div className="h-6 w-48 bg-white/10 rounded-lg" />
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 bg-white/10 rounded-xl" />
+                          <div className="flex-1">
+                            <div className="h-4 w-24 bg-white/10 rounded" />
+                            <div className="h-3 w-40 bg-white/5 rounded mt-2" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Second section card */}
+                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-white/10 rounded-xl" />
+                    <div className="h-6 w-36 bg-white/10 rounded-lg" />
+                  </div>
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02]">
+                        <div>
+                          <div className="h-4 w-32 bg-white/10 rounded" />
+                          <div className="h-3 w-48 bg-white/5 rounded mt-1" />
+                        </div>
+                        <div className="w-12 h-6 bg-white/10 rounded-full" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </main>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1712,10 +1869,271 @@ function SettingsPageInner() {
                       )}
                     </div>
 
+                    {/* Spotify Integration */}
+                    <div className={`mb-6 p-4 rounded-xl border transition-all ${
+                      spotifyStatus?.isConnected
+                        ? 'bg-green-500/5 border-green-500/30'
+                        : spotifyStatus?.hasCredentials
+                        ? 'bg-green-500/[0.02] border-green-500/10'
+                        : 'bg-white/[0.02] border-white/[0.06]'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3 flex-1">
+                          {/* Spotify Icon with animation */}
+                          <div className="relative">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
+                              spotifyStatus?.isConnected
+                                ? 'bg-green-500/20 border-2 border-green-500/50'
+                                : spotifyStatus?.hasCredentials
+                                ? 'bg-green-500/10 border-2 border-green-500/30'
+                                : 'bg-white/[0.06] border border-white/[0.06]'
+                            }`}>
+                              {spotifyStatus?.isConnected ? (
+                                <motion.div
+                                  animate={{ scale: [1, 1.1, 1] }}
+                                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                                >
+                                  <svg className="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                                  </svg>
+                                </motion.div>
+                              ) : (
+                                <svg className={`w-6 h-6 ${spotifyStatus?.hasCredentials ? 'text-green-400/60' : 'text-slate-400'}`} viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                                </svg>
+                              )}
+                            </div>
+
+                            {/* Pulsing ring when connected */}
+                            {spotifyStatus?.isConnected && (
+                              <>
+                                <motion.div
+                                  className="absolute inset-0 rounded-xl border-2 border-green-400/50"
+                                  animate={{ scale: [1, 1.3, 1.3], opacity: [0.6, 0, 0] }}
+                                  transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                                />
+                                <motion.div
+                                  className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full"
+                                  animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+                                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                                />
+                              </>
+                            )}
+                          </div>
+
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-white font-medium">Spotify</p>
+                              {spotifyStatus?.isConnected && (
+                                <motion.span
+                                  initial={{ opacity: 0, scale: 0.8 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30 flex items-center gap-1"
+                                >
+                                  <Radio className="w-2.5 h-2.5 fill-green-400 text-green-400" />
+                                  Connected
+                                </motion.span>
+                              )}
+                              {!spotifyStatus?.isConnected && spotifyStatus?.hasCredentials && (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+                                  Credentials Set
+                                </span>
+                              )}
+                              {spotifyStatus?.accountType === 'premium' && (
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                  Premium
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              Music for workouts, meditation & recovery
+                            </p>
+                            {spotifyStatus?.isConnected && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mt-2 space-y-1"
+                              >
+                                {spotifyStatus.displayName && (
+                                  <p className="text-xs text-slate-400">
+                                    Account: <span className="text-white">{spotifyStatus.displayName}</span>
+                                  </p>
+                                )}
+                                {spotifyStatus.connectedAt && (
+                                  <p className="text-xs text-green-400 flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" />
+                                    Connected: {new Date(spotifyStatus.connectedAt).toLocaleString()}
+                                  </p>
+                                )}
+                              </motion.div>
+                            )}
+                            {/* Show masked credentials */}
+                            {!spotifyStatus?.isConnected && spotifyStatus?.hasCredentials && spotifyStatus?.clientIdMasked && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                Client ID: <span className="text-slate-400 font-mono">{spotifyStatus.clientIdMasked}</span>
+                                {spotifyStatus.credentialSource === 'env' && (
+                                  <span className="ml-1 text-slate-600">(env)</span>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {/* Credentials button (gear icon) */}
+                          <button
+                            type="button"
+                            onClick={() => setShowSpotifyCredentialsModal(true)}
+                            className="p-2 rounded-lg bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                            title="Manage Spotify Credentials"
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
+
+                          {!spotifyStatus?.isConnected ? (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  setIsSpotifyConnecting(true);
+                                  // Send the correct redirect URI based on current origin
+                                  const redirectUri = `${window.location.origin}/api/integrations/oauth/callback/spotify`;
+                                  const response = await api.post<{
+                                    authUrl: string;
+                                    state: string;
+                                  }>('/spotify/auth/connect', { redirectUri });
+                                  if (response.success && response.data?.authUrl) {
+                                    window.location.href = response.data.authUrl;
+                                  } else {
+                                    toast.error('Failed to initiate Spotify connection.');
+                                  }
+                                } catch (err) {
+                                  console.error('Failed to connect Spotify:', err);
+                                  toast.error('Failed to connect Spotify. Please add your credentials first.');
+                                } finally {
+                                  setIsSpotifyConnecting(false);
+                                }
+                              }}
+                              disabled={!spotifyStatus?.hasCredentials || isSpotifyConnecting}
+                              className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                              {isSpotifyConnecting ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : null}
+                              {spotifyStatus?.hasCredentials ? 'Connect Spotify' : 'Add Credentials'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await api.delete('/spotify/auth/disconnect');
+                                  setSpotifyStatus(prev => prev ? { ...prev, isConnected: false } : prev);
+                                  toast.success('Spotify disconnected');
+                                } catch {
+                                  toast.error('Failed to disconnect Spotify');
+                                }
+                              }}
+                              className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                              title="Disconnect Spotify"
+                            >
+                              <Unlink className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Connected info card */}
+                      {spotifyStatus?.isConnected && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          className="mt-3 p-3 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              {spotifyStatus.avatarUrl && (
+                                <img
+                                  src={spotifyStatus.avatarUrl}
+                                  alt=""
+                                  className="w-8 h-8 rounded-full border border-green-500/30"
+                                />
+                              )}
+                              <div>
+                                <p className="text-sm text-white font-medium">
+                                  {spotifyStatus.accountType === 'premium' ? 'Full Playback Ready' : '30s Previews Available'}
+                                </p>
+                                <p className="text-xs text-green-400/80 mt-0.5">
+                                  {spotifyStatus.accountType === 'premium'
+                                    ? 'Stream full tracks directly in Balencia'
+                                    : 'Upgrade to Spotify Premium for full playback'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {/* No credentials — prompt to add */}
+                      {!spotifyStatus?.isConnected && !spotifyStatus?.hasCredentials && (
+                        <div className="mt-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                          <p className="text-xs text-yellow-400 mb-3">
+                            Spotify requires a Client ID and Client Secret to connect. Add your credentials below.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowSpotifyCredentialsModal(true)}
+                            className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 transition-colors text-sm font-medium flex items-center gap-2"
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                            Add Spotify Credentials
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Has credentials but not connected */}
+                      {!spotifyStatus?.isConnected && spotifyStatus?.hasCredentials && spotifyStatus?.credentialSource === 'user' && (
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowSpotifyCredentialsModal(true)}
+                            className="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-1"
+                          >
+                            <Key className="w-3 h-3" />
+                            Edit Credentials
+                          </button>
+                          <span className="text-slate-700">|</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const confirmed = await confirm({
+                                title: 'Delete Spotify Credentials',
+                                description: 'This will remove your Spotify Client ID and Client Secret. You will need to add them again to reconnect.',
+                                confirmText: 'Delete',
+                                variant: 'destructive',
+                              });
+                              if (confirmed) {
+                                try {
+                                  await api.delete('/spotify/credentials');
+                                  setSpotifyStatus(prev => prev ? { ...prev, hasCredentials: false, isConfigured: false, clientIdMasked: undefined, credentialSource: undefined } : prev);
+                                  toast.success('Spotify credentials deleted');
+                                } catch {
+                                  toast.error('Failed to delete credentials');
+                                }
+                              }
+                            }}
+                            className="text-xs text-red-400/60 hover:text-red-400 transition-colors flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete Credentials
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Other Integrations */}
                     <div className="space-y-3">
                       {integrations
-                        .filter((i) => i.provider !== "whoop")
+                        .filter((i) => i.provider !== "whoop" && i.provider !== "spotify")
                         .map((integration) => (
                           <div
                             key={integration.provider}
@@ -1878,7 +2296,7 @@ function SettingsPageInner() {
                               toast.error("Failed to save assistant name");
                             }
                           }}
-                          placeholder="e.g. YHealth Coach"
+                          placeholder="e.g. Balencia Coach"
                           className="w-full max-w-md px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-colors"
                         />
                         <p className="text-slate-500 text-xs mt-1">
@@ -1942,7 +2360,7 @@ function SettingsPageInner() {
                             Anonymous Analytics
                           </p>
                           <p className="text-sm text-slate-400">
-                            Help improve yHealth with anonymous usage data
+                            Help improve Balencia with anonymous usage data
                           </p>
                         </div>
                         <ToggleSwitch
@@ -2502,6 +2920,188 @@ function SettingsPageInner() {
                   Cancel
                 </button>
               </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Spotify Credentials Modal */}
+      {showSpotifyCredentialsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                  </svg>
+                  Spotify Credentials
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Add your Spotify Developer App credentials
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSpotifyCredentialsModal(false);
+                  setSpotifyCredentialsData({ clientId: '', clientSecret: '' });
+                  setShowSpotifyCredentials({ clientId: false, clientSecret: false });
+                }}
+                className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  setIsSavingSpotifyCredentials(true);
+                  const response = await api.post<{ id: string; status: string; requiresReauth?: boolean }>("/spotify/credentials", {
+                    clientId: spotifyCredentialsData.clientId,
+                    clientSecret: spotifyCredentialsData.clientSecret,
+                  });
+
+                  if (response.success) {
+                    toast.success(response.data?.requiresReauth
+                      ? "Credentials updated. Please reconnect Spotify."
+                      : "Spotify credentials saved successfully"
+                    );
+                    setShowSpotifyCredentialsModal(false);
+                    setSpotifyCredentialsData({ clientId: '', clientSecret: '' });
+                    setShowSpotifyCredentials({ clientId: false, clientSecret: false });
+                    await fetchPreferences();
+                  }
+                } catch (err) {
+                  const errorMessage = err instanceof ApiError ? err.message : 'Failed to save credentials';
+                  toast.error(errorMessage);
+                } finally {
+                  setIsSavingSpotifyCredentials(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Client ID <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSpotifyCredentials.clientId ? "text" : "password"}
+                    value={spotifyCredentialsData.clientId}
+                    onChange={(e) => setSpotifyCredentialsData({ ...spotifyCredentialsData, clientId: e.target.value })}
+                    placeholder="Enter Spotify Client ID"
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSpotifyCredentials({ ...showSpotifyCredentials, clientId: !showSpotifyCredentials.clientId })}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showSpotifyCredentials.clientId ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Client Secret <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showSpotifyCredentials.clientSecret ? "text" : "password"}
+                    value={spotifyCredentialsData.clientSecret}
+                    onChange={(e) => setSpotifyCredentialsData({ ...spotifyCredentialsData, clientSecret: e.target.value })}
+                    placeholder="Enter Spotify Client Secret"
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSpotifyCredentials({ ...showSpotifyCredentials, clientSecret: !showSpotifyCredentials.clientSecret })}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showSpotifyCredentials.clientSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {spotifyStatus?.hasCredentials && spotifyStatus.credentialSource === 'user' && (
+                <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                  <p className="text-xs text-slate-400">
+                    Current: <span className="font-mono text-slate-300">{spotifyStatus.clientIdMasked}</span>
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Updating credentials will require reconnecting your Spotify account.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-4">
+                <button
+                  type="submit"
+                  disabled={isSavingSpotifyCredentials}
+                  className="flex-1 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingSpotifyCredentials ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Credentials
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSpotifyCredentialsModal(false);
+                    setSpotifyCredentialsData({ clientId: '', clientSecret: '' });
+                    setShowSpotifyCredentials({ clientId: false, clientSecret: false });
+                  }}
+                  className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {spotifyStatus?.hasCredentials && spotifyStatus.credentialSource === 'user' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const confirmed = await confirm({
+                      title: 'Delete Spotify Credentials',
+                      description: 'This will remove your Spotify Client ID and Client Secret and disconnect your account.',
+                      confirmText: 'Delete',
+                      variant: 'destructive',
+                    });
+                    if (confirmed) {
+                      try {
+                        await api.delete('/spotify/credentials');
+                        setSpotifyStatus(prev => prev ? { ...prev, hasCredentials: false, isConfigured: false, isConnected: false, clientIdMasked: undefined, credentialSource: undefined } : prev);
+                        setShowSpotifyCredentialsModal(false);
+                        setSpotifyCredentialsData({ clientId: '', clientSecret: '' });
+                        toast.success('Spotify credentials deleted');
+                      } catch {
+                        toast.error('Failed to delete credentials');
+                      }
+                    }
+                  }}
+                  className="w-full px-4 py-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Credentials & Disconnect
+                </button>
+              )}
             </form>
           </motion.div>
         </div>

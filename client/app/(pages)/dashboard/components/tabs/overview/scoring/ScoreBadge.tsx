@@ -7,7 +7,7 @@ import { AnimatedProgressBar } from './AnimatedProgressBar';
 interface ScoreBadgeProps {
   score: number;
   label: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   color: 'blue' | 'orange' | 'pink' | 'purple' | 'green';
 }
 

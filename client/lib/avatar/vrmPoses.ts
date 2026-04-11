@@ -199,16 +199,16 @@ export const STATE_POSE_OFFSETS: Record<string, VrmPose> = {
   speaking: {
     spine: { rotation: [0.044, 0, 0, 0.999] },              // 5° engaged forward lean
     upperChest: { rotation: [0.026, 0, 0, 1.0] },           // 3° chest lift
-    // Arms forward but CLOSE to body — eulerDegToQuat(35, 5, -58)
-    // Z=-58° keeps arms close to body (idle is Z=-65°). Previous Z=-40° was BUG.
-    leftUpperArm: { rotation: [0.243, 0.182, -0.450, 0.840] },
-    rightUpperArm: { rotation: [0.243, -0.182, 0.450, 0.840] },
-    // 70° elbow bend — hands at chest level — eulerDegToQuat(-70, 0, 0)
-    leftLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
-    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
-    // 12° wrist curl — eulerDegToQuat(-12, 0, 0)
-    leftHand: { rotation: [-0.105, 0, 0, 0.995] },
-    rightHand: { rotation: [-0.105, 0, 0, 0.995] },
+    // Arms forward IN FRONT of chest — eulerDegToQuat(40, 8, -45)
+    // Z=-45° brings arms forward (idle Z=-65°, previous speaking Z=-58° was too far back)
+    leftUpperArm: { rotation: [0.290, 0.191, -0.337, 0.875] },
+    rightUpperArm: { rotation: [0.290, -0.191, 0.337, 0.875] },
+    // 60° elbow bend — hands visible in front — eulerDegToQuat(-60, 0, 0)
+    leftLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
+    rightLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
+    // 10° wrist curl — eulerDegToQuat(-10, 0, 0)
+    leftHand: { rotation: [-0.087, 0, 0, 0.996] },
+    rightHand: { rotation: [-0.087, 0, 0, 0.996] },
   },
 };
 
@@ -227,174 +227,160 @@ export const STATE_POSE_OFFSETS: Record<string, VrmPose> = {
  * All quaternions pre-computed via eulerDegToQuat.
  */
 export const EMOTION_SPEAKING_POSES: Record<string, VrmPose> = {
-  // Neutral Speaking: Relaxed forward-resting position
+  // Neutral Speaking: Hands forward at chest level — eulerDegToQuat(40, 5, -45)
   neutral: {
     spine: { rotation: [0.044, 0, 0, 0.999] },
     upperChest: { rotation: [0.026, 0, 0, 1.0] },
-    // eulerDegToQuat(35, 5, -58) — 35° forward, close to body
-    leftUpperArm: { rotation: [0.243, 0.182, -0.450, 0.840] },
-    rightUpperArm: { rotation: [0.243, -0.182, 0.450, 0.840] },
-    leftLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° elbow
-    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
-    leftHand: { rotation: [-0.105, 0, 0, 0.995] },
-    rightHand: { rotation: [-0.105, 0, 0, 0.995] },
-  },
-
-  // Motivational/Energetic: Higher arms, bigger gestures
-  happy: {
-    spine: { rotation: [0.035, 0, 0, 0.999] },
-    upperChest: { rotation: [0.035, 0, 0, 0.999] },
-    // eulerDegToQuat(45, 8, -50) — arms higher, slightly more open for energy
-    leftUpperArm: { rotation: [0.319, 0.220, -0.365, 0.847] },
-    rightUpperArm: { rotation: [0.319, -0.220, 0.365, 0.847] },
+    leftUpperArm: { rotation: [0.300, 0.169, -0.345, 0.873] },
+    rightUpperArm: { rotation: [0.300, -0.169, 0.345, 0.873] },
     leftLowerArm: { rotation: [-0.500, 0, 0, 0.866] },   // 60° elbow
     rightLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
     leftHand: { rotation: [-0.087, 0, 0, 0.996] },
     rightHand: { rotation: [-0.087, 0, 0, 0.996] },
   },
 
-  // Calm/Supportive: Lower arms, close to body, gentle
+  // Motivational/Energetic: Arms higher, wider — eulerDegToQuat(48, 10, -40)
+  happy: {
+    spine: { rotation: [0.035, 0, 0, 0.999] },
+    upperChest: { rotation: [0.035, 0, 0, 0.999] },
+    leftUpperArm: { rotation: [0.354, 0.213, -0.278, 0.867] },
+    rightUpperArm: { rotation: [0.354, -0.213, 0.278, 0.867] },
+    leftLowerArm: { rotation: [-0.500, 0, 0, 0.866] },   // 60° elbow
+    rightLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
+    leftHand: { rotation: [-0.087, 0, 0, 0.996] },
+    rightHand: { rotation: [-0.087, 0, 0, 0.996] },
+  },
+
+  // Calm/Supportive: Lower, gentler — eulerDegToQuat(30, 5, -50)
   relaxed: {
     spine: { rotation: [0.026, 0, 0, 1.0] },
     upperChest: { rotation: [0.017, 0, 0, 1.0] },
-    // eulerDegToQuat(25, 3, -62) — arms low, close
-    leftUpperArm: { rotation: [0.172, 0.133, -0.498, 0.840] },
-    rightUpperArm: { rotation: [0.172, -0.133, 0.498, 0.840] },
+    leftUpperArm: { rotation: [0.217, 0.147, -0.398, 0.879] },
+    rightUpperArm: { rotation: [0.217, -0.147, 0.398, 0.879] },
     leftLowerArm: { rotation: [-0.383, 0, 0, 0.924] },   // 45° elbow
     rightLowerArm: { rotation: [-0.383, 0, 0, 0.924] },
     leftHand: { rotation: [-0.070, 0, 0, 0.998] },
     rightHand: { rotation: [-0.070, 0, 0, 0.998] },
   },
 
-  // Gentle/Empathetic: Similar to calm, slightly more closed
+  // Gentle/Empathetic: Drooped, protective — eulerDegToQuat(28, 3, -52)
   sad: {
     spine: { rotation: [0.044, 0, 0, 0.999] },
     upperChest: { rotation: [0.017, 0, 0, 1.0] },
-    // eulerDegToQuat(25, 3, -62) — low, close, protective
-    leftUpperArm: { rotation: [0.172, 0.133, -0.498, 0.840] },
-    rightUpperArm: { rotation: [0.172, -0.133, 0.498, 0.840] },
+    leftUpperArm: { rotation: [0.206, 0.129, -0.420, 0.875] },
+    rightUpperArm: { rotation: [0.206, -0.129, 0.420, 0.875] },
     leftLowerArm: { rotation: [-0.423, 0, 0, 0.906] },   // 50° elbow
     rightLowerArm: { rotation: [-0.423, 0, 0, 0.906] },
     leftHand: { rotation: [-0.087, 0, 0, 0.996] },
     rightHand: { rotation: [-0.087, 0, 0, 0.996] },
   },
 
-  // Strong Warning: Tight, controlled, aggressive forward lean
+  // Strong Warning: Tight, controlled — eulerDegToQuat(42, 5, -43)
   angry: {
     spine: { rotation: [0.052, 0, 0, 0.999] },
     upperChest: { rotation: [0.035, 0, 0, 0.999] },
-    // eulerDegToQuat(40, 5, -55) — forward, tight
-    leftUpperArm: { rotation: [0.284, 0.194, -0.420, 0.840] },
-    rightUpperArm: { rotation: [0.284, -0.194, 0.420, 0.840] },
-    leftLowerArm: { rotation: [-0.643, 0, 0, 0.766] },   // 80° elbow — fists close
-    rightLowerArm: { rotation: [-0.643, 0, 0, 0.766] },
+    leftUpperArm: { rotation: [0.318, 0.169, -0.327, 0.874] },
+    rightUpperArm: { rotation: [0.318, -0.169, 0.327, 0.874] },
+    leftLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° elbow — fists close
+    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
     leftHand: { rotation: [-0.130, 0, 0, 0.992] },
     rightHand: { rotation: [-0.130, 0, 0, 0.992] },
   },
 
-  // Emergency Support: Open palms, calming gesture
+  // Emergency/Surprised: Open palms — eulerDegToQuat(35, 8, -42)
   surprised: {
     spine: { rotation: [0.035, 0, 0, 0.999] },
     upperChest: { rotation: [0.026, 0, 0, 1.0] },
-    // eulerDegToQuat(30, 5, -55) — forward, open
-    leftUpperArm: { rotation: [0.210, 0.157, -0.436, 0.861] },
-    rightUpperArm: { rotation: [0.210, -0.157, 0.436, 0.861] },
-    leftLowerArm: { rotation: [-0.423, 0, 0, 0.906] },   // 50° elbow — open hands visible
+    leftUpperArm: { rotation: [0.256, 0.170, -0.321, 0.896] },
+    rightUpperArm: { rotation: [0.256, -0.170, 0.321, 0.896] },
+    leftLowerArm: { rotation: [-0.423, 0, 0, 0.906] },   // 50° elbow
     rightLowerArm: { rotation: [-0.423, 0, 0, 0.906] },
-    // Slight upward wrist for palm-forward calming gesture
-    leftHand: { rotation: [0.044, 0.026, 0, 0.999] },
+    leftHand: { rotation: [0.044, 0.026, 0, 0.999] },    // palms forward
     rightHand: { rotation: [0.044, -0.026, 0, 0.999] },
   },
 
-  // Curiosity: Leaning in, attentive
+  // Curiosity: Leaning in — eulerDegToQuat(42, 8, -43)
   curiosity: {
     spine: { rotation: [0.052, 0, 0, 0.999] },
     upperChest: { rotation: [0.035, 0, 0, 0.999] },
-    // eulerDegToQuat(38, 5, -56) — forward lean
-    leftUpperArm: { rotation: [0.267, 0.196, -0.433, 0.844] },
-    rightUpperArm: { rotation: [0.267, -0.196, 0.433, 0.844] },
+    leftUpperArm: { rotation: [0.309, 0.192, -0.318, 0.876] },
+    rightUpperArm: { rotation: [0.309, -0.192, 0.318, 0.876] },
     leftLowerArm: { rotation: [-0.530, 0, 0, 0.848] },   // 64° elbow
     rightLowerArm: { rotation: [-0.530, 0, 0, 0.848] },
     leftHand: { rotation: [-0.087, 0, 0, 0.996] },
     rightHand: { rotation: [-0.087, 0, 0, 0.996] },
   },
 
-  // Concern: Gentle, empathetic stance
+  // Concern: Gentle, empathetic — eulerDegToQuat(33, 5, -48)
   concern: {
     spine: { rotation: [0.035, 0, 0, 0.999] },
     upperChest: { rotation: [0.017, 0, 0, 1.0] },
-    // eulerDegToQuat(30, 3, -60) — moderate forward
-    leftUpperArm: { rotation: [0.202, 0.144, -0.479, 0.846] },
-    rightUpperArm: { rotation: [0.202, -0.144, 0.479, 0.846] },
+    leftUpperArm: { rotation: [0.242, 0.154, -0.378, 0.880] },
+    rightUpperArm: { rotation: [0.242, -0.154, 0.378, 0.880] },
     leftLowerArm: { rotation: [-0.469, 0, 0, 0.883] },   // 56° elbow
     rightLowerArm: { rotation: [-0.469, 0, 0, 0.883] },
     leftHand: { rotation: [-0.070, 0.015, 0, 0.998] },
     rightHand: { rotation: [-0.070, -0.015, 0, 0.998] },
   },
 
-  // Confusion: Slight tilt, questioning pose
-  confusion: {
-    spine: { rotation: [0.026, 0, 0.017, 0.999] },
-    upperChest: { rotation: [0.013, 0, 0.013, 1.0] },
-    // eulerDegToQuat(32, 8, -58) — slight confusion lean
-    leftUpperArm: { rotation: [0.221, 0.178, -0.459, 0.845] },
-    rightUpperArm: { rotation: [0.221, -0.178, 0.459, 0.845] },
-    leftLowerArm: { rotation: [-0.500, 0, 0, 0.866] },   // 60° elbow
-    rightLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
-    leftHand: { rotation: [-0.079, 0, 0.026, 0.997] },
-    rightHand: { rotation: [-0.079, 0, -0.026, 0.997] },
-  },
-
-  // Excitement: Energetic, expressive
+  // Excitement: Energetic, wide — eulerDegToQuat(52, 12, -38)
   excitement: {
     spine: { rotation: [0.026, 0, 0, 1.0] },
     upperChest: { rotation: [0.044, 0, 0, 0.999] },
-    // eulerDegToQuat(50, 10, -48) — high energy, arms more open
-    leftUpperArm: { rotation: [0.379, 0.284, -0.350, 0.817] },
-    rightUpperArm: { rotation: [0.379, -0.284, 0.350, 0.817] },
+    leftUpperArm: { rotation: [0.382, 0.231, -0.248, 0.860] },
+    rightUpperArm: { rotation: [0.382, -0.231, 0.248, 0.860] },
     leftLowerArm: { rotation: [-0.454, 0, 0, 0.891] },   // 54° elbow
     rightLowerArm: { rotation: [-0.454, 0, 0, 0.891] },
     leftHand: { rotation: [-0.061, 0.035, 0, 0.998] },
     rightHand: { rotation: [-0.061, -0.035, 0, 0.998] },
   },
 
-  // Empathy: Warm, open, welcoming
+  // Empathy: Warm, open — eulerDegToQuat(30, 8, -48)
   empathy: {
     spine: { rotation: [0.044, 0, 0, 0.999] },
     upperChest: { rotation: [0.026, 0, 0, 1.0] },
-    // eulerDegToQuat(28, 4, -58) — open, warm stance
-    leftUpperArm: { rotation: [0.188, 0.151, -0.459, 0.855] },
-    rightUpperArm: { rotation: [0.188, -0.151, 0.459, 0.855] },
+    leftUpperArm: { rotation: [0.208, 0.167, -0.375, 0.888] },
+    rightUpperArm: { rotation: [0.208, -0.167, 0.375, 0.888] },
     leftLowerArm: { rotation: [-0.444, 0, 0, 0.896] },   // 53° elbow
     rightLowerArm: { rotation: [-0.444, 0, 0, 0.896] },
     leftHand: { rotation: [-0.052, 0.022, 0, 0.998] },
     rightHand: { rotation: [-0.052, -0.022, 0, 0.998] },
   },
 
-  // Contemplation: Thoughtful, chin-stroking ready
+  // Contemplation: Thoughtful — eulerDegToQuat(28, 5, -52)
   contemplation: {
     spine: { rotation: [0.017, 0, 0, 1.0] },
     upperChest: { rotation: [0.009, 0, 0, 1.0] },
-    // eulerDegToQuat(25, 2, -62) — lower, reflective
-    leftUpperArm: { rotation: [0.172, 0.127, -0.498, 0.845] },
-    rightUpperArm: { rotation: [0.172, -0.127, 0.498, 0.845] },
+    leftUpperArm: { rotation: [0.199, 0.144, -0.415, 0.876] },
+    rightUpperArm: { rotation: [0.199, -0.144, 0.415, 0.876] },
     leftLowerArm: { rotation: [-0.407, 0, 0, 0.913] },   // 48° elbow
-    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° — right hand up
+    rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° — right hand up to chin
     leftHand: { rotation: [-0.070, 0, 0, 0.998] },
-    rightHand: { rotation: [0.044, 0, 0, 0.999] },      // tilted up
+    rightHand: { rotation: [0.044, 0, 0, 0.999] },
   },
 
-  // Determination: Firm, resolute stance
+  // Determination: Firm — eulerDegToQuat(40, 5, -44)
   determination: {
     spine: { rotation: [0.035, 0, 0, 0.999] },
     upperChest: { rotation: [0.026, 0, 0, 1.0] },
-    // eulerDegToQuat(38, 6, -54) — forward, confident
-    leftUpperArm: { rotation: [0.267, 0.196, -0.433, 0.844] },
-    rightUpperArm: { rotation: [0.267, -0.196, 0.433, 0.844] },
+    leftUpperArm: { rotation: [0.301, 0.166, -0.338, 0.876] },
+    rightUpperArm: { rotation: [0.301, -0.166, 0.338, 0.876] },
     leftLowerArm: { rotation: [-0.574, 0, 0, 0.819] },   // 70° elbow
     rightLowerArm: { rotation: [-0.574, 0, 0, 0.819] },
     leftHand: { rotation: [-0.114, 0, 0, 0.993] },
     rightHand: { rotation: [-0.114, 0, 0, 0.993] },
+  },
+
+  // Confusion: Uncertain — eulerDegToQuat(35, 5, -48)
+  confusion: {
+    spine: { rotation: [0.035, 0, 0, 0.999] },
+    upperChest: { rotation: [0.017, 0, 0, 1.0] },
+    leftUpperArm: { rotation: [0.258, 0.160, -0.376, 0.876] },
+    rightUpperArm: { rotation: [0.258, -0.160, 0.376, 0.876] },
+    leftLowerArm: { rotation: [-0.500, 0, 0, 0.866] },   // 60° elbow
+    rightLowerArm: { rotation: [-0.500, 0, 0, 0.866] },
+    leftHand: { rotation: [-0.087, 0, 0, 0.996] },
+    rightHand: { rotation: [-0.087, 0, 0, 0.996] },
   },
 };
 

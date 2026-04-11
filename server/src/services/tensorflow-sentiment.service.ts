@@ -14,7 +14,7 @@ export interface SentimentResult {
   sentiment: 'positive' | 'negative' | 'neutral';
   confidence: number; // 0-1
   score: number; // -1 to 1, where -1 is very negative, 1 is very positive
-  method: 'tensorflow' | 'openai_fallback' | 'keyword_fallback';
+  method: 'tensorflow' | 'llm_fallback' | 'keyword_fallback';
 }
 
 // Reference vectors for sentiment classification
@@ -90,12 +90,10 @@ class TensorFlowSentimentService {
       
       // Only log warning once to avoid log spam
       if (!this.availabilityCheckLogged) {
-        logger.warn('[TensorFlowSentiment] TensorFlow packages not available, will use OpenAI fallback for all requests', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        logger.info('[TensorFlowSentiment] TensorFlow native addon not available on this platform, using LLM fallback (Gemini emotion detection)');
         this.availabilityCheckLogged = true;
       } else {
-        logger.debug('[TensorFlowSentiment] TensorFlow not available, using OpenAI fallback');
+        logger.debug('[TensorFlowSentiment] TensorFlow not available, using LLM fallback');
       }
       
       return false;
@@ -159,16 +157,16 @@ class TensorFlowSentimentService {
       // Check if TensorFlow is available first
       const isAvailable = await this.checkTensorFlowAvailability();
       if (!isAvailable) {
-        logger.debug('[TensorFlowSentiment] TensorFlow not available, using OpenAI fallback');
-        return this.fallbackToOpenAI(text);
+        logger.debug('[TensorFlowSentiment] TensorFlow not available, using LLM fallback');
+        return this.fallbackToLLM(text);
       }
 
       // Load model if not loaded
       await this.loadModel();
 
       if (!this.model) {
-        logger.warn('[TensorFlowSentiment] Model not available, using OpenAI fallback');
-        return this.fallbackToOpenAI(text);
+        logger.warn('[TensorFlowSentiment] Model not available, using LLM fallback');
+        return this.fallbackToLLM(text);
       }
 
       // Get embeddings for input text and reference sentences
@@ -224,7 +222,7 @@ class TensorFlowSentimentService {
         error: error instanceof Error ? error.message : 'Unknown error',
         textLength: text.length,
       });
-      return this.fallbackToOpenAI(text);
+      return this.fallbackToLLM(text);
     }
   }
 
@@ -279,9 +277,9 @@ class TensorFlowSentimentService {
   }
 
   /**
-   * Fallback to OpenAI emotion detection
+   * Fallback to LLM-based emotion detection (uses DeepSeek → Gemini cascade via emotionDetectionService)
    */
-  private async fallbackToOpenAI(text: string): Promise<SentimentResult> {
+  private async fallbackToLLM(text: string): Promise<SentimentResult> {
     try {
       const emotion = await emotionDetectionService.detectEmotionFromText(text);
       
@@ -313,10 +311,10 @@ class TensorFlowSentimentService {
         sentiment,
         confidence,
         score,
-        method: 'openai_fallback',
+        method: 'llm_fallback',
       };
     } catch (error) {
-      logger.warn('[TensorFlowSentiment] OpenAI fallback failed, using keyword fallback', {
+      logger.warn('[TensorFlowSentiment] LLM fallback failed, using keyword fallback', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       return this.keywordFallback(text);

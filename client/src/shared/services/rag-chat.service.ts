@@ -27,10 +27,12 @@ export interface RAGConversation {
   topics: string[];
   createdAt: string;
   lastMessageAt?: string;
+  lastMessagePreview?: string | null;
+  lastMessageRole?: string | null;
 }
 
 export interface ActionCommand {
-  type: 'navigate' | 'update' | 'create' | 'delete' | 'open_modal';
+  type: 'navigate' | 'update' | 'create' | 'delete' | 'open_modal' | 'music_control';
   target: string; // page/tab name or data type
   params?: Record<string, unknown>;
   sequence?: number; // for ordering multiple actions

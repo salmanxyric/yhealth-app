@@ -2,7 +2,7 @@
 
 import { useRef, type ReactNode } from "react";
 import { useGSAP } from "@/hooks/use-gsap";
-import { gsap, ScrollTrigger } from "@/lib/gsap-init";
+import { gsap } from "@/lib/gsap-init";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 
 type Direction = "up" | "down" | "left" | "right" | "scale" | "fade";
@@ -88,7 +88,7 @@ export function GSAPScrollReveal({
   ease = "power3.out",
   style,
 }: GSAPScrollRevealProps) {
-  const ref = useRef<HTMLElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotionSafe();
 
   useGSAP(
@@ -125,20 +125,18 @@ export function GSAPScrollReveal({
   );
 
   // Render without GSAP styles when reduced motion is preferred
-  const Tag = Component as React.ElementType;
+  const props = {
+    ref,
+    id,
+    className,
+    style: {
+      ...style,
+      // Set initial hidden state to prevent flash (GSAP will animate from these)
+      ...(prefersReducedMotion ? {} : { visibility: "inherit" as const }),
+    },
+  };
 
-  return (
-    <Tag
-      ref={ref}
-      id={id}
-      className={className}
-      style={{
-        ...style,
-        // Set initial hidden state to prevent flash (GSAP will animate from these)
-        ...(prefersReducedMotion ? {} : { visibility: "inherit" }),
-      }}
-    >
-      {children}
-    </Tag>
-  );
+  if (Component === "section") return <section {...props}>{children}</section>;
+  if (Component === "article") return <article {...props}>{children}</article>;
+  return <div {...props}>{children}</div>;
 }

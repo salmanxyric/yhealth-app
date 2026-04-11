@@ -211,17 +211,17 @@ export function WorkoutCharts() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
         </div>
-        <div className="rounded-xl bg-red-500/10 backdrop-blur-sm border border-red-500/20 p-6 transition-all duration-300">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-red-500/10 backdrop-blur-sm border border-red-500/20 p-4 sm:p-6 transition-all duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
               <div>
-                <p className="text-red-400 font-medium">Failed to load workout data</p>
-                <p className="text-sm text-red-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-red-400 font-medium">Failed to load workout data</p>
+                <p className="text-[13px] sm:text-[14px] text-red-300/70 mt-1">
                   {error.message || 'Unable to fetch workout analytics. Please check your connection and try again.'}
                 </p>
               </div>
@@ -243,17 +243,17 @@ export function WorkoutCharts() {
 
   if (!workoutChartData || workoutChartData.daily.length === 0) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
         </div>
-        <div className="rounded-xl bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 p-6 transition-all duration-300">
-          <div className="flex items-center justify-between">
+        <div className="rounded-xl bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 p-4 sm:p-6 transition-all duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-400" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
               <div>
-                <p className="text-blue-400 font-medium">No workout data available</p>
-                <p className="text-sm text-blue-300/70 mt-1">
+                <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No workout data available</p>
+                <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                   No workout data found for the selected date range. Make sure your WHOOP device is syncing data regularly.
                 </p>
               </div>
@@ -274,16 +274,16 @@ export function WorkoutCharts() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Date Range Picker */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
         {workoutChartData.totals && (
-          <div className="flex items-center gap-4 text-sm text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[13px] sm:text-[14px] text-slate-400">
             <span>Total: {workoutChartData.totals.totalWorkouts} workouts</span>
-            <span>•</span>
+            <span className="hidden sm:inline">•</span>
             <span>{Math.round(workoutChartData.totals.totalCalories)} kcal</span>
-            <span>•</span>
+            <span className="hidden sm:inline">•</span>
             <span>{workoutChartData.totals.totalDistance.toFixed(1)} km</span>
           </div>
         )}
@@ -293,15 +293,15 @@ export function WorkoutCharts() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-6"
+        className="space-y-4 sm:space-y-6"
       >
         {/* Combined Workout Performance Chart */}
-        <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-6">
+        <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-4 sm:p-6">
           <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
             <Activity className="w-4 h-4 text-purple-400" />
             Workout Performance Overview
           </h4>
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={workoutChartData.daily}>
               <defs>
                 <linearGradient id="strainGradient" x1="0" y1="0" x2="0" y2="1">
@@ -375,12 +375,12 @@ export function WorkoutCharts() {
         </div>
 
         {/* Heart Rate & Distance Chart */}
-        <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-6">
-          <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 backdrop-blur-sm border border-white/10 p-4 sm:p-6">
+          <h4 className="text-[13px] sm:text-[14px] font-semibold text-white mb-3 sm:mb-4 flex items-center gap-2">
             <Heart className="w-4 h-4 text-blue-400" />
             Heart Rate & Distance Trends
           </h4>
-          <ResponsiveContainer width="100%" height={350}>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart data={workoutChartData.daily}>
               <defs>
                 <linearGradient id="hrGradient" x1="0" y1="0" x2="0" y2="1">

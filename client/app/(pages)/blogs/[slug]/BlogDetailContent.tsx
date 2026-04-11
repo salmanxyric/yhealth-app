@@ -182,7 +182,7 @@ export function BlogDetailContent({ blog }: BlogDetailContentProps) {
               },
               publisher: {
                 "@type": "Organization",
-                name: "YHealth",
+                name: "Balencia",
               },
             }),
           }}

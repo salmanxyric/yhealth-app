@@ -28,10 +28,9 @@ export function ConfidenceSlider({ value, onChange }: ConfidenceSliderProps) {
                    [&::-webkit-slider-thumb]:w-5
                    [&::-webkit-slider-thumb]:h-5
                    [&::-webkit-slider-thumb]:rounded-full
-                   [&::-webkit-slider-thumb]:bg-gradient-to-r
-                   [&::-webkit-slider-thumb]:from-emerald-400
-                   [&::-webkit-slider-thumb]:to-teal-400
-                   [&::-webkit-slider-thumb]:shadow-lg"
+                   [&::-webkit-slider-thumb]:bg-sky-600
+                   [&::-webkit-slider-thumb]:shadow-lg
+                   [&::-webkit-slider-thumb]:shadow-sky-600/20"
       />
       {value < 7 && (
         <motion.div

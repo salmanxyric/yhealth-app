@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { useRef } from 'react';
+import { motion, useMotionValue, useSpring } from 'framer-motion';
 import {
   LayoutDashboard,
   Target,
@@ -17,9 +17,11 @@ import {
   Heart,
   Dumbbell,
   Utensils,
+  Brain,
+  Wallet,
 } from 'lucide-react';
 
-export type TabId = 'overview' | 'goals' | 'plans' | 'progress' | 'activity' | 'achievements' | 'notifications' | 'chat-history' | 'preferences' | 'settings' | 'profile' | 'wellbeing' | 'workouts' | 'nutrition';
+export type TabId = 'overview' | 'intelligence' | 'goals' | 'plans' | 'progress' | 'activity' | 'achievements' | 'notifications' | 'chat-history' | 'preferences' | 'settings' | 'profile' | 'wellbeing' | 'workouts' | 'nutrition' | 'finance';
 
 interface Tab {
   id: TabId;
@@ -36,6 +38,13 @@ const tabs: Tab[] = [
     icon: <LayoutDashboard className="w-4 h-4" />,
     gradient: 'from-blue-500 to-purple-500',
     glowColor: 'shadow-blue-500/30',
+  },
+  {
+    id: 'intelligence',
+    label: 'Intelligence',
+    icon: <Brain className="w-4 h-4" />,
+    gradient: 'from-indigo-500 to-violet-500',
+    glowColor: 'shadow-indigo-500/30',
   },
   {
     id: 'goals',
@@ -127,6 +136,13 @@ const tabs: Tab[] = [
     icon: <Heart className="w-4 h-4" />,
     gradient: 'from-pink-500 to-rose-500',
     glowColor: 'shadow-pink-500/30',
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    icon: <Wallet className="w-4 h-4" />,
+    gradient: 'from-emerald-500 to-teal-500',
+    glowColor: 'shadow-emerald-500/30',
   },
 ];
 
@@ -285,7 +301,7 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
 
   return (
     <motion.div 
-      className="mb-8"
+      className="mb-4 sm:mb-8"
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
@@ -335,7 +351,7 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
         
         {/* Mobile scroll indicator */}
         <div className="flex items-center justify-center gap-1 mt-2">
-          {tabs.slice(0, Math.min(tabs.length, 6)).map((tab, index) => (
+          {tabs.slice(0, Math.min(tabs.length, 6)).map((tab) => (
             <motion.div
               key={tab.id}
               className={`h-1 rounded-full transition-all duration-300 ${

@@ -11,13 +11,16 @@ import type { ChatMessageItemData } from '../components/ChatMessageItem';
  */
 export function adaptMessageToChatMessageItem(
   message: Message,
-  currentUserId?: string
+  currentUserId?: string,
+  isAiChat?: boolean
 ): ChatMessageItemData {
   const isUser = message.senderId === currentUserId;
 
   // Determine media type from contentType
-  let mediaType: 'image' | 'video' | 'audio' | 'document' | undefined;
-  if (message.mediaUrl) {
+  let mediaType: 'image' | 'video' | 'audio' | 'document' | 'gif' | undefined;
+  if (message.contentType === 'gif') {
+    mediaType = 'gif';
+  } else if (message.mediaUrl) {
     if (message.contentType === 'image') mediaType = 'image';
     else if (message.contentType === 'video') mediaType = 'video';
     else if (message.contentType === 'audio') mediaType = 'audio';
@@ -73,6 +76,8 @@ export function adaptMessageToChatMessageItem(
     isPinned: message.isPinned,
     isViewOnce: message.isViewOnce,
     viewOnceOpenedAt: message.viewOnceOpenedAt,
+    readBy: message.readBy,
+    isAiChat,
   };
 }
 

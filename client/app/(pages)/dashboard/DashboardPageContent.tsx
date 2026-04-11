@@ -5,7 +5,6 @@ import { Suspense, useEffect, useState, useCallback } from "react";
 import {
   ChevronRight,
   Sparkles,
-  Bell,
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
@@ -33,6 +32,8 @@ import {
   SettingsTab,
   ProfileTab,
   WellbeingTab,
+  IntelligenceTab,
+  FinanceTab,
 } from "./components";
 import { DashboardLayout } from "@/components/layout";
 import { SubscriptionAccessProvider } from "@/app/context/SubscriptionAccessContext";
@@ -110,7 +111,7 @@ interface WeeklySummary {
 }
 
 function DashboardContent() {
-  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user: _user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -121,6 +122,7 @@ function DashboardContent() {
       tab &&
       [
         "overview",
+        "intelligence",
         "goals",
         "plans",
         "workouts",
@@ -153,8 +155,8 @@ function DashboardContent() {
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null);
   const [weekCompletionRate, setWeekCompletionRate] = useState(0);
-  const [greeting, setGreeting] = useState("");
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [_greeting, setGreeting] = useState("");
+  const [_currentTime, setCurrentTime] = useState(new Date());
 
   // State for active call context (passed to VoiceAssistantTab)
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
@@ -185,8 +187,8 @@ function DashboardContent() {
     };
   }, [searchParams, isAuthenticated, router]);
 
-  // Handle tab change
-  const handleTabChange = useCallback(
+  // Handle tab change (used by DashboardTabs component via props)
+  const _handleTabChange = useCallback(
     (tab: string) => {
       // Navigate to separate pages for these tabs
       if (tab === "ai-coach") {
@@ -325,33 +327,43 @@ function DashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]); // Only depend on isAuthenticated - fetchDashboardData is stable
 
-  // Log activity completion
+  // Toggle activity completion status (complete ↔ uncomplete)
   const handleActivityComplete = async (activityId: string) => {
     if (!plan) return;
 
-    try {
-      const response = await api.post(`/plans/${plan.id}/activities/${activityId}/log`, {
-        status: "completed",
-        scheduledDate: new Date().toISOString(),
-      });
+    // Find current status to toggle
+    const activity = todayData?.activities.find((a) => a.id === activityId);
+    const currentStatus = activity?.status || 'pending';
+    const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
 
-      if (response.success) {
-        // Optimistically update todayData - no need to refetch entire dashboard
-        setTodayData((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            completedCount: prev.completedCount + 1,
-            activities: prev.activities.map((a) =>
-              a.id === activityId ? { ...a, status: "completed" as const } : a
-            ),
-          };
-        });
-        // Note: Removed fetchDashboardData() call here to prevent full page reload
-        // The optimistic update is sufficient for UI feedback
+    // Optimistically update UI immediately
+    setTodayData((prev) => {
+      if (!prev) return prev;
+      const delta = newStatus === 'completed' ? 1 : -1;
+      return {
+        ...prev,
+        completedCount: Math.max(0, prev.completedCount + delta),
+        activities: prev.activities.map((a) =>
+          a.id === activityId ? { ...a, status: newStatus as 'pending' | 'completed' | 'skipped' } : a
+        ),
+      };
+    });
+
+    try {
+      // Use dedicated complete/uncomplete endpoints
+      const endpoint = newStatus === 'completed'
+        ? `/plans/${plan.id}/activities/${activityId}/complete`
+        : `/plans/${plan.id}/activities/${activityId}/uncomplete`;
+      // Send as YYYY-MM-DD to avoid timezone offset issues with DATE columns
+      const todayStr = new Date().toLocaleDateString('en-CA'); // 'en-CA' gives YYYY-MM-DD
+      const response = await api.post(endpoint, { scheduledDate: todayStr });
+
+      if (!response.success) {
+        // Revert on failure
+        fetchDashboardData().catch(() => {});
       }
     } catch (err) {
-      console.error("Failed to log activity:", err);
+      console.error("Failed to toggle activity:", err);
       // Revert optimistic update on error
       fetchDashboardData().catch(() => {
         // Silently fail - user can manually refresh
@@ -407,6 +419,10 @@ function DashboardContent() {
         return <ProfileTab />;
       case "wellbeing":
         return <WellbeingTab />;
+      case "intelligence":
+        return <IntelligenceTab />;
+      case "finance":
+        return <FinanceTab />;
       default:
         return (
           <OverviewTab
@@ -492,51 +508,11 @@ function DashboardContent() {
           <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="relative max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-2">
           {/* Trial banner when in free trial */}
           <div className="mb-4">
             <TrialBanner />
           </div>
-          {/* Header */}
-          <motion.header
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white">
-                  {greeting},{" "}
-                  <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                    {user?.firstName || "there"}
-                  </span>
-                </h1>
-                <p className="text-slate-400 mt-1">
-                  {currentTime.toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleTabChange("notifications")}
-                  className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                >
-                  <Bell className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={fetchDashboardData}
-                  className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          </motion.header>
-
           {/* Tab Content */}
           {renderTabContent()}
         </div>

@@ -35,7 +35,7 @@ export function VoiceAssistantControls({
             backgroundClip: "text",
           }}
         >
-          yHealth AI
+          Balencia AI
         </span>
       </div>
       <p className="text-xs sm:text-sm font-medium" style={{ color: "#888" }}>

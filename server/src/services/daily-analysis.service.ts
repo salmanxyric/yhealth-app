@@ -7,11 +7,12 @@
  */
 
 import crypto from 'crypto';
-import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
 import { env } from '../config/env.config.js';
+import { modelFactory } from './model-factory.service.js';
 import { comprehensiveUserContextService } from './comprehensive-user-context.service.js';
 import type { ComprehensiveUserContext } from './comprehensive-user-context.service.js';
 import { aiScoringService } from './ai-scoring.service.js';
@@ -106,13 +107,12 @@ interface HistoricalScoreRow {
 // ============================================
 
 class DailyAnalysisService {
-  private llm: ChatAnthropic;
+  private llm: BaseChatModel;
   private tableEnsured = false;
 
   constructor() {
-    this.llm = new ChatAnthropic({
-      anthropicApiKey: env.anthropic.apiKey,
-      model: env.anthropic.model,
+    this.llm = modelFactory.getModel({
+      tier: 'reasoning',
       maxTokens: 1500,
     });
   }
@@ -248,13 +248,15 @@ class DailyAnalysisService {
 
       // ----- Step 6b: Cross-pillar contradiction analysis -----
       // Runs 22 deterministic rules, deduplicates, and generates AI corrections
-      // for high/critical severity. Fire-and-forget: doesn't block report assembly.
-      crossPillarIntelligenceService.analyzeUser(userId, snapshot, context).catch(err => {
+      // for high/critical severity. Now awaited to ensure contradictions are persisted before report.
+      try {
+        await crossPillarIntelligenceService.analyzeUser(userId, snapshot, context);
+      } catch (err) {
         logger.warn('[DailyAnalysis] Cross-pillar analysis failed (non-blocking)', {
           userId,
           error: err instanceof Error ? err.message : 'Unknown',
         });
-      });
+      }
 
       // ----- Step 7: Assemble the report -----
       const report: DailyAnalysisReport = {
@@ -736,8 +738,19 @@ Return ONLY valid JSON array of insights.`;
         }))
         .slice(0, 5);
     } catch (error) {
-      if (llmCircuitBreaker.isRateLimitError(error)) {
+      if (modelFactory.isAuthError(error)) {
+        modelFactory.markCurrentProviderRateLimited(24 * 60 * 60 * 1000);
+        logger.warn('[DailyAnalysis] Provider has invalid API key, blacklisted for 24h');
+        try {
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          logger.info('[DailyAnalysis] Switched to next LLM provider after auth failure');
+        } catch { /* no providers available */ }
+      } else if (llmCircuitBreaker.isRateLimitError(error)) {
         llmCircuitBreaker.recordRateLimitError(error);
+        try {
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          logger.info('[DailyAnalysis] Switched to fallback LLM provider after rate limit');
+        } catch { /* no providers available */ }
       }
       logger.error('[DailyAnalysis] Error generating structured insights', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -772,16 +785,20 @@ Return ONLY valid JSON array of insights.`;
       toneRecommendation = 'tough_love';
     }
 
-    // --- Focus areas: top 2 weakest components ---
-    const focusAreas = this.getWeakestComponents(snapshot.componentScores, 2);
+    // --- Focus areas: top 1 weakest component (less aggressive — only highlight the most critical) ---
+    const focusAreas = this.getWeakestComponents(snapshot.componentScores, 1);
 
-    // --- Avoid topics ---
+    // --- Avoid topics (expanded to prevent repetitive nagging) ---
     const avoidTopics: string[] = [];
     if (snapshot.moodLevel < 3) {
-      avoidTopics.push('missed targets', 'declining metrics');
+      avoidTopics.push('missed targets', 'declining metrics', 'data gaps');
     }
     if (snapshot.stressLevel > 8) {
-      avoidTopics.push('additional commitments', 'ambitious new goals');
+      avoidTopics.push('additional commitments', 'ambitious new goals', 'calorie tracking');
+    }
+    // Always avoid topics that feel like nagging
+    if (snapshot.moodLevel < 5 || snapshot.stressLevel > 6) {
+      avoidTopics.push('WHOOP sync reminders', 'logging reminders');
     }
 
     // --- Coach emotional state (deterministic) ---
@@ -1240,6 +1257,42 @@ Return ONLY valid JSON array of insights.`;
 
     return parts.join('\n');
   }
+
+  /**
+   * Get paginated report history (summary only: date, score, insight/risk counts).
+   */
+  async getReportHistory(
+    userId: string,
+    limit: number,
+    offset: number
+  ): Promise<Array<{ date: string; totalScore: number; insightsCount: number; riskCount: number }>> {
+    await this.ensureTable();
+    const result = await query<{
+      report_date: string;
+      total_score: number;
+      insights_count: number;
+      risk_count: number;
+    }>(
+      `SELECT
+         report_date,
+         (snapshot->>'totalScore')::numeric AS total_score,
+         jsonb_array_length(COALESCE(insights, '[]'::jsonb)) AS insights_count,
+         jsonb_array_length(COALESCE(risks, '[]'::jsonb)) AS risk_count
+       FROM daily_analysis_reports
+       WHERE user_id = $1
+       ORDER BY report_date DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+
+    return result.rows.map((r) => ({
+      date: r.report_date,
+      totalScore: parseFloat(r.total_score as unknown as string) || 0,
+      insightsCount: parseInt(r.insights_count as unknown as string, 10) || 0,
+      riskCount: parseInt(r.risk_count as unknown as string, 10) || 0,
+    }));
+  }
+
 }
 
 // ============================================

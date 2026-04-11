@@ -1,16 +1,16 @@
 /**
  * @file Community Group Seed Script
- * @description Creates the YHealth Community group and sends a welcome message
+ * @description Creates the Balencia Community group and sends a welcome message
  */
 
 import { query, transaction } from './pg.js';
 import { logger } from '../services/logger.service.js';
 
-const COMMUNITY_NAME = 'YHealth Community';
+const COMMUNITY_NAME = 'Balencia Community';
 const COMMUNITY_AVATAR = 'https://icon-library.com/images/community-icon/community-icon-25.jpg';
 const WELCOME_MESSAGE = `Welcome to ${COMMUNITY_NAME}! 👋
 
-This is a space for all YHealth users to connect, share experiences, and support each other on their health and wellness journey.
+This is a space for all Balencia users to connect, share experiences, and support each other on their health and wellness journey.
 
 Feel free to:
 • Share your progress and achievements

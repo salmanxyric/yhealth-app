@@ -1,7 +1,12 @@
 "use client";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertCircle, Phone, MessageSquare } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AlertCircle, Phone, MessageSquare, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface CrisisResourcesModalProps {
@@ -9,14 +14,17 @@ interface CrisisResourcesModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function CrisisResourcesModal({ open, onOpenChange }: CrisisResourcesModalProps) {
-  // Default US resources - in production, this would be region-specific
+export function CrisisResourcesModal({
+  open,
+  onOpenChange,
+}: CrisisResourcesModalProps) {
   const resources = [
     {
       name: "National Suicide Prevention Lifeline",
       number: "988",
       type: "phone",
-      description: "24/7 free and confidential support for people in distress",
+      description:
+        "24/7 free and confidential support for people in distress",
     },
     {
       name: "Crisis Text Line",
@@ -34,52 +42,61 @@ export function CrisisResourcesModal({ open, onOpenChange }: CrisisResourcesModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl bg-slate-900 border-slate-700">
+      <DialogContent className="max-w-lg bg-[#0f0f18] border-white/[0.06]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3 text-white">
-            <AlertCircle className="w-6 h-6 text-amber-500" />
-            <span>Support Resources</span>
+          <DialogTitle className="flex items-center gap-2.5 text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
+              <AlertCircle className="h-4 w-4 text-amber-400" />
+            </div>
+            Support Resources
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 mt-4">
-          <p className="text-slate-300 leading-relaxed">
-            I want to make sure you have the support you need right now. Here are some resources
-            that can help:
+        <div className="space-y-4 mt-2">
+          <p className="text-sm text-slate-400 leading-relaxed">
+            I want to make sure you have the support you need right now.
+            Here are some resources that can help:
           </p>
 
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {resources.map((resource, index) => (
               <motion.div
                 key={index}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="p-4 rounded-lg bg-slate-800/50 border border-slate-700 hover:border-emerald-500/50 transition-colors"
+                transition={{ delay: index * 0.08 }}
+                className="flex items-start gap-3.5 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.1] transition-colors"
               >
-                <div className="flex items-start gap-4">
-                  <div className="p-2 rounded-lg bg-emerald-500/20">
-                    {resource.type === "text" ? (
-                      <MessageSquare className="w-5 h-5 text-emerald-400" />
-                    ) : (
-                      <Phone className="w-5 h-5 text-emerald-400" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-white mb-1">{resource.name}</h3>
-                    <p className="text-emerald-400 font-mono text-lg mb-2">{resource.number}</p>
-                    <p className="text-slate-400 text-sm">{resource.description}</p>
-                  </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-pink-500/10 shrink-0">
+                  {resource.type === "text" ? (
+                    <MessageSquare className="h-4 w-4 text-pink-400" />
+                  ) : resource.type === "emergency" ? (
+                    <ShieldAlert className="h-4 w-4 text-rose-400" />
+                  ) : (
+                    <Phone className="h-4 w-4 text-pink-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-white mb-0.5">
+                    {resource.name}
+                  </h3>
+                  <p className="text-pink-400 font-mono text-base font-semibold mb-1">
+                    {resource.number}
+                  </p>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {resource.description}
+                  </p>
                 </div>
               </motion.div>
             ))}
           </div>
 
-          <div className="mt-6 p-4 rounded-lg bg-amber-900/20 border border-amber-500/30">
-            <p className="text-amber-200 text-sm leading-relaxed">
-              <strong>Remember:</strong> You&apos;re not alone. Reaching out for help is a sign of
-              strength. If you&apos;re in immediate danger, please call 911 or go to your nearest
-              emergency room.
+          <div className="p-3.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/15">
+            <p className="text-xs text-amber-200/80 leading-relaxed">
+              <strong className="text-amber-200">Remember:</strong>{" "}
+              You&apos;re not alone. Reaching out for help is a sign of
+              strength. If you&apos;re in immediate danger, please call 911
+              or go to your nearest emergency room.
             </p>
           </div>
         </div>
@@ -87,4 +104,3 @@ export function CrisisResourcesModal({ open, onOpenChange }: CrisisResourcesModa
     </Dialog>
   );
 }
-

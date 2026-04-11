@@ -1,6 +1,6 @@
 /**
  * @file Reset Chats and Create Community Group
- * @description Deletes all chats, messages, and related data, then creates a single "yhealth community" group chat with all users
+ * @description Deletes all chats, messages, and related data, then creates a single "balencia community" group chat with all users
  */
 
 import { transaction, query, closePool } from './pg.js';
@@ -117,7 +117,7 @@ async function resetChatsAndCreateCommunity(): Promise<void> {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
         [
-          'yhealth community',
+          'balencia community',
           true,
           true,
           null, // avatar

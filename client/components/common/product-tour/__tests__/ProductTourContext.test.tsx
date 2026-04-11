@@ -47,7 +47,7 @@ jest.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const STORAGE_KEY = "yhealth_product_tour";
+const STORAGE_KEY = "balencia_product_tour";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return <ProductTourProvider>{children}</ProductTourProvider>;

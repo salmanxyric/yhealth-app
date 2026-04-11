@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useRef, useMemo } from "react";
-import { motion, AnimatePresence, useInView } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
-  Minus,
   HelpCircle,
   MessageCircle,
   Sparkles,
@@ -18,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useGSAP } from "@/hooks/use-gsap";
 import { gsap } from "@/lib/gsap-init";
-import { AnimatedGradientMesh, GSAPScrollReveal, GSAPParallax } from "./shared";
+import { AnimatedGradientMesh, GSAPScrollReveal } from "./shared";
 
 // ─── Data ────────────────────────────────────────────────────────────
 
@@ -33,7 +32,7 @@ const faqs = [
   {
     question: "Does it replace a doctor?",
     answer:
-      "No. yHealth is a wellness companion that complements professional medical care. Our AI provides personalized fitness, nutrition, and wellbeing guidance — but does not diagnose, treat, or prescribe. Always consult your healthcare provider for medical decisions.",
+      "No. Balencia is a wellness companion that complements professional medical care. Our AI provides personalized fitness, nutrition, and wellbeing guidance — but does not diagnose, treat, or prescribe. Always consult your healthcare provider for medical decisions.",
     category: "Trust",
     icon: HelpCircle,
   },
@@ -61,7 +60,7 @@ const faqs = [
   {
     question: "How does AI-powered health tracking work?",
     answer:
-      "yHealth aggregates data from wearables, manual inputs, and in-app activity across Fitness, Nutrition, and Wellbeing. Our AI processes this in real time — analyzing sleep, HRV, workouts, nutrition, and stress to generate your daily Wellness Score and surface proactive insights.",
+      "Balencia aggregates data from wearables, manual inputs, and in-app activity across Fitness, Nutrition, and Wellbeing. Our AI processes this in real time — analyzing sleep, HRV, workouts, nutrition, and stress to generate your daily Wellness Score and surface proactive insights.",
     category: "AI & Technology",
     icon: Sparkles,
   },
@@ -133,7 +132,7 @@ function FAQItem({
           "relative overflow-hidden rounded-2xl border transition-all duration-500",
           isOpen
             ? "border-white/15 bg-white/[0.03] shadow-lg"
-            : "border-white/[0.08] bg-white/[0.015] hover:border-white/15 hover:bg-white/[0.025]"
+            : "border-white/[0.12] bg-white/[0.07] hover:border-white/15 hover:bg-white/[0.09]"
         )}
         style={
           isOpen
@@ -178,7 +177,7 @@ function FAQItem({
             <Icon
               className={cn(
                 "w-4.5 h-4.5 transition-colors duration-300",
-                isOpen ? "text-white" : "text-muted-foreground/70"
+                isOpen ? "text-white" : "text-muted-foreground/90"
               )}
               strokeWidth={2}
             />
@@ -203,7 +202,7 @@ function FAQItem({
                 "hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider transition-all duration-300",
                 isOpen
                   ? `bg-gradient-to-r ${gradient} text-white`
-                  : "bg-white/[0.06] text-muted-foreground/50"
+                  : "bg-white/[0.07] text-muted-foreground/80"
               )}
             >
               {faq.category}
@@ -215,7 +214,7 @@ function FAQItem({
                 "flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-300",
                 isOpen
                   ? "bg-white/10 text-foreground"
-                  : "bg-white/[0.04] text-muted-foreground/50 group-hover:bg-white/[0.08] group-hover:text-muted-foreground"
+                  : "bg-white/[0.07] text-muted-foreground/80 group-hover:bg-white/[0.1] group-hover:text-muted-foreground"
               )}
             >
               <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
@@ -239,7 +238,7 @@ function FAQItem({
               <div className="px-5 sm:px-6 pb-5 sm:pb-6 pt-0">
                 <div className="pl-14">
                   <div className="h-px bg-gradient-to-r from-white/10 via-white/5 to-transparent mb-4" />
-                  <p className="text-sm text-muted-foreground/80 leading-[1.7]">
+                  <p className="text-sm text-muted-foreground/90 leading-[1.7]">
                     {faq.answer}
                   </p>
                 </div>
@@ -351,7 +350,7 @@ export function FAQSection() {
         >
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/80" />
             <input
               type="text"
               placeholder="Search questions..."
@@ -360,7 +359,7 @@ export function FAQSection() {
                 setSearchQuery(e.target.value);
                 setOpenIndex(null);
               }}
-              className="w-full pl-11 pr-10 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/30 focus:ring-1 focus:ring-primary/15 transition-all backdrop-blur-sm"
+              className="w-full pl-11 pr-10 py-3 rounded-xl bg-white/[0.07] border border-white/[0.12] text-sm placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/30 focus:ring-1 focus:ring-primary/15 transition-all backdrop-blur-sm"
             />
             {searchQuery && (
               <button
@@ -384,7 +383,7 @@ export function FAQSection() {
                   "px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-300 border",
                   activeCategory === category
                     ? "bg-primary/15 border-primary/30 text-primary shadow-sm shadow-primary/10"
-                    : "bg-white/[0.03] border-white/[0.08] text-muted-foreground/60 hover:border-white/15 hover:text-foreground/80"
+                    : "bg-white/[0.07] border-white/[0.12] text-muted-foreground/80 hover:border-white/15 hover:text-foreground/80"
                 )}
               >
                 {category}
@@ -420,10 +419,10 @@ export function FAQSection() {
                   animate={{ opacity: 1, y: 0 }}
                   className="text-center py-16"
                 >
-                  <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mx-auto mb-4">
-                    <Search className="w-6 h-6 text-muted-foreground/30" />
+                  <div className="w-14 h-14 rounded-2xl bg-white/[0.07] border border-white/[0.12] flex items-center justify-center mx-auto mb-4">
+                    <Search className="w-6 h-6 text-muted-foreground/60" />
                   </div>
-                  <p className="text-muted-foreground/60 text-sm mb-2">
+                  <p className="text-muted-foreground/80 text-sm mb-2">
                     No questions match your search.
                   </p>
                   <button
@@ -451,7 +450,7 @@ export function FAQSection() {
           className="mt-16 md:mt-20 max-w-2xl mx-auto"
         >
           <motion.div
-            className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.015] backdrop-blur-sm p-8 sm:p-10 text-center"
+            className="relative overflow-hidden rounded-3xl border border-white/[0.12] bg-white/[0.07] backdrop-blur-sm p-8 sm:p-10 text-center"
             whileHover={{
               boxShadow:
                 "0 0 60px -12px rgba(139, 92, 246, 0.2), 0 0 0 1px rgba(255,255,255,0.1)",
@@ -485,7 +484,7 @@ export function FAQSection() {
               <h3 className="text-xl sm:text-2xl font-bold mb-2 text-foreground/95">
                 Still have questions?
               </h3>
-              <p className="text-sm text-muted-foreground/70 mb-6 max-w-md mx-auto leading-relaxed">
+              <p className="text-sm text-muted-foreground/90 mb-6 max-w-md mx-auto leading-relaxed">
                 Our support team responds within hours and is available around
                 the clock to assist you.
               </p>

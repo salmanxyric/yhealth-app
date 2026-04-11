@@ -21,11 +21,8 @@ function extractToken(req: Request): string | null {
     return cookieToken;
   }
 
-  // Check query parameter (for WebSocket connections)
-  const queryToken = req.query['token'];
-  if (typeof queryToken === 'string') {
-    return queryToken;
-  }
+  // Query parameter token removed for security — tokens in URLs are logged and
+  // leaked via Referer headers. WebSocket auth uses socket.io handshake instead.
 
   return null;
 }

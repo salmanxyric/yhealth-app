@@ -115,7 +115,7 @@ export function RealTimeActivityCard({
           {/* Main Value */}
           <div className="text-center mb-6">
             <motion.span
-              className="text-6xl font-black text-white"
+              className="text-2xl sm:text-3xl font-black text-white"
               style={{ textShadow: '0 0 30px rgba(16, 185, 129, 0.5)' }}
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
@@ -160,7 +160,7 @@ export function RealTimeActivityCard({
               </defs>
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-bold text-emerald-400">{Math.round(stepsProgress)}%</span>
+              <span className="text-lg font-bold text-emerald-400">{Math.round(stepsProgress)}%</span>
               <span className="text-xs text-slate-400">Complete</span>
             </div>
           </div>
@@ -251,7 +251,7 @@ export function RealTimeActivityCard({
           {/* Main Value */}
           <div className="text-center mb-6">
             <motion.span
-              className="text-6xl font-black text-white"
+              className="text-2xl sm:text-3xl font-black text-white"
               style={{ textShadow: '0 0 30px rgba(249, 115, 22, 0.5)' }}
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}

@@ -406,9 +406,9 @@ export function DashboardSidebar({
             transition={{ duration: 0.3 }}
             className="flex items-center gap-2.5"
           >
-            <Image src="/logo1.png" alt="yHealth" width={28} height={28} className="object-contain" />
+            <Image src="/logo1.png" alt="Balencia" width={28} height={28} className="object-contain" />
             <span className="text-lg font-bold bg-gradient-to-r from-cyan-400 via-teal-400 to-sky-400 bg-clip-text text-transparent">
-              yHealth
+              Balencia
             </span>
           </motion.div>
         )}
@@ -419,7 +419,7 @@ export function DashboardSidebar({
             transition={{ duration: 0.3 }}
             className="flex justify-center w-full"
           >
-            <Image src="/logo1.png" alt="yHealth" width={28} height={28} className="object-contain" />
+            <Image src="/logo1.png" alt="Balencia" width={28} height={28} className="object-contain" />
           </motion.div>
         )}
         <Button
@@ -446,7 +446,7 @@ export function DashboardSidebar({
         >
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10 ring-2 ring-cyan-500/30">
-              <AvatarImage src={user?.avatarUrl || undefined} />
+              <AvatarImage src={user?.avatarUrl || '/avatar.jpg'} />
               <AvatarFallback className="bg-gradient-to-br from-cyan-500 via-teal-500 to-sky-500 text-white text-sm font-semibold">
                 {getInitials()}
               </AvatarFallback>

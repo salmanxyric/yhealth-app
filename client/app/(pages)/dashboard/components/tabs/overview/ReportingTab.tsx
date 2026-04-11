@@ -204,7 +204,7 @@ function AnimatedStatCard({
   trend,
   trendValue,
 }: {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number | string;
   subtitle?: string;
@@ -289,7 +289,7 @@ function AnimatedStatCard({
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-400">{label}</p>
               <div className="flex items-baseline gap-2 mt-1">
-                <p className="text-3xl font-bold text-white">
+                <p className="text-lg font-bold text-white">
                   {typeof value === 'number' ? <AnimatedNumber value={value} decimals={value % 1 !== 0 ? 1 : 0} /> : value}
                 </p>
                 {trend && trendValue !== undefined && (
@@ -331,7 +331,7 @@ function CategoryProgressBar({
   index,
 }: CategoryPerformance & { index: number }) {
   const percentage = total > 0 ? (completed / total) * 100 : 0;
-  const categoryIcons: Record<string, React.ElementType> = {
+  const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
     workout: Activity,
     meal: UtensilsCrossed,
     sleep_routine: Moon,
@@ -555,7 +555,7 @@ function TrendCard({ trend, index }: { trend: HealthTrend; index: number }) {
         )}
       </div>
       <div className="flex items-baseline gap-3">
-        <p className="text-2xl font-bold text-white">
+        <p className="text-lg font-bold text-white">
           {trend.current.toFixed(trend.unit.includes('/') ? 1 : 0)}
           <span className="text-sm font-normal text-slate-400 ml-1">{trend.unit}</span>
         </p>
@@ -681,7 +681,7 @@ export function ReportingTab() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `yhealth-report-${reportPeriod}-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `balencia-report-${reportPeriod}-${new Date().toISOString().split('T')[0]}.json`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -706,7 +706,7 @@ export function ReportingTab() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `yhealth-report-${reportPeriod}-${new Date().toISOString().split('T')[0]}.${format}`;
+            a.download = `balencia-report-${reportPeriod}-${new Date().toISOString().split('T')[0]}.${format}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -794,8 +794,8 @@ export function ReportingTab() {
         className="flex flex-col md:flex-row md:items-center justify-between gap-4"
       >
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <FileText className="w-6 h-6 text-purple-400" />
+          <h2 className="text-[16px] sm:text-[18px] font-bold text-white flex items-center gap-2">
+            <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
             Health Report
           </h2>
           <p className="text-slate-400 text-sm mt-1">{data.summary.period}</p>

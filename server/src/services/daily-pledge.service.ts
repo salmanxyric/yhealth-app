@@ -279,7 +279,7 @@ class DailyPledgeService {
       // Use daily score components to find weakest area
       const result = await query<{ component_scores: Record<string, number> }>(
         `SELECT component_scores FROM daily_user_scores
-         WHERE user_id = $1 ORDER BY score_date DESC LIMIT 1`,
+         WHERE user_id = $1 ORDER BY date DESC LIMIT 1`,
         [userId]
       );
 

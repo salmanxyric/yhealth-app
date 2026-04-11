@@ -15,3 +15,5 @@ export { PreferencesTab } from "./PreferencesTab";
 export { SettingsTab } from "./SettingsTab";
 export { ProfileTab } from "./ProfileTab";
 export { WellbeingTab } from "./WellbeingTab";
+export { IntelligenceTab } from "./IntelligenceTab";
+export { FinanceTab } from "./FinanceTab";

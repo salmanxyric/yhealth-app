@@ -52,7 +52,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { WorkoutAlarmsWidget } from "../alarms/WorkoutAlarmsWidget";
-import { MotivationalVideosWidget } from "../motivation/MotivationalVideosWidget";
 import { workoutsService, type WorkoutLog } from "@/src/shared/services";
 
 // Import workout utilities, constants, and logger
@@ -1812,7 +1811,7 @@ export function WorkoutsTab() {
   const progressPercentage = totalExercises > 0 ? (completedExercises / totalExercises) * 100 : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       {/* Active Workout Session Banner */}
       <AnimatePresence>
         {session.isActive && (
@@ -1822,7 +1821,7 @@ export function WorkoutsTab() {
             exit={{ opacity: 0, y: -20, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 p-6 relative overflow-hidden">
+            <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 p-4 sm:p-6 relative overflow-hidden">
               {/* Animated background */}
               <motion.div
                 className="absolute inset-0 opacity-20"
@@ -1840,36 +1839,36 @@ export function WorkoutsTab() {
               />
 
               <div className="relative z-10">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                     <motion.div
                       animate={{ scale: [1, 1.1, 1] }}
                       transition={{ duration: 1, repeat: Infinity }}
-                      className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center"
+                      className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0"
                     >
-                      <Dumbbell className="w-8 h-8 text-white" />
+                      <Dumbbell className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                     </motion.div>
-                    <div>
-                      <h3 className="text-white font-bold text-xl">{selectedWorkout?.name}</h3>
+                    <div className="min-w-0">
+                      <h3 className="text-white font-bold text-base sm:text-xl truncate">{selectedWorkout?.name}</h3>
                       <div className="flex items-center gap-2 text-white/80">
-                        <Timer className="w-4 h-4" />
-                        <span className="text-2xl font-mono font-bold">{formatTime(session.elapsedSeconds)}</span>
+                        <Timer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <span className="text-xl sm:text-2xl font-mono font-bold">{formatTime(session.elapsedSeconds)}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                     <button
                       onClick={togglePause}
-                      className="p-3 rounded-xl bg-white/20 hover:bg-white/30 text-white transition-colors"
+                      className="p-2 sm:p-3 rounded-xl bg-white/20 hover:bg-white/30 text-white transition-colors"
                     >
-                      {session.isPaused ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
+                      {session.isPaused ? <Play className="w-5 h-5 sm:w-6 sm:h-6" /> : <Pause className="w-5 h-5 sm:w-6 sm:h-6" />}
                     </button>
                     <button
                       onClick={stopWorkout}
-                      className="p-3 rounded-xl bg-white/20 hover:bg-red-500/50 text-white transition-colors"
+                      className="p-2 sm:p-3 rounded-xl bg-white/20 hover:bg-red-500/50 text-white transition-colors"
                     >
-                      <Square className="w-6 h-6" />
+                      <Square className="w-5 h-5 sm:w-6 sm:h-6" />
                     </button>
                   </div>
                 </div>
@@ -2070,100 +2069,144 @@ export function WorkoutsTab() {
         onUpdateWeight={updateExerciseWeight}
       />
 
-      {/* Header with Quick Stats */}
+      {/* Header — clean title + add button */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-500/20 via-red-500/10 to-transparent border border-orange-500/20 p-6"
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-
-        <div className="relative z-10">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-2 rounded-xl bg-orange-500/20">
-                  <Dumbbell className="w-5 h-5 text-orange-400" />
-                </div>
-                <span className="text-orange-400 text-sm font-medium">AI Workout Plan</span>
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-1">Your Fitness Journey</h2>
-              <p className="text-slate-400 text-sm">Personalized workouts adapted to your progress</p>
-            </div>
-            <div className="flex gap-2">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white font-medium text-sm hover:bg-white/20 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Create Plan
-              </motion.button>
-            </div>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-white">Your Fitness Journey</h2>
+            <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Personalized workouts adapted to your progress</p>
           </div>
-
-          {/* Quick Stats Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Flame className="w-4 h-4 text-orange-400" />
-                <span className="text-xs text-slate-400">This Week</span>
-              </div>
-              <p className="text-2xl font-bold text-white">{workoutStats.weeklyWorkouts}<span className="text-sm text-slate-400">/{workoutStats.weeklyGoal}</span></p>
-              <p className="text-xs text-slate-500">Workouts</p>
-            </div>
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs text-slate-400">Total Time</span>
-              </div>
-              <p className="text-2xl font-bold text-white">{workoutStats.totalMinutes}</p>
-              <p className="text-xs text-slate-500">Minutes</p>
-            </div>
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span className="text-xs text-slate-400">Burned</span>
-              </div>
-              <p className="text-2xl font-bold text-white">{workoutStats.caloriesBurned}</p>
-              <p className="text-xs text-slate-500">Calories</p>
-            </div>
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Trophy className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs text-slate-400">Streak</span>
-              </div>
-              <p className="text-2xl font-bold text-white">{workoutStats.currentStreak}</p>
-              <p className="text-xs text-slate-500">Days</p>
-            </div>
-          </div>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add new plan</span>
+          </motion.button>
         </div>
+
+          {/* Quick Stats Row — Dark cards with sparkline charts */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+            {[
+              {
+                label: "Workout",
+                value: `${workoutStats.weeklyWorkouts}/${workoutStats.weeklyGoal}`,
+                sub: "This Week",
+                icon: <Dumbbell className="w-5 h-5 sm:w-6 sm:h-6" />,
+                color: "#f59e0b",
+                sparkline: [30, 45, 35, 60, 40, 70, 55],
+              },
+              {
+                label: "Total Time",
+                value: String(workoutStats.totalMinutes),
+                sub: "Minutes",
+                icon: <Clock className="w-5 h-5 sm:w-6 sm:h-6" />,
+                color: "#06b6d4",
+                sparkline: [20, 25, 30, 22, 28, 35, 30],
+              },
+              {
+                label: "Burned",
+                value: String(workoutStats.caloriesBurned),
+                sub: "Calories",
+                icon: <Flame className="w-5 h-5 sm:w-6 sm:h-6" />,
+                color: "#f97316",
+                sparkline: [40, 55, 65, 50, 70, 60, 75],
+              },
+              {
+                label: "Streak",
+                value: String(workoutStats.currentStreak),
+                sub: "Days",
+                icon: <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />,
+                color: "#a855f7",
+                sparkline: [10, 15, 12, 18, 14, 20, 16],
+              },
+            ].map((card, idx) => {
+              const maxY = Math.max(...card.sparkline, 1);
+              const points = card.sparkline
+                .map((v, i) => `${(i / (card.sparkline.length - 1)) * 100},${100 - (v / maxY) * 60}`)
+                .join(" ");
+              const areaPoints = `0,100 ${points} 100,100`;
+
+              return (
+                <motion.div
+                  key={card.label}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.08, type: "spring", stiffness: 300, damping: 25 }}
+                  className="relative overflow-hidden rounded-2xl border border-white/[0.06]"
+                  style={{ background: "linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)" }}
+                >
+                  <div className="relative z-10 p-3.5 sm:p-4 pb-0">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium mb-1">{card.label}</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-none">{card.value}</p>
+                        <p className="text-[10px] sm:text-xs text-slate-600 mt-0.5">{card.sub}</p>
+                      </div>
+                      <div className="p-1.5 rounded-lg" style={{ color: card.color, opacity: 0.8 }}>
+                        {card.icon}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Sparkline chart */}
+                  <div className="relative h-12 sm:h-14 mt-1">
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                      <defs>
+                        <linearGradient id={`spark-fill-${idx}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={card.color} stopOpacity="0.3" />
+                          <stop offset="100%" stopColor={card.color} stopOpacity="0.02" />
+                        </linearGradient>
+                      </defs>
+                      <polygon points={areaPoints} fill={`url(#spark-fill-${idx})`} />
+                      <polyline points={points} fill="none" stroke={card.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                    </svg>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
       </motion.div>
 
-      {/* View Toggle */}
-      <div className="flex gap-2 p-1 rounded-xl bg-slate-800/50 border border-slate-700/50 w-fit">
-        {[
-          { id: "today", label: "Today", icon: Calendar },
-          { id: "plan", label: "My Plans", icon: BarChart3 },
-          { id: "weekly", label: "Weekly", icon: ListOrdered },
-          { id: "calendar", label: "Calendar", icon: CalendarDays },
-          { id: "analytics", label: "Analytics", icon: TrendingUp },
-          { id: "schedule", label: "Schedule", icon: RefreshCw },
-        ].map((view) => (
-          <button
-            key={view.id}
-            onClick={() => setActiveView(view.id as typeof activeView)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeView === view.id
-                ? "bg-orange-500 text-white"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <view.icon className="w-4 h-4" />
-            {view.label}
-          </button>
-        ))}
+      {/* View Toggle — Clean underline tabs */}
+      <div className="overflow-x-auto scrollbar-hide border-b border-white/[0.06]">
+        <div className="flex gap-0 w-max">
+          {[
+            { id: "today", label: "Workout", icon: Calendar },
+            { id: "plan", label: "My Plan", icon: BarChart3 },
+            { id: "weekly", label: "Weekly", icon: ListOrdered },
+            { id: "calendar", label: "Calender", icon: CalendarDays },
+            { id: "analytics", label: "Analytics", icon: TrendingUp },
+            { id: "schedule", label: "Schedule", icon: RefreshCw },
+          ].map((view) => {
+            const isActive = activeView === view.id;
+            return (
+              <button
+                key={view.id}
+                onClick={() => setActiveView(view.id as typeof activeView)}
+                className={`relative flex items-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                  isActive
+                    ? "text-white"
+                    : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                <view.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                {view.label}
+                {isActive && (
+                  <motion.div
+                    layoutId="workoutTabIndicator"
+                    className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-emerald-500"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -2236,14 +2279,14 @@ export function WorkoutsTab() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="grid lg:grid-cols-3 gap-6"
+            className="grid lg:grid-cols-3 gap-4 sm:gap-6"
           >
             {/* Today's Workout Card */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className="lg:col-span-2 space-y-4 min-w-0">
               <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 overflow-hidden">
                 {/* Workout Header */}
-                <div className="p-6 border-b border-slate-700/50">
-                  <div className="flex items-start justify-between mb-4">
+                <div className="p-4 sm:p-6 border-b border-slate-700/50">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <span className="px-2 py-1 rounded-lg bg-orange-500/20 text-orange-400 text-xs font-medium">
@@ -2263,7 +2306,7 @@ export function WorkoutsTab() {
                           </span>
                         )}
                       </div>
-                      <h3 className="text-xl font-bold text-white mb-1">{selectedWorkout.name}</h3>
+                      <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{selectedWorkout.name}</h3>
                       <div className="flex flex-wrap gap-2">
                         {selectedWorkout.muscleGroups.map((group) => (
                           <span key={group} className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">
@@ -2285,17 +2328,17 @@ export function WorkoutsTab() {
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             onClick={startWorkout}
-                            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 transition-shadow"
+                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 text-white text-sm sm:text-base font-semibold shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 transition-shadow"
                           >
-                            <Play className="w-5 h-5" />
+                            <Play className="w-4 h-4 sm:w-5 sm:h-5" />
                             Start
                           </motion.button>
                         ) : (
                           <motion.button
                             disabled
-                            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-700/50 text-slate-500 font-semibold cursor-not-allowed opacity-60"
+                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-3 rounded-xl bg-slate-700/50 text-slate-500 text-sm sm:text-base font-semibold cursor-not-allowed opacity-60"
                           >
-                            <Play className="w-5 h-5" />
+                            <Play className="w-4 h-4 sm:w-5 sm:h-5" />
                             Rest Day
                           </motion.button>
                         )
@@ -2304,17 +2347,17 @@ export function WorkoutsTab() {
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={completeWorkout}
-                          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 text-white font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-shadow"
+                          className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 text-white text-sm sm:text-base font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-shadow"
                         >
-                          <CheckCircle2 className="w-5 h-5" />
-                          Finish Workout
+                          <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                          Finish
                         </motion.button>
                       )}
                     </div>
                   </div>
 
                   {/* Progress Section with Circular Progress */}
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-3 sm:gap-6">
                     <CircularProgress
                       percentage={progressPercentage}
                       size={80}
@@ -2356,7 +2399,7 @@ export function WorkoutsTab() {
                 {/* Exercise List */}
                 <div className="divide-y divide-slate-700/50">
                   {selectedWorkout.exercises.length === 0 ? (
-                    <div className="p-8">
+                    <div className="p-4 sm:p-8">
                       <div className="text-center mb-6">
                         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 flex items-center justify-center relative overflow-hidden">
                           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-blue-500/10 animate-pulse" />
@@ -2413,7 +2456,7 @@ export function WorkoutsTab() {
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className={`p-4 flex items-center gap-4 hover:bg-white/5 transition-colors cursor-pointer ${
+                        className={`p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-white/5 transition-colors cursor-pointer ${
                           exercise.completed ? "bg-emerald-500/5" : ""
                         }`}
                         onClick={() => setExecutionDrawerExercise(exercise)}
@@ -2428,26 +2471,26 @@ export function WorkoutsTab() {
                               animate={{ scale: 1 }}
                               transition={{ type: "spring", stiffness: 500, damping: 30 }}
                             >
-                              <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                              <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
                             </motion.div>
                           ) : (
-                            <Circle className="w-6 h-6 text-slate-600 hover:text-orange-400 transition-colors" />
+                            <Circle className="w-5 h-5 sm:w-6 sm:h-6 text-slate-600 hover:text-orange-400 transition-colors" />
                           )}
                         </button>
                         <div className="flex-1 min-w-0">
-                          <p className={`font-medium ${exercise.completed ? "text-emerald-400" : "text-white"}`}>
+                          <p className={`font-medium text-[14px] sm:text-[15px] truncate ${exercise.completed ? "text-emerald-400" : "text-white"}`}>
                             {exercise.name}
                           </p>
-                          <p className="text-sm text-slate-500">
+                          <p className="text-[13px] sm:text-sm text-slate-500">
                             {exercise.sets} sets × {exercise.reps}
                             {exercise.weight && ` • ${exercise.weight}`}
-                            {exercise.restSeconds && ` • ${exercise.restSeconds}s rest`}
+                            <span className="hidden sm:inline">{exercise.restSeconds && ` • ${exercise.restSeconds}s rest`}</span>
                           </p>
                         </div>
-                        <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">
+                        <span className="text-[11px] sm:text-xs text-slate-500 bg-slate-800 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded hidden sm:inline-block">
                           {exercise.muscleGroup}
                         </span>
-                        <ChevronRight className="w-5 h-5 text-slate-600" />
+                        <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
                       </motion.div>
                     ))
                   )}
@@ -2456,9 +2499,9 @@ export function WorkoutsTab() {
             </div>
 
             {/* Side Panel */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               {/* Weekly Analytics */}
-              <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-5">
+              <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-3 sm:p-5">
                 <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-cyan-400" />
                   Weekly Progress
@@ -2541,7 +2584,7 @@ export function WorkoutsTab() {
               </div>
 
               {/* Weekly Schedule Mini */}
-              <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-5">
+              <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-3 sm:p-5">
                 <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-orange-400" />
                   This Week
@@ -2584,7 +2627,7 @@ export function WorkoutsTab() {
               </div>
 
               {/* Personal Records */}
-              <div className="rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/20 p-5">
+              <div className="rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/20 p-3 sm:p-5">
                 <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
                   <Trophy className="w-4 h-4 text-amber-400" />
                   Recent PRs
@@ -2612,7 +2655,7 @@ export function WorkoutsTab() {
               </div>
 
               {/* AI Tip */}
-              <div className="rounded-2xl bg-gradient-to-br from-violet-500/10 to-purple-500/5 border border-violet-500/20 p-5">
+              <div className="rounded-2xl bg-gradient-to-br from-violet-500/10 to-purple-500/5 border border-violet-500/20 p-3 sm:p-5">
                 <div className="flex items-start gap-3">
                   <div className="p-2 rounded-xl bg-violet-500/20 flex-shrink-0">
                     <Sparkles className="w-4 h-4 text-violet-400" />
@@ -2629,12 +2672,6 @@ export function WorkoutsTab() {
               {/* Workout Alarms Widget */}
               <WorkoutAlarmsWidget />
 
-              {/* Motivational Videos Widget */}
-              <MotivationalVideosWidget
-                goalCategory="muscle_building"
-                title="Get Motivated"
-                maxVideos={5}
-              />
             </div>
           </motion.div>
         )}
@@ -3338,30 +3375,32 @@ export function WorkoutsTab() {
                               key={exercise.id}
                               className="flex items-center gap-3 p-3 rounded-xl bg-slate-800 border border-slate-700"
                             >
-                              <GripVertical className="w-4 h-4 text-slate-600" />
-                              <div className="flex-1 grid grid-cols-4 gap-2">
-                                <span className="text-white text-sm col-span-1 truncate">{exercise.name}</span>
-                                <input
-                                  type="number"
-                                  value={exercise.sets}
-                                  onChange={(e) => updateExerciseInForm(exercise.id, { sets: parseInt(e.target.value) || 0 })}
-                                  className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                                  placeholder="Sets"
-                                />
-                                <input
-                                  type="text"
-                                  value={exercise.reps}
-                                  onChange={(e) => updateExerciseInForm(exercise.id, { reps: e.target.value })}
-                                  className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                                  placeholder="Reps"
-                                />
-                                <input
-                                  type="number"
-                                  value={exercise.restSeconds || ""}
-                                  onChange={(e) => updateExerciseInForm(exercise.id, { restSeconds: parseInt(e.target.value) || 60 })}
-                                  className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                                  placeholder="Rest (s)"
-                                />
+                              <GripVertical className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <span className="text-white text-[13px] sm:text-sm block truncate mb-1">{exercise.name}</span>
+                                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                                  <input
+                                    type="number"
+                                    value={exercise.sets}
+                                    onChange={(e) => updateExerciseInForm(exercise.id, { sets: parseInt(e.target.value) || 0 })}
+                                    className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                    placeholder="Sets"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={exercise.reps}
+                                    onChange={(e) => updateExerciseInForm(exercise.id, { reps: e.target.value })}
+                                    className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                    placeholder="Reps"
+                                  />
+                                  <input
+                                    type="number"
+                                    value={exercise.restSeconds || ""}
+                                    onChange={(e) => updateExerciseInForm(exercise.id, { restSeconds: parseInt(e.target.value) || 60 })}
+                                    className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                    placeholder="Rest"
+                                  />
+                                </div>
                               </div>
                               <button
                                 onClick={() => removeExerciseFromForm(exercise.id)}
@@ -3660,30 +3699,32 @@ export function WorkoutsTab() {
                           key={exercise.id}
                           className="flex items-center gap-3 p-3 rounded-xl bg-slate-800 border border-slate-700"
                         >
-                          <GripVertical className="w-4 h-4 text-slate-600" />
-                          <div className="flex-1 grid grid-cols-4 gap-2">
-                            <span className="text-white text-sm col-span-1 truncate">{exercise.name}</span>
-                            <input
-                              type="number"
-                              value={exercise.sets}
-                              onChange={(e) => updateExerciseInForm(exercise.id, { sets: parseInt(e.target.value) || 0 })}
-                              className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                              placeholder="Sets"
-                            />
-                            <input
-                              type="text"
-                              value={exercise.reps}
-                              onChange={(e) => updateExerciseInForm(exercise.id, { reps: e.target.value })}
-                              className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                              placeholder="Reps"
-                            />
-                            <input
-                              type="number"
-                              value={exercise.restSeconds || ""}
-                              onChange={(e) => updateExerciseInForm(exercise.id, { restSeconds: parseInt(e.target.value) || 60 })}
-                              className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                              placeholder="Rest (s)"
-                            />
+                          <GripVertical className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-white text-[13px] sm:text-sm block truncate mb-1">{exercise.name}</span>
+                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                              <input
+                                type="number"
+                                value={exercise.sets}
+                                onChange={(e) => updateExerciseInForm(exercise.id, { sets: parseInt(e.target.value) || 0 })}
+                                className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                placeholder="Sets"
+                              />
+                              <input
+                                type="text"
+                                value={exercise.reps}
+                                onChange={(e) => updateExerciseInForm(exercise.id, { reps: e.target.value })}
+                                className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                placeholder="Reps"
+                              />
+                              <input
+                                type="number"
+                                value={exercise.restSeconds || ""}
+                                onChange={(e) => updateExerciseInForm(exercise.id, { restSeconds: parseInt(e.target.value) || 60 })}
+                                className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                placeholder="Rest"
+                              />
+                            </div>
                           </div>
                           <button
                             onClick={() => removeExerciseFromForm(exercise.id)}

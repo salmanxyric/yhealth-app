@@ -20,7 +20,7 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
 }
 
 // Cookie utilities
-const COOKIE_NAME = "yhealth_access_token";
+const COOKIE_NAME = "balencia_access_token";
 const COOKIE_MAX_AGE = 3 * 24 * 60 * 60; // 3 days - match JWT_EXPIRES_IN
 
 function getCookie(name: string): string | null {

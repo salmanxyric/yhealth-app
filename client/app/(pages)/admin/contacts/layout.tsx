@@ -1,6 +1,6 @@
 
 export const metadata = {
-  title: "Contact Submissions | Admin - yHealth",
+  title: "Contact Submissions | Admin - Balencia",
   description: "Manage contact form submissions",
 };
 

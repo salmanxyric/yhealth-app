@@ -80,7 +80,7 @@ export function WhyChooseUsSection() {
       </div>
 
       <div className="container mx-auto px-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-8xl mx-auto">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -93,7 +93,7 @@ export function WhyChooseUsSection() {
               <span>Why Choose Us</span>
             </div>
             <h2 className="text-4xl lg:text-5xl font-bold mb-4">
-              The YHealth
+              The Balencia
               <span className="block gradient-text-animated">Advantage</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -180,7 +180,7 @@ export function WhyChooseUsSection() {
                 with your needs.
               </p>
               <p className="text-base text-muted-foreground leading-relaxed">
-                Join thousands who have transformed their health journey with YHealth. Your
+                Join thousands who have transformed their health journey with Balencia. Your
                 wellness goals are within reach, and we&apos;re here to help you achieve them.
               </p>
             </div>

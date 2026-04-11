@@ -1,0 +1,96 @@
+---
+alwaysApply: true
+---
+
+# Typography System – Global Rules (Auto-Apply)
+
+Apply the following typography constraints across the entire application to ensure consistency, readability, and a clean UI system.
+
+## 1. Heading Sizes
+
+All heading elements (`h1` → `h6`) must follow a constrained and balanced scale:
+
+- Minimum: **16px**
+- Maximum: **20px**
+
+Small Devices:
+
+All heading elements (`h1` → `h6`) must follow a constrained and balanced scale:
+
+- Minimum: **16px**
+- Maximum: **18px**
+
+### Rules:
+- Avoid oversized headings
+- Maintain compact, modern UI density
+- Use font-weight (600–700) for hierarchy instead of large size jumps
+- Ensure consistent vertical rhythm
+
+---
+
+## 2. Body & UI Text Sizes
+
+Apply to all text elements including:
+
+- `p`, `span`
+- `label`, `input`, `select`, `option`
+- `li`, `button`, `a`
+- Any other UI text
+
+### Size Constraints:
+- Minimum: **13px**
+- Maximum: **15px**
+
+### Rules:
+- Default size: **14px**
+- Use **13px** for secondary/meta text
+- Use **15px** for important readable content
+- Maintain high readability across all devices
+
+---
+
+## 3. Accessibility & Readability
+
+- Maintain sufficient contrast ratios
+- Ensure line-height: **1.4 – 1.6**
+- Avoid text smaller than 13px
+- Ensure responsiveness without breaking size constraints
+
+---
+
+## 4. Responsive Behavior
+
+- Do NOT scale typography aggressively on larger screens
+- Keep UI compact and consistent across breakpoints
+- Prefer spacing adjustments over font scaling
+
+---
+
+## 5. Implementation Guidance
+
+### CSS Example
+
+```css
+:root {
+  --font-heading-min: 16px;
+  --font-heading-max: 20px;
+
+  --font-body-min: 13px;
+  --font-body-default: 14px;
+  --font-body-max: 15px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-size: clamp(var(--font-heading-min), 2vw, var(--font-heading-max));
+  font-weight: 600;
+}
+
+p, span, label, input, select, option, li, button, a {
+  font-size: clamp(var(--font-body-min), 1.5vw, var(--font-body-max));
+}
+
+
+Button & Tabs, Menus:
+
+Large devices: 14px
+small devices 13px

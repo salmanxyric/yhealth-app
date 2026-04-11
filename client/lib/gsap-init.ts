@@ -11,8 +11,8 @@ if (typeof window !== "undefined") {
     toggleActions: "play none none reverse",
   });
 
-  // Debounce ScrollTrigger callbacks for performance
-  ScrollTrigger.config({ limitCallbacks: true });
+  // Sync mode: Lenis drives scroll, so avoid throttling ScrollTrigger updates
+  ScrollTrigger.config({ ignoreMobileResize: true });
 }
 
 export { gsap, ScrollTrigger };

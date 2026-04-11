@@ -151,7 +151,7 @@ export default function HipaaPageContent() {
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={heroInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5, delay: 0.2 }}>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                YHealth is committed to protecting your health information in accordance with the Health Insurance
+                Balencia is committed to protecting your health information in accordance with the Health Insurance
                 Portability and Accountability Act (HIPAA). Learn about our comprehensive compliance program.
               </p>
             </motion.div>
@@ -185,7 +185,7 @@ export default function HipaaPageContent() {
         </div>
 
         <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto flex gap-10">
+          <div className="max-w-8xl mx-auto flex gap-10">
             {/* TOC */}
             <motion.aside initial={{ opacity: 0, x: -30 }} animate={contentInView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.5 }} className="hidden lg:block w-64 flex-shrink-0">
               <div className="sticky top-24 glass-card rounded-2xl p-5">
@@ -212,13 +212,13 @@ export default function HipaaPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      The Health Insurance Portability and Accountability Act (HIPAA) is a federal law that establishes national standards for protecting sensitive patient health information. As an AI-powered health and wellness platform, YHealth takes HIPAA compliance seriously and has implemented comprehensive safeguards to protect your Protected Health Information (PHI).
+                      The Health Insurance Portability and Accountability Act (HIPAA) is a federal law that establishes national standards for protecting sensitive patient health information. As an AI-powered health and wellness platform, Balencia takes HIPAA compliance seriously and has implemented comprehensive safeguards to protect your Protected Health Information (PHI).
                     </p>
                     <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
                       <ShieldCheck className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
                       <p className="text-sm text-muted-foreground">
                         <span className="text-foreground font-medium">Our Commitment: </span>
-                        YHealth maintains a comprehensive HIPAA compliance program that includes administrative, physical, and technical safeguards, annual risk assessments, workforce training, and incident response procedures.
+                        Balencia maintains a comprehensive HIPAA compliance program that includes administrative, physical, and technical safeguards, annual risk assessments, workforce training, and incident response procedures.
                       </p>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -245,7 +245,7 @@ export default function HipaaPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      PHI includes any individually identifiable health information that we create, receive, maintain, or transmit. In the context of YHealth, this includes:
+                      PHI includes any individually identifiable health information that we create, receive, maintain, or transmit. In the context of Balencia, this includes:
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {[
@@ -275,7 +275,7 @@ export default function HipaaPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      The HIPAA Privacy Rule establishes standards for how PHI can be used and disclosed. YHealth complies by:
+                      The HIPAA Privacy Rule establishes standards for how PHI can be used and disclosed. Balencia complies by:
                     </p>
                     <ul className="space-y-2">
                       {[
@@ -409,7 +409,7 @@ export default function HipaaPageContent() {
                   </div>
                   <div className="glass-card rounded-2xl p-6 space-y-4">
                     <p className="text-muted-foreground leading-relaxed">
-                      In the unlikely event of a breach of unsecured PHI, YHealth will comply with the HIPAA Breach Notification Rule:
+                      In the unlikely event of a breach of unsecured PHI, Balencia will comply with the HIPAA Breach Notification Rule:
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {[
@@ -498,7 +498,7 @@ export default function HipaaPageContent() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                         <h4 className="text-sm font-semibold text-foreground mb-2">HIPAA Privacy Officer</h4>
-                        <p className="text-xs text-muted-foreground mb-1">Email: hipaa@yhealth.app</p>
+                        <p className="text-xs text-muted-foreground mb-1">Email: hipaa@balencia.app</p>
                         <p className="text-xs text-muted-foreground mb-1">Phone: +1 (555) 123-4567</p>
                         <p className="text-xs text-muted-foreground">Response time: Within 30 days</p>
                       </div>

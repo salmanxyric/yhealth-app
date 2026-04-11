@@ -29,7 +29,7 @@ import {
  * - Insight extraction and display
  */
 export function DeepAssessmentStep() {
-  const [interactionMode, setInteractionMode] = useState<AssessmentInteractionMode>('qa');
+  const [interactionMode, setInteractionMode] = useState<AssessmentInteractionMode>('mcq');
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -188,7 +188,8 @@ export function DeepAssessmentStep() {
         onSwitchMode={handleSwitchToQuick}
         canChangeLanguage={canChangeLanguage}
         interactionMode={interactionMode}
-        onInteractionModeChange={handleModeChange}
+        onInteractionModeChange={undefined}
+        disableQuickMode={mcqAssessment.questionCount > 0}
       />
 
       {/* Error Banner */}

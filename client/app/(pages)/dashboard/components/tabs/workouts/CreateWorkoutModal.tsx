@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   Save,
-  GripVertical,
   Loader2,
   Sparkles,
   Wand2,
@@ -546,8 +545,8 @@ export function CreateWorkoutModal({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header */}
-          <div className="flex items-center justify-between p-6 border-b border-slate-700">
-            <h3 className="text-xl font-bold text-white">Create New Workout</h3>
+          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-700">
+            <h3 className="text-[16px] sm:text-xl font-bold text-white">Create New Workout</h3>
             <button
               onClick={handleClose}
               className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
@@ -557,7 +556,7 @@ export function CreateWorkoutModal({
           </div>
 
           {/* Mode Toggle */}
-          <div className="px-6 pt-4">
+          <div className="px-4 sm:px-6 pt-4">
             <div className="flex gap-2 p-1 bg-slate-800 rounded-xl">
               <button
                 onClick={() => setMode("ai")}
@@ -585,7 +584,7 @@ export function CreateWorkoutModal({
           </div>
 
           {/* Modal Body */}
-          <div className="p-6 overflow-y-auto max-h-[60vh] space-y-6">
+          <div className="p-4 sm:p-6 overflow-y-auto max-h-[60vh] space-y-4 sm:space-y-6">
             {/* Error Message */}
             {error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
@@ -626,10 +625,10 @@ export function CreateWorkoutModal({
                 </div>
 
                 {/* Duration & Frequency Row */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      <Calendar className="w-4 h-4 inline mr-2 text-slate-400" />
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
+                      <Calendar className="w-4 h-4 inline mr-1.5 text-slate-400" />
                       Duration
                     </label>
                     <select
@@ -712,16 +711,16 @@ export function CreateWorkoutModal({
                 </div>
 
                 {/* Time & Fitness Level Row */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      <Clock className="w-4 h-4 inline mr-2 text-slate-400" />
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
+                      <Clock className="w-4 h-4 inline mr-1.5 text-slate-400" />
                       Time/Workout
                     </label>
                     <select
                       value={aiFormData.timePerWorkout}
                       onChange={(e) => setAIFormData(prev => ({ ...prev, timePerWorkout: parseInt(e.target.value) }))}
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-violet-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white text-[13px] sm:text-sm focus:outline-none focus:border-violet-500"
                     >
                       {TIME_PER_WORKOUT_OPTIONS.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -729,14 +728,14 @@ export function CreateWorkoutModal({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      <Target className="w-4 h-4 inline mr-2 text-slate-400" />
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
+                      <Target className="w-4 h-4 inline mr-1.5 text-slate-400" />
                       Fitness Level
                     </label>
                     <select
                       value={aiFormData.fitnessLevel}
                       onChange={(e) => setAIFormData(prev => ({ ...prev, fitnessLevel: e.target.value as "beginner" | "intermediate" | "advanced" }))}
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-violet-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white text-[13px] sm:text-sm focus:outline-none focus:border-violet-500"
                     >
                       {DIFFICULTY_OPTIONS.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -755,7 +754,7 @@ export function CreateWorkoutModal({
                       <button
                         key={goal.value}
                         onClick={() => setAIFormData(prev => ({ ...prev, goalCategory: goal.value }))}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[13px] sm:text-sm font-medium transition-all ${
                           aiFormData.goalCategory === goal.value
                             ? "bg-violet-500/20 border border-violet-500 text-violet-400"
                             : "bg-slate-800 border border-slate-700 text-slate-400 hover:border-slate-600"
@@ -778,7 +777,7 @@ export function CreateWorkoutModal({
                       <button
                         key={loc.value}
                         onClick={() => setAIFormData(prev => ({ ...prev, workoutLocation: loc.value }))}
-                        className={`flex-1 px-4 py-2 rounded-xl border text-sm font-medium transition-all ${
+                        className={`flex-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border text-[13px] sm:text-sm font-medium transition-all ${
                           aiFormData.workoutLocation === loc.value
                             ? "bg-violet-500/20 border-violet-500 text-violet-400"
                             : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
@@ -878,29 +877,29 @@ export function CreateWorkoutModal({
                 </div>
 
                 {/* Start Date & Scheduled Time */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      <Calendar className="w-4 h-4 inline mr-2 text-orange-400" />
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
+                      <Calendar className="w-4 h-4 inline mr-1.5 text-orange-400" />
                       Start Date
                     </label>
                     <input
                       type="date"
                       value={formData.startDate}
                       onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white text-[13px] sm:text-sm focus:outline-none focus:border-orange-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      <Clock className="w-4 h-4 inline mr-2 text-slate-400" />
-                      Scheduled Time
+                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
+                      <Clock className="w-4 h-4 inline mr-1.5 text-slate-400" />
+                      Time
                     </label>
                     <input
                       type="time"
                       value={formData.scheduledTime}
                       onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-                      className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 border border-slate-700 text-white text-[13px] sm:text-sm focus:outline-none focus:border-orange-500"
                     />
                   </div>
                 </div>
@@ -923,10 +922,10 @@ export function CreateWorkoutModal({
 
                 {/* Select Workout Days */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">
                     Select Workout Days ({formData.selectedDays?.length || 0} selected)
                   </label>
-                  <div className="grid grid-cols-7 gap-2">
+                  <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                     {DAYS_OF_WEEK.map((day) => {
                       const isSelected = formData.selectedDays?.includes(day) || false;
                       return (
@@ -935,7 +934,7 @@ export function CreateWorkoutModal({
                           type="button"
                           onClick={() => toggleDay(day)}
                           className={`
-                            px-3 py-2 rounded-xl border text-sm font-medium transition-all
+                            px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-[11px] sm:text-sm font-medium transition-all
                             ${isSelected
                               ? "bg-orange-500/20 border-orange-500 text-orange-400"
                               : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
@@ -962,7 +961,7 @@ export function CreateWorkoutModal({
                       <button
                         key={option.value}
                         onClick={() => setFormData(prev => ({ ...prev, difficulty: option.value }))}
-                        className={`flex-1 px-4 py-2 rounded-xl border text-sm font-medium transition-all ${
+                        className={`flex-1 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border text-[13px] sm:text-sm font-medium transition-all ${
                           formData.difficulty === option.value
                             ? "bg-orange-500/20 border-orange-500 text-orange-400"
                             : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
@@ -1054,29 +1053,31 @@ export function CreateWorkoutModal({
                               </div>
                             )}
                           </div>
-                          <div className="flex-1 grid grid-cols-4 gap-2">
-                            <span className="text-white text-sm col-span-1 truncate">{exercise.name}</span>
-                            <input
-                              type="number"
-                              value={exercise.sets}
-                              onChange={(e) => updateExercise(exercise.id, { sets: parseInt(e.target.value) || 0 })}
-                              className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                              placeholder="Sets"
-                            />
-                            <input
-                              type="text"
-                              value={exercise.reps}
-                              onChange={(e) => updateExercise(exercise.id, { reps: e.target.value })}
-                              className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                              placeholder="Reps"
-                            />
-                            <input
-                              type="number"
-                              value={exercise.restSeconds || ""}
-                              onChange={(e) => updateExercise(exercise.id, { restSeconds: parseInt(e.target.value) || 60 })}
-                              className="px-2 py-1 rounded bg-slate-700 text-white text-sm w-full"
-                              placeholder="Rest (s)"
-                            />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-white text-[13px] sm:text-sm block truncate mb-1">{exercise.name}</span>
+                            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                              <input
+                                type="number"
+                                value={exercise.sets}
+                                onChange={(e) => updateExercise(exercise.id, { sets: parseInt(e.target.value) || 0 })}
+                                className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                placeholder="Sets"
+                              />
+                              <input
+                                type="text"
+                                value={exercise.reps}
+                                onChange={(e) => updateExercise(exercise.id, { reps: e.target.value })}
+                                className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                placeholder="Reps"
+                              />
+                              <input
+                                type="number"
+                                value={exercise.restSeconds || ""}
+                                onChange={(e) => updateExercise(exercise.id, { restSeconds: parseInt(e.target.value) || 60 })}
+                                className="px-2 py-1 rounded bg-slate-700 text-white text-[13px] sm:text-sm w-full"
+                                placeholder="Rest"
+                              />
+                            </div>
                           </div>
                           <button
                             onClick={() => removeExercise(exercise.id)}
@@ -1122,10 +1123,10 @@ export function CreateWorkoutModal({
           </div>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-700">
+          <div className="flex items-center justify-end gap-2 sm:gap-3 p-4 sm:p-6 border-t border-slate-700">
             <button
               onClick={handleClose}
-              className="px-4 py-2 rounded-xl text-slate-400 hover:text-white transition-colors"
+              className="px-3 sm:px-4 py-2 rounded-xl text-slate-400 hover:text-white transition-colors text-[13px] sm:text-sm"
             >
               Cancel
             </button>
@@ -1134,7 +1135,7 @@ export function CreateWorkoutModal({
               <button
                 onClick={handleGenerateAIPlan}
                 disabled={!aiFormData.description.trim() || isLoadingAI}
-                className="flex items-center gap-2 px-6 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-medium hover:from-violet-600 hover:to-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-medium text-[13px] sm:text-sm hover:from-violet-600 hover:to-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoadingAI ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -1147,7 +1148,7 @@ export function CreateWorkoutModal({
               <button
                 onClick={handleCreateWorkout}
                 disabled={!formData.name || formData.exercises.length === 0 || isCreating}
-                className="flex items-center gap-2 px-6 py-2 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 rounded-xl bg-orange-500 text-white font-medium text-[13px] sm:text-sm hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isCreating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

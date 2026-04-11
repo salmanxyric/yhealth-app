@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ragChatbotController } from '../controllers/rag-chatbot.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
+import { messagingLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -13,6 +14,7 @@ const router = Router();
 const chatMessageSchema = z.object({
   message: z.string().min(1).max(4000),
   conversationId: z.string().uuid().optional(),
+  imageBase64: z.string().max(2_000_000).optional(), // Camera frame for multimodal vision coaching
 });
 
 const createConversationSchema = z.object({
@@ -56,7 +58,7 @@ const addKnowledgeSchema = z.object({
  * @access  Private
  * @body    { message: string, conversationId?: string }
  */
-router.post('/message', authenticate, validate(chatMessageSchema), ragChatbotController.chat);
+router.post('/message', authenticate, messagingLimiter, validate(chatMessageSchema), ragChatbotController.chat);
 
 /**
  * @route   POST /api/rag-chat/message/stream
@@ -64,7 +66,7 @@ router.post('/message', authenticate, validate(chatMessageSchema), ragChatbotCon
  * @access  Private
  * @body    { message: string, conversationId?: string }
  */
-router.post('/message/stream', authenticate, validate(chatMessageSchema), ragChatbotController.chatStream);
+router.post('/message/stream', authenticate, messagingLimiter, validate(chatMessageSchema), ragChatbotController.chatStream);
 
 // ============================================================================
 // Conversation Management Routes

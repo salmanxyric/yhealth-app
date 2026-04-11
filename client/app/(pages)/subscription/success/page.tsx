@@ -2,8 +2,8 @@ import { createMetadata } from '@/lib/seo';
 import SubscriptionSuccessPageContent from './SuccessPageContent';
 
 export const metadata = createMetadata({
-  title: 'Subscription Success - YHealth',
-  description: 'Your YHealth subscription is confirmed. Welcome to your premium wellness journey.',
+  title: 'Subscription Success - Balencia',
+  description: 'Your Balencia subscription is confirmed. Welcome to your premium wellness journey.',
   path: '/subscription/success',
   noIndex: true,
 });

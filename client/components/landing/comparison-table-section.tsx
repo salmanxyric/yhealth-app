@@ -8,10 +8,7 @@ import {
   Minus,
   Brain,
   Activity,
-  Watch,
-  Salad,
   HeartPulse,
-  LifeBuoy,
   Crown,
   Sparkles,
   ChevronDown,
@@ -27,7 +24,7 @@ type CellValue = boolean | string;
 
 interface FeatureRow {
   feature: string;
-  yhealth: CellValue;
+  balencia: CellValue;
   generic: CellValue;
   whoop: CellValue;
   calorie: CellValue;
@@ -36,7 +33,7 @@ interface FeatureRow {
 
 interface Category {
   name: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   color: string;
   rows: FeatureRow[];
 }
@@ -47,65 +44,38 @@ const categories: Category[] = [
     icon: Brain,
     color: "from-purple-500 to-primary",
     rows: [
-      { feature: "AI personalization", yhealth: true, generic: false, whoop: "Limited", calorie: false, bevel: "Limited" },
-      { feature: "Emotional AI coach", yhealth: true, generic: false, whoop: false, calorie: false, bevel: false },
-      { feature: "Voice AI coach & call coach", yhealth: true, generic: false, whoop: false, calorie: false, bevel: "Some" },
-      { feature: "Real-time chat with AI", yhealth: true, generic: "Some", whoop: false, calorie: false, bevel: "Some" },
-      { feature: "Proactive AI messaging", yhealth: true, generic: false, whoop: false, calorie: false, bevel: false },
+      { feature: "AI personalization", balencia: true, generic: false, whoop: "Limited", calorie: false, bevel: "Limited" },
+      { feature: "Proactive AI coaching (AI initiates)", balencia: true, generic: false, whoop: false, calorie: false, bevel: false },
+      { feature: "Voice AI coach", balencia: true, generic: false, whoop: false, calorie: false, bevel: "Some" },
+    ],
+  },
+  {
+    name: "Life Coaching & Goals",
+    icon: Trophy,
+    color: "from-amber-500 to-orange-500",
+    rows: [
+      { feature: "Life goal decomposition by AI", balencia: true, generic: false, whoop: false, calorie: false, bevel: false },
+      { feature: "Motivation-based personalization", balencia: true, generic: false, whoop: false, calorie: false, bevel: false },
+      { feature: "Cross-domain coaching (career, finance, etc.)", balencia: true, generic: false, whoop: false, calorie: false, bevel: false },
     ],
   },
   {
     name: "Fitness & Activity",
     icon: Activity,
-    color: "from-orange-500 to-amber-500",
+    color: "from-orange-500 to-red-500",
     rows: [
-      { feature: "Competition & leaderboard", yhealth: true, generic: "Some", whoop: "Limited", calorie: false, bevel: false },
-      { feature: "Goals & milestones", yhealth: true, generic: "Some", whoop: "Limited", calorie: "Some", bevel: "Some" },
-      { feature: "Exercise library & workouts", yhealth: true, generic: true, whoop: "Limited", calorie: false, bevel: "Some" },
-      { feature: "Progress & analytics dashboard", yhealth: true, generic: "Some", whoop: true, calorie: "Limited", bevel: "Some" },
-      { feature: "Achievements & gamification", yhealth: true, generic: "Some", whoop: "Limited", calorie: false, bevel: false },
+      { feature: "Exercise library & workouts", balencia: true, generic: true, whoop: "Limited", calorie: false, bevel: "Some" },
+      { feature: "Wearable sync & recovery insights", balencia: true, generic: "Some", whoop: true, calorie: "Some", bevel: "Limited" },
     ],
   },
   {
-    name: "Wearables & Recovery",
-    icon: Watch,
-    color: "from-blue-500 to-cyan-500",
-    rows: [
-      { feature: "Wearable sync (Apple, Huawei, Whoop)", yhealth: true, generic: "Some", whoop: true, calorie: "Some", bevel: "Limited" },
-      { feature: "WHOOP integration & analytics", yhealth: true, generic: false, whoop: true, calorie: false, bevel: false },
-      { feature: "Recovery & sleep insights", yhealth: true, generic: "Limited", whoop: true, calorie: false, bevel: "Some" },
-    ],
-  },
-  {
-    name: "Nutrition",
-    icon: Salad,
+    name: "Wellbeing & Life Domains",
+    icon: HeartPulse,
     color: "from-green-500 to-emerald-500",
     rows: [
-      { feature: "Diet & meal plans", yhealth: true, generic: "Some", whoop: false, calorie: true, bevel: "Some" },
-      { feature: "Unified fitness + nutrition + wellbeing", yhealth: true, generic: false, whoop: false, calorie: "Nutrition only", bevel: "Limited" },
-    ],
-  },
-  {
-    name: "Wellbeing",
-    icon: HeartPulse,
-    color: "from-pink-500 to-rose-500",
-    rows: [
-      { feature: "Mood & emotional check-in", yhealth: true, generic: "Some", whoop: "Limited", calorie: false, bevel: "Some" },
-      { feature: "Journal & habits", yhealth: true, generic: "Some", whoop: false, calorie: false, bevel: "Some" },
-      { feature: "Breathing & stress tools", yhealth: true, generic: "Some", whoop: false, calorie: false, bevel: "Limited" },
-    ],
-  },
-  {
-    name: "Support & Engagement",
-    icon: LifeBuoy,
-    color: "from-indigo-500 to-violet-500",
-    rows: [
-      { feature: "Emergency support mode", yhealth: true, generic: false, whoop: false, calorie: false, bevel: "Some" },
-      { feature: "Community & social", yhealth: true, generic: "Some", whoop: false, calorie: false, bevel: "Limited" },
-      { feature: "Help center & support", yhealth: true, generic: "Some", whoop: "Some", calorie: false, bevel: true },
-      { feature: "Subscription & plan management", yhealth: true, generic: "Some", whoop: "Some", calorie: "Some", bevel: true },
-      { feature: "Blog & wellness content", yhealth: true, generic: "Some", whoop: false, calorie: false, bevel: "Some" },
-      { feature: "Smart notifications & reminders", yhealth: true, generic: "Some", whoop: true, calorie: "Some", bevel: "Some" },
+      { feature: "Diet & meal plans", balencia: true, generic: "Some", whoop: false, calorie: true, bevel: "Some" },
+      { feature: "Mood tracking & journaling", balencia: true, generic: "Some", whoop: "Limited", calorie: false, bevel: "Some" },
+      { feature: "Unified fitness + nutrition + wellbeing + life", balencia: true, generic: false, whoop: false, calorie: "Nutrition only", bevel: "Limited" },
     ],
   },
 ];
@@ -118,7 +88,7 @@ function countTrue(key: keyof FeatureRow) {
 }
 
 const competitors = [
-  { key: "yhealth" as const, name: "YHealth", score: TOTAL, highlight: true },
+  { key: "balencia" as const, name: "Balencia", score: TOTAL, highlight: true },
   { key: "generic" as const, name: "Generic Apps", score: countTrue("generic") },
   { key: "whoop" as const, name: "WHOOP", score: countTrue("whoop") },
   { key: "calorie" as const, name: "Calorie Apps", score: countTrue("calorie") },
@@ -164,7 +134,7 @@ function ScoreBar({ score, total, highlight }: { score: number; total: number; h
     <div ref={ref} className="relative w-full">
       <div className={cn(
         "h-2 rounded-full overflow-hidden",
-        highlight ? "bg-primary/20" : "bg-white/5"
+        highlight ? "bg-primary/20" : "bg-white/[0.07]"
       )}>
         <motion.div
           className={cn(
@@ -183,14 +153,14 @@ function ScoreBar({ score, total, highlight }: { score: number; total: number; h
 }
 
 // ─── Cell Component ──────────────────────────────────────────────────
-function Cell({ value, isYHealthCol }: { value: CellValue; isYHealthCol?: boolean }) {
+function Cell({ value, isBalenciaCol }: { value: CellValue; isBalenciaCol?: boolean }) {
   if (value === true) {
     return (
-      <td className={cn("p-3 sm:p-4 text-center", isYHealthCol && "bg-primary/[0.04]")}>
+      <td className={cn("p-3 sm:p-4 text-center", isBalenciaCol && "bg-primary/[0.04]")}>
         <span
           className={cn(
             "inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full transition-colors",
-            isYHealthCol
+            isBalenciaCol
               ? "bg-primary/20 text-primary shadow-[0_0_12px_-2px_hsl(var(--primary)/0.4)]"
               : "bg-primary/15 text-primary"
           )}
@@ -202,20 +172,20 @@ function Cell({ value, isYHealthCol }: { value: CellValue; isYHealthCol?: boolea
   }
   if (value === false) {
     return (
-      <td className={cn("p-3 sm:p-4 text-center", isYHealthCol && "bg-primary/[0.04]")}>
-        <span className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/[0.03] text-muted-foreground/40">
+      <td className={cn("p-3 sm:p-4 text-center", isBalenciaCol && "bg-primary/[0.04]")}>
+        <span className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/[0.07] text-muted-foreground/70">
           <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </span>
       </td>
     );
   }
   return (
-    <td className={cn("p-3 sm:p-4 text-center", isYHealthCol && "bg-primary/[0.04]")}>
+    <td className={cn("p-3 sm:p-4 text-center", isBalenciaCol && "bg-primary/[0.04]")}>
       <span className="inline-flex items-center justify-center gap-1.5">
         <span className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-500/10 text-amber-400/80">
           <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </span>
-        <span className="text-xs text-muted-foreground/70 hidden lg:inline">{value}</span>
+        <span className="text-xs text-muted-foreground/90 hidden lg:inline">{value}</span>
       </span>
     </td>
   );
@@ -245,7 +215,7 @@ function MobileCategoryCard({ category, index }: { category: Category; index: nu
   const [open, setOpen] = useState(index === 0);
   const Icon = category.icon;
   const totalFeatures = category.rows.length;
-  const yhealthCount = category.rows.filter((r) => r.yhealth === true).length;
+  const balenciaCount = category.rows.filter((r) => r.balencia === true).length;
 
   return (
     <motion.div
@@ -253,7 +223,7 @@ function MobileCategoryCard({ category, index }: { category: Category; index: nu
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-30px" }}
       transition={{ delay: index * 0.08, duration: 0.4 }}
-      className="rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-sm overflow-hidden"
+      className="rounded-2xl border border-white/10 bg-white/[0.07] backdrop-blur-sm overflow-hidden"
     >
       <button
         onClick={() => setOpen(!open)}
@@ -265,7 +235,7 @@ function MobileCategoryCard({ category, index }: { category: Category; index: nu
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm">{category.name}</p>
           <p className="text-xs text-muted-foreground">
-            <span className="text-primary font-medium">{yhealthCount}/{totalFeatures}</span> full support
+            <span className="text-primary font-medium">{balenciaCount}/{totalFeatures}</span> full support
           </p>
         </div>
         <motion.div
@@ -282,7 +252,7 @@ function MobileCategoryCard({ category, index }: { category: Category; index: nu
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           transition={{ duration: 0.3 }}
-          className="border-t border-white/5"
+          className="border-t border-white/10"
         >
           {category.rows.map((row) => (
             <div
@@ -291,12 +261,12 @@ function MobileCategoryCard({ category, index }: { category: Category; index: nu
             >
               <span className="text-sm text-foreground/80 flex-1">{row.feature}</span>
               <div className="flex items-center gap-1.5 shrink-0">
-                {row.yhealth === true ? (
+                {row.balencia === true ? (
                   <span className="w-6 h-6 rounded-full bg-primary/20 text-primary inline-flex items-center justify-center">
                     <Check className="w-3 h-3" strokeWidth={3} />
                   </span>
                 ) : (
-                  <span className="w-6 h-6 rounded-full bg-white/5 text-muted-foreground/40 inline-flex items-center justify-center">
+                  <span className="w-6 h-6 rounded-full bg-white/[0.07] text-muted-foreground/70 inline-flex items-center justify-center">
                     <X className="w-3 h-3" />
                   </span>
                 )}
@@ -396,12 +366,12 @@ export function ComparisonTableSection() {
           </div>
 
           <h2 className="ct-header-item text-3xl sm:text-4xl md:text-5xl font-bold mb-5 tracking-tight">
-            Why <span className="gradient-text-animated">YHealth</span> wins
+            Why <span className="gradient-text-animated">Balencia</span> wins
           </h2>
 
           <p className="ct-header-item text-base sm:text-lg text-muted-foreground/90 max-w-2xl mx-auto leading-relaxed">
-            The only platform that covers AI coaching, fitness, nutrition, and
-            wellbeing in one place. See how we compare.
+            The only platform that covers AI life coaching across fitness, career,
+            relationships, and every life domain. See how we compare.
           </p>
         </GSAPScrollReveal>
 
@@ -454,7 +424,7 @@ export function ComparisonTableSection() {
         {/* Desktop Table */}
         <div className="hidden md:block" ref={tableRef}>
           <div className="relative overflow-x-auto overflow-y-visible rounded-2xl border border-white/10 bg-white/[0.015] backdrop-blur-sm shadow-2xl shadow-black/10">
-            {/* YHealth column glow */}
+            {/* Balencia column glow */}
             <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: "calc(200px + (100% - 200px) * 0 / 5)", width: "calc((100% - 200px) / 5)" }}>
               <div className="absolute inset-0 bg-primary/[0.03]" />
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
@@ -474,7 +444,7 @@ export function ComparisonTableSection() {
                     <div className="flex flex-col items-center gap-1.5">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary text-sm font-bold">
                         <Crown className="w-3.5 h-3.5" />
-                        YHealth
+                        Balencia
                       </span>
                     </div>
                   </th>
@@ -512,7 +482,7 @@ export function ComparisonTableSection() {
         <GSAPScrollReveal direction="up" distance={20} duration={0.5} delay={0.2} className="text-center mt-10 md:mt-14">
           <p className="text-sm text-muted-foreground">
             <span className="text-primary font-semibold">{TOTAL}/{TOTAL} features</span>{" "}
-            — YHealth is the only platform with complete coverage.
+            — Balencia is the only platform with complete coverage.
           </p>
         </GSAPScrollReveal>
       </div>
@@ -538,7 +508,7 @@ function CategoryGroup({ category }: { category: Category }) {
               {row.feature}
             </span>
           </td>
-          <Cell value={row.yhealth} isYHealthCol />
+          <Cell value={row.balencia} isBalenciaCol />
           <Cell value={row.generic} />
           <Cell value={row.whoop} />
           <Cell value={row.calorie} />

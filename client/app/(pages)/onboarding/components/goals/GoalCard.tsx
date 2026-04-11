@@ -61,10 +61,11 @@ export function GoalCard({
         transition-all duration-300
         ${
           isConfirmed
-            ? 'bg-emerald-500/10 border-emerald-500/30'
-            : 'bg-white/5 border-white/10'
+            ? 'border-emerald-600 border-[1.5px]'
+            : 'bg-[#02000f] border-white/[0.24]'
         }
       `}
+      style={isConfirmed ? { backgroundImage: 'linear-gradient(178deg, rgba(5,150,105,0) 3%, rgba(5,150,105,0.3) 99%)' } : undefined}
     >
       {/* Goal Header */}
       <div className="p-5">
@@ -160,7 +161,7 @@ function GoalCheckbox({
         border-2 transition-all duration-200 mt-1
         ${
           isConfirmed
-            ? 'bg-emerald-500 border-emerald-500'
+            ? 'bg-emerald-600 border-emerald-600'
             : 'border-slate-600 hover:border-slate-500'
         }
       `}
@@ -183,12 +184,12 @@ function GoalBadges({ goal }: { goal: Goal }) {
   return (
     <div className="flex items-center gap-2 mb-1">
       {goal.isPrimary && (
-        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
+        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-sky-600/20 text-sky-400">
           Primary
         </span>
       )}
       {goal.aiSuggested && (
-        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400">
+        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400">
           AI Suggested
         </span>
       )}

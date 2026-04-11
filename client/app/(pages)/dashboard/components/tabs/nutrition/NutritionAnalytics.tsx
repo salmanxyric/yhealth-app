@@ -365,67 +365,67 @@ export function NutritionAnalytics() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Time Range Selector */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <h3 className="text-lg font-semibold text-white">Nutrition Analytics</h3>
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <h3 className="text-[16px] sm:text-[18px] font-semibold text-white">Nutrition Analytics</h3>
+        <div className="flex gap-1.5 sm:gap-2">
           {(['7d', '30d', '90d', '1y'] as const).map((range) => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
                 timeRange === range
                   ? 'bg-emerald-500 text-white'
                   : 'bg-slate-800 text-slate-400 hover:text-white'
               }`}
             >
-              {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : range === '90d' ? '90 Days' : '1 Year'}
+              {range === '7d' ? '7D' : range === '30d' ? '30D' : range === '90d' ? '90D' : '1Y'}
             </button>
           ))}
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
-          <div className="flex items-center gap-2 mb-2">
-            <Flame className="w-4 h-4 text-orange-400" />
-            <span className="text-xs text-slate-400">Avg Calories</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+        <div className="p-3 sm:p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+            <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400" />
+            <span className="text-[11px] sm:text-xs text-slate-400">Avg Calories</span>
           </div>
-          <p className="text-2xl font-bold text-orange-400">{data.totals.averageCalories}</p>
-          <p className="text-xs text-slate-500 mt-1">kcal/day</p>
+          <p className="text-[15px] sm:text-lg font-semibold text-orange-400">{data.totals.averageCalories}</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">kcal/day</p>
         </div>
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-          <div className="flex items-center gap-2 mb-2">
-            <Beef className="w-4 h-4 text-red-400" />
-            <span className="text-xs text-slate-400">Avg Protein</span>
+        <div className="p-3 sm:p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+            <Beef className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" />
+            <span className="text-[11px] sm:text-xs text-slate-400">Avg Protein</span>
           </div>
-          <p className="text-2xl font-bold text-red-400">{data.totals.averageProtein}g</p>
-          <p className="text-xs text-slate-500 mt-1">per day</p>
+          <p className="text-[15px] sm:text-lg font-semibold text-red-400">{data.totals.averageProtein}g</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">per day</p>
         </div>
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-          <div className="flex items-center gap-2 mb-2">
-            <Wheat className="w-4 h-4 text-amber-400" />
-            <span className="text-xs text-slate-400">Avg Carbs</span>
+        <div className="p-3 sm:p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+            <Wheat className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+            <span className="text-[11px] sm:text-xs text-slate-400">Avg Carbs</span>
           </div>
-          <p className="text-2xl font-bold text-amber-400">{data.totals.averageCarbs}g</p>
-          <p className="text-xs text-slate-500 mt-1">per day</p>
+          <p className="text-[15px] sm:text-lg font-semibold text-amber-400">{data.totals.averageCarbs}g</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">per day</p>
         </div>
-        <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30">
-          <div className="flex items-center gap-2 mb-2">
-            <Apple className="w-4 h-4 text-purple-400" />
-            <span className="text-xs text-slate-400">Avg Fat</span>
+        <div className="p-3 sm:p-4 rounded-xl bg-purple-500/10 border border-purple-500/30">
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+            <Apple className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
+            <span className="text-[11px] sm:text-xs text-slate-400">Avg Fat</span>
           </div>
-          <p className="text-2xl font-bold text-purple-400">{data.totals.averageFat}g</p>
-          <p className="text-xs text-slate-500 mt-1">per day</p>
+          <p className="text-[15px] sm:text-lg font-semibold text-purple-400">{data.totals.averageFat}g</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">per day</p>
         </div>
       </div>
 
       {/* Chart */}
-      <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h4 className="text-white font-semibold">Daily Nutrition Trends</h4>
+      <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-3 sm:p-6">
+        <div className="flex items-center justify-between mb-3 sm:mb-6">
+          <h4 className="text-[14px] sm:text-[15px] text-white font-semibold">Daily Nutrition Trends</h4>
           <div className="flex gap-2">
             <button
               onClick={() => setChartMode('line')}
@@ -462,7 +462,7 @@ export function NutritionAnalytics() {
             </button>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={400}>
+        <ResponsiveContainer width="100%" height={250} className="sm:!h-[400px]">
           <ChartComponent mode={chartMode} />
         </ResponsiveContainer>
       </div>

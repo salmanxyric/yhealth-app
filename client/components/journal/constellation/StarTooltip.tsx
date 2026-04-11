@@ -2,21 +2,21 @@
 
 /**
  * @file StarTooltip Component
- * @description Observatory-styled hover tooltip positioned near a hovered star.
- * Deep glass aesthetic with Cinzel typography and mood emoji.
+ * @description Observatory-styled hover tooltip for date-grouped stars.
+ * Shows date, entry count, times, and first entry snippet.
  */
 
 import { useRef, useLayoutEffect, useState } from "react";
 import { motion } from "framer-motion";
 import type { JournalEntry } from "@shared/types/domain/wellbeing";
-import { getMoodEmoji, getMoodLabel } from "./constellation-math";
+import { formatTime, getMoodEmoji, getMoodLabel } from "./constellation-math";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface StarTooltipProps {
-  entry: JournalEntry;
+  entries: JournalEntry[];
   position: { x: number; y: number };
   label: string;
 }
@@ -34,7 +34,7 @@ const SNIPPET_LENGTH = 80;
 // Component
 // ---------------------------------------------------------------------------
 
-export function StarTooltip({ entry, position, label }: StarTooltipProps) {
+export function StarTooltip({ entries, position, label }: StarTooltipProps) {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState<{
     top: number;
@@ -75,13 +75,20 @@ export function StarTooltip({ entry, position, label }: StarTooltipProps) {
     setAdjustedPosition({ top, left, caretLeft, flipBelow });
   }, [position]);
 
-  const moodEmoji = getMoodEmoji(entry.sentimentScore);
-  const moodLabel = getMoodLabel(entry.sentimentScore);
+  if (entries.length === 0) return null;
+
+  const firstEntry = entries[0];
+  const entryCount = entries.length;
+  const moodEmoji = getMoodEmoji(firstEntry.sentimentScore);
+  const moodLabel = getMoodLabel(firstEntry.sentimentScore);
 
   const snippet =
-    entry.entryText.length > SNIPPET_LENGTH
-      ? entry.entryText.slice(0, SNIPPET_LENGTH).trimEnd() + "..."
-      : entry.entryText;
+    firstEntry.entryText.length > SNIPPET_LENGTH
+      ? firstEntry.entryText.slice(0, SNIPPET_LENGTH).trimEnd() + "..."
+      : firstEntry.entryText;
+
+  // Time list: "9:30 AM · 2:15 PM · 8:00 PM"
+  const timeList = entries.map((e) => formatTime(e.loggedAt)).join(" · ");
 
   return (
     <motion.div
@@ -107,15 +114,33 @@ export function StarTooltip({ entry, position, label }: StarTooltipProps) {
             "0 0 30px rgba(139, 92, 246, 0.1), 0 8px 32px rgba(0, 0, 0, 0.4)",
         }}
       >
-        {/* Date label */}
+        {/* Date label + count */}
+        <div className="flex items-center justify-between gap-2">
+          <p
+            className="observatory-font-display text-purple-300/70"
+            style={{ fontSize: 9, letterSpacing: "0.15em" }}
+          >
+            {label}
+          </p>
+          {entryCount > 1 && (
+            <span
+              className="observatory-font-display text-purple-300/40 shrink-0"
+              style={{ fontSize: 9, letterSpacing: "0.08em" }}
+            >
+              {entryCount} ENTRIES
+            </span>
+          )}
+        </div>
+
+        {/* Times */}
         <p
-          className="observatory-font-display text-purple-300/70"
-          style={{ fontSize: 9, letterSpacing: "0.15em" }}
+          className="observatory-font-display text-white/50"
+          style={{ fontSize: 10, letterSpacing: "0.06em" }}
         >
-          {label}
+          {timeList}
         </p>
 
-        {/* Mood indicator */}
+        {/* Mood indicator (from first entry) */}
         <div className="flex items-center gap-2">
           <span className="text-base leading-none" aria-hidden="true">
             {moodEmoji}
@@ -135,14 +160,6 @@ export function StarTooltip({ entry, position, label }: StarTooltipProps) {
         >
           {snippet}
         </p>
-
-        {/* Word count badge */}
-        <span
-          className="inline-block observatory-font-display text-white/25 border border-white/8 rounded-full px-2 py-0.5"
-          style={{ fontSize: 8, letterSpacing: "0.1em" }}
-        >
-          {entry.wordCount} WORDS
-        </span>
 
         {/* Caret / arrow */}
         <div

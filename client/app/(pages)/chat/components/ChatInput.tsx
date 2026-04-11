@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Loader2, Paperclip, Mic, Square, Smile } from 'lucide-react';
+import { Send, Loader2, Paperclip, Mic, Square, Smile, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ReplyPreview } from './ReplyPreview';
 import { MediaPreview } from './MediaPreview';
@@ -25,8 +25,20 @@ const EmojiPicker = dynamic(
   searchDisabled?: boolean;
 }>;
 
+// Dynamically import GIF picker to avoid SSR issues
+const GifPicker = dynamic(
+  () => import('gif-picker-react'),
+  { ssr: false }
+) as React.ComponentType<{
+  tenorApiKey: string;
+  onGifClick?: (gif: { url: string; preview: { url: string } }) => void;
+  width?: number | string;
+  height?: number | string;
+  theme?: string;
+}>;
+
 interface ChatInputProps {
-  onSend: (message: string, options?: { mediaFiles?: File[]; repliedToId?: string; isViewOnce?: boolean }) => void;
+  onSend: (message: string, options?: { mediaFiles?: File[]; repliedToId?: string; isViewOnce?: boolean; gifUrl?: string }) => void;
   isLoading?: boolean;
   placeholder?: string;
   disabled?: boolean;
@@ -56,6 +68,7 @@ export function ChatInput({
   const [isViewOnce, setIsViewOnce] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -117,6 +130,12 @@ export function ChatInput({
       const newPosition = cursorPosition + emoji.length;
       textareaRef.current?.setSelectionRange(newPosition, newPosition);
     }, 0);
+  };
+
+  const handleGifClick = (gif: { url: string; preview: { url: string } }) => {
+    setShowGifPicker(false);
+    onSend('', { gifUrl: gif.url, repliedToId: replyTo?.id });
+    onCancelReply?.();
   };
 
   const handleSubmit = () => {
@@ -293,6 +312,36 @@ export function ChatInput({
                 previewConfig={{ showPreview: false }}
                 theme="dark"
                 searchDisabled={false}
+              />
+            </PopoverContent>
+          </Popover>
+
+          {/* GIF Picker */}
+          <Popover open={showGifPicker} onOpenChange={setShowGifPicker}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  actionBtnClass,
+                  showGifPicker && 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                )}
+                disabled={disabled || isLoading}
+              >
+                <ImageIcon className="h-[18px] w-[18px]" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="end"
+              className="w-auto rounded-2xl border-slate-200 dark:border-white/10 bg-white dark:bg-[#1a2332] shadow-2xl p-0"
+            >
+              <GifPicker
+                tenorApiKey={process.env.NEXT_PUBLIC_TENOR_API_KEY || ''}
+                onGifClick={handleGifClick}
+                width={350}
+                height={400}
+                theme="dark"
               />
             </PopoverContent>
           </Popover>

@@ -24,7 +24,7 @@ import type {
   TourStorageData,
 } from "@/components/common/product-tour/types";
 
-const STORAGE_KEY = "yhealth_product_tour";
+const STORAGE_KEY = "balencia_product_tour";
 
 function getStoredTourData(): TourStorageData | null {
   if (typeof window === "undefined") return null;

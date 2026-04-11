@@ -15,6 +15,8 @@ import {
   Brain,
   Tag,
   FileText,
+  Target,
+  Smartphone,
 } from "lucide-react";
 import type { CheckinTag } from "@shared/types/domain/wellbeing";
 import { dailyCheckinService } from "@/src/shared/services/wellbeing.service";
@@ -38,7 +40,7 @@ interface StepConfig {
   key: string;
   label: string;
   question: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
 }
 
 interface CheckinValues {
@@ -46,7 +48,9 @@ interface CheckinValues {
   energy: number | undefined;
   sleep: number | undefined;
   stress: number | undefined;
+  screenTimeMinutes: number | undefined;
   tags: CheckinTag[];
+  intention: string;
   summary: string;
 }
 
@@ -75,15 +79,27 @@ const STEPS: StepConfig[] = [
     icon: Brain,
   },
   {
+    key: "screenTime",
+    label: "Screen Time",
+    question: "How much screen time today?",
+    icon: Smartphone,
+  },
+  {
     key: "tags",
     label: "Tags",
     question: "What describes your day?",
     icon: Tag,
   },
   {
+    key: "intention",
+    label: "Intention",
+    question: "What life goal will you focus on today?",
+    icon: Target,
+  },
+  {
     key: "summary",
     label: "Summary",
-    question: "Anything else?",
+    question: "Anything else on your mind?",
     icon: FileText,
   },
 ];
@@ -223,7 +239,7 @@ function SuccessState({
         transition={{ delay: 0.4 }}
         className="text-slate-400 text-base mb-8 max-w-xs"
       >
-        Great job taking a moment to check in with yourself today.
+        Great job taking a moment to reflect and set your intentions today.
       </motion.p>
 
       <div className="flex flex-col gap-3 w-full max-w-xs">
@@ -279,7 +295,9 @@ export function DailyCheckinFlow({
     energy: undefined,
     sleep: undefined,
     stress: undefined,
+    screenTimeMinutes: undefined,
     tags: [],
+    intention: "",
     summary: "",
   });
 
@@ -307,41 +325,6 @@ export function DailyCheckinFlow({
     }
   }, [currentStep]);
 
-  const handleSkip = useCallback(() => {
-    const stepKey = STEPS[currentStep].key;
-
-    setValues((prev) => {
-      const updated = { ...prev };
-      switch (stepKey) {
-        case "mood":
-          updated.mood = undefined;
-          break;
-        case "energy":
-          updated.energy = undefined;
-          break;
-        case "sleep":
-          updated.sleep = undefined;
-          break;
-        case "stress":
-          updated.stress = undefined;
-          break;
-        case "tags":
-          updated.tags = [];
-          break;
-        case "summary":
-          updated.summary = "";
-          break;
-      }
-      return updated;
-    });
-
-    if (isLastStep) {
-      handleSubmit();
-    } else {
-      goNext();
-    }
-  }, [currentStep, isLastStep, goNext]);
-
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
     setSubmitError(null);
@@ -353,7 +336,9 @@ export function DailyCheckinFlow({
           values.energy !== undefined ? values.energy * 2 : undefined,
         sleep_quality: values.sleep,
         stress_score: values.stress,
+        screen_time_minutes: values.screenTimeMinutes,
         tags: values.tags.length > 0 ? values.tags : undefined,
+        intention: values.intention.trim() || undefined,
         day_summary: values.summary.trim() || undefined,
       };
 
@@ -372,6 +357,47 @@ export function DailyCheckinFlow({
       setIsSubmitting(false);
     }
   }, [values]);
+
+  const handleSkip = useCallback(() => {
+    const stepKey = STEPS[currentStep].key;
+
+    setValues((prev) => {
+      const updated = { ...prev };
+      switch (stepKey) {
+        case "mood":
+          updated.mood = undefined;
+          break;
+        case "energy":
+          updated.energy = undefined;
+          break;
+        case "sleep":
+          updated.sleep = undefined;
+          break;
+        case "stress":
+          updated.stress = undefined;
+          break;
+        case "screenTime":
+          updated.screenTimeMinutes = undefined;
+          break;
+        case "tags":
+          updated.tags = [];
+          break;
+        case "intention":
+          updated.intention = "";
+          break;
+        case "summary":
+          updated.summary = "";
+          break;
+      }
+      return updated;
+    });
+
+    if (isLastStep) {
+      handleSubmit();
+    } else {
+      goNext();
+    }
+  }, [currentStep, isLastStep, goNext, handleSubmit]);
 
   const handleComplete = useCallback(() => {
     onComplete(checkinId);
@@ -427,6 +453,83 @@ export function DailyCheckinFlow({
           />
         );
 
+      case "screenTime":
+        return (
+          <div className="space-y-4">
+            {/* Quick-select buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "< 1 hr", value: 30 },
+                { label: "1-3 hrs", value: 120 },
+                { label: "3-5 hrs", value: 240 },
+                { label: "5+ hrs", value: 360 },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() =>
+                    setValues((prev) => ({
+                      ...prev,
+                      screenTimeMinutes: option.value,
+                    }))
+                  }
+                  className={`
+                    py-3 px-4 rounded-xl text-sm font-medium transition-all duration-200 border
+                    ${
+                      values.screenTimeMinutes === option.value
+                        ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-lg shadow-emerald-500/10"
+                        : "bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/60 hover:text-white"
+                    }
+                  `}
+                  aria-label={`Select ${option.label} screen time`}
+                  aria-pressed={values.screenTimeMinutes === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Manual input */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500 whitespace-nowrap">
+                Or exact:
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={1440}
+                value={
+                  values.screenTimeMinutes !== undefined &&
+                  ![30, 120, 240, 360].includes(values.screenTimeMinutes)
+                    ? values.screenTimeMinutes
+                    : ""
+                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "") {
+                    setValues((prev) => ({
+                      ...prev,
+                      screenTimeMinutes: undefined,
+                    }));
+                  } else {
+                    const num = Math.min(1440, Math.max(0, parseInt(val, 10)));
+                    if (!isNaN(num)) {
+                      setValues((prev) => ({
+                        ...prev,
+                        screenTimeMinutes: num,
+                      }));
+                    }
+                  }
+                }}
+                placeholder="minutes"
+                className="flex-1 rounded-xl bg-slate-800/60 border border-slate-700/50 text-white placeholder:text-slate-500 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all duration-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                aria-label="Exact screen time in minutes"
+              />
+              <span className="text-xs text-slate-500">min</span>
+            </div>
+          </div>
+        );
+
       case "tags":
         return (
           <QuickTagSelector
@@ -435,6 +538,29 @@ export function DailyCheckinFlow({
               setValues((prev) => ({ ...prev, tags }))
             }
           />
+        );
+
+      case "intention":
+        return (
+          <div className="space-y-3">
+            <textarea
+              value={values.intention}
+              onChange={(e) => {
+                const text = e.target.value;
+                if (text.length <= 200) {
+                  setValues((prev) => ({ ...prev, intention: text }));
+                }
+              }}
+              placeholder="e.g. Practice patience, work on my side project, stick to my meal plan... (optional)"
+              rows={3}
+              maxLength={200}
+              className="w-full rounded-xl bg-slate-800/60 border border-slate-700/50 text-white placeholder:text-slate-500 px-4 py-3 text-base resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all duration-200"
+              aria-label="Life goal intention for today"
+            />
+            <p className="text-right text-xs text-slate-500">
+              {values.intention.length}/200
+            </p>
+          </div>
         );
 
       case "summary":
@@ -448,7 +574,7 @@ export function DailyCheckinFlow({
                   setValues((prev) => ({ ...prev, summary: text }));
                 }
               }}
-              placeholder="Write a short note about your day... (optional)"
+              placeholder="Reflect on your day, wins, lessons, or anything on your mind... (optional)"
               rows={4}
               maxLength={MAX_SUMMARY_LENGTH}
               className="w-full rounded-xl bg-slate-800/60 border border-slate-700/50 text-white placeholder:text-slate-500 px-4 py-3 text-base resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all duration-200"

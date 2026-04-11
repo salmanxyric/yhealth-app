@@ -29,7 +29,7 @@ import type {
 } from '../types';
 
 // LocalStorage key for persisting onboarding state
-const ONBOARDING_STORAGE_KEY = 'yhealth_onboarding_state';
+const ONBOARDING_STORAGE_KEY = 'balencia_onboarding_state';
 
 // Default body image state
 const createDefaultBodyImage = (type: BodyImageType): BodyImage => ({

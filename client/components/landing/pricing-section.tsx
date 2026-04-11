@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
+import { useGSAP } from "@/hooks/use-gsap";
+import { gsap } from "@/lib/gsap-init";
 import type { PlanItem } from "@/components/subscription/PricingSection";
 import { AnimatedGradientMesh, GSAPScrollReveal } from "./shared";
 
@@ -108,7 +110,10 @@ function PricingCard({
       initial={{ opacity: 0, y: 40 }}
       animate={isInView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.5, delay: index * 0.1 }}
-      className={cn("relative flex flex-col h-full", plan.popular && "lg:-mt-4 lg:mb-4")}
+      className={cn(
+        "pricing-card-gsap relative flex flex-col h-full",
+        plan.popular && "pricing-recommended lg:-mt-4 lg:mb-4"
+      )}
     >
       {plan.popular && (
         <motion.div
@@ -227,9 +232,49 @@ function PricingCard({
 
 // ─── PRICING SECTION ─────────────────────────────────────────────────
 export function PricingSection() {
+  const sectionContainerRef = useRef<HTMLElement>(null);
   const [isYearly, setIsYearly] = useState(false);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // GSAP stagger entrance for pricing cards + glow on recommended
+  useGSAP(
+    () => {
+      if (!sectionContainerRef.current) return;
+
+      // Stagger entrance for all pricing cards
+      gsap.from(".pricing-card-gsap", {
+        y: 60,
+        opacity: 0,
+        scale: 0.95,
+        duration: 0.8,
+        stagger: 0.12,
+        ease: "power3.out",
+        scrollTrigger: {
+          trigger: sectionContainerRef.current,
+          start: "top 75%",
+        },
+      });
+
+      // Pulsing glow on recommended/popular card
+      gsap.fromTo(
+        ".pricing-recommended",
+        { boxShadow: "0 0 0px rgba(14,165,233,0)" },
+        {
+          boxShadow: "0 0 30px rgba(14,165,233,0.3)",
+          duration: 1.5,
+          repeat: -1,
+          yoyo: true,
+          scrollTrigger: {
+            trigger: ".pricing-recommended",
+            start: "top 80%",
+          },
+        }
+      );
+    },
+    sectionContainerRef,
+    [loading]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -260,7 +305,7 @@ export function PricingSection() {
   }, [plans, isYearly]);
 
   return (
-    <section id="pricing" className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
+    <section ref={sectionContainerRef} id="pricing" className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
       <div className="absolute inset-0 cyber-grid opacity-30" />
       <AnimatedGradientMesh intensity={0.2} speed={0.85} blur={110} />
       <div className="absolute top-0 left-1/4 w-48 sm:w-72 md:w-96 h-48 sm:h-72 md:h-96 bg-primary/5 rounded-full blur-3xl" />
@@ -316,7 +361,7 @@ export function PricingSection() {
             <Button asChild variant="outline"><Link href="/plans">View pricing page</Link></Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-6xl mx-auto items-stretch">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-8xl mx-auto items-stretch">
             {displayPlans.map((plan, index) => (
               <PricingCard key={plan.id} plan={plan} index={index} isYearly={isYearly} />
             ))}

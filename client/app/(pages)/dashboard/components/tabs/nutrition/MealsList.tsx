@@ -27,7 +27,7 @@ export function MealsList({
   return (
     <div className="lg:col-span-2 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white">Today&apos;s Meals</h3>
+        <h3 className="text-base font-semibold text-white">Today&apos;s Meals</h3>
         <span className="text-sm text-slate-400">{meals.length} meals logged</span>
       </div>
 

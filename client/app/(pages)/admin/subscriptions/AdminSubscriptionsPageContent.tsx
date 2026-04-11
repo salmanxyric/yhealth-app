@@ -483,15 +483,15 @@ export default function AdminSubscriptionsPageContent() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('yHealth', 50, 20);
+    doc.text('Balencia', 50, 20);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.text('Your Health, Your Future', 50, 28);
     
     // Contact info in header (right side)
     doc.setFontSize(8);
-    doc.text('support@yhealth.app', pageWidth - 20, 20, { align: 'right' });
-    doc.text('www.yhealth.app', pageWidth - 20, 26, { align: 'right' });
+    doc.text('support@balencia.app', pageWidth - 20, 20, { align: 'right' });
+    doc.text('www.balencia.app', pageWidth - 20, 26, { align: 'right' });
     doc.text('+1 (555) 123-4567', pageWidth - 20, 32, { align: 'right' });
     
     yPos = 60;
@@ -692,16 +692,16 @@ export default function AdminSubscriptionsPageContent() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text('yHealth Inc.', 20, footerY + 10);
+    doc.text('Balencia Inc.', 20, footerY + 10);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text('123 Health Street, Suite 100', 20, footerY + 16);
     doc.text('San Francisco, CA 94102, USA', 20, footerY + 22);
     
     // Contact info
-    doc.text('Email: support@yhealth.app', pageWidth / 2, footerY + 10);
+    doc.text('Email: support@balencia.app', pageWidth / 2, footerY + 10);
     doc.text('Phone: +1 (555) 123-4567', pageWidth / 2, footerY + 16);
-    doc.text('Website: www.yhealth.app', pageWidth / 2, footerY + 22);
+    doc.text('Website: www.balencia.app', pageWidth / 2, footerY + 22);
     
     // Legal text
     doc.setFontSize(7);
@@ -713,7 +713,7 @@ export default function AdminSubscriptionsPageContent() {
       { align: 'center' }
     );
     doc.text(
-      '© 2026 yHealth Inc. All rights reserved.',
+      '© 2026 Balencia Inc. All rights reserved.',
       pageWidth / 2,
       footerY + 35,
       { align: 'center' }

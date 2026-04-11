@@ -16,7 +16,7 @@ const leadership = [
   {
     name: "Sarah Martinez",
     role: "CTO & Co-Founder",
-    bio: "AI researcher and engineer specializing in machine learning for healthcare. Led AI initiatives at leading tech companies before co-founding YHealth.",
+    bio: "AI researcher and engineer specializing in machine learning for healthcare. Led AI initiatives at leading tech companies before co-founding Balencia.",
     initials: "SM",
     gradient: "from-purple-400 to-purple-600",
   },
@@ -49,7 +49,7 @@ export function LeadershipSection() {
       </div>
 
       <div className="container mx-auto px-4">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-8xl mx-auto">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -63,7 +63,7 @@ export function LeadershipSection() {
             </div>
             <h2 className="text-4xl lg:text-5xl font-bold mb-4">
               Meet the Team
-              <span className="block gradient-text-animated">Behind YHealth</span>
+              <span className="block gradient-text-animated">Behind Balencia</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Our leadership team brings together decades of experience in technology, healthcare,

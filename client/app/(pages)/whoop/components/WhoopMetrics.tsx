@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
 export function WhoopMetrics() {
-  const { data, isLoading, error, refetch, isFetched, reset } = useFetch<{
+  const { data, isLoading, error, refetch, reset } = useFetch<{
     currentRecovery: {
       score: number;
       hrv: number;
@@ -37,88 +37,17 @@ export function WhoopMetrics() {
     immediate: true,
   });
 
-  // Refetch when WHOOP page is opened - always get fresh data, not cached
+  // Listen for refresh/connection events from parent
   useEffect(() => {
-    const handlePageOpened = () => {
-      reset();
-      refetch();
-    };
-    const handleRefreshRequested = () => {
-      reset();
-      refetch();
-    };
-    window.addEventListener('whoop-page-opened', handlePageOpened);
-    window.addEventListener('whoop-refresh-requested', handleRefreshRequested);
+    const handleRefresh = () => { reset(); refetch(); };
+    window.addEventListener('whoop-refresh-requested', handleRefresh);
+    window.addEventListener('whoop-connected', handleRefresh);
     return () => {
-      window.removeEventListener('whoop-page-opened', handlePageOpened);
-      window.removeEventListener('whoop-refresh-requested', handleRefreshRequested);
+      window.removeEventListener('whoop-refresh-requested', handleRefresh);
+      window.removeEventListener('whoop-connected', handleRefresh);
     };
-  }, [reset, refetch]);
-
-  // Listen for connection status changes and refetch when connected
-  useEffect(() => {
-    const handleConnectionChange = () => {
-      reset();
-      refetch(); // Fetch immediately, no delay
-    };
-    window.addEventListener('whoop-connected', handleConnectionChange);
-    return () => window.removeEventListener('whoop-connected', handleConnectionChange);
-  }, [reset, refetch]);
-
-  // Auto-refetch on mount if no data or data is empty
-  // This ensures we always try to fetch data when component mounts
-  useEffect(() => {
-    // On initial mount, if we haven't fetched yet and not currently loading, fetch immediately
-    if (!isFetched && !isLoading) {
-      refetch();
-    }
-    // If we have fetched but data is empty, refetch after a short delay (might be stale cache)
-    else if (isFetched && data && !data.currentRecovery && !data.currentSleep && !data.todayStrain && !isLoading) {
-      // Reduced delay for faster response
-      const timeoutId = setTimeout(() => {
-        refetch();
-      }, 500);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isFetched, isLoading, data, refetch]);
-
-  // Refetch when page becomes visible (user switches back to tab)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && !isLoading) {
-        // Refetch when page becomes visible to ensure fresh data
-        refetch();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isLoading, refetch]);
-
-  // Poll for data if we have empty data (in case sync is in progress)
-  useEffect(() => {
-    const hasEmptyData = data && !data.currentRecovery && !data.currentSleep && !data.todayStrain;
-    
-    if (hasEmptyData && !isLoading && isFetched) {
-      // Poll every 5 seconds if data is empty (max 6 attempts = 30 seconds)
-      let attempts = 0;
-      const maxAttempts = 6;
-      
-      const pollInterval = setInterval(() => {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-          return;
-        }
-        
-        refetch();
-      }, 5000);
-      
-      return () => clearInterval(pollInterval);
-    }
-  }, [data, isLoading, isFetched, refetch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { mutate: triggerSync, isLoading: isSyncing } = useApiMutation({
     onSuccess: () => {
@@ -172,13 +101,13 @@ export function WhoopMetrics() {
 
   if (error) {
     return (
-      <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-6">
-        <div className="flex items-center justify-between">
+      <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400" />
+            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
             <div>
-              <p className="text-red-400 font-medium">Failed to load metrics</p>
-              <p className="text-sm text-red-300/70 mt-1">
+              <p className="text-[13px] sm:text-[14px] text-red-400 font-medium">Failed to load metrics</p>
+              <p className="text-[13px] sm:text-[14px] text-red-300/70 mt-1">
                 {error.message || 'Unable to fetch WHOOP data. Please check your connection and try again.'}
               </p>
             </div>
@@ -200,12 +129,12 @@ export function WhoopMetrics() {
   // Check if data exists but is empty
   if (!data) {
     return (
-      <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-6">
+      <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-4 sm:p-6">
         <div className="flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-400" />
+          <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
           <div className="flex-1">
-            <p className="text-blue-400 font-medium">No data available</p>
-            <p className="text-sm text-blue-300/70 mt-1">
+            <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No data available</p>
+            <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
               Unable to load WHOOP metrics. Please try refreshing.
             </p>
           </div>
@@ -232,13 +161,13 @@ export function WhoopMetrics() {
 
   if (hasNoData) {
     return (
-      <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-6">
-        <div className="flex items-center justify-between gap-4">
+      <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3 flex-1">
-            <AlertCircle className="w-5 h-5 text-blue-400" />
+            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
             <div className="flex-1">
-              <p className="text-blue-400 font-medium">No data available</p>
-              <p className="text-sm text-blue-300/70 mt-1">
+              <p className="text-[13px] sm:text-[14px] text-blue-400 font-medium">No data available</p>
+              <p className="text-[13px] sm:text-[14px] text-blue-300/70 mt-1">
                 WHOOP data hasn&apos;t been synced yet. Your device is connected, but no health data has been received. This usually means:
                 <br />• Data sync may take a few minutes after connecting
                 <br />• Make sure your WHOOP device is actively tracking and syncing
@@ -305,23 +234,23 @@ export function WhoopMetrics() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ scale: 1.02 }}
-      className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${gradient} backdrop-blur-sm border border-white/10 p-6 transition-all duration-300 ${
+      className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${gradient} backdrop-blur-sm border border-white/10 p-4 sm:p-6 transition-all duration-300 ${
         isEmpty ? 'opacity-60' : ''
       }`}
     >
-      <div className="flex items-center gap-3 mb-4">
-        <div className={`w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-white/20`}>
-          <Icon className={`w-6 h-6 ${iconColor}`} />
+      <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-white/20`}>
+          <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${iconColor}`} />
         </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-white/90">{title}</p>
-          <p className="text-3xl font-bold text-white mt-1">
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] sm:text-[14px] font-medium text-white/90">{title}</p>
+          <p className="text-[18px] sm:text-2xl font-bold text-white mt-0.5 sm:mt-1 truncate">
             {isEmpty ? '--' : value}
           </p>
         </div>
       </div>
       {details && (
-        <div className="space-y-1.5 text-xs text-white/80 mt-4 pt-4 border-t border-white/10">
+        <div className="space-y-1 sm:space-y-1.5 text-[13px] text-white/80 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-white/10">
           {details}
         </div>
       )}
@@ -329,7 +258,7 @@ export function WhoopMetrics() {
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
       {/* Recovery */}
       <MetricCard
         icon={Heart}

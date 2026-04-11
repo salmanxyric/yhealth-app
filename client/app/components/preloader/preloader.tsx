@@ -32,18 +32,22 @@ export function AILoader({ text = "Generating" }: { text?: string }) {
     return () => clearInterval(interval)
   }, [])
 
+  // Round to 4 decimal places to avoid SSR/client floating-point hydration mismatches
+  const r4 = (n: number) => Math.round(n * 10000) / 10000
+
   const floatingParticles = useMemo(
     () =>
       [...Array(40)].map((_, i) => {
         const angle = (i / 40) * Math.PI * 2
-        // eslint-disable-next-line react-hooks/purity
-        const radius = 200 + Math.random() * 150
+        // Deterministic pseudo-random via Knuth multiplicative hash (avoids SSR/client mismatch)
+        const seed = ((i * 2654435761) >>> 0) / 4294967296
+        const radius = 200 + seed * 150
         return {
           id: i,
           angle,
           radius,
           duration: 3 + (i % 4),
-          delay: (i * 0.15) % 3,
+          delay: r4((i * 0.15) % 3),
           size: 1 + (i % 4),
         }
       }),
@@ -57,8 +61,8 @@ export function AILoader({ text = "Generating" }: { text?: string }) {
         const radius = 160
         return {
           id: i,
-          x: 200 + radius * Math.cos(angle),
-          y: 200 + radius * Math.sin(angle),
+          x: r4(200 + radius * Math.cos(angle)),
+          y: r4(200 + radius * Math.sin(angle)),
           delay: i * 0.15,
         }
       }),
@@ -71,8 +75,8 @@ export function AILoader({ text = "Generating" }: { text?: string }) {
         const angle = (i / 6) * Math.PI * 2
         return {
           id: i,
-          startAngle: angle,
-          endAngle: angle + Math.PI / 3,
+          startAngle: r4(angle),
+          endAngle: r4(angle + Math.PI / 3),
           radius: 140 + (i % 2) * 30,
         }
       }),
@@ -236,7 +240,7 @@ export function AILoader({ text = "Generating" }: { text?: string }) {
             {circuitPaths.map((path) => (
               <path
                 key={path.id}
-                d={`M ${200 + path.radius * Math.cos(path.startAngle)} ${200 + path.radius * Math.sin(path.startAngle)} A ${path.radius} ${path.radius} 0 0 1 ${200 + path.radius * Math.cos(path.endAngle)} ${200 + path.radius * Math.sin(path.endAngle)}`}
+                d={`M ${r4(200 + path.radius * Math.cos(path.startAngle))} ${r4(200 + path.radius * Math.sin(path.startAngle))} A ${path.radius} ${path.radius} 0 0 1 ${r4(200 + path.radius * Math.cos(path.endAngle))} ${r4(200 + path.radius * Math.sin(path.endAngle))}`}
                 fill="none"
                 stroke="url(#circuitGrad)"
                 strokeWidth="2"
@@ -447,8 +451,8 @@ export function AILoader({ text = "Generating" }: { text?: string }) {
       </div>
 
       {floatingParticles.map((particle) => {
-        const x = 50 + (particle.radius / 10) * Math.cos(particle.angle)
-        const y = 50 + (particle.radius / 10) * Math.sin(particle.angle)
+        const x = r4(50 + (particle.radius / 10) * Math.cos(particle.angle))
+        const y = r4(50 + (particle.radius / 10) * Math.sin(particle.angle))
         return (
           <div
             key={particle.id}

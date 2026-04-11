@@ -8,7 +8,7 @@
  * - Goal-specific questions (8-12 per goal)
  * - Cross-pillar universal questions (asked for ALL goals)
  *
- * @see yhealth-platform/prd-epics/PRD-Epic-01-Onboarding-Assessment.md
+ * @see balencia-platform/prd-epics/PRD-Epic-01-Onboarding-Assessment.md
  */
 
 import 'dotenv/config';
@@ -1929,7 +1929,7 @@ const habitBuildingQuestions: AssessmentQuestion[] = [
         { value: 'life_change', label: 'Major life change' },
         { value: 'accumulated', label: 'Things have accumulated' },
         { value: 'inspired', label: 'Feeling inspired/motivated' },
-        { value: 'accountability', label: 'Found accountability (yHealth!)' },
+        { value: 'accountability', label: 'Found accountability (Balencia!)' },
         { value: 'always', label: 'Always the right time' },
       ],
     }
@@ -2333,7 +2333,7 @@ async function seedAssessmentQuestions(): Promise<void> {
   const pool = new Pool({
     host: process.env['DB_HOST'] || 'localhost',
     port: parseInt(process.env['DB_PORT'] || '5432', 10),
-    database: process.env['DB_NAME'] || 'yhealth',
+    database: process.env['DB_NAME'] || 'balencia',
     user: process.env['DB_USER'] || 'postgres',
     password: process.env['DB_PASSWORD'] || '',
   });

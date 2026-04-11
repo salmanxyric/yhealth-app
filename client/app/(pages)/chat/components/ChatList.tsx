@@ -216,14 +216,14 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
           <div className="h-9 w-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
             <Image
               src="/logo1.png"
-              alt="yHealth"
+              alt="Balencia"
               width={24}
               height={24}
               className="object-contain"
             />
           </div>
           <h2 className="text-lg font-bold text-white tracking-tight">
-            yHealth
+            Balencia
           </h2>
         </motion.div>
         <DropdownMenu>
@@ -292,7 +292,16 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
                     const unreadCount = getUnreadCount(chat);
                     const title = getChatTitle(chat);
                     const avatar = getChatAvatar(chat);
-                    const lastMessage = chat.latestMessage?.content || '';
+                    const rawLastMessage = chat.latestMessage?.content || '';
+                    // Strip markdown formatting from preview
+                    const lastMessage = rawLastMessage
+                      .replace(/\*\*([^*]+)\*\*/g, '$1')  // **bold** → bold
+                      .replace(/\*([^*]+)\*/g, '$1')       // *italic* → italic
+                      .replace(/`([^`]+)`/g, '$1')         // `code` → code
+                      .replace(/#{1,6}\s/g, '')            // # headers
+                      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [link](url) → link
+                      .replace(/\n+/g, ' ')                // newlines → space
+                      .trim();
                     const lastMessageTime = chat.updatedAt
                       ? formatLastMessageTime(chat.updatedAt)
                       : '';
@@ -358,13 +367,13 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
                             )}
                           </div>
                           {lastMessage && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-start gap-2">
                               <p className={cn(
-                                'truncate text-[13px] flex-1',
+                                'line-clamp-2 text-[13px] flex-1',
                                 unreadCount > 0 ? 'text-slate-700 dark:text-slate-300 font-medium' : 'text-slate-500 dark:text-slate-400'
                               )}>{lastMessage}</p>
                               {unreadCount > 0 && (
-                                <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                                <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 mt-1.5" />
                               )}
                             </div>
                           )}

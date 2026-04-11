@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: client/Dockerfile
-    container_name: yhealth-client
+    container_name: balencia-client
     ports:
       - "3000:3000"
     environment:
@@ -15,7 +15,7 @@ services:
     depends_on:
       - server
     networks:
-      - yhealth-network
+      - balencia-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
@@ -29,7 +29,7 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
-    container_name: yhealth-server
+    container_name: balencia-server
     ports:
       - "5000:5000"
     environment:
@@ -37,13 +37,13 @@ services:
       - PORT=5000
       - HOST=0.0.0.0
       # Database connection (adjust as needed)
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:5432/yhealth?schema=public}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:5432/balencia?schema=public}
       # Add other required environment variables
       # - JWT_SECRET=${JWT_SECRET}
       # - REDIS_URL=${REDIS_URL}
       # - CORS_ORIGIN=http://localhost:3000,http://client:3000
     networks:
-      - yhealth-network
+      - balencia-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
@@ -53,6 +53,6 @@ services:
       start_period: 40s
 
 networks:
-  yhealth-network:
+  balencia-network:
     driver: bridge
 

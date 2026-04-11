@@ -1,6 +1,6 @@
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, UnrecoverableError } from 'bullmq';
 import { redisConnection, QueueNames } from '../config/queue.config.js';
-import { vectorEmbeddingService } from '../services/vector-embedding.service.js';
+import { vectorEmbeddingService, EmbeddingAuthError } from '../services/vector-embedding.service.js';
 import { query } from '../database/pg.js';
 import { logger } from '../services/logger.service.js';
 import type { EmbeddingJobData } from '../services/embedding-queue.service.js';
@@ -10,6 +10,22 @@ import type { EmbeddingJobData } from '../services/embedding-queue.service.js';
 // ============================================================================
 
 async function processEmbeddingJob(job: Job<EmbeddingJobData>): Promise<void> {
+  try {
+    await processEmbeddingJobInner(job);
+  } catch (error) {
+    if (error instanceof EmbeddingAuthError) {
+      // Auth failure — skip BullMQ retries entirely (they'll never succeed)
+      logger.warn('[EmbeddingWorker] Skipping job due to auth error (unrecoverable)', {
+        jobId: job.id,
+        error: (error as Error).message,
+      });
+      throw new UnrecoverableError(error.message);
+    }
+    throw error;
+  }
+}
+
+async function processEmbeddingJobInner(job: Job<EmbeddingJobData>): Promise<void> {
   const { userId, sourceType, sourceId, operation } = job.data;
 
   logger.debug('[EmbeddingWorker] Processing job', {
@@ -31,6 +47,27 @@ async function processEmbeddingJob(job: Job<EmbeddingJobData>): Promise<void> {
   // Handle delete operation
   if (operation === 'delete') {
     await handleDeleteEmbedding(userId, sourceType, sourceId);
+    return;
+  }
+
+  // Handle rag_message — backfill embedding for an existing message row
+  if (sourceType === 'rag_message') {
+    const msgResult = await query<{ content: string }>(
+      `SELECT content FROM rag_messages WHERE id = $1`,
+      [sourceId]
+    );
+    if (msgResult.rows.length === 0) {
+      logger.debug('[EmbeddingWorker] rag_message not found, skipping', { sourceId });
+      return;
+    }
+    const msgContent = msgResult.rows[0].content;
+    // Skip trivial messages (short replies like "ok", "yes", "thanks")
+    if (msgContent.length < 20) {
+      logger.debug('[EmbeddingWorker] Skipping embedding for short message', { sourceId, length: msgContent.length });
+      return;
+    }
+    await vectorEmbeddingService.updateMessageEmbedding(sourceId, msgContent);
+    logger.info('[EmbeddingWorker] Message embedding backfilled', { sourceId });
     return;
   }
 

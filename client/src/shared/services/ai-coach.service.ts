@@ -16,6 +16,8 @@ export type AICoachGoalCategory =
   | 'health_condition'
   | 'habit_building'
   | 'overall_optimization'
+  | 'nutrition'
+  | 'fitness'
   | 'custom';
 
 export type ConversationPhase = 'opening' | 'exploration' | 'deepening' | 'closing';
@@ -220,7 +222,7 @@ export interface MCQQuestion {
 export interface MCQGenerationRequest {
   goal: AICoachGoalCategory;
   phase?: ConversationPhase;
-  previousAnswers?: { questionId: string; selectedOptions: string[] }[];
+  previousAnswers?: { questionId: string; questionText?: string; selectedOptions: string[] }[];
   extractedInsights?: ExtractedInsight[];
   language?: SupportedLanguage;
 }
@@ -464,7 +466,7 @@ class AICoachServiceClient {
       return null;
     };
 
-    const token = getCookie('yhealth_access_token');
+    const token = getCookie('balencia_access_token');
 
     const response = await fetch(`${API_URL}/ai-coach/session/${sessionId}/pdf`, {
       method: 'GET',

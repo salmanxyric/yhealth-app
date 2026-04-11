@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { X, Loader2, Check, CloudOff, Feather } from "lucide-react";
+import { X, Loader2, Check, CloudOff, Feather, CalendarDays } from "lucide-react";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +25,9 @@ export interface DistractionFreeEditorProps {
   onSubmit: () => void;
   isSubmitting?: boolean;
   autoSaveStatus?: "idle" | "saving" | "saved";
+  /** Selected date for the entry (YYYY-MM-DD). Defaults to today. */
+  entryDate?: string;
+  onDateChange?: (date: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +40,7 @@ const MODE_LABELS: Record<JournalingMode, { label: string; accent: string }> = {
   gratitude: { label: "GRATITUDE", accent: "rgba(251, 191, 36, 0.5)" },
   life_perspective: { label: "LIFE PERSPECTIVE", accent: "rgba(139, 92, 246, 0.5)" },
   free_write: { label: "FREE WRITE", accent: "rgba(148, 163, 184, 0.5)" },
+  voice_conversation: { label: "VOICE JOURNAL", accent: "rgba(45, 212, 191, 0.5)" },
 };
 
 const PLACEHOLDER_BY_MODE: Record<JournalingMode, string> = {
@@ -50,6 +54,8 @@ const PLACEHOLDER_BY_MODE: Record<JournalingMode, string> = {
     "Consider your values and the person you are becoming. What do you notice?",
   free_write:
     "Start writing. There are no rules here -- just let the words come...",
+  voice_conversation:
+    "Speak your thoughts aloud. Your voice will be transcribed and guided by AI...",
 };
 
 function formatElapsed(seconds: number): string {
@@ -100,6 +106,8 @@ export function DistractionFreeEditor({
   onSubmit,
   isSubmitting = false,
   autoSaveStatus = "idle",
+  entryDate,
+  onDateChange,
 }: DistractionFreeEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -172,9 +180,23 @@ export function DistractionFreeEditor({
         className="flex items-center justify-between px-6 py-4"
         style={{ zIndex: 10 }}
       >
-        {/* Left: auto-save + mode badge */}
+        {/* Left: auto-save + date picker + mode badge */}
         <div className="flex items-center gap-4">
           <AutoSaveBadge status={autoSaveStatus} />
+          {/* Date picker */}
+          {onDateChange && (
+            <label className="relative flex items-center gap-1.5 cursor-pointer group">
+              <CalendarDays className="w-3 h-3 text-white/20 group-hover:text-white/40 transition-colors" />
+              <input
+                type="date"
+                value={entryDate || new Date().toISOString().split("T")[0]}
+                max={new Date().toISOString().split("T")[0]}
+                onChange={(e) => onDateChange(e.target.value)}
+                className="observatory-font-display bg-transparent border border-white/8 rounded-full px-2.5 py-0.5 text-white/30 hover:text-white/50 hover:border-white/15 focus:text-white/60 focus:border-purple-500/30 outline-none transition-all cursor-pointer"
+                style={{ fontSize: 9, letterSpacing: "0.1em", colorScheme: "dark" }}
+              />
+            </label>
+          )}
           <span
             className="observatory-font-display text-white/20 border border-white/8 rounded-full px-2.5 py-0.5"
             style={{ fontSize: 8, letterSpacing: "0.12em" }}

@@ -23,14 +23,27 @@ import type {
   JournalPromptCategory,
   HabitTrackingType,
   DailyCheckin,
-  CreateDailyCheckinInput,
   CheckinTag,
   LifeGoal,
-  CreateLifeGoalInput,
   LifeGoalCategory,
+  LifeGoalMilestone,
+  LifeGoalCheckin,
+  LifeGoalDashboard,
   DailyIntention,
   JournalGoalLink,
   JournalingMode,
+  TriggerCategory,
+  CheckinType,
+  DayComparison,
+  BehavioralPattern,
+  LessonLearned,
+  LessonDomain,
+  VoiceJournalSession,
+  VoiceJournalTurnResponse,
+  VoiceJournalSummary,
+  GoalAction,
+  GoalDecomposition,
+  GoalActionResponseType,
 } from '@shared/types/domain/wellbeing';
 
 // ============================================
@@ -48,6 +61,8 @@ export interface CreateMoodLogRequest {
   context_note?: string;
   mode: WellbeingMode;
   logged_at?: string;
+  transition_trigger?: string;
+  trigger_category?: TriggerCategory;
 }
 
 export interface MoodLogsResponse {
@@ -106,6 +121,16 @@ export const moodService = {
 
   async getPatterns(days: number = 30): Promise<ApiResponse<MoodPatternsResponse>> {
     return api.get('/v1/wellbeing/mood/patterns', {
+      params: { days },
+    });
+  },
+
+  async getTransitions(date: string): Promise<ApiResponse<{ transitions: MoodLog[] }>> {
+    return api.get(`/v1/wellbeing/mood/transitions/${date}`);
+  },
+
+  async getTransitionPatterns(days: number = 30): Promise<ApiResponse<{ patterns: Array<{ triggerCategory: TriggerCategory; avgRating: number; count: number }> }>> {
+    return api.get('/v1/wellbeing/mood/transition-patterns', {
       params: { days },
     });
   },
@@ -283,12 +308,34 @@ export const dailyCheckinService = {
     stress_score?: number;
     tags?: CheckinTag[];
     day_summary?: string;
+    checkin_type?: CheckinType;
+    predicted_mood?: number;
+    predicted_energy?: number;
+    known_stressors?: string[];
+    day_rating?: number;
+    went_well?: string[];
+    didnt_go_well?: string[];
+    evening_lessons?: string[];
+    tomorrow_focus?: string;
+    screen_time_minutes?: number;
   }): Promise<ApiResponse<{ checkin: DailyCheckin }>> {
     return api.post('/v1/journal/checkin', data);
   },
 
-  async getToday(): Promise<ApiResponse<{ checkin: DailyCheckin | null; hasCheckedIn: boolean }>> {
-    return api.get('/v1/journal/checkin/today');
+  async getToday(type?: CheckinType): Promise<ApiResponse<{ checkin: DailyCheckin | null; hasCheckedIn: boolean }>> {
+    return api.get('/v1/journal/checkin/today', { params: type ? { type } : undefined });
+  },
+
+  async getMorning(date?: string): Promise<ApiResponse<{ checkin: DailyCheckin | null }>> {
+    return api.get('/v1/journal/checkin/morning', { params: date ? { date } : undefined });
+  },
+
+  async getEvening(date?: string): Promise<ApiResponse<{ checkin: DailyCheckin | null }>> {
+    return api.get('/v1/journal/checkin/evening', { params: date ? { date } : undefined });
+  },
+
+  async getComparison(date?: string): Promise<ApiResponse<{ comparison: DayComparison | null }>> {
+    return api.get('/v1/journal/checkin/comparison', { params: date ? { date } : undefined });
   },
 
   async getHistory(params?: {
@@ -296,6 +343,7 @@ export const dailyCheckinService = {
     limit?: number;
     startDate?: string;
     endDate?: string;
+    type?: CheckinType;
   }): Promise<ApiResponse<{ checkins: DailyCheckin[]; total: number; page: number; limit: number }>> {
     return api.get('/v1/journal/checkin/history', { params });
   },
@@ -366,12 +414,29 @@ export const lifeGoalsService = {
   async setIntention(data: {
     intention_text: string;
     checkin_id?: string;
+    sort_order?: number;
+    domain?: string;
   }): Promise<ApiResponse<{ intention: DailyIntention }>> {
     return api.post('/v1/journal/intentions', data);
   },
 
+  async bulkSetIntentions(data: {
+    intentions: Array<{ intentionText: string; domain?: string }>;
+    checkin_id?: string;
+  }): Promise<ApiResponse<{ intentions: DailyIntention[] }>> {
+    return api.post('/v1/journal/intentions/bulk', data);
+  },
+
   async getTodayIntention(): Promise<ApiResponse<{ intention: DailyIntention | null }>> {
     return api.get('/v1/journal/intentions/today');
+  },
+
+  async getTodayIntentions(): Promise<ApiResponse<{ intentions: DailyIntention[] }>> {
+    return api.get('/v1/journal/intentions/today');
+  },
+
+  async getFulfillmentRate(days: number = 30): Promise<ApiResponse<{ rate: number; total: number; fulfilled: number }>> {
+    return api.get('/v1/journal/intentions/fulfillment-rate', { params: { days } });
   },
 
   async updateIntention(id: string, data: {
@@ -379,6 +444,106 @@ export const lifeGoalsService = {
     reflection?: string;
   }): Promise<ApiResponse<{ intention: DailyIntention }>> {
     return api.put(`/v1/journal/intentions/${id}`, data);
+  },
+
+  // Milestones
+  async createMilestone(goalId: string, data: {
+    title: string;
+    description?: string;
+    target_date?: string;
+    target_value?: number;
+    sort_order?: number;
+  }): Promise<ApiResponse<{ milestone: LifeGoalMilestone }>> {
+    return api.post(`/v1/journal/goals/${goalId}/milestones`, data);
+  },
+
+  async getMilestones(goalId: string): Promise<ApiResponse<{ milestones: LifeGoalMilestone[] }>> {
+    return api.get(`/v1/journal/goals/${goalId}/milestones`);
+  },
+
+  async updateMilestone(milestoneId: string, data: Partial<{
+    title: string;
+    description: string;
+    target_date: string;
+    target_value: number;
+    current_value: number;
+    sort_order: number;
+    completed: boolean;
+  }>): Promise<ApiResponse<{ milestone: LifeGoalMilestone }>> {
+    return api.put(`/v1/journal/milestones/${milestoneId}`, data);
+  },
+
+  async completeMilestone(milestoneId: string): Promise<ApiResponse<{ milestone: LifeGoalMilestone }>> {
+    return api.post(`/v1/journal/milestones/${milestoneId}/complete`);
+  },
+
+  async deleteMilestone(milestoneId: string): Promise<ApiResponse<void>> {
+    return api.delete(`/v1/journal/milestones/${milestoneId}`);
+  },
+
+  // Check-ins
+  async createCheckin(goalId: string, data: {
+    progress_value?: number;
+    note?: string;
+    mood_about_goal?: number;
+  }): Promise<ApiResponse<{ checkin: LifeGoalCheckin }>> {
+    return api.post(`/v1/journal/goals/${goalId}/checkins`, data);
+  },
+
+  async getCheckins(goalId: string, limit?: number): Promise<ApiResponse<{ checkins: LifeGoalCheckin[] }>> {
+    return api.get(`/v1/journal/goals/${goalId}/checkins`, { params: { limit } });
+  },
+
+  async getCheckinStreak(goalId: string): Promise<ApiResponse<{ streak: number }>> {
+    return api.get(`/v1/journal/goals/${goalId}/checkins/streak`);
+  },
+
+  // Dashboard aggregate
+  async getGoalDashboard(goalId: string): Promise<ApiResponse<{ dashboard: LifeGoalDashboard }>> {
+    return api.get(`/v1/journal/goals/${goalId}/dashboard`);
+  },
+
+  // Goal Actions
+  async getGoalActions(goalId: string): Promise<ApiResponse<{ actions: GoalAction[] }>> {
+    return api.get(`/v1/journal/goals/${goalId}/actions`);
+  },
+
+  async decomposeGoal(goalId: string): Promise<ApiResponse<{ decomposition: GoalDecomposition }>> {
+    return api.post(`/v1/journal/goals/${goalId}/decompose`);
+  },
+
+  async respondToAction(
+    goalId: string,
+    actionId: string,
+    responseType: GoalActionResponseType,
+    editedData?: { title?: string; description?: string },
+  ): Promise<ApiResponse<void>> {
+    return api.post(`/v1/journal/goals/${goalId}/actions/${actionId}/respond`, {
+      responseType,
+      ...editedData,
+    });
+  },
+
+  async completeAction(goalId: string, actionId: string): Promise<ApiResponse<void>> {
+    return api.post(`/v1/journal/goals/${goalId}/actions/${actionId}/complete`);
+  },
+
+  // AI-powered goal generation from onboarding assessment
+  async generateGoalsFromAssessment(
+    answers: Array<{ question: string; answer: string }>,
+    motivationTier: string,
+  ): Promise<Array<{ title: string; category: string; actions: string[] }>> {
+    type GoalSuggestion = { title: string; category: string; actions: string[] };
+    const res: ApiResponse<GoalSuggestion[]> = await api.post('/v1/journal/goals/from-assessment', {
+      answers,
+      motivationTier,
+    });
+    return res.data ?? [];
+  },
+
+  // Set motivation profile during onboarding
+  async setMotivationProfile(declaredTier: string): Promise<void> {
+    await api.post('/v1/journal/motivation-profile', { tier: declaredTier });
   },
 };
 
@@ -661,3 +826,136 @@ export const breathingService = {
   },
 };
 
+// ============================================
+// BEHAVIORAL PATTERN SERVICE
+// ============================================
+
+export const behavioralPatternService = {
+  async getActive(): Promise<ApiResponse<{ patterns: BehavioralPattern[] }>> {
+    return api.get('/v1/wellbeing/behavioral-patterns');
+  },
+
+  async acknowledge(id: string): Promise<ApiResponse<void>> {
+    return api.post(`/v1/wellbeing/behavioral-patterns/${id}/acknowledge`);
+  },
+
+  async dismiss(id: string): Promise<ApiResponse<void>> {
+    return api.post(`/v1/wellbeing/behavioral-patterns/${id}/dismiss`);
+  },
+};
+
+// ============================================
+// LESSONS LEARNED SERVICE
+// ============================================
+
+export const lessonsService = {
+  async getAll(params?: {
+    domain?: LessonDomain;
+    confirmed?: boolean;
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse<{ lessons: LessonLearned[]; total: number; page: number; limit: number }>> {
+    return api.get('/v1/journal/lessons', { params });
+  },
+
+  async confirm(id: string): Promise<ApiResponse<{ lesson: LessonLearned }>> {
+    return api.post(`/v1/journal/lessons/${id}/confirm`);
+  },
+
+  async dismiss(id: string): Promise<ApiResponse<void>> {
+    return api.post(`/v1/journal/lessons/${id}/dismiss`);
+  },
+
+  async getReminders(): Promise<ApiResponse<{ lessons: LessonLearned[] }>> {
+    return api.get('/v1/journal/lessons/reminders');
+  },
+
+  async search(q: string): Promise<ApiResponse<{ lessons: LessonLearned[] }>> {
+    return api.get('/v1/journal/lessons/search', { params: { q } });
+  },
+
+  async markReminded(id: string): Promise<ApiResponse<void>> {
+    return api.post(`/v1/journal/lessons/${id}/reminded`);
+  },
+};
+
+// ============================================
+// VOICE JOURNAL SERVICE
+// ============================================
+
+export const voiceJournalService = {
+  async startSession(): Promise<ApiResponse<{ session: VoiceJournalSession }>> {
+    return api.post('/v1/journal/voice/start');
+  },
+
+  async getActiveSession(): Promise<ApiResponse<{ session: VoiceJournalSession | null }>> {
+    return api.get('/v1/journal/voice/active');
+  },
+
+  async submitVoiceTurn(sessionId: string, audioBlob: Blob): Promise<ApiResponse<VoiceJournalTurnResponse>> {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    return api.post(`/v1/journal/voice/${sessionId}/turn`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  async submitTextTurn(sessionId: string, text: string): Promise<ApiResponse<VoiceJournalTurnResponse>> {
+    return api.post(`/v1/journal/voice/${sessionId}/text-turn`, { text });
+  },
+
+  async generateSummary(sessionId: string): Promise<ApiResponse<{ summary: VoiceJournalSummary }>> {
+    return api.post(`/v1/journal/voice/${sessionId}/summarize`);
+  },
+
+  async approveAndSave(sessionId: string, editedText?: string): Promise<ApiResponse<{ journalEntryId: string }>> {
+    return api.post(`/v1/journal/voice/${sessionId}/approve`, { editedText });
+  },
+
+  async abandonSession(sessionId: string): Promise<ApiResponse<void>> {
+    return api.post(`/v1/journal/voice/${sessionId}/abandon`);
+  },
+};
+
+// ============================================
+// INSIGHTS SERVICE
+// ============================================
+
+export interface InsightCorrelation {
+  id: string;
+  patternType: string;
+  headline: string;
+  insight: string;
+  correlationStrength: number;
+  dataPoints: number;
+  confidence: 'high' | 'medium' | 'low';
+  evidence: Record<string, unknown>;
+  windowDays: number;
+  computedAt: string;
+}
+
+export const insightsService = {
+  async getCorrelations(): Promise<ApiResponse<{ correlations: InsightCorrelation[] }>> {
+    return api.get('/v1/wellbeing/insights/correlations');
+  },
+
+  async dismissInsight(id: string): Promise<ApiResponse<void>> {
+    return api.post(`/v1/wellbeing/insights/${id}/dismiss`);
+  },
+
+  async getThemes(): Promise<ApiResponse<{ themes: ThemeInsightData[] }>> {
+    return api.get('/v1/wellbeing/insights/themes');
+  },
+
+  async computeNow(days: number = 30): Promise<ApiResponse<{ correlationsFound: number; themesFound: number; windowDays: number }>> {
+    return api.post(`/v1/wellbeing/insights/compute?days=${days}`);
+  },
+};
+
+export interface ThemeInsightData {
+  theme: string;
+  frequency: number;
+  percentage: number;
+  trend: 'increasing' | 'stable' | 'decreasing';
+  coOccurrences?: string[];
+}
