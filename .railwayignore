@@ -1,0 +1,59 @@
+# Aggressively exclude non-essential files from Railway upload
+node_modules
+.next
+dist
+build
+out
+*.tsbuildinfo
+
+# Git history (large)
+.git
+
+# Client (not needed - server-only deployment)
+client
+
+# Tests
+coverage
+__tests__
+__mocks__
+tests
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# IDE
+.vscode
+.idea
+.cursor
+.claude
+
+# Docs (not needed for build)
+docs
+deployment
+progress
+scripts
+*.md
+
+# Presentation
+presentation
+
+# Logs & temp
+*.log
+logs
+tmp
+temp
+.cache
+.turbo
+.eslintcache
+
+# Images/media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.mp4
+*.webm
+*.webp
