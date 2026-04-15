@@ -34,6 +34,7 @@ import {
   RiSearchLine,
   RiArrowDownSLine,
   RiCrosshairFill,
+  RiCompassFill,
   RiBookOpenFill,
   RiCalendarCheckFill,
   RiHeartPulseFill,
@@ -115,6 +116,7 @@ const sections: NavSection[] = [
     label: "Social & Goals",
     items: [
       { id: "goals", label: "Goals", icon: <RiCrosshairFill className={S18} />, href: "/goals" },
+      { id: "life-areas", label: "Life Areas", icon: <RiCompassFill className={S18} />, href: "/life-areas" },
       { id: "leaderboard", label: "Leaderboard", icon: <RiMedalFill className={S18} />, href: "/leaderboard" },
       { id: "competitions", label: "Competitions", icon: <RiTeamFill className={S18} />, href: "/competitions" },
       { id: "knowledge-graph", label: "Knowledge Graph", icon: <RiMindMap className={S18} />, href: "/knowledge-graph" },
