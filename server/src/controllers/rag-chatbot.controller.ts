@@ -1,16 +1,47 @@
 import { Response } from 'express';
+import OpenAI from 'openai';
 import { ragChatbotService } from '../services/rag-chatbot.service.js';
 import { langGraphChatbotService } from '../services/langgraph-chatbot.service.js';
 import { vectorEmbeddingService } from '../services/vector-embedding.service.js';
 import { emotionDetectionService, type EmotionDetection } from '../services/emotion-detection.service.js';
 import { crisisDetectionService } from '../services/crisis-detection.service.js';
 import { wellbeingQuestionEngineService } from '../services/wellbeing-question-engine.service.js';
+import { routeCoachIntent } from '../services/life-area-intent-router.service.js';
+import { env } from '../config/env.config.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from '../services/logger.service.js';
 import { query } from '../database/pg.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+
+/**
+ * Thin classifier-mode LLM helper for the life-area intent router.
+ * Mirrors the pattern used in ai-coach.controller.ts (Task 9).
+ * Returns '' on any failure so routeCoachIntent resolves to null safely.
+ */
+const routerLlmClient: OpenAI | null = env.openai.apiKey
+  ? new OpenAI({ apiKey: env.openai.apiKey })
+  : null;
+
+async function routerLlm(prompt: string): Promise<string> {
+  if (!routerLlmClient) return '';
+  try {
+    const model = env.openai.model || 'gpt-4o-mini';
+    const res = await routerLlmClient.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'Respond with strict JSON only, no prose.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0,
+      max_tokens: 200,
+    });
+    return res.choices[0]?.message?.content ?? '';
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Skip emotion detection for short action commands that don't carry emotional content.
@@ -121,6 +152,12 @@ class RAGChatbotController {
       conversationId,
     });
 
+    const routingChip = await routeCoachIntent({
+      userId,
+      userMessage: trimmedMessage,
+      llm: routerLlm,
+    });
+
     // Map response to client-expected format
     const resultAny = result as any;
     ApiResponse.success(res, {
@@ -138,6 +175,7 @@ class RAGChatbotController {
         retrievedDocs: (result.context.knowledgeUsed || 0) + (result.context.profileUsed || 0),
         historyUsed: result.context.historyUsed || 0,
       } : undefined,
+      routingChip,
     }, 'Message sent successfully');
   });
 
@@ -297,11 +335,17 @@ class RAGChatbotController {
 
       const resultAny = result as any;
       const finalMessage = result.response || '';
-      
+
+      const routingChip = await routeCoachIntent({
+        userId,
+        userMessage: trimmedMessage,
+        llm: routerLlm,
+      });
+
       // Send completion with tool calls and actions if any
-      const doneEvent: any = { 
-        done: true, 
-        message: finalMessage, 
+      const doneEvent: any = {
+        done: true,
+        message: finalMessage,
         conversationId: result.conversationId,
         actions: resultAny.actions,
         toolCalls: resultAny.toolCalls,
@@ -311,6 +355,7 @@ class RAGChatbotController {
           confidence: (emotionDetected as EmotionDetection).confidence,
         } : undefined,
         crisis: crisisDetected,
+        routingChip,
       };
       
       
