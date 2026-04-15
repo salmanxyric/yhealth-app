@@ -1,5 +1,13 @@
 import type { NextConfig } from "next";
 import path from "path";
+import fs from "fs";
+
+// Dev: shared/ is at ../shared (monorepo root)
+// Docker build: shared/ is copied to ./shared (inside client dir)
+const sharedInside = path.join(__dirname, 'shared');
+const sharedOutside = path.join(__dirname, '..', 'shared');
+const sharedPath = fs.existsSync(sharedInside) ? sharedInside : sharedOutside;
+const turbopackRoot = fs.existsSync(sharedInside) ? __dirname : path.join(__dirname, '..');
 
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker optimization
@@ -42,11 +50,11 @@ const nextConfig: NextConfig = {
     // Optimize package imports to reduce chunk size
     optimizePackageImports: ['@xyflow/react', 'framer-motion', 'gsap', 'lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
   },
-  // Turbopack config: root set to monorepo root so @shared (outside client dir) resolves
+  // Turbopack config: resolves @shared in both dev (outside) and Docker (inside client)
   turbopack: {
-    root: path.join(__dirname, '..'),
+    root: turbopackRoot,
     resolveAlias: {
-      '@shared': path.join(__dirname, '..', 'shared'),
+      '@shared': sharedPath,
     },
     resolveExtensions: ['.tsx', '.ts', '.jsx', '.js', '.json', '.mjs'],
   },

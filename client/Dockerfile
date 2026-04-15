@@ -22,17 +22,18 @@ RUN npm ci
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy root package.json (Next.js uses it to detect monorepo root)
-COPY package.json ./
-
-# Copy shared types (tsconfig paths: @shared/* -> ../shared/*)
-COPY shared/ ./shared/
-
 # Copy dependencies from deps stage
 COPY --from=deps /app/client/node_modules ./client/node_modules
 
 # Copy client source
 COPY client/ ./client/
+
+# Copy shared types INSIDE client/ so Turbopack can resolve them
+# (Turbopack has limited support for tsconfig paths outside project root)
+COPY shared/ ./client/shared/
+
+# Rewrite tsconfig paths: @shared/* -> ./shared/* (inside client dir)
+RUN sed -i 's|"\.\./shared/\*"|"./shared/*"|g' ./client/tsconfig.json
 
 # Accept build-time environment variables (NEXT_PUBLIC_* are baked into the bundle)
 ARG NEXT_PUBLIC_API_URL
