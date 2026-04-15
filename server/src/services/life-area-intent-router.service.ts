@@ -124,7 +124,9 @@ export async function routeCoachIntent(params: {
 
     return { lifeAreaId, lifeAreaName, domainType: parsed.domainType, wasAutoCreated, alternatives };
   } catch (err) {
-    logger.warn('[life-area-intent-router] routing failed (non-fatal):', err);
+    logger.warn('[life-area-intent-router] routing failed (non-fatal):', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
 }
