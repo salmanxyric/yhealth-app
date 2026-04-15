@@ -700,3 +700,54 @@
   border-radius: 10px !important;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4) !important;
 }
+
+/* ============================================================ */
+/* Scrollbar utilities — hide scrollbars while keeping scroll    */
+/* ============================================================ */
+
+/* Utility class: fully hide scrollbar (still scrollable) */
+.scrollbar-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE / Edge */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+/* Global: thin, near-invisible scrollbars everywhere by default */
+*::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+* {
+  scrollbar-width: none;
+}
+html, body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Cinematic landing — scroll snap between scenes */
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-snap-type: y proximity; /* proximity (not mandatory) — lets users scroll freely but snaps near edges */
+    scroll-behavior: smooth;
+  }
+  .cinematic-snap > section {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+}
