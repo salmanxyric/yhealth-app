@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import type { Response } from 'express';
+import OpenAI from 'openai';
 import { BaseController } from './base.controller.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -17,8 +18,38 @@ import {
   type ConversationPhase,
 } from '../services/index.js';
 import { userCoachingProfileService } from '../services/user-coaching-profile.service.js';
+import { routeCoachIntent } from '../services/life-area-intent-router.service.js';
+import { env } from '../config/env.config.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import type { FileRequest } from '../middlewares/upload.middleware.js';
+
+/**
+ * Thin classifier-mode LLM helper for the life-area intent router.
+ * Reuses the same OpenAI SDK + env config pattern as aiCoachService.
+ * Returns '' on any failure so routeCoachIntent resolves to null safely.
+ */
+const routerLlmClient: OpenAI | null = env.openai.apiKey
+  ? new OpenAI({ apiKey: env.openai.apiKey })
+  : null;
+
+async function routerLlm(prompt: string): Promise<string> {
+  if (!routerLlmClient) return '';
+  try {
+    const model = env.openai.model || 'gpt-4o-mini';
+    const res = await routerLlmClient.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'Respond with strict JSON only, no prose.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0,
+      max_tokens: 200,
+    });
+    return res.choices[0]?.message?.content ?? '';
+  } catch {
+    return '';
+  }
+}
 
 /**
  * AI Coach Controller
@@ -182,12 +213,19 @@ class AICoachController extends BaseController {
       message.trim()
     );
 
+    const routingChip = await routeCoachIntent({
+      userId,
+      userMessage: message.trim(),
+      llm: routerLlm,
+    });
+
     this.success(res, {
       message: response.message,
       phase: response.phase,
       insights: response.insights,
       isComplete: response.isComplete,
       suggestedActions: response.suggestedActions,
+      routingChip,
     });
   });
 
@@ -646,6 +684,12 @@ class AICoachController extends BaseController {
       isComplete: response.isComplete,
     });
 
+    const routingChip = await routeCoachIntent({
+      userId,
+      userMessage: message.trim(),
+      llm: routerLlm,
+    });
+
     this.success(res, {
       sessionId: session.id,
       message: response.message,
@@ -654,6 +698,7 @@ class AICoachController extends BaseController {
       isComplete: response.isComplete,
       suggestedActions: response.suggestedActions,
       historicalContextUsed: historicalContext.length > 0,
+      routingChip,
     });
   });
 
