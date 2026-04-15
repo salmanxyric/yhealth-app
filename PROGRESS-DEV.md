@@ -468,3 +468,25 @@ kb_summary: Active development progress tracker for yHealth app features and fix
 - `focus_areas` (text[] — max 5)
 - `coaching_style` (supportive/direct/analytical/motivational)
 - `coaching_intensity` (light/moderate/intensive)
+
+## 2026-04-15 — Universal Self-Improvement Phase 1
+
+**Shipped:**
+- `life_areas` + `life_area_links` tables, domain registry (8 domains; career flagship)
+- `/api/life-areas` CRUD + linking; `/api/life-areas/domains`
+- AI coach intent router: auto-creates or matches an existing life area on self-improvement messages and attaches a `routingChip` to the reply (wired into both `ai-coach.controller` and `rag-chatbot.controller`, including the streaming `done` SSE event)
+- `/life-areas` hub page with hero, grid, create modal, detail drawer
+- Routing chip UI in the AI coach message bubble
+- Sidebar nav entry for Life Areas
+
+**Deferred (Phase 2+):**
+- Unified follow-up orchestrator (chat + check-in + push) — Phase 2
+- `/career` flagship + `career_artifacts` schema and 6-tab UI — Phase 3
+- Structured preference persistence from chat heuristics — Phase 4
+- Full reroute endpoint for routing-chip "Change" (currently navigates to /life-areas)
+- Consolidate duplicate OpenAI client instantiation across ai-coach + rag-chat controllers
+- Parallelize routing LLM call with streaming reply generation to eliminate ~150-400ms added latency on SSE `done` event
+
+**Refs:**
+- Spec: `docs/superpowers/specs/2026-04-15-universal-self-improvement-design.md`
+- Plan: `docs/superpowers/plans/2026-04-15-universal-self-improvement-phase1.md`
