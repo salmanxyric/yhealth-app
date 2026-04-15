@@ -28,6 +28,10 @@ import voiceCallsRoutes from './voice-calls.routes.js';
 import whatsappWebhookRoutes from './webhooks/whatsapp.routes.js';
 import automationRoutes from './automation.routes.js';
 import activityStatusRoutes from './activity-status.routes.js';
+import accountabilityRoutes from './accountability.routes.js';
+import accountabilityContractRoutes from './accountability-contract.routes.js';
+import lifeAreasRoutes from './life-areas.routes.js';
+import followRoutes from './follow.routes.js';
 import ttsRoutes from './tts.routes.js';
 import emotionsRoutes from './emotions.routes.js';
 import recoveryScoreRoutes from './recovery-score.routes.js';
@@ -79,6 +83,8 @@ import emailRoutes from './email.routes.js';
 import adminWhoopRoutes from './admin-whoop.routes.js';
 import financeRoutes from './finance.routes.js';
 import streakRoutes from './streak.routes.js';
+import calendarRoutes from './calendar.routes.js';
+import obstacleRoutes from './obstacle.routes.js';
 import { env } from '../config/env.config.js';
 
 const router = Router();
@@ -229,6 +235,18 @@ router.use('/whoop/analytics', whoopAnalyticsRoutes);
 // Activity Status routes
 router.use('/activity-status', activityStatusRoutes);
 
+// Social Accountability routes
+router.use('/accountability', accountabilityRoutes);
+
+// Accountability Contracts routes
+router.use('/contracts', accountabilityContractRoutes);
+
+// Life Areas routes (Universal Self-Improvement)
+router.use('/life-areas', lifeAreasRoutes);
+
+// Follow / Social / Buddy routes
+router.use('/follows', followRoutes);
+
 // TTS routes (Text-to-Speech)
 router.use('/tts', ttsRoutes);
 
@@ -374,5 +392,11 @@ router.use('/finance', financeRoutes);
 
 // Streak tracking routes (status, history, calendar, leaderboard, rewards, freezes)
 router.use('/streaks', streakRoutes);
+
+// Google Calendar integration (OAuth, sync, events)
+router.use('/calendar', calendarRoutes);
+
+// Obstacle Diagnosis — proactive coach-led diagnosis of repeatedly-missed goals
+router.use('/obstacles', obstacleRoutes);
 
 export default router;
