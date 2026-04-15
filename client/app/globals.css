@@ -740,3 +740,95 @@ body::-webkit-scrollbar {
   display: none;
 }
 
+/* ============================================================
+   GLOBAL BUTTON OVERRIDE — sky-600 with glass shine on hover
+   Applies to anything using Tailwind cyan→purple / blue→purple
+   gradient classes, plus a reusable .btn-sky utility.
+   ============================================================ */
+
+/* 1. Kill the cyan/blue → purple gradient pattern everywhere */
+[class*="from-cyan-"][class*="to-purple-"],
+[class*="from-blue-"][class*="to-purple-"],
+[class*="from-cyan-"][class*="to-blue-"],
+[class*="from-indigo-"][class*="to-purple-"],
+[class*="from-violet-"][class*="to-purple-"] {
+  background-image: none !important;
+  background-color: #0284c7 !important; /* sky-600 */
+  color: #ffffff !important;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: background-color 200ms ease, box-shadow 200ms ease,
+    transform 200ms ease;
+}
+
+/* Shine sweep — glass highlight moves L→R on hover */
+[class*="from-cyan-"][class*="to-purple-"]::before,
+[class*="from-blue-"][class*="to-purple-"]::before,
+[class*="from-cyan-"][class*="to-blue-"]::before,
+[class*="from-indigo-"][class*="to-purple-"]::before,
+[class*="from-violet-"][class*="to-purple-"]::before,
+.btn-sky::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  transition: transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+[class*="from-cyan-"][class*="to-purple-"]:hover::before,
+[class*="from-blue-"][class*="to-purple-"]:hover::before,
+[class*="from-cyan-"][class*="to-blue-"]:hover::before,
+[class*="from-indigo-"][class*="to-purple-"]:hover::before,
+[class*="from-violet-"][class*="to-purple-"]:hover::before,
+.btn-sky:hover::before {
+  transform: translateX(120%);
+}
+
+[class*="from-cyan-"][class*="to-purple-"]:hover,
+[class*="from-blue-"][class*="to-purple-"]:hover,
+[class*="from-cyan-"][class*="to-blue-"]:hover,
+[class*="from-indigo-"][class*="to-purple-"]:hover,
+[class*="from-violet-"][class*="to-purple-"]:hover,
+.btn-sky:hover {
+  background-color: #0369a1 !important; /* sky-700 */
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
+    0 8px 28px -6px rgba(14, 165, 233, 0.55),
+    0 0 0 3px rgba(14, 165, 233, 0.18);
+  transform: translateY(-1px);
+}
+
+/* 2. Reusable utility: any new button can just use class="btn-sky" */
+.btn-sky {
+  background-color: #0284c7;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  font-weight: 500;
+  transition: background-color 200ms ease, box-shadow 200ms ease,
+    transform 200ms ease;
+}
+
+/* 3. Keep hover children (text, icons) above the shine layer */
+[class*="from-cyan-"][class*="to-purple-"] > *,
+[class*="from-blue-"][class*="to-purple-"] > *,
+[class*="from-cyan-"][class*="to-blue-"] > *,
+[class*="from-indigo-"][class*="to-purple-"] > *,
+[class*="from-violet-"][class*="to-purple-"] > *,
+.btn-sky > * {
+  position: relative;
+  z-index: 2;
+}
+
