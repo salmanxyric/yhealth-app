@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { motion, type Variants } from "framer-motion";
-import { type CategoryBreakdownItem, FINANCE_CATEGORY_LABELS,
-  FINANCE_CATEGORY_ICONS, } from "@shared/types/domain/finance";
+import type { CategoryBreakdownItem } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_LABELS, FINANCE_CATEGORY_ICONS } from "@shared/types/domain/finance";
 import {
   AnimatedCurrency,
   formatCurrency,

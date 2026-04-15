@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { activityStatusService } from '../services/activity-status.service.js';
+import { statusPlanAdjusterService } from '../services/status-plan-adjuster.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -207,6 +208,49 @@ class ActivityStatusController {
 
     await activityStatusService.deleteStatusForDate(userId, date);
     ApiResponse.success(res, { success: true }, 'Status deleted successfully');
+  });
+
+  /**
+   * @route   GET /api/activity-status/enhanced-current
+   * @desc    Get enhanced current status with duration, overrides, and 7-day summary
+   * @access  Private
+   */
+  getEnhancedCurrent = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    const [current, daysSince, overrides, calendar] = await Promise.all([
+      activityStatusService.getCurrentStatus(userId),
+      activityStatusService.getDaysSinceLastWorkingStatus(userId),
+      statusPlanAdjusterService.getActiveOverrides(userId),
+      activityStatusService.getStatusForMonth(
+        userId,
+        new Date().getFullYear(),
+        new Date().getMonth() + 1,
+      ),
+    ]);
+
+    // Build 7-day summary from calendar data
+    const today = new Date();
+    const last7Days: Array<{ date: string; status: string }> = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0]!;
+      const dayData = calendar.days.find((day) => day.date === dateStr);
+      last7Days.push({ date: dateStr, status: dayData?.status || 'working' });
+    }
+
+    ApiResponse.success(res, {
+      status: current.status,
+      since: current.updatedAt,
+      expectedEndDate: overrides?.expiresAt ?? null,
+      daysInStatus: daysSince,
+      activeOverrides: overrides,
+      last7Days,
+    }, 'Enhanced status retrieved');
   });
 }
 

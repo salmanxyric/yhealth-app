@@ -21,7 +21,8 @@ function getProgressColor(percentage: number): { stroke: string; bg: string; tex
   if (percentage <= 60) return { stroke: "#a3e635", bg: "#a3e63520", text: "text-lime-400" };
   if (percentage <= 75) return { stroke: "#22c55e", bg: "#22c55e20", text: "text-green-400" };
   if (percentage <= 90) return { stroke: "#14b8a6", bg: "#14b8a620", text: "text-teal-400" };
-  return { stroke: "#06b6d4", bg: "#06b6d420", text: "text-cyan-400" };
+  if (percentage < 100) return { stroke: "#06b6d4", bg: "#06b6d420", text: "text-cyan-400" };
+  return { stroke: "#22c55e", bg: "#22c55e20", text: "text-green-400" };
 }
 
 export function CircularProgress({
@@ -280,6 +281,82 @@ export function WeeklyProgressOverview({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// Donut chart for legend with multiple segments
+interface DonutSegment {
+  percentage: number;
+  color: string;
+  label: string;
+}
+
+interface DonutChartProps {
+  segments: DonutSegment[];
+  size?: number;
+  strokeWidth?: number;
+  centerLabel?: string;
+  centerSubLabel?: string;
+}
+
+export function DonutChart({
+  segments,
+  size = 140,
+  strokeWidth = 14,
+  centerLabel = "Satisfied",
+  centerSubLabel = "Progress",
+}: DonutChartProps) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+
+  // Calculate offsets for each segment
+  let accumulatedOffset = 0;
+  const segmentArcs = segments.map((seg) => {
+    const segLength = (seg.percentage / 100) * circumference;
+    const gap = 4; // small gap between segments
+    const arc = {
+      ...seg,
+      dashArray: `${Math.max(segLength - gap, 0)} ${circumference - Math.max(segLength - gap, 0)}`,
+      dashOffset: -accumulatedOffset,
+    };
+    accumulatedOffset += segLength;
+    return arc;
+  });
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width={size} height={size} className="transform -rotate-90">
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#1e293b"
+          strokeWidth={strokeWidth}
+        />
+        {/* Segment arcs */}
+        {segmentArcs.map((arc, i) => (
+          <circle
+            key={i}
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={arc.color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={arc.dashArray}
+            strokeDashoffset={arc.dashOffset}
+            style={{ filter: `drop-shadow(0 0 4px ${arc.color}30)` }}
+          />
+        ))}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[10px] text-slate-400">{centerSubLabel}</span>
+        <span className="text-base font-bold text-white">{centerLabel}</span>
       </div>
     </div>
   );

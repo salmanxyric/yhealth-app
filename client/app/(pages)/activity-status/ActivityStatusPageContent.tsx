@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Calendar, List, BarChart3, Settings, Plus, Loader2 } from "lucide-react";
 import { StatusIndicator } from "@/app/components/activity/StatusIndicator";
@@ -11,12 +11,8 @@ import { StatusStats } from "./components/StatusStats";
 import { StatusPickerModal } from "./components/StatusPickerModal";
 import { activityStatusService } from "@/src/shared/services/activity-status.service";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import {
-  DashboardSidebar,
-  MobileBottomNav,
-  TabId,
-} from "../dashboard/components";
+import { DashboardUnderlineTabs } from "@/app/(pages)/dashboard/components/DashboardUnderlineTabs";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/app/context/AuthContext";
 
 type InternalTabType = "calendar" | "timeline" | "stats" | "settings";
@@ -24,10 +20,9 @@ type InternalTabType = "calendar" | "timeline" | "stats" | "settings";
 function ActivityStatusPageInner() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  // Dashboard sidebar tab state
-  const [sidebarActiveTab, setSidebarActiveTab] = useState<TabId>("activity");
+
+  // Internal tab state
 
   // Internal page tab state
   const [activeTab, setActiveTab] = useState<InternalTabType>("calendar");
@@ -36,24 +31,6 @@ function ActivityStatusPageInner() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Handle sidebar tab change
-  const handleSidebarTabChange = useCallback(
-    (tab: string) => {
-      if (tab === "ai-coach") {
-        router.push("/ai-coach");
-      } else if (tab === "voice-assistant") {
-        router.push("/voice-assistant");
-      } else if (tab === "activity-status") {
-        router.push("/activity-status");
-      } else {
-        setSidebarActiveTab(tab as TabId);
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("tab", tab);
-        router.push(`/dashboard?${params.toString()}`, { scroll: false });
-      }
-    },
-    [router, searchParams]
-  );
-
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -130,25 +107,15 @@ function ActivityStatusPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      {/* Sidebar - Desktop */}
-      <div className="hidden md:block">
-        <DashboardSidebar activeTab={sidebarActiveTab} onTabChange={handleSidebarTabChange} />
+    <DashboardLayout activeTab="activity-status">
+      {/* Animated Background */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-600/8 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-sky-600/8 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
       </div>
 
-      {/* Mobile Bottom Navigation */}
-      <MobileBottomNav activeTab={sidebarActiveTab} onTabChange={handleSidebarTabChange} />
-
-      {/* Main Content */}
-      <div className="md:ml-64 min-h-screen pb-20 md:pb-0 overflow-x-hidden">
-        {/* Animated Background */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl" />
-        </div>
-
-        <div className="relative min-h-full bg-gradient-to-br from-slate-950 to-slate-900">
+      <div className="relative min-h-full">
           <div className="container mx-auto px-4 py-8 max-w-8xl">
             {/* Header */}
             <motion.div
@@ -166,28 +133,16 @@ function ActivityStatusPageInner() {
                 <StatusIndicator showLabel />
               </div>
 
-              {/* Tabs */}
-              <div className="flex gap-2 bg-slate-900/80 rounded-xl p-2 border border-white/10">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  return (
-                    <Button
-                      key={tab.id}
-                      variant="ghost"
-                      onClick={() => setActiveTab(tab.id)}
-                      className={cn(
-                        "flex-1 flex items-center justify-center gap-2 rounded-lg transition-all",
-                        activeTab === tab.id
-                          ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-sm"
-                          : "text-slate-400 hover:text-white hover:bg-white/5"
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="hidden sm:inline">{tab.label}</span>
-                    </Button>
-                  );
-                })}
-              </div>
+              <DashboardUnderlineTabs
+                layoutId="activityStatusSubTabUnderline"
+                activeId={activeTab}
+                onTabChange={(id) => setActiveTab(id as InternalTabType)}
+                tabs={tabs.map((t) => ({
+                  id: t.id,
+                  label: t.label,
+                  icon: t.icon,
+                }))}
+              />
             </motion.div>
 
             {/* Tab Content */}
@@ -221,7 +176,7 @@ function ActivityStatusPageInner() {
             <Button
               onClick={() => setIsNewStatusModalOpen(true)}
               size="lg"
-              className="h-14 w-14 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 shadow-lg shadow-pink-500/50 hover:shadow-pink-500/70 transition-all"
+              className="h-14 w-14 rounded-full bg-gradient-to-r from-emerald-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 shadow-lg shadow-emerald-600/40 hover:shadow-emerald-600/60 transition-all"
             >
               <Plus className="h-6 w-6" />
             </Button>
@@ -235,8 +190,7 @@ function ActivityStatusPageInner() {
             onSuccess={handleNewStatusSuccess}
           />
         </div>
-      </div>
-    </div>
+    </DashboardLayout>
   );
 }
 

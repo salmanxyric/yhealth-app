@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { type FinanceTransaction, type FinanceCategory, FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
+import type { FinanceTransaction, FinanceCategory } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 import { CHART_COLORS, formatCurrency } from "../../lib/motion";
 
 interface MiniCategoryRingProps {

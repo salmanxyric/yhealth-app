@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronDown, LayoutGrid } from 'lucide-react';
-import { type GraphNode, type GraphNodeCategory, NODE_CATEGORY_COLORS } from '@shared/types/domain/knowledge-graph';
+import type { GraphNode, GraphNodeCategory } from '@shared/types/domain/knowledge-graph';
+import { NODE_CATEGORY_COLORS } from '@shared/types/domain/knowledge-graph';
 
 interface CardsViewProps {
   nodes: GraphNode[];

@@ -2831,7 +2831,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       <div className="absolute inset-0 z-[5] cursor-pointer" onClick={toggleConversation}>
         <AvatarLayer
           ref={avatarRef}
-          vrmUrl="/models/Char2.vrm"
+          vrmUrl="/models/coach-avatar.vrm"
           autoMapVoiceState
           className="w-full h-full"
         />

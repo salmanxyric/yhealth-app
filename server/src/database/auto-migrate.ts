@@ -487,6 +487,10 @@ async function runFullSchema(): Promise<void> {
     '109-streak-activity-log.sql',
     '110-streak-freeze-log.sql',
     '111-streak-rewards.sql',
+    // Obstacle diagnosis
+    '116-goal-obstacles.sql',
+    // Goal reconnection (DKA prevention)
+    '117-goal-reconnections.sql',
     // Triggers (must be last)
     '99-triggers.sql',
   ];
@@ -1004,6 +1008,8 @@ export async function autoMigrate(): Promise<{
             'streak_activity_log': '109-streak-activity-log.sql',
             'streak_freeze_log': '110-streak-freeze-log.sql',
             'streak_rewards': '111-streak-rewards.sql',
+            'goal_obstacles': '116-goal-obstacles.sql',
+            'goal_reconnections': '117-goal-reconnections.sql',
           };
           
           const tableFile = tableToFileMap[table] || tableFiles.find(f => {

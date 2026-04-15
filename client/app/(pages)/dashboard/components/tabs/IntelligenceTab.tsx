@@ -8,6 +8,7 @@ import { CorrelationExplorer } from './intelligence/CorrelationExplorer';
 import { PredictionTracker } from './intelligence/PredictionTracker';
 import { ReportViewer } from './intelligence/ReportViewer';
 import { HealthScoreBreakdown } from './intelligence/HealthScoreBreakdown';
+import { DashboardUnderlineTabs } from '../DashboardUnderlineTabs';
 
 const SUB_TABS = [
   { id: 'insights', label: 'Insights', icon: Sparkles },
@@ -24,36 +25,12 @@ export function IntelligenceTab() {
 
   return (
     <div className="space-y-6">
-      {/* Sub-tab Navigation */}
-      <div className="flex items-center gap-2 p-1.5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-xl overflow-x-auto scrollbar-hide">
-        {SUB_TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeSubTab === tab.id;
-          return (
-            <motion.button
-              key={tab.id}
-              onClick={() => setActiveSubTab(tab.id)}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className={`relative flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
-                isActive ? 'text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="activeIntelligenceSubTab"
-                  className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-lg"
-                  initial={false}
-                  transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
-                  style={{ boxShadow: '0 0 20px rgba(99, 102, 241, 0.3)' }}
-                />
-              )}
-              <Icon className="w-4 h-4 relative z-10" />
-              <span className="relative z-10">{tab.label}</span>
-            </motion.button>
-          );
-        })}
-      </div>
+      <DashboardUnderlineTabs
+        layoutId="intelligenceSubTabUnderline"
+        activeId={activeSubTab}
+        onTabChange={(id) => setActiveSubTab(id as SubTabId)}
+        tabs={SUB_TABS.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+      />
 
       {/* Sub-tab Content */}
       <AnimatePresence mode="wait">

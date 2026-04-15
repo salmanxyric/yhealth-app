@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { AnimatedIcon } from "@/components/ui/animated-icon";
-import { type FinanceTransaction, type FinanceCategory, type FinanceTransactionType, type CreateTransactionInput, FINANCE_CATEGORY_ICONS,
-  FINANCE_CATEGORY_LABELS, } from "@shared/types/domain/finance";
+import type { FinanceTransaction, FinanceCategory, FinanceTransactionType, CreateTransactionInput } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 import {
   formatCurrency,
   fadeSlideUp,

@@ -10,8 +10,8 @@ import { api } from "@/lib/api-client";
 import {
   FINANCE_CATEGORY_ICONS,
   FINANCE_CATEGORY_LABELS,
-  type FinanceCategory,
 } from "@shared/types/domain/finance";
+import type { FinanceCategory } from "@shared/types/domain/finance";
 import { formatCurrency } from "../lib/motion";
 
 interface ExtractedTransaction {

@@ -9,9 +9,6 @@ out
 # Git history (large)
 .git
 
-# Client (not needed - server-only deployment)
-client
-
 # Tests
 coverage
 __tests__
@@ -47,13 +44,6 @@ temp
 .turbo
 .eslintcache
 
-# Images/media
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.svg
-*.ico
+# Large media (keep client/public assets — needed by Dockerfile COPY)
 *.mp4
 *.webm
-*.webp

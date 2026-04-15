@@ -64,3 +64,21 @@ export type {
   CoachingPreferences,
   UserPreferences,
 } from './preferences';
+
+// Obstacle types
+export type {
+  ObstacleCategory,
+  GoalRefType,
+  ObstacleUserResponse,
+  SuggestedAdjustment,
+  GoalObstacle,
+  ObstacleDiagnosisBlock,
+} from './obstacle';
+
+// Goal Reconnection types
+export type {
+  ReconnectionTier,
+  ReconnectionResponse,
+  GoalReconnection,
+  ReconnectionRespondInput,
+} from './reconnection';

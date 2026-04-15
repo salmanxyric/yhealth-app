@@ -4,7 +4,8 @@ import { useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 import { CHART_COLORS, fadeSlideUp, formatCurrency } from "../../lib/motion";
-import { type CategoryBreakdownItem, type FinanceCategory, FINANCE_CATEGORY_LABELS, FINANCE_CATEGORY_ICONS } from "@shared/types/domain/finance";
+import type { CategoryBreakdownItem, FinanceCategory } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_LABELS, FINANCE_CATEGORY_ICONS } from "@shared/types/domain/finance";
 
 interface CategoryDonutProps {
   data: CategoryBreakdownItem[];

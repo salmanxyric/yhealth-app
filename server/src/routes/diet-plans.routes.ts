@@ -378,7 +378,7 @@ JSON: {"mealName":"","description":"","calories":0,"proteinGrams":0,"carbsGrams"
       const response = await aiProviderService.generateCompletion({
         systemPrompt,
         userPrompt,
-        maxTokens: 1024,
+        maxTokens: 2048,
         temperature: 0.4,
         jsonMode: true,
       });

@@ -128,7 +128,6 @@ const sections: NavSection[] = [
     collapsible: true,
     items: [
       { id: "chat", label: "Chat", icon: <RiChat3Fill className={S18} />, href: "/chat" },
-      { id: "chat-history", label: "Chat History", icon: <RiSparklingFill className={S18} />, href: "/chat-history" },
       { id: "voice-assistant", label: "Voice Assistant", icon: <RiMicFill className={S18} />, href: "/voice-assistant" },
       { id: "voice-call", label: "Call Coach", icon: <RiPhoneFill className={S18} />, href: "/voice-call" },
       { id: "notifications", label: "Notifications", icon: <RiNotification3Fill className={S18} />, href: "/notifications" },
@@ -351,7 +350,7 @@ export function DashboardSidebar({
           "transition-colors duration-150 cursor-pointer group",
           h,
           isActive
-            ? "bg-sky-500/[0.08] text-white"
+            ? "bg-sky-600/[0.08] text-white"
             : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
         )}
       >
@@ -359,7 +358,7 @@ export function DashboardSidebar({
         {isActive && (
           <motion.div
             layoutId="sidebarActiveIndicator"
-            className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-sky-500"
+            className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-sky-600"
             transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
           />
         )}
@@ -469,7 +468,7 @@ export function DashboardSidebar({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search...  ⌘K"
-              className="w-full h-8 pl-8 pr-3 rounded-lg text-[12px] font-medium bg-white/[0.03] border border-white/[0.06] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-sky-500/30 focus:bg-white/[0.05] transition-colors"
+              className="w-full h-8 pl-8 pr-3 rounded-lg text-[12px] font-medium bg-white/[0.03] border border-white/[0.06] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-sky-600/30 focus:bg-white/[0.05] transition-colors"
             />
           </div>
         </div>
@@ -599,7 +598,7 @@ function renderSearchInput(
           className={cn(
             "w-full h-8 pl-8 pr-3 rounded-lg text-[12px] font-medium",
             "bg-white/[0.03] border border-white/[0.06] text-slate-300 placeholder-slate-600",
-            "focus:outline-none focus:border-sky-500/30 focus:bg-white/[0.05] transition-colors"
+            "focus:outline-none focus:border-sky-600/30 focus:bg-white/[0.05] transition-colors"
           )}
         />
       </div>
@@ -627,7 +626,7 @@ function renderFooter(
             <Image src={user.avatarUrl} alt={`${user?.firstName || "User"} avatar`} fill sizes="32px" className="object-cover" unoptimized />
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-lg shadow-emerald-500/20">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-600 to-sky-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-lg shadow-emerald-500/20">
             {user?.firstName?.[0]?.toUpperCase() || "U"}{user?.lastName?.[0]?.toUpperCase() || ""}
           </div>
         )}
@@ -728,10 +727,10 @@ function MobileNavDrawer({
         onClick={(e) => { onNavClick(enriched, e); onClose(); }}
         className={cn(
           "relative flex items-center gap-2.5 h-10 px-2.5 rounded-lg text-[13px] font-medium transition-colors",
-          isActive ? "bg-sky-500/[0.08] text-sky-400" : "text-slate-300 hover:bg-white/[0.04]"
+          isActive ? "bg-sky-600/[0.08] text-sky-500" : "text-slate-300 hover:bg-white/[0.04]"
         )}
       >
-        {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-sky-500" />}
+        {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-sky-600" />}
         <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">{enriched.icon}</span>
         <span className="flex-1 truncate">{enriched.label}</span>
         {enriched.badge && (
@@ -876,7 +875,7 @@ export function MobileBottomNav({
                 onClick={(e) => handleNavClick(item, e)}
                 className={cn(
                   "flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1.5 px-2 rounded-xl transition-colors",
-                  isActive ? "bg-sky-500/[0.08] text-sky-400" : "text-slate-500 hover:text-slate-400"
+                  isActive ? "bg-sky-600/[0.08] text-sky-500" : "text-slate-500 hover:text-slate-400"
                 )}
               >
                 <span className="w-5 h-5 relative">

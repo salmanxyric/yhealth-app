@@ -49,6 +49,7 @@ import { TodayTab, PlansTab, RecipesTab } from "./nutrition/tabs";
 import { MealHistoryTab } from "./nutrition/MealHistoryTab";
 import { PRESET_FOODS, FOOD_CATEGORY_ICONS, getFoodIcon } from "./nutrition/constants";
 import { MacroCircularChart } from "./nutrition/MacroCircularChart";
+import { DashboardUnderlineTabs } from "../DashboardUnderlineTabs";
 
 // ============================================
 // TYPES
@@ -295,6 +296,7 @@ export function NutritionTab() {
     instructions: RecipeInstruction[];
     tags: string[];
     dietaryFlags: string[];
+    imageUrl: string | null;
   }>({
     name: "",
     description: "",
@@ -313,12 +315,21 @@ export function NutritionTab() {
     instructions: [],
     tags: [],
     dietaryFlags: [],
+    imageUrl: null,
   });
+  const [isUploadingRecipeImage, setIsUploadingRecipeImage] = useState(false);
+  const recipeImageInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modal states
   const [showCreateMealModal, setShowCreateMealModal] = useState(false);
   const [showCreatePlanModal, setShowCreatePlanModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [mealInputMode, setMealInputMode] = useState<"manual" | "ai" | "image">("manual");
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [showCustomFood, setShowCustomFood] = useState(false);
+  const [customFoodDraft, setCustomFoodDraft] = useState<{
+    name: string; calories: string; protein: string; carbs: string; fat: string; portion: string;
+  }>({ name: "", calories: "", protein: "", carbs: "", fat: "", portion: "1 serving" });
   const [editingMeal, setEditingMeal] = useState<ClientMeal | null>(null);
   const [editingPlan, setEditingPlan] = useState<ClientDietPlan | null>(null);
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
@@ -1129,6 +1140,7 @@ export function NutritionTab() {
         instructions: recipeFormData.instructions,
         tags: recipeFormData.tags,
         dietaryFlags: recipeFormData.dietaryFlags,
+        imageUrl: recipeFormData.imageUrl || undefined,
       });
       if (response.success && response.data?.recipe) {
         setRecipes((prev) => [response.data!.recipe, ...prev]);
@@ -1165,6 +1177,7 @@ export function NutritionTab() {
         instructions: recipeFormData.instructions,
         tags: recipeFormData.tags,
         dietaryFlags: recipeFormData.dietaryFlags,
+        imageUrl: recipeFormData.imageUrl ?? undefined,
       });
       if (response.success && response.data?.recipe) {
         setRecipes((prev) =>
@@ -1294,6 +1307,7 @@ export function NutritionTab() {
       instructions: [],
       tags: [],
       dietaryFlags: [],
+      imageUrl: null,
     });
     // Reset recipe image capture states
     setRecipeCapturedImage(null);
@@ -1323,8 +1337,34 @@ export function NutritionTab() {
       instructions: recipe.instructions,
       tags: recipe.tags,
       dietaryFlags: recipe.dietaryFlags,
+      imageUrl: recipe.imageUrl ?? null,
     });
     setShowCreateRecipeModal(true);
+  };
+
+  // Upload a recipe image to R2 and store the returned public URL on the form
+  const handleRecipeImageSelect = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image too large (max 10 MB)");
+      return;
+    }
+    setIsUploadingRecipeImage(true);
+    try {
+      const { imageUrl } = await nutritionService.uploadRecipeImage(file);
+      setRecipeFormData((prev) => ({ ...prev, imageUrl }));
+      toast.success("Image uploaded");
+    } catch (err) {
+      console.error("Failed to upload recipe image:", err);
+      toast.error("Upload failed. Please try again.");
+    } finally {
+      setIsUploadingRecipeImage(false);
+      if (recipeImageInputRef.current) recipeImageInputRef.current.value = "";
+    }
   };
 
   const openEditMeal = (meal: ClientMeal) => {
@@ -1412,10 +1452,42 @@ export function NutritionTab() {
   };
 
   const addFoodItem = (food: MealFood) => {
+    const alreadyAdded = mealFormData.items.some(
+      (i) => i.name.trim().toLowerCase() === food.name.trim().toLowerCase(),
+    );
+    if (alreadyAdded) {
+      toast(`${food.name} is already added`, { icon: "ℹ️" });
+      return;
+    }
     setMealFormData((prev) => ({
       ...prev,
       items: [...prev.items, { ...food, id: Date.now().toString(), eaten: true }],
     }));
+    toast.success(`${food.name} added`);
+  };
+
+  const addCustomFood = () => {
+    const name = customFoodDraft.name.trim();
+    if (!name) {
+      toast.error("Please enter a food name");
+      return;
+    }
+    const toNum = (v: string) => {
+      const n = parseFloat(v);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+    const food: MealFood = {
+      id: `custom-${Date.now()}`,
+      name,
+      calories: Math.round(toNum(customFoodDraft.calories)),
+      protein: toNum(customFoodDraft.protein),
+      carbs: toNum(customFoodDraft.carbs),
+      fat: toNum(customFoodDraft.fat),
+      portion: customFoodDraft.portion.trim() || "1 serving",
+    };
+    addFoodItem(food);
+    setCustomFoodDraft({ name: "", calories: "", protein: "", carbs: "", fat: "", portion: "1 serving" });
+    setShowCustomFood(false);
   };
 
   const removeFoodItem = (itemId: string) => {
@@ -2647,7 +2719,13 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
       console.log("[RecipeAnalysis] Analysis text (first 1000 chars):", analysisText.substring(0, 1000));
       
       setRecipeImageAnalysisResult(analysisText);
-      
+
+      // Persist the analyzed image URL on the recipe form so it shows up on the
+      // recipe card after save (R2 URL returned by the analyze-image endpoint).
+      if (result.imageUrl) {
+        setRecipeFormData((prev) => ({ ...prev, imageUrl: result.imageUrl }));
+      }
+
       // Parse and populate recipe form
       const parsedRecipe = parseRecipeAnalysis(analysisText);
       console.log("[RecipeAnalysis] Parsed recipe:", parsedRecipe);
@@ -2822,127 +2900,77 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
 
   return (
     <div className="space-y-4 sm:space-y-6 overflow-x-hidden">
-      {/* Header with Macro Overview - Modern Glass Design */}
+      {/* Header — Title + Add Meal CTA */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl border border-white/[0.08] p-4 sm:p-6"
-        style={{
-          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 78, 59, 0.12) 50%, rgba(15, 23, 42, 0.95) 100%)',
-          backdropFilter: 'blur(24px)',
-        }}
+        className="flex items-center justify-between gap-3"
       >
-        {/* Ambient glow effects */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/8 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-500/6 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/4 pointer-events-none" />
-
-        <div className="relative z-10">
-          {/* Top row - Title & CTA */}
-          <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 shrink-0">
-                <Utensils className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-[15px] sm:text-[17px] font-bold text-white tracking-tight">Today&apos;s Nutrition</h2>
-                <p className="text-slate-400 text-[12px] sm:text-[13px] truncate mt-0.5">
-                  {activePlan ? activePlan.name : "No active plan — create one to track macros"}
-                </p>
-              </div>
-            </div>
-            <motion.button
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => {
-                resetMealForm();
-                setEditingMeal(null);
-                setShowCreateMealModal(true);
-              }}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-emerald-500 text-white font-semibold text-[13px] hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/25 shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add</span> Meal
-            </motion.button>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/20 shrink-0">
+            <Utensils className="w-5 h-5 text-emerald-400" />
           </div>
-
-          {/* Macro Progress Rings - Modern Filled Arcs */}
-          <div className="grid grid-cols-4 gap-2 sm:gap-6">
-            {Object.entries(macros).map(([key, macroValue]) => {
-              const colorMap: Record<string, { primary: string; secondary: string }> = {
-                calories: { primary: '#f97316', secondary: '#ef4444' },
-                protein: { primary: '#ec4899', secondary: '#f43f5e' },
-                carbs: { primary: '#f59e0b', secondary: '#eab308' },
-                fat: { primary: '#a855f7', secondary: '#8b5cf6' },
-              };
-              const colors = colorMap[key] || { primary: '#10b981', secondary: '#059669' };
-
-              return (
-                <motion.div
-                  key={key}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: Object.keys(macros).indexOf(key) * 0.1 }}
-                  className="flex justify-center"
-                >
-                  <MacroCircularChart
-                    value={macroValue.current}
-                    max={macroValue.target}
-                    label={key.charAt(0).toUpperCase() + key.slice(1)}
-                    unit={macroValue.unit}
-                    primaryColor={colors.primary}
-                    secondaryColor={colors.secondary}
-                    size="sm"
-                    className="sm:hidden"
-                  />
-                  <MacroCircularChart
-                    value={macroValue.current}
-                    max={macroValue.target}
-                    label={key.charAt(0).toUpperCase() + key.slice(1)}
-                    unit={macroValue.unit}
-                    primaryColor={colors.primary}
-                    secondaryColor={colors.secondary}
-                    size="md"
-                    className="hidden sm:flex"
-                  />
-                </motion.div>
-              );
-            })}
+          <div className="min-w-0">
+            <h2 className="text-[15px] sm:text-[18px] font-bold text-white tracking-tight">Today&apos;s Nutrition</h2>
+            <p className="text-slate-400 text-[12px] sm:text-[13px] truncate mt-0.5">
+              {activePlan ? activePlan.name : "No active plan — create one to track macros"}
+            </p>
           </div>
         </div>
+        <motion.button
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.96 }}
+          onClick={() => {
+            resetMealForm();
+            setEditingMeal(null);
+            setShowCreateMealModal(true);
+          }}
+          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[13px] transition-all shadow-lg shadow-emerald-600/25 shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">Add</span> Meal
+        </motion.button>
       </motion.div>
 
-      {/* Modern Tab Navigation */}
-      <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
-        <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-sm w-max">
-          {[
-            { id: "today", label: "Today", icon: Utensils },
-            { id: "plan", label: "Plans", icon: Clock },
-            { id: "recipes", label: "Recipes", icon: Salad },
-            { id: "history", label: "History", icon: Calendar },
-            { id: "analytics", label: "Analytics", icon: BarChart3 },
-          ].map((view) => (
-            <button
-              key={view.id}
-              onClick={() => setActiveView(view.id as typeof activeView)}
-              className={`relative flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[13px] sm:text-sm font-medium transition-all whitespace-nowrap ${
-                activeView === view.id
-                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
-                  : "text-slate-400 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              <view.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              {view.label}
-              {activeView === view.id && (
-                <motion.div
-                  layoutId="activeNutritionTab"
-                  className="absolute inset-0 rounded-lg bg-emerald-500/10 border border-emerald-500/20 -z-10"
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
+      {/* Today's Nutrition — 4 standalone macro cards with sparklines */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {(
+          [
+            { key: "calories", label: "Calories", accent: "#f97316", unitOverride: "Kcal" },
+            { key: "protein",  label: "Protein",  accent: "#06b6d4", unitOverride: "g" },
+            { key: "carbs",    label: "Carbs",    accent: "#a855f7", unitOverride: "g" },
+            { key: "fat",      label: "Fat",      accent: "#fb7185", unitOverride: "g" },
+          ] as const
+        ).map((m, idx) => {
+          const macroValue = macros[m.key];
+          if (!macroValue) return null;
+          return (
+            <MacroHeroCard
+              key={m.key}
+              index={idx}
+              label={m.label}
+              current={macroValue.current}
+              target={macroValue.target}
+              unit={m.unitOverride}
+              accent={m.accent}
+            />
+          );
+        })}
       </div>
+
+      <DashboardUnderlineTabs
+        layoutId="nutritionSubTabUnderline"
+        activeId={activeView}
+        onTabChange={(id) => setActiveView(id as typeof activeView)}
+        className="-mx-1 px-1"
+        tabs={[
+          { id: "today", label: "Today", icon: Utensils },
+          { id: "plan", label: "Plans", icon: Clock },
+          { id: "recipes", label: "Recipes", icon: Salad },
+          { id: "history", label: "History", icon: Calendar },
+          { id: "analytics", label: "Analytics", icon: BarChart3 },
+        ]}
+      />
 
       <AnimatePresence mode="wait">
         {/* TODAY VIEW */}
@@ -3089,64 +3117,76 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl"
+              className="w-full max-w-4xl max-h-[90vh] overflow-y-auto scrollbar-hide bg-[linear-gradient(145deg,#0f1219_0%,#0a0d14_100%)] rounded-3xl border border-white/[0.08] shadow-2xl shadow-black/50"
             >
-              <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-4 sm:p-6">
+              <div className="sticky top-0 z-10 bg-[linear-gradient(180deg,rgba(15,18,25,0.98)_0%,rgba(15,18,25,0.92)_100%)] backdrop-blur-xl border-b border-white/[0.06] px-5 sm:px-8 py-4 sm:py-5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-[15px] sm:text-base font-bold text-white">{editingMeal ? "Edit Meal" : "Log New Meal"}</h2>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/25">
+                      <Utensils className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-300" />
+                    </div>
+                    <div>
+                      <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                        {editingMeal ? "Edit Meal" : "Log New Meal"}
+                      </h2>
+                      <p className="text-[11px] sm:text-xs text-slate-400">
+                        {editingMeal ? "Update your meal details and foods" : "Track what you ate with precision"}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setShowCreateMealModal(false)}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                    className="p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+              <div className="p-5 sm:p-8 flex flex-col gap-5 sm:gap-6">
                 {/* Meal Name */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Meal Name</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Meal Name</label>
                   <input
                     type="text"
                     value={mealFormData.name}
                     onChange={(e) => setMealFormData((prev) => ({ ...prev, name: e.target.value }))}
                     placeholder="e.g., Breakfast, Post-workout Shake"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                   />
                 </div>
 
                 {/* Time & Icon */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Time</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Time</label>
                     <div className="relative">
                       <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-                    <input
-                      type="time"
-                      value={mealFormData.time}
-                      onChange={(e) => setMealFormData((prev) => ({ ...prev, time: e.target.value }))}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
+                      <input
+                        type="time"
+                        value={mealFormData.time}
+                        onChange={(e) => setMealFormData((prev) => ({ ...prev, time: e.target.value }))}
+                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                      />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[13px] sm:text-sm font-medium text-slate-300 mb-1.5 sm:mb-2">Meal Type</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Meal Type</label>
                     <div className="flex gap-2">
                       {mealIconsList.map((item) => (
                         <button
                           key={item.id}
                           onClick={() => setMealFormData((prev) => ({ ...prev, icon: item.id as typeof mealFormData.icon }))}
-                          className={`flex-1 p-3 rounded-xl border transition-colors ${
+                          className={`flex-1 p-3 rounded-xl border transition-all ${
                             mealFormData.icon === item.id
-                              ? "border-emerald-500 bg-emerald-500/20"
-                              : "border-slate-700 bg-slate-800 hover:border-slate-600"
+                              ? "border-emerald-500/60 bg-emerald-500/15 shadow shadow-emerald-500/20"
+                              : "border-white/[0.08] bg-white/[0.02] hover:border-white/[0.15] hover:bg-white/[0.04]"
                           }`}
                           title={item.label}
                         >
                           <item.icon
-                            className={`w-5 h-5 mx-auto ${
-                              mealFormData.icon === item.id ? "text-emerald-400" : "text-slate-400"
+                            className={`w-5 h-5 mx-auto transition-colors ${
+                              mealFormData.icon === item.id ? "text-emerald-300" : "text-slate-400"
                             }`}
                           />
                         </button>
@@ -3155,7 +3195,21 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                   </div>
                 </div>
 
+                {/* Input Mode Tabs — underline style */}
+                <DashboardUnderlineTabs
+                  layoutId="mealInputModeTabs"
+                  activeId={mealInputMode}
+                  onTabChange={(id) => setMealInputMode(id as typeof mealInputMode)}
+                  equalWidth
+                  tabs={[
+                    { id: "manual", label: "Manual", icon: Search },
+                    { id: "ai", label: "AI", icon: Sparkles },
+                    { id: "image", label: "Image", icon: Camera },
+                  ]}
+                />
+
                 {/* Image Capture/Upload for Meal Analysis */}
+                {mealInputMode === "image" && (
                 <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     {imageScanMode === 'label' ? (
@@ -3445,8 +3499,10 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                     </button>
                   )}
                 </div>
+                )}
 
                 {/* AI Meal Generation */}
+                {mealInputMode === "ai" && (
                 <div className="rounded-xl bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Sparkles className="w-5 h-5 text-purple-400" />
@@ -3486,25 +3542,38 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                     )}
                   </button>
                 </div>
+                )}
 
-                {/* Food Items Added */}
+                {/* Food Items Added — visible in all tabs, rendered last */}
                 {mealFormData.items.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Added Foods</label>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {mealFormData.items.map((item) => (
+                  <div className="order-last">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Added Foods</label>
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[10px] font-semibold">
+                          {mealFormData.items.length}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 max-h-[26rem] overflow-y-auto scrollbar-hide pr-1">
+                      {mealFormData.items.map((item) => {
+                        const isEditing = editingItemId === item.id;
+                        const muted = item.eaten === false;
+                        return (
                         <div
                           key={item.id}
-                          className={`flex items-center justify-between p-3 rounded-xl border transition-colors ${
-                            item.eaten === false
-                              ? 'bg-slate-800/30 border-slate-700/30 opacity-60'
-                              : 'bg-slate-800 border-slate-700'
-                          }`}
+                          className={`group rounded-2xl border transition-all overflow-hidden ${
+                            muted
+                              ? 'bg-white/[0.02] border-white/[0.05] opacity-60'
+                              : isEditing
+                                ? 'bg-[linear-gradient(145deg,#0f1219_0%,#0a0d14_100%)] border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+                                : 'bg-[linear-gradient(145deg,#0f1219_0%,#0a0d14_100%)] border-white/[0.07] hover:border-white/[0.14]'
+                          } ${isEditing ? 'lg:col-span-2' : ''}`}
                         >
-                          <div className="flex items-center gap-3 flex-1">
+                          <div className="flex items-center gap-3 p-3">
                             <input
                               type="checkbox"
-                              checked={item.eaten !== false}
+                              checked={!muted}
                               onChange={(e) => {
                                 setMealFormData((prev) => ({
                                   ...prev,
@@ -3513,34 +3582,106 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                                   ),
                                 }));
                               }}
-                              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
+                              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer shrink-0"
                             />
-                            <span className="text-lg shrink-0">{getFoodIcon(item.name)}</span>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className={`text-sm ${item.eaten === false ? 'text-slate-500 line-through' : 'text-white'}`}>
+                            <span className="w-10 h-10 flex items-center justify-center text-2xl rounded-xl bg-white/[0.04] shrink-0">
+                              {getFoodIcon(item.name)}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className={`text-sm font-medium truncate ${muted ? 'text-slate-500 line-through' : 'text-white'}`}>
                                   {item.name}
                                 </p>
                                 {item.id.startsWith('ai-') && (
-                                  <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-medium">
+                                  <span className="px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[9px] font-bold uppercase tracking-wider shrink-0">
                                     AI
                                   </span>
                                 )}
                               </div>
-                            <p className="text-xs text-slate-500">
-                              {item.calories} kcal • P: {item.protein}g • C: {item.carbs}g • F: {item.fat}g
-                            </p>
-                              <p className="text-xs text-slate-600 mt-0.5">{item.portion}</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">{item.portion}</p>
+                              <div className="flex items-center gap-1.5 mt-1.5 text-[11px] overflow-x-auto scrollbar-hide whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-200 shrink-0">
+                                  <Flame className="w-3 h-3" />{item.calories}
+                                </span>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-500/10 text-red-200 shrink-0">
+                                  <Beef className="w-3 h-3" />{item.protein}g
+                                </span>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-200 shrink-0">
+                                  <Wheat className="w-3 h-3" />{item.carbs}g
+                                </span>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-200 shrink-0">
+                                  <Apple className="w-3 h-3" />{item.fat}g
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0 self-start">
+                              <button
+                                onClick={() => setEditingItemId(isEditing ? null : item.id)}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  isEditing
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-emerald-300'
+                                }`}
+                                title={isEditing ? 'Done editing' : 'Edit nutrition'}
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (editingItemId === item.id) setEditingItemId(null);
+                                  removeFoodItem(item.id);
+                                }}
+                                className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
-                          <button
-                            onClick={() => removeFoodItem(item.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors ml-2"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                          {isEditing && (
+                            <div className="px-3 pb-3 pt-3 border-t border-white/[0.06] bg-white/[0.02]">
+                              <p className="text-[10px] uppercase tracking-wider text-emerald-300/80 font-semibold mb-2">Edit nutrition for this item</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {[
+                                  { key: 'calories', label: 'Cal', icon: Flame, color: 'text-orange-400', step: '1' },
+                                  { key: 'protein', label: 'Protein (g)', icon: Beef, color: 'text-red-400', step: '0.1' },
+                                  { key: 'carbs', label: 'Carbs (g)', icon: Wheat, color: 'text-amber-400', step: '0.1' },
+                                  { key: 'fat', label: 'Fat (g)', icon: Apple, color: 'text-purple-400', step: '0.1' },
+                                ].map((field) => {
+                                  const Icon = field.icon;
+                                  const val = (item as unknown as Record<string, number>)[field.key];
+                                  return (
+                                    <div key={field.key}>
+                                      <label className="block text-[10px] text-slate-500 mb-1 uppercase tracking-wider">{field.label}</label>
+                                      <div className="relative">
+                                        <Icon className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 ${field.color}`} />
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step={field.step}
+                                          value={val ?? 0}
+                                          onChange={(e) => {
+                                            const raw = e.target.value;
+                                            const num = raw === '' ? 0 : (field.step === '1' ? parseInt(raw, 10) : parseFloat(raw));
+                                            if (Number.isNaN(num)) return;
+                                            setMealFormData((prev) => ({
+                                              ...prev,
+                                              items: prev.items.map((i) =>
+                                                i.id === item.id ? { ...i, [field.key]: num } : i
+                                              ),
+                                            }));
+                                          }}
+                                          className="w-full pl-7 pr-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {/* Totals - Separated Micro and Macro */}
@@ -3685,8 +3826,28 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                 )}
 
                 {/* Food Search */}
+                {mealInputMode === "manual" && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Add Foods</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Add Foods</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCustomFood((prev) => !prev);
+                        if (!showCustomFood && foodSearch.trim()) {
+                          setCustomFoodDraft((d) => ({ ...d, name: foodSearch.trim() }));
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                        showCustomFood
+                          ? "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40"
+                          : "bg-white/[0.04] text-slate-300 border border-white/[0.08] hover:bg-white/[0.08] hover:text-white"
+                      }`}
+                    >
+                      <Plus className="w-3 h-3" />
+                      {showCustomFood ? "Hide custom form" : "Add custom food"}
+                    </button>
+                  </div>
                   <div className="relative mb-3">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                     <input
@@ -3694,9 +3855,83 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                       value={foodSearch}
                       onChange={(e) => setFoodSearch(e.target.value)}
                       placeholder="Search foods..."
-                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                     />
                   </div>
+
+                  {/* Custom Food Form */}
+                  {showCustomFood && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mb-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4"
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="p-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25">
+                          <Plus className="w-3.5 h-3.5 text-emerald-300" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-200">Create Custom Food</p>
+                          <p className="text-[11px] text-slate-400">Add your own food with exact nutrition</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={customFoodDraft.name}
+                          onChange={(e) => setCustomFoodDraft((d) => ({ ...d, name: e.target.value }))}
+                          placeholder="Food name (e.g., Grandma's Lasagna)"
+                          className="sm:col-span-2 w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-white/[0.08] text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                        />
+                        <input
+                          type="text"
+                          value={customFoodDraft.portion}
+                          onChange={(e) => setCustomFoodDraft((d) => ({ ...d, portion: e.target.value }))}
+                          placeholder="Portion (e.g., 100g, 1 bowl)"
+                          className="sm:col-span-2 w-full px-3 py-2.5 rounded-xl bg-slate-900/60 border border-white/[0.08] text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { key: "calories", label: "Cal", icon: Flame, color: "text-orange-400", step: "1" },
+                          { key: "protein", label: "Protein (g)", icon: Beef, color: "text-red-400", step: "0.1" },
+                          { key: "carbs", label: "Carbs (g)", icon: Wheat, color: "text-amber-400", step: "0.1" },
+                          { key: "fat", label: "Fat (g)", icon: Apple, color: "text-purple-400", step: "0.1" },
+                        ].map((f) => {
+                          const Icon = f.icon;
+                          return (
+                            <div key={f.key}>
+                              <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">{f.label}</label>
+                              <div className="relative">
+                                <Icon className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 ${f.color}`} />
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step={f.step}
+                                  value={(customFoodDraft as Record<string, string>)[f.key]}
+                                  onChange={(e) =>
+                                    setCustomFoodDraft((d) => ({ ...d, [f.key]: e.target.value }))
+                                  }
+                                  placeholder="0"
+                                  className="w-full pl-7 pr-2 py-2 rounded-lg bg-slate-900/60 border border-white/[0.08] text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addCustomFood}
+                        disabled={!customFoodDraft.name.trim()}
+                        className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-lg shadow-emerald-600/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add to meal
+                      </button>
+                    </motion.div>
+                  )}
 
                   {/* Category Filter */}
                   <div className="flex flex-wrap gap-2 mb-3">
@@ -3727,40 +3962,94 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                   </div>
 
                   {/* Food List */}
-                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                  <div className="space-y-4 max-h-80 overflow-y-auto scrollbar-hide pr-1">
+                    {Object.keys(filteredFoods).length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.02] p-6 text-center">
+                        <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-2">
+                          <Search className="w-4 h-4 text-emerald-300" />
+                        </div>
+                        <p className="text-sm text-slate-200 font-medium">
+                          {foodSearch.trim() ? `No match for "${foodSearch}"` : "No foods in this category"}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-1 mb-3">Create it manually with your own nutrition values</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowCustomFood(true);
+                            if (foodSearch.trim()) {
+                              setCustomFoodDraft((d) => ({ ...d, name: foodSearch.trim() }));
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow shadow-emerald-600/25 transition-all"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Add as custom food
+                        </button>
+                      </div>
+                    )}
                     {Object.entries(filteredFoods).map(([category, foods]) => (
                       <div key={category}>
-                        <h5 className="text-xs text-slate-500 font-medium mb-2 flex items-center gap-1.5">
-                          <span>{FOOD_CATEGORY_ICONS[category] || "🍽️"}</span>
+                        <h5 className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2 flex items-center gap-1.5">
+                          <span className="text-sm">{FOOD_CATEGORY_ICONS[category] || "🍽️"}</span>
                           {category}
+                          <span className="text-slate-600 font-normal normal-case tracking-normal">· {foods.length}</span>
                         </h5>
-                        <div className="space-y-1">
-                          {foods.map((food) => (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                          {foods.map((food) => {
+                            const isAdded = mealFormData.items.some(
+                              (i) => i.name.trim().toLowerCase() === food.name.trim().toLowerCase(),
+                            );
+                            return (
                             <button
                               key={food.id}
                               onClick={() => addFoodItem(food)}
-                              className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors text-left"
+                              className={`group w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left border ${
+                                isAdded
+                                  ? "bg-emerald-500/10 border-emerald-500/40 hover:bg-emerald-500/15"
+                                  : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.12]"
+                              }`}
                             >
-                              <span className="text-2xl flex-shrink-0">{getFoodIcon(food.name, category)}</span>
+                              <span className={`w-10 h-10 flex items-center justify-center text-2xl rounded-xl shrink-0 transition-colors ${
+                                isAdded ? "bg-emerald-500/15" : "bg-white/[0.04] group-hover:bg-white/[0.06]"
+                              }`}>{getFoodIcon(food.name, category)}</span>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm text-white truncate">{food.name}</p>
-                                <p className="text-xs text-slate-500">{food.portion}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className={`text-sm font-medium truncate ${isAdded ? "text-emerald-200" : "text-white"}`}>{food.name}</p>
+                                  {isAdded && (
+                                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-semibold flex items-center gap-0.5 shrink-0">
+                                      <CheckCircle2 className="w-2.5 h-2.5" />
+                                      Added
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 mt-0.5">{food.portion}</p>
                               </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className="text-sm text-orange-400">{food.calories} kcal</p>
-                                <Plus className="w-4 h-4 text-emerald-400 ml-auto" />
+                              <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+                                <span className="inline-flex items-center gap-1 text-sm font-semibold text-orange-300">
+                                  <Flame className="w-3 h-3" />
+                                  {food.calories}
+                                </span>
+                                {isAdded ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center group-hover:bg-emerald-500/25 transition-colors">
+                                    <Plus className="w-3 h-3 text-emerald-300" />
+                                  </div>
+                                )}
                               </div>
                             </button>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Footer */}
-              <div className="sticky bottom-0 bg-slate-900 border-t border-slate-700 p-6">
+              <div className="sticky bottom-0 bg-[linear-gradient(0deg,rgba(15,18,25,0.98)_0%,rgba(15,18,25,0.92)_100%)] backdrop-blur-xl border-t border-white/[0.06] px-5 sm:px-8 py-4">
                 <div className="flex gap-3">
                   <button
                     onClick={() => {
@@ -3768,14 +4057,14 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                       setEditingMeal(null);
                       resetMealForm();
                     }}
-                    className="flex-1 px-4 py-3 rounded-xl bg-slate-800 text-slate-300 font-medium hover:bg-slate-700 transition-colors"
+                    className="flex-1 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 font-semibold hover:bg-white/[0.08] hover:text-white transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={editingMeal ? updateMeal : createMeal}
                     disabled={!isMealFormValid || mealsSaving}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                   >
                     {mealsSaving ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -4622,6 +4911,77 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                   )}
                 </div>
 
+                {/* Recipe Image (manual upload) */}
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Recipe Image</label>
+                  <input
+                    ref={recipeImageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    onChange={(e) => handleRecipeImageSelect(e.target.files?.[0] ?? null)}
+                    className="hidden"
+                  />
+                  {recipeFormData.imageUrl ? (
+                    <div className="relative group rounded-2xl overflow-hidden border border-white/[0.08] bg-black/40" style={{ aspectRatio: "16 / 9" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={recipeFormData.imageUrl}
+                        alt="Recipe"
+                        className="w-full h-full object-cover"
+                      />
+                      {isUploadingRecipeImage && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                          <Loader2 className="w-6 h-6 animate-spin text-emerald-300" />
+                        </div>
+                      )}
+                      <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => recipeImageInputRef.current?.click()}
+                          disabled={isUploadingRecipeImage}
+                          className="px-2.5 py-1.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/[0.12] text-white text-[11px] font-semibold hover:bg-black/80 transition-colors disabled:opacity-50"
+                        >
+                          <Upload className="w-3 h-3 inline mr-1" />
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRecipeFormData((prev) => ({ ...prev, imageUrl: null }))}
+                          disabled={isUploadingRecipeImage}
+                          className="p-1.5 rounded-lg bg-red-500/80 backdrop-blur-md text-white hover:bg-red-500 transition-colors disabled:opacity-50"
+                          title="Remove image"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => recipeImageInputRef.current?.click()}
+                      disabled={isUploadingRecipeImage}
+                      className="w-full rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.02] hover:bg-emerald-500/[0.04] hover:border-emerald-500/40 text-slate-400 hover:text-emerald-300 transition-all flex flex-col items-center justify-center gap-2 py-10 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isUploadingRecipeImage ? (
+                        <>
+                          <Loader2 className="w-6 h-6 animate-spin text-emerald-300" />
+                          <span className="text-[12px] font-medium">Uploading…</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                            <Upload className="w-5 h-5 text-emerald-300" />
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[13px] font-semibold text-white">Click to upload recipe photo</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">JPEG, PNG, WebP · max 10MB</p>
+                          </div>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
                 {/* Basic Info */}
                 <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="sm:col-span-2">
@@ -5087,5 +5447,138 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
         onToggleFavorite={toggleRecipeFavorite}
       />
     </div>
+  );
+}
+
+// ============================================
+// MacroHeroCard — standalone per-macro card with sparkline
+// ============================================
+
+function MacroHeroCard({
+  index,
+  label,
+  current,
+  target,
+  unit,
+  accent,
+}: {
+  index: number;
+  label: string;
+  current: number;
+  target: number;
+  unit: string;
+  accent: string;
+}) {
+  const pct = target > 0 ? Math.max(0, Math.min(100, (current / target) * 100)) : 0;
+
+  // Arc ring (corner)
+  const arcSize = 44;
+  const arcStroke = 5;
+  const arcRadius = (arcSize - arcStroke) / 2;
+  const arcCircumference = arcRadius * 2 * Math.PI;
+  const arcOffset = arcCircumference - (pct / 100) * arcCircumference;
+
+  // Sparkline: synthetic smooth curve until history endpoint wired.
+  // Uses a seeded pseudo-random pattern so each macro has a stable shape.
+  const points = useMemo(() => {
+    const seed = label.charCodeAt(0) * 7 + index * 13;
+    const n = 32;
+    const arr: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      // layered sines for organic look
+      const wave =
+        0.5 +
+        0.18 * Math.sin(t * Math.PI * 2 + seed * 0.1) +
+        0.12 * Math.sin(t * Math.PI * 4 + seed * 0.05) +
+        0.08 * Math.sin(t * Math.PI * 8 + seed * 0.2);
+      arr.push(wave);
+    }
+    // Scale amplitude by how active today is (hint of real data presence)
+    const activity = Math.min(1, pct / 100 + 0.25);
+    return arr.map((v) => Math.max(0, Math.min(1, v * activity)));
+  }, [label, index, pct]);
+
+  const sparkW = 240;
+  const sparkH = 56;
+  const polyline = useMemo(() => {
+    if (!points.length) return { line: "", area: "" };
+    const step = sparkW / (points.length - 1);
+    const coords = points.map((v, i) => [i * step, sparkH - v * (sparkH - 4) - 2]);
+    const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const area = `${coords[0][0]},${sparkH} ${line} ${coords[coords.length - 1][0]},${sparkH}`;
+    return { line, area };
+  }, [points]);
+
+  const gradientId = `macroSparkGrad-${label}`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.06 }}
+      className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,#0f1219_0%,#0a0d14_100%)] p-4 sm:p-5"
+    >
+      {/* Top row: label (left), arc (right) */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[13px] sm:text-sm text-slate-300 font-medium">{label}</p>
+          <p className="text-[13px] sm:text-sm text-slate-400 mt-0.5">
+            <span className="text-white font-semibold">{Math.round(current)}</span>
+            <span className="text-slate-500">/{Math.round(target)}</span>
+          </p>
+        </div>
+        <div className="relative shrink-0" style={{ width: arcSize, height: arcSize }}>
+          <svg width={arcSize} height={arcSize} className="-rotate-90">
+            <circle
+              cx={arcSize / 2}
+              cy={arcSize / 2}
+              r={arcRadius}
+              stroke="rgba(255,255,255,0.08)"
+              strokeWidth={arcStroke}
+              fill="none"
+            />
+            <motion.circle
+              cx={arcSize / 2}
+              cy={arcSize / 2}
+              r={arcRadius}
+              stroke={accent}
+              strokeWidth={arcStroke}
+              strokeLinecap="round"
+              fill="none"
+              strokeDasharray={arcCircumference}
+              initial={{ strokeDashoffset: arcCircumference }}
+              animate={{ strokeDashoffset: arcOffset }}
+              transition={{ duration: 0.9, ease: "easeOut", delay: 0.1 + index * 0.06 }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+            <span className="text-[10px] font-semibold text-white">{Math.round(current)}</span>
+            <span className="text-[7px] text-slate-400 mt-0.5">{unit}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Sparkline */}
+      <div className="mt-3 -mx-1">
+        <svg viewBox={`0 0 ${sparkW} ${sparkH}`} className="w-full h-10 sm:h-12" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={accent} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={accent} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <polygon points={polyline.area} fill={`url(#${gradientId})`} />
+          <polyline
+            points={polyline.line}
+            fill="none"
+            stroke={accent}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+    </motion.div>
   );
 }

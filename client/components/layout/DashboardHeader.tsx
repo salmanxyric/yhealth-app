@@ -40,7 +40,7 @@ export function DashboardHeader() {
       <div>
         <h1 className="text-sm sm:text-base md:text-lg font-semibold text-white leading-tight">
           {greeting},{' '}
-          <span className="bg-gradient-to-r from-sky-400 to-emerald-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-emerald-600 to-sky-600 bg-clip-text text-transparent">
             {firstName}
           </span>
         </h1>

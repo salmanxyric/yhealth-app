@@ -8,6 +8,16 @@ const VALID_STATUSES: ActivityStatus[] = [
 ];
 
 const KEYWORD_MAP: Record<string, { status: ActivityStatus; confidence: number }[]> = {
+  // Working (returning to normal)
+  "i'm working": [{ status: 'working', confidence: 0.80 }],
+  'working today': [{ status: 'working', confidence: 0.80 }],
+  'at work': [{ status: 'working', confidence: 0.75 }],
+  'back to work': [{ status: 'working', confidence: 0.85 }],
+  'busy working': [{ status: 'working', confidence: 0.75 }],
+  'at the office': [{ status: 'working', confidence: 0.75 }],
+  "i'm back": [{ status: 'working', confidence: 0.70 }],
+  'back to normal': [{ status: 'working', confidence: 0.80 }],
+  'feeling better now': [{ status: 'working', confidence: 0.75 }],
   // Sick
   "i'm sick": [{ status: 'sick', confidence: 0.80 }],
   'not feeling well': [{ status: 'sick', confidence: 0.75 }],
@@ -43,17 +53,28 @@ const KEYWORD_MAP: Record<string, { status: ActivityStatus; confidence: number }
   'need a rest day': [{ status: 'rest', confidence: 0.80 }],
   'taking it easy': [{ status: 'rest', confidence: 0.70 }],
   'recovery day': [{ status: 'rest', confidence: 0.75 }],
+  // Excellent / Good / Fair / Poor
+  'feeling amazing': [{ status: 'excellent', confidence: 0.80 }],
+  'feeling great': [{ status: 'excellent', confidence: 0.75 }],
+  'on top of the world': [{ status: 'excellent', confidence: 0.80 }],
+  'doing well': [{ status: 'good', confidence: 0.70 }],
+  'feeling good': [{ status: 'good', confidence: 0.70 }],
+  'feeling okay': [{ status: 'fair', confidence: 0.65 }],
+  'could be better': [{ status: 'fair', confidence: 0.65 }],
+  'not great': [{ status: 'poor', confidence: 0.65 }],
+  'feeling terrible': [{ status: 'poor', confidence: 0.75 }],
+  'feeling awful': [{ status: 'poor', confidence: 0.75 }],
 };
 
 const CLASSIFICATION_SYSTEM_PROMPT = `You are an activity status classifier for a health coaching app.
 Analyze the user's message to detect if they are declaring or implying a change in their activity status.
 
-Activity statuses: sick, injury, rest, vacation, travel, stress
+Activity statuses: working, sick, injury, rest, vacation, travel, stress, excellent, good, fair, poor
 
 Respond with ONLY a JSON object:
 {
   "detected": boolean,
-  "status": "sick" | "injury" | "rest" | "vacation" | "travel" | "stress" | null,
+  "status": "working" | "sick" | "injury" | "rest" | "vacation" | "travel" | "stress" | "excellent" | "good" | "fair" | "poor" | null,
   "confidence": 0.0-1.0,
   "duration": { "days": number | null, "endDate": "YYYY-MM-DD" | null } | null,
   "reason": "brief description of what was detected" | null,
@@ -61,8 +82,10 @@ Respond with ONLY a JSON object:
 }
 
 Rules:
-- "explicit": user directly states their status ("I'm sick", "traveling to X")
-- "inferred": emotional language suggests a status ("I can't cope with anything" → stress)
+- "explicit": user directly states their status ("I'm sick", "traveling to X", "I'm working today", "back to work")
+- "inferred": emotional language suggests a status ("I can't cope with anything" → stress, "feeling amazing" → excellent)
+- "working" means the user is back to their normal routine (at work, busy, productive, recovered)
+- "excellent/good/fair/poor" reflect the user's general wellbeing state
 - Extract duration if mentioned ("for 3 days", "until Friday", "for a week")
 - If no status change detected, return detected: false with low confidence
 - Do NOT classify normal complaints as status changes ("this workout was hard" is NOT injury)

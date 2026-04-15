@@ -35,6 +35,7 @@ import { formatTime } from "./utils";
 import { PlateCalculator } from "./PlateCalculator";
 import { api } from "@/lib/api-client";
 import YouTubeEmbed from "@/app/(pages)/yoga/components/YouTubeEmbed";
+import { DashboardUnderlineTabs } from "../../DashboardUnderlineTabs";
 
 // Difficulty badge config
 const difficultyConfig: Record<string, { label: string; bg: string; text: string; glow: string }> = {
@@ -278,6 +279,15 @@ export function ExerciseExecutionDrawer({
   const tips = libraryExercise?.tips as string[] || [];
   const commonMistakes = libraryExercise?.common_mistakes as string[] || [];
   const hasTabContent = instructions.length > 0 || tips.length > 0 || commonMistakes.length > 0;
+  const drawerTabItems = [
+    ...(instructions.length > 0
+      ? [{ id: "instructions" as const, label: "How To", icon: ListOrdered }]
+      : []),
+    ...(tips.length > 0 ? [{ id: "tips" as const, label: "Pro Tips", icon: Lightbulb }] : []),
+    ...(commonMistakes.length > 0
+      ? [{ id: "mistakes" as const, label: "Avoid", icon: AlertTriangle }]
+      : []),
+  ];
   const difficulty = libraryExercise
     ? difficultyConfig[libraryExercise.difficulty_level] || difficultyConfig.beginner
     : null;
@@ -459,63 +469,16 @@ export function ExerciseExecutionDrawer({
                         {/* Instructions / Tips / Mistakes */}
                         {hasTabContent && (
                           <div className="rounded-2xl bg-slate-900/30 border border-slate-800/40 overflow-hidden">
-                            {/* Tab header */}
-                            <div className="flex items-center border-b border-slate-800/40 bg-slate-900/20">
-                              {instructions.length > 0 && (
-                                <button
-                                  onClick={() => setActiveTab("instructions")}
-                                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-medium transition-all relative ${
-                                    activeTab === "instructions" ? "text-orange-300" : "text-slate-500 hover:text-slate-300"
-                                  }`}
-                                >
-                                  <ListOrdered className="w-4 h-4" />
-                                  <span>How To</span>
-                                  {activeTab === "instructions" && (
-                                    <motion.div
-                                      layoutId="execDrawerTab"
-                                      className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500"
-                                      transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
-                                    />
-                                  )}
-                                </button>
-                              )}
-                              {tips.length > 0 && (
-                                <button
-                                  onClick={() => setActiveTab("tips")}
-                                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-medium transition-all relative ${
-                                    activeTab === "tips" ? "text-amber-300" : "text-slate-500 hover:text-slate-300"
-                                  }`}
-                                >
-                                  <Lightbulb className="w-4 h-4" />
-                                  <span>Pro Tips</span>
-                                  {activeTab === "tips" && (
-                                    <motion.div
-                                      layoutId="execDrawerTab"
-                                      className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500"
-                                      transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
-                                    />
-                                  )}
-                                </button>
-                              )}
-                              {commonMistakes.length > 0 && (
-                                <button
-                                  onClick={() => setActiveTab("mistakes")}
-                                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-medium transition-all relative ${
-                                    activeTab === "mistakes" ? "text-red-300" : "text-slate-500 hover:text-slate-300"
-                                  }`}
-                                >
-                                  <AlertTriangle className="w-4 h-4" />
-                                  <span>Avoid</span>
-                                  {activeTab === "mistakes" && (
-                                    <motion.div
-                                      layoutId="execDrawerTab"
-                                      className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-gradient-to-r from-red-500 to-rose-500"
-                                      transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
-                                    />
-                                  )}
-                                </button>
-                              )}
-                            </div>
+                            <DashboardUnderlineTabs
+                              equalWidth
+                              layoutId="execDrawerTabUnderline"
+                              activeId={activeTab}
+                              onTabChange={(id) =>
+                                setActiveTab(id as "instructions" | "tips" | "mistakes")
+                              }
+                              tabs={drawerTabItems}
+                              className="border-slate-800/40 bg-slate-900/20"
+                            />
 
                             {/* Tab content */}
                             <div className="p-5 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700/50">

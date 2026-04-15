@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { motion, type Variants } from "framer-motion";
 import { ArrowUpRight, ArrowDownRight, Minus, Sparkles } from "lucide-react";
-import { type MonthlySummary, FINANCE_CATEGORY_LABELS, FINANCE_CATEGORY_ICONS } from "@shared/types/domain/finance";
+import type { MonthlySummary } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_LABELS, FINANCE_CATEGORY_ICONS } from "@shared/types/domain/finance";
 import {
   AnimatedCurrency,
   formatCurrency,

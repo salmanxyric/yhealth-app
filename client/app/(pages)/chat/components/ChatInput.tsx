@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Loader2, Paperclip, Mic, Square, Smile, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Paperclip, Mic, Square, Smile, Image as ImageIcon, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ReplyPreview } from './ReplyPreview';
 import { MediaPreview } from './MediaPreview';
@@ -11,7 +11,6 @@ import dynamic from 'next/dynamic';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { emitTyping, emitStopTyping } from '@/lib/socket-client';
 
-// Dynamically import emoji picker to avoid SSR issues
 const EmojiPicker = dynamic(
   () => import('emoji-picker-react'),
   { ssr: false }
@@ -25,7 +24,6 @@ const EmojiPicker = dynamic(
   searchDisabled?: boolean;
 }>;
 
-// Dynamically import GIF picker to avoid SSR issues
 const GifPicker = dynamic(
   () => import('gif-picker-react'),
   { ssr: false }
@@ -56,7 +54,7 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   isLoading = false,
-  placeholder = 'Type a message...',
+  placeholder = 'Ask Aurea...',
   disabled = false,
   chatId,
   replyTo,
@@ -69,12 +67,15 @@ export function ChatInput({
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
+
+  const hasContent = message.trim().length > 0 || mediaFiles.length > 0;
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -85,15 +86,10 @@ export function ChatInput({
 
   useEffect(() => {
     if (!chatId || disabled || isLoading) return;
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     const trimmedMessage = message.trim();
-    const hasContent = trimmedMessage.length > 0;
-
-    if (hasContent && !isTypingRef.current) {
+    if (trimmedMessage.length > 0 && !isTypingRef.current) {
       isTypingRef.current = true;
       emitTyping(chatId);
     }
@@ -106,10 +102,8 @@ export function ChatInput({
     }, 1000);
 
     return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      if (isTypingRef.current && !hasContent) {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (isTypingRef.current && trimmedMessage.length === 0) {
         isTypingRef.current = false;
         emitStopTyping(chatId);
       }
@@ -119,16 +113,12 @@ export function ChatInput({
   const handleEmojiClick = (emojiData: { emoji?: string; unicode?: string }) => {
     const emoji = emojiData.emoji || emojiData.unicode || '';
     if (!emoji) return;
-
-    const cursorPosition = textareaRef.current?.selectionStart || message.length;
-    const textBefore = message.substring(0, cursorPosition);
-    const textAfter = message.substring(cursorPosition);
-    setMessage(textBefore + emoji + textAfter);
-
+    const pos = textareaRef.current?.selectionStart || message.length;
+    setMessage(message.substring(0, pos) + emoji + message.substring(pos));
     setTimeout(() => {
       textareaRef.current?.focus();
-      const newPosition = cursorPosition + emoji.length;
-      textareaRef.current?.setSelectionRange(newPosition, newPosition);
+      const np = pos + emoji.length;
+      textareaRef.current?.setSelectionRange(np, np);
     }, 0);
   };
 
@@ -139,8 +129,8 @@ export function ChatInput({
   };
 
   const handleSubmit = () => {
-    const trimmedMessage = message.trim();
-    if ((trimmedMessage || mediaFiles.length > 0) && !isLoading && !disabled) {
+    const trimmed = message.trim();
+    if ((trimmed || mediaFiles.length > 0) && !isLoading && !disabled) {
       if (isTypingRef.current && chatId) {
         isTypingRef.current = false;
         emitStopTyping(chatId);
@@ -149,8 +139,7 @@ export function ChatInput({
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
-
-      onSend(trimmedMessage, {
+      onSend(trimmed, {
         mediaFiles: mediaFiles.length > 0 ? mediaFiles : undefined,
         repliedToId: replyTo?.id,
         isViewOnce: isViewOnce && mediaFiles.length > 0 ? true : undefined,
@@ -159,9 +148,7 @@ export function ChatInput({
       setMediaFiles([]);
       setIsViewOnce(false);
       onCancelReply?.();
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
     }
   };
 
@@ -173,8 +160,7 @@ export function ChatInput({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setMediaFiles((prev) => [...prev, ...files]);
+    setMediaFiles((prev) => [...prev, ...Array.from(e.target.files || [])]);
   };
 
   const handleRemoveMedia = (index: number) => {
@@ -184,26 +170,16 @@ export function ChatInput({
   const handleStartRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setMediaFiles((prev) => [...prev, new File([blob], `recording-${Date.now()}.webm`, { type: 'audio/webm' })]);
+        stream.getTracks().forEach((t) => t.stop());
       };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const audioFile = new File([audioBlob], `recording-${Date.now()}.webm`, {
-          type: 'audio/webm',
-        });
-        setMediaFiles((prev) => [...prev, audioFile]);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
+      recorder.start();
       setIsRecording(true);
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -217,10 +193,21 @@ export function ChatInput({
     }
   };
 
-  const actionBtnClass = "h-9 w-9 shrink-0 rounded-xl text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/8 transition-colors";
+  const toolBtnClass = cn(
+    "h-8 w-8 shrink-0 rounded-lg transition-all duration-200",
+    "text-slate-500 hover:text-slate-300",
+    "hover:bg-white/[0.06]",
+  );
 
   return (
-    <div className="border-t border-slate-100 dark:border-white/6 bg-white/90 dark:bg-[#111827]/90 backdrop-blur-xl px-3 sm:px-4 py-3 safe-area-pb">
+    <div
+      className="px-3 sm:px-4 py-3 safe-area-pb"
+      style={{
+        background: 'linear-gradient(180deg, rgba(6,8,14,0.85) 0%, rgba(8,10,18,0.95) 100%)',
+        borderTop: '1px solid rgba(255,255,255,0.04)',
+        backdropFilter: 'blur(20px)',
+      }}
+    >
       <div className="w-full max-w-4xl mx-auto">
         {/* Reply preview */}
         {replyTo && (
@@ -231,7 +218,7 @@ export function ChatInput({
 
         {/* Media previews */}
         {mediaFiles.length > 0 && (
-          <div className="mb-3 space-y-2 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
+          <div className="mb-3 space-y-2 max-h-48 overflow-y-auto scrollbar-hide">
             {mediaFiles.map((file, index) => (
               <MediaPreview
                 key={index}
@@ -244,145 +231,110 @@ export function ChatInput({
           </div>
         )}
 
-        <div className="flex items-end gap-1.5">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
-            className="hidden"
-            onChange={handleFileSelect}
+        {/* Main input container */}
+        <div
+          className="relative rounded-2xl transition-all duration-300 overflow-hidden"
+          style={{
+            background: isFocused
+              ? 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(16,185,129,0.03))'
+              : 'rgba(255,255,255,0.03)',
+            border: `1px solid ${isFocused ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)'}`,
+            boxShadow: isFocused
+              ? '0 0 20px rgba(16,185,129,0.06), inset 0 1px 0 rgba(255,255,255,0.04)'
+              : 'inset 0 1px 0 rgba(255,255,255,0.02)',
+          }}
+        >
+          {/* Textarea */}
+          <Textarea
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={permissionDeniedMessage || placeholder}
+            disabled={disabled || isLoading}
+            className={cn(
+              'min-h-[44px] max-h-[160px] resize-none w-full',
+              'bg-transparent border-0 shadow-none ring-0',
+              'text-white placeholder:text-slate-500',
+              'focus-visible:ring-0 focus-visible:border-0 focus-visible:shadow-none',
+              'text-[14px] leading-relaxed px-4 pt-3 pb-1',
+              permissionDeniedMessage && 'cursor-not-allowed opacity-50'
+            )}
+            rows={1}
           />
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className={actionBtnClass}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || isLoading}
-          >
-            <Paperclip className="h-[18px] w-[18px]" />
-          </Button>
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-between px-2 pb-2">
+            <div className="flex items-center gap-0.5">
+              <input ref={fileInputRef} type="file" multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx" className="hidden" onChange={handleFileSelect} />
 
-          <div className="relative flex-1">
-            <Textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={permissionDeniedMessage || placeholder}
-              disabled={disabled || isLoading}
-              className={cn(
-                'min-h-[42px] max-h-[120px] resize-none',
-                'rounded-2xl border border-slate-200/60 dark:border-white/8 bg-slate-50 dark:bg-white/5',
-                'text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500',
-                'focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-500/30',
-                'text-[14px] px-4 py-2.5',
-                permissionDeniedMessage && 'cursor-not-allowed'
+              <Button variant="ghost" size="icon" className={toolBtnClass} onClick={() => fileInputRef.current?.click()} disabled={disabled || isLoading}>
+                <Paperclip className="h-4 w-4" />
+              </Button>
+
+              {/* Emoji */}
+              <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon"
+                    className={cn(toolBtnClass, showEmojiPicker && 'bg-emerald-500/10 text-emerald-400')}
+                    disabled={disabled || isLoading}>
+                    <Smile className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-auto rounded-2xl border-white/[0.08] bg-[#0f1120]/95 backdrop-blur-xl shadow-2xl p-0">
+                  <EmojiPicker onEmojiClick={handleEmojiClick} width={340} height={380} skinTonesDisabled previewConfig={{ showPreview: false }} theme="dark" searchDisabled={false} />
+                </PopoverContent>
+              </Popover>
+
+              {/* GIF */}
+              <Popover open={showGifPicker} onOpenChange={setShowGifPicker}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon"
+                    className={cn(toolBtnClass, showGifPicker && 'bg-emerald-500/10 text-emerald-400')}
+                    disabled={disabled || isLoading}>
+                    <ImageIcon className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="start" className="w-auto rounded-2xl border-white/[0.08] bg-[#0f1120]/95 backdrop-blur-xl shadow-2xl p-0">
+                  <GifPicker tenorApiKey={process.env.NEXT_PUBLIC_TENOR_API_KEY || ''} onGifClick={handleGifClick} width={340} height={380} theme="dark" />
+                </PopoverContent>
+              </Popover>
+
+              {/* Mic */}
+              {isRecording ? (
+                <Button variant="ghost" size="icon"
+                  className="h-8 w-8 shrink-0 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 animate-pulse"
+                  onClick={handleStopRecording}>
+                  <Square className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button variant="ghost" size="icon" className={toolBtnClass} onClick={handleStartRecording} disabled={disabled || isLoading}>
+                  <Mic className="h-4 w-4" />
+                </Button>
               )}
-              rows={1}
-            />
+            </div>
+
+            {/* Send button */}
+            <Button
+              onClick={handleSubmit}
+              disabled={!hasContent || isLoading || disabled}
+              size="icon"
+              className={cn(
+                'h-8 w-8 shrink-0 rounded-lg transition-all duration-300',
+                hasContent && !isLoading
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20'
+                  : 'bg-white/[0.04] text-slate-600 cursor-not-allowed',
+              )}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowUp className="h-4 w-4" />
+              )}
+            </Button>
           </div>
-
-          {/* Emoji Picker */}
-          <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  actionBtnClass,
-                  showEmojiPicker && 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                )}
-                disabled={disabled || isLoading}
-              >
-                <Smile className="h-[18px] w-[18px]" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="end"
-              className="w-auto rounded-2xl border-slate-200 dark:border-white/10 bg-white dark:bg-[#1a2332] shadow-2xl p-0"
-            >
-              <EmojiPicker
-                onEmojiClick={handleEmojiClick}
-                width={350}
-                height={400}
-                skinTonesDisabled
-                previewConfig={{ showPreview: false }}
-                theme="dark"
-                searchDisabled={false}
-              />
-            </PopoverContent>
-          </Popover>
-
-          {/* GIF Picker */}
-          <Popover open={showGifPicker} onOpenChange={setShowGifPicker}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  actionBtnClass,
-                  showGifPicker && 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                )}
-                disabled={disabled || isLoading}
-              >
-                <ImageIcon className="h-[18px] w-[18px]" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="end"
-              className="w-auto rounded-2xl border-slate-200 dark:border-white/10 bg-white dark:bg-[#1a2332] shadow-2xl p-0"
-            >
-              <GifPicker
-                tenorApiKey={process.env.NEXT_PUBLIC_TENOR_API_KEY || ''}
-                onGifClick={handleGifClick}
-                width={350}
-                height={400}
-                theme="dark"
-              />
-            </PopoverContent>
-          </Popover>
-
-          {isRecording ? (
-            <Button
-              variant="destructive"
-              size="icon"
-              className="h-9 w-9 shrink-0 rounded-xl bg-red-500 hover:bg-red-600 animate-pulse"
-              onClick={handleStopRecording}
-            >
-              <Square className="h-3.5 w-3.5" />
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              className={actionBtnClass}
-              onClick={handleStartRecording}
-              disabled={disabled || isLoading}
-            >
-              <Mic className="h-[18px] w-[18px]" />
-            </Button>
-          )}
-
-          <Button
-            onClick={handleSubmit}
-            disabled={(!message.trim() && mediaFiles.length === 0) || isLoading || disabled}
-            size="icon"
-            className={cn(
-              'h-9 w-9 shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-500',
-              'disabled:opacity-30 disabled:cursor-not-allowed',
-              'transition-all shadow-md shadow-emerald-600/25'
-            )}
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin text-white" />
-            ) : (
-              <Send className="h-4 w-4 text-white" />
-            )}
-          </Button>
         </div>
       </div>
     </div>

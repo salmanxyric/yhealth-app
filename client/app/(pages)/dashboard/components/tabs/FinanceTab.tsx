@@ -19,7 +19,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
-import { type TransactionSummary, type MonthlySummary, type CategoryBreakdownItem, type SpendingTrend, type FinanceTransaction, type FinanceBudget, type FinanceSavingGoal, type FinanceAIInsight, type BudgetAlert, type FinanceCategory, type CreateTransactionInput, FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
+import type { TransactionSummary, MonthlySummary, CategoryBreakdownItem, SpendingTrend, FinanceTransaction, FinanceBudget, FinanceSavingGoal, FinanceAIInsight, BudgetAlert, FinanceCategory, CreateTransactionInput } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 
 // ============================================
 // ANIMATED COUNTER

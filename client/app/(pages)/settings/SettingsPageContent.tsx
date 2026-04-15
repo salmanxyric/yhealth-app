@@ -42,6 +42,7 @@ import {
   MessageCircle,
   Zap,
   Focus,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useVoiceAssistant } from "@/app/context/VoiceAssistantContext";
@@ -51,6 +52,151 @@ import { api, ApiError } from "@/lib/api-client";
 import { DashboardSidebar, MobileBottomNav } from "../dashboard/components";
 import { toast } from "sonner";
 import { confirm } from "@/components/common/ConfirmDialog";
+
+// ============================================
+// Google Calendar Section Component
+// ============================================
+
+function GoogleCalendarSection() {
+  const [showForm, setShowForm] = useState(false);
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [hasCredentials, setHasCredentials] = useState(false);
+  const [maskedId, setMaskedId] = useState('');
+  const [connecting, setConnecting] = useState(false);
+
+  // Check if credentials exist on mount
+  useEffect(() => {
+    api.get<{ hasCredentials: boolean; credentials: { clientId: string } | null }>('/calendar/credentials')
+      .then(res => {
+        if (res.success && res.data) {
+          setHasCredentials(res.data.hasCredentials);
+          if (res.data.credentials) setMaskedId(res.data.credentials.clientId);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSave = async () => {
+    if (!clientId.trim() || !clientSecret.trim()) return;
+    setSaving(true);
+    try {
+      await api.post('/calendar/credentials', { clientId: clientId.trim(), clientSecret: clientSecret.trim() });
+      setHasCredentials(true);
+      setShowForm(false);
+      setMaskedId(clientId.substring(0, 12) + '****');
+      toast.success('Google Calendar credentials saved');
+    } catch (err) {
+      toast.error('Failed to save credentials');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const result = await api.get<{ url: string }>('/calendar/auth-url');
+      if (result.success && result.data?.url) {
+        window.location.href = result.data.url;
+      }
+    } catch (err) {
+      toast.error('Failed to connect. Check your credentials.');
+      setConnecting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Remove Google Calendar credentials and disconnect?')) return;
+    try {
+      await api.delete('/calendar/credentials');
+      setHasCredentials(false);
+      setMaskedId('');
+      setClientId('');
+      setClientSecret('');
+      toast.success('Google Calendar disconnected');
+    } catch {
+      toast.error('Failed to remove credentials');
+    }
+  };
+
+  return (
+    <div className="mb-6 p-5 rounded-2xl border border-sky-500/10 overflow-hidden" style={{ background: 'linear-gradient(145deg, rgba(14,165,233,0.04) 0%, #0a0d14 100%)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-sky-600/15 border border-sky-500/25 flex items-center justify-center">
+            <CalendarIcon className="w-6 h-6 text-sky-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="text-white font-medium">Google Calendar</p>
+              {hasCredentials && (
+                <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                  Credentials Set
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">Sync your calendar for AI-aware scheduling & stress detection</p>
+            {hasCredentials && maskedId && (
+              <p className="text-[10px] text-slate-600 mt-0.5">Client ID: {maskedId}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {hasCredentials && (
+            <button onClick={handleConnect} disabled={connecting}
+              className="px-4 py-2 rounded-xl bg-sky-600/20 text-sky-400 hover:bg-sky-600/30 transition-colors text-sm font-medium border border-sky-500/25 disabled:opacity-50">
+              {connecting ? 'Connecting...' : 'Connect Calendar'}
+            </button>
+          )}
+          {!hasCredentials && !showForm && (
+            <button onClick={() => setShowForm(true)}
+              className="px-4 py-2 rounded-xl bg-sky-600/20 text-sky-400 hover:bg-sky-600/30 transition-colors text-sm font-medium border border-sky-500/25">
+              Set Credentials
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Credentials Form */}
+      {showForm && (
+        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-4 pt-4 border-t border-white/[0.06] space-y-3">
+          <div>
+            <label className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">Client ID</label>
+            <input type="text" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="Your Google OAuth Client ID"
+              className="w-full h-10 px-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white text-sm placeholder-slate-600 focus:outline-none focus:border-sky-500/40 transition-colors" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">Client Secret</label>
+            <input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Your Google OAuth Client Secret"
+              className="w-full h-10 px-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white text-sm placeholder-slate-600 focus:outline-none focus:border-sky-500/40 transition-colors" />
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <button onClick={handleSave} disabled={saving || !clientId.trim() || !clientSecret.trim()}
+              className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition-colors disabled:opacity-40 shadow-lg shadow-sky-600/20">
+              {saving ? 'Saving...' : 'Save Credentials'}
+            </button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Edit / Delete links */}
+      {hasCredentials && !showForm && (
+        <div className="mt-2 flex items-center gap-3 text-xs">
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-1 text-slate-400 hover:text-white transition-colors">
+            <Key className="w-3 h-3" /> Edit Credentials
+          </button>
+          <span className="text-slate-700">|</span>
+          <button onClick={handleDelete} className="flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors">
+            <Trash2 className="w-3 h-3" /> Delete Credentials
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Types - Local UI state (simpler structure for form management)
 interface UserPreferences {
@@ -851,6 +997,7 @@ function SettingsPageInner() {
       icon: <MessageSquare className="w-5 h-5" />,
       gradient: "from-indigo-500 to-violet-500",
     },
+    { id: "contracts", label: "Contracts", icon: <Target className="w-5 h-5" />, gradient: "from-cyan-500 to-emerald-500" },
     { id: "privacy", label: "Privacy", icon: <Shield className="w-5 h-5" />, gradient: "from-rose-500 to-pink-500" },
     { id: "account", label: "Account", icon: <User className="w-5 h-5" />, gradient: "from-slate-400 to-slate-500" },
   ];
@@ -871,7 +1018,7 @@ function SettingsPageInner() {
             <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
           </div>
 
-          <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-pulse">
+          <div className="relative max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-pulse">
             {/* Header skeleton */}
             <div className="mb-8">
               <div className="flex items-center justify-between">
@@ -964,7 +1111,7 @@ function SettingsPageInner() {
           <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-pink-500/8 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="relative max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
           <motion.header
             initial={{ opacity: 0, y: -20 }}
@@ -2130,6 +2277,9 @@ function SettingsPageInner() {
                       )}
                     </div>
 
+                    {/* Google Calendar Integration — Per-User Credentials */}
+                    <GoogleCalendarSection />
+
                     {/* Other Integrations */}
                     <div className="space-y-3">
                       {integrations
@@ -2317,6 +2467,67 @@ function SettingsPageInner() {
                           The assistant will speak and listen in the selected language.
                         </p>
                       </div>
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Accountability Contracts */}
+              {activeSection === "contracts" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Target className="w-5 h-5" />}
+                      title="Accountability Contracts"
+                      gradient="from-cyan-500 to-emerald-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-6">
+                      Create self-imposed commitment contracts with real consequences to boost your discipline and habit adherence.
+                    </p>
+                    <a
+                      href="/contracts"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold
+                        bg-gradient-to-r from-cyan-500/15 to-emerald-500/15 text-emerald-400
+                        border border-emerald-500/20 hover:border-emerald-500/40
+                        transition-all cursor-pointer"
+                    >
+                      <Target className="w-4 h-4" />
+                      Open Contracts Dashboard
+                    </a>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-base font-semibold text-white mb-4">How it works</h3>
+                    <div className="space-y-3">
+                      {[
+                        { step: "1", title: "Create a Contract", desc: "Define a condition (e.g. miss gym) and a penalty (e.g. donate 500 PKR)" },
+                        { step: "2", title: "Sign & Activate", desc: "Formally commit — the contract becomes active and monitored" },
+                        { step: "3", title: "AI Monitors", desc: "The system checks your activity automatically every 2 hours" },
+                        { step: "4", title: "Consequences Apply", desc: "Violations trigger your chosen penalty — XP loss, donation pledge, or social alert" },
+                      ].map((item) => (
+                        <div key={item.step} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-sm font-bold flex-shrink-0">
+                            {item.step}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">{item.title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{item.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-base font-semibold text-white mb-1">AI Suggestions</h3>
+                    <p className="text-sm text-slate-400 mb-4">
+                      The AI analyzes your behavior patterns and suggests personalized contracts — like workout consistency, calorie control, or streak protection.
+                    </p>
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-indigo-500/8 border border-indigo-500/15">
+                      <Flame className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                      <p className="text-xs text-indigo-300">
+                        Suggestions appear on the Contracts dashboard based on your recent activity data.
+                      </p>
                     </div>
                   </GlassCard>
                 </div>

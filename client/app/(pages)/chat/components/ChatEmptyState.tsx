@@ -42,7 +42,7 @@ export function ChatEmptyState({ className }: ChatEmptyStateProps) {
           />
 
           <motion.div
-            className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/8"
+            className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-white/[0.04] border border-white/[0.08]"
             animate={{ y: [0, -4, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
           >
@@ -66,7 +66,7 @@ export function ChatEmptyState({ className }: ChatEmptyStateProps) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white"
+            className="text-xl font-semibold tracking-tight text-white"
           >
             Select a conversation
           </motion.h2>
@@ -74,7 +74,7 @@ export function ChatEmptyState({ className }: ChatEmptyStateProps) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35, duration: 0.5 }}
-            className="max-w-[260px] text-center text-sm text-slate-500 dark:text-slate-400"
+            className="max-w-[260px] text-center text-sm text-slate-400"
           >
             Choose a chat from the sidebar or start a new conversation
           </motion.p>

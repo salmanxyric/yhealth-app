@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import {
   LineChart,
   Line,
@@ -366,106 +367,104 @@ export function NutritionAnalytics() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Time Range Selector */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <h3 className="text-[16px] sm:text-[18px] font-semibold text-white">Nutrition Analytics</h3>
-        <div className="flex gap-1.5 sm:gap-2">
+        <div>
+          <h3 className="text-[16px] sm:text-[18px] font-bold text-white tracking-tight">Nutrition Analytics</h3>
+          <p className="text-[11px] sm:text-[12px] text-slate-400 mt-0.5">Trends & performance across your meal log</p>
+        </div>
+        <div className="flex gap-1 w-full sm:w-auto bg-white/[0.03] border border-white/[0.06] rounded-xl p-1">
           {(['7d', '30d', '90d', '1y'] as const).map((range) => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
+              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-[12px] sm:text-[13px] font-semibold transition-all ${
                 timeRange === range
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-white'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
-              {range === '7d' ? '7D' : range === '30d' ? '30D' : range === '90d' ? '90D' : '1Y'}
+              {range.toUpperCase()}
             </button>
           ))}
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
-        <div className="p-3 sm:p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
-          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-            <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400" />
-            <span className="text-[11px] sm:text-xs text-slate-400">Avg Calories</span>
-          </div>
-          <p className="text-[15px] sm:text-lg font-semibold text-orange-400">{data.totals.averageCalories}</p>
-          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">kcal/day</p>
-        </div>
-        <div className="p-3 sm:p-4 rounded-xl bg-red-500/10 border border-red-500/30">
-          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-            <Beef className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" />
-            <span className="text-[11px] sm:text-xs text-slate-400">Avg Protein</span>
-          </div>
-          <p className="text-[15px] sm:text-lg font-semibold text-red-400">{data.totals.averageProtein}g</p>
-          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">per day</p>
-        </div>
-        <div className="p-3 sm:p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-            <Wheat className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-            <span className="text-[11px] sm:text-xs text-slate-400">Avg Carbs</span>
-          </div>
-          <p className="text-[15px] sm:text-lg font-semibold text-amber-400">{data.totals.averageCarbs}g</p>
-          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">per day</p>
-        </div>
-        <div className="p-3 sm:p-4 rounded-xl bg-purple-500/10 border border-purple-500/30">
-          <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-            <Apple className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
-            <span className="text-[11px] sm:text-xs text-slate-400">Avg Fat</span>
-          </div>
-          <p className="text-[15px] sm:text-lg font-semibold text-purple-400">{data.totals.averageFat}g</p>
-          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">per day</p>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        {[
+          { icon: Flame, label: "Avg Calories", value: data.totals.averageCalories, unit: "kcal/day", accent: "orange", color: "text-orange-300" },
+          { icon: Beef, label: "Avg Protein", value: `${data.totals.averageProtein}g`, unit: "per day", accent: "red", color: "text-red-300" },
+          { icon: Wheat, label: "Avg Carbs", value: `${data.totals.averageCarbs}g`, unit: "per day", accent: "amber", color: "text-amber-300" },
+          { icon: Apple, label: "Avg Fat", value: `${data.totals.averageFat}g`, unit: "per day", accent: "purple", color: "text-purple-300" },
+        ].map((stat, i) => {
+          const Icon = stat.icon;
+          const bgMap: Record<string, string> = {
+            orange: "bg-orange-500/10 border-orange-500/20",
+            red: "bg-red-500/10 border-red-500/20",
+            amber: "bg-amber-500/10 border-amber-500/20",
+            purple: "bg-purple-500/10 border-purple-500/20",
+          };
+          return (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,#0f1219_0%,#0a0d14_100%)] p-4 sm:p-5"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border ${bgMap[stat.accent]}`}>
+                  <Icon className={`w-4 h-4 ${stat.color}`} />
+                </div>
+              </div>
+              <p className={`text-lg sm:text-2xl font-bold tracking-tight ${stat.color}`}>{stat.value}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">{stat.label}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{stat.unit}</p>
+            </motion.div>
+          );
+        })}
       </div>
 
       {/* Chart */}
-      <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-3 sm:p-6">
-        <div className="flex items-center justify-between mb-3 sm:mb-6">
-          <h4 className="text-[14px] sm:text-[15px] text-white font-semibold">Daily Nutrition Trends</h4>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setChartMode('line')}
-              className={`p-2 rounded-lg transition-colors ${
-                chartMode === 'line'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:text-white'
-              }`}
-              title="Line Chart"
-            >
-              <LineChartIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setChartMode('bar')}
-              className={`p-2 rounded-lg transition-colors ${
-                chartMode === 'bar'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:text-white'
-              }`}
-              title="Bar Chart"
-            >
-              <BarChart2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setChartMode('area')}
-              className={`p-2 rounded-lg transition-colors ${
-                chartMode === 'area'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:text-white'
-              }`}
-              title="Area Chart"
-            >
-              <Layers className="w-4 h-4" />
-            </button>
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,#0f1219_0%,#0a0d14_100%)] p-4 sm:p-6"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-[14px] sm:text-[15px] text-white font-semibold flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/20">
+              <LineChartIcon className="w-3.5 h-3.5 text-emerald-300" />
+            </span>
+            Daily Nutrition Trends
+          </h4>
+          <div className="flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-lg p-1">
+            {([
+              { mode: 'line' as const, Icon: LineChartIcon, title: "Line Chart" },
+              { mode: 'bar' as const, Icon: BarChart2, title: "Bar Chart" },
+              { mode: 'area' as const, Icon: Layers, title: "Area Chart" },
+            ]).map(({ mode, Icon, title }) => (
+              <button
+                key={mode}
+                onClick={() => setChartMode(mode)}
+                className={`p-1.5 rounded transition-all ${
+                  chartMode === mode
+                    ? 'bg-emerald-600 text-white shadow shadow-emerald-600/20'
+                    : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+                }`}
+                title={title}
+              >
+                <Icon className="w-3.5 h-3.5" />
+              </button>
+            ))}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={250} className="sm:!h-[400px]">
+        <ResponsiveContainer width="100%" height={320} className="sm:!h-[440px]">
           <ChartComponent mode={chartMode} />
         </ResponsiveContainer>
-      </div>
+      </motion.div>
     </div>
   );
 }

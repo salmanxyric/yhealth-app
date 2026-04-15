@@ -154,6 +154,19 @@ const TABLE_FILES = [
   '109-streak-activity-log.sql',
   '110-streak-freeze-log.sql',
   '111-streak-rewards.sql',
+  // Accountability system
+  '112-accountability-system.sql',
+  // Accountability contracts
+  '113-accountability-contracts.sql',
+  // Follow / Buddy system
+  '115-user-follows.sql',
+  // Calendar integration
+  '113-calendar-connections.sql',
+  '114-calendar-events.sql',
+  // Obstacle diagnosis
+  '116-goal-obstacles.sql',
+  // Goal reconnection (DKA prevention)
+  '117-goal-reconnections.sql',
   // Triggers (must be last)
   '99-triggers.sql',
 ];

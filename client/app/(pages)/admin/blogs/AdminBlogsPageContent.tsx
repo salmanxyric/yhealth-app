@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { sanitizeHtml } from "@/lib/sanitize";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -1113,7 +1114,7 @@ export default function AdminBlogsPageContent() {
                 <div
                   className="text-sm text-slate-300 prose prose-invert prose-sm max-w-none"
                   dangerouslySetInnerHTML={{
-                    __html: detailBlog.content.substring(0, 500) + (detailBlog.content.length > 500 ? "..." : ""),
+                    __html: sanitizeHtml(detailBlog.content.substring(0, 500) + (detailBlog.content.length > 500 ? "..." : "")),
                   }}
                 />
               </div>

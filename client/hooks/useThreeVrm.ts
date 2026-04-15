@@ -167,12 +167,51 @@ export function useThreeVrm({
       setError(null);
 
       try {
-        const loader = new GLTFLoader();
+        // Dedicated LoadingManager so we can silence cosmetic texture errors.
+        // VRMs commonly embed textures the browser can't decode (KTX2/BASIS)
+        // or whose blob: URLs the dev server rejects. Three.js logs each
+        // failure as a console error even though the VRM renders fine with
+        // fallback materials. We downgrade those specific errors to a single
+        // aggregated warn so the console stays readable.
+        const manager = new THREE.LoadingManager();
+        let failedTextures = 0;
+        manager.onError = (failedUrl: string) => {
+          if (failedUrl.startsWith("blob:") || failedUrl.startsWith("data:")) {
+            failedTextures++;
+            return;
+          }
+          console.warn("[useThreeVrm] Asset failed to load:", failedUrl);
+        };
+
+        const loader = new GLTFLoader(manager);
+        loader.setCrossOrigin("anonymous");
         loader.register((parser) => new VRMLoaderPlugin(parser));
 
         const gltf = await loader.loadAsync(url);
+        if (failedTextures > 0) {
+          console.warn(
+            `[useThreeVrm] ${failedTextures} embedded texture(s) failed to decode — VRM loaded with fallback materials.`,
+          );
+        }
         const vrm = gltf.userData.vrm as VRM | undefined;
         if (!vrm) throw new Error("No VRM data found in file");
+
+        // Defensive: ensure every texture has colorSpace set. Some VRM files
+        // ship with texture slots the MToon/GLTF extensions later read as
+        // `texture.colorSpace` — undefined textures there trigger
+        // "Cannot read properties of undefined (reading 'colorSpace')".
+        vrm.scene.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((mat) => {
+            if (!mat) return;
+            const slots = ["map", "emissiveMap", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "alphaMap", "lightMap"];
+            for (const slot of slots) {
+              const tex = (mat as unknown as Record<string, THREE.Texture | undefined>)[slot];
+              if (tex && !tex.colorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+            }
+          });
+        });
 
         // Remove previous VRM
         if (vrmRef.current) {

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker optimization
@@ -14,6 +15,22 @@ const nextConfig: NextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(self)' },
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.lordicon.com https://fonts.googleapis.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com",
+              "img-src 'self' data: blob: https: http:",
+              "media-src 'self' blob: https: http:",
+              "connect-src 'self' http://localhost:* ws://localhost:* https: wss:",
+              "frame-src 'self' https://accounts.google.com https://accounts.spotify.com",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join('; '),
+          },
         ],
       },
     ];
@@ -24,6 +41,14 @@ const nextConfig: NextConfig = {
   experimental: {
     // Optimize package imports to reduce chunk size
     optimizePackageImports: ['@xyflow/react', 'framer-motion', 'gsap', 'lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
+  },
+  // Turbopack config: root set to monorepo root so @shared (outside client dir) resolves
+  turbopack: {
+    root: path.join(__dirname, '..'),
+    resolveAlias: {
+      '@shared': path.join(__dirname, '..', 'shared'),
+    },
+    resolveExtensions: ['.tsx', '.ts', '.jsx', '.js', '.json', '.mjs'],
   },
   // Transpile packages that might have issues with Turbopack
   transpilePackages: [],

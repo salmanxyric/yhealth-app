@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   MoodCheckIn,
   EnergyCheckIn,
@@ -40,9 +40,12 @@ import {
   Sun,
   Moon,
   Mic,
+  LayoutDashboard,
+  ListChecks,
 } from "lucide-react";
 import type { JournalPrompt as JournalPromptType } from "@/src/shared/services/wellbeing.service";
 import { dailyCheckinService } from "@/src/shared/services/wellbeing.service";
+import { DashboardUnderlineTabs } from "../DashboardUnderlineTabs";
 
 export function WellbeingTab() {
   const [showMoodCheckIn, setShowMoodCheckIn] = useState(false);
@@ -121,38 +124,18 @@ export function WellbeingTab() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5 bg-slate-800/50 border border-slate-700/50 rounded-xl p-1.5 backdrop-blur-sm">
-          <TabsTrigger 
-            value="overview" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/30 rounded-lg transition-all duration-300"
-          >
-            Overview
-          </TabsTrigger>
-          <TabsTrigger 
-            value="mood" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/30 rounded-lg transition-all duration-300"
-          >
-            Mood
-          </TabsTrigger>
-          <TabsTrigger 
-            value="energy" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/30 rounded-lg transition-all duration-300"
-          >
-            Energy
-          </TabsTrigger>
-          <TabsTrigger 
-            value="journal" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/30 rounded-lg transition-all duration-300"
-          >
-            Journal
-          </TabsTrigger>
-          <TabsTrigger 
-            value="habits" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-600 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/30 rounded-lg transition-all duration-300"
-          >
-            Habits
-          </TabsTrigger>
-        </TabsList>
+        <DashboardUnderlineTabs
+          layoutId="wellbeingSubTabUnderline"
+          activeId={activeTab}
+          onTabChange={setActiveTab}
+          tabs={[
+            { id: "overview", label: "Overview", icon: LayoutDashboard },
+            { id: "mood", label: "Mood", icon: Smile },
+            { id: "energy", label: "Energy", icon: Zap },
+            { id: "journal", label: "Journal", icon: BookOpen },
+            { id: "habits", label: "Habits", icon: ListChecks },
+          ]}
+        />
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6 mt-6">

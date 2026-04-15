@@ -10,6 +10,7 @@ import { query } from '../database/pg.js';
 import { logger } from '../services/logger.service.js';
 import { competitionService } from '../services/competition.service.js';
 import type { CompetitionRules } from '../services/competition.service.js';
+import { smartCompetitionService } from '../services/smart-competition.service.js';
 
 // ============================================
 // CONFIGURATION
@@ -98,9 +99,41 @@ const TEMPLATES: CompetitionTemplate[] = [
 // ============================================
 
 /**
- * Pick a template that differs from the given name
+ * Pick a template using smart goal-weighted selection.
+ * Falls back to random if smart service fails.
  */
-function pickTemplate(avoidName?: string): CompetitionTemplate {
+async function pickTemplate(avoidName?: string): Promise<CompetitionTemplate> {
+  try {
+    const recentNames = await smartCompetitionService.getRecentTemplateNames(5);
+    const result = await smartCompetitionService.selectBestTemplateIndex('daily', recentNames);
+
+    // Smart template (custom, not in TEMPLATES array)
+    if (result.smartTemplate) {
+      logger.info('[CompetitionAutoCreate] Smart template selected', { name: result.smartTemplate.name, reason: result.reason });
+      return {
+        name: result.smartTemplate.name,
+        description: result.smartTemplate.description,
+        rules: result.smartTemplate.rules,
+        scoringWeights: result.smartTemplate.scoringWeights,
+        badges: result.smartTemplate.badges,
+      };
+    }
+
+    // Standard template by index
+    if (result.index >= 0 && result.index < TEMPLATES.length) {
+      const template = TEMPLATES[result.index];
+      if (template.name !== avoidName) {
+        logger.info('[CompetitionAutoCreate] Goal-weighted template selected', { name: template.name, reason: result.reason });
+        return template;
+      }
+    }
+  } catch (error) {
+    logger.warn('[CompetitionAutoCreate] Smart selection failed, falling back to random', {
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+  }
+
+  // Fallback: random selection
   const pool = avoidName ? TEMPLATES.filter((t) => t.name !== avoidName) : TEMPLATES;
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -196,7 +229,7 @@ async function ensureDailyCompetition(): Promise<void> {
     });
   }
 
-  const template = pickTemplate(latest?.name);
+  const template = await pickTemplate(latest?.name);
   await createCompetitionFromTemplate(template, DAILY_DURATION, 'daily');
 }
 
@@ -244,7 +277,7 @@ async function ensureChallengeCompetition(): Promise<void> {
     });
   }
 
-  const template = pickTemplate(latest?.name);
+  const template = await pickTemplate(latest?.name);
   const durationDays = CHALLENGE_DURATIONS[Math.floor(Math.random() * CHALLENGE_DURATIONS.length)];
   await createCompetitionFromTemplate(template, durationDays, 'challenge');
 }

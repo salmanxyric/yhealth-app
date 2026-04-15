@@ -17,3 +17,5 @@ export { ProfileTab } from "./ProfileTab";
 export { WellbeingTab } from "./WellbeingTab";
 export { IntelligenceTab } from "./IntelligenceTab";
 export { FinanceTab } from "./FinanceTab";
+export { AccountabilityTab } from "./accountability/AccountabilityTab";
+export { SocialTab } from "./social/SocialTab";

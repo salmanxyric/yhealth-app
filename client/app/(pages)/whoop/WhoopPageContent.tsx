@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { api } from '@/lib/api-client';
 import { getSocket } from '@/lib/socket-client';
+import { DashboardUnderlineTabs } from '@/app/(pages)/dashboard/components/DashboardUnderlineTabs';
 
 interface WhoopStatus {
   isConnected: boolean;
@@ -400,10 +401,9 @@ export default function WhoopPageContent() {
                 ))}
               </div>
 
-              {/* Tab Navigation Skeleton */}
-              <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-gradient-to-r from-white/5 via-white/5 to-white/5 border border-white/10 backdrop-blur-xl overflow-x-auto">
+              <div className="flex gap-3 border-b border-white/10 pb-3 overflow-x-auto">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <Skeleton key={i} className="h-12 w-24 rounded-xl bg-slate-700/50 flex-shrink-0" />
+                  <Skeleton key={i} className="h-9 w-28 rounded-md bg-slate-700/50 flex-shrink-0" />
                 ))}
               </div>
 
@@ -430,58 +430,20 @@ export default function WhoopPageContent() {
 
               {/* Tabs - Always show (components have own loading states) */}
               <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 sm:mt-8">
-            {/* Beautiful Custom Tab List */}
-            <div className="relative mb-4 sm:mb-8">
-              <div className="flex items-center gap-1 sm:gap-2 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-white/5 via-white/5 to-white/5 border border-white/10 backdrop-blur-xl shadow-2xl shadow-purple-500/10 overflow-x-auto scrollbar-hide">
-                {[
-                  { id: 'overview', label: 'Overview', icon: TrendingUp, gradient: 'from-purple-500 via-pink-500 to-purple-500', color: 'text-purple-400' },
-                  { id: 'recovery', label: 'Recovery', icon: Heart, gradient: 'from-red-500 via-rose-500 to-red-500', color: 'text-red-400' },
-                  { id: 'sleep', label: 'Sleep', icon: Moon, gradient: 'from-blue-500 via-cyan-500 to-blue-500', color: 'text-blue-400' },
-                  { id: 'strain', label: 'Strain', icon: Activity, gradient: 'from-purple-500 via-violet-500 to-purple-500', color: 'text-purple-400' },
-                  { id: 'stress', label: 'Stress', icon: Brain, gradient: 'from-rose-500 via-pink-500 to-rose-500', color: 'text-rose-400' },
-                  { id: 'cycles', label: 'Cycles', icon: Calendar, gradient: 'from-indigo-500 via-purple-500 to-indigo-500', color: 'text-indigo-400' },
-                ].map((tab) => {
-                  const isActive = activeTab === tab.id;
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`
-                        relative flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-5 py-2 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-[13px] sm:text-[14px]
-                        transition-all duration-300 whitespace-nowrap cursor-pointer
-                        ${isActive
-                          ? 'text-white'
-                          : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }
-                      `}
-                    >
-                      {isActive && (
-                        <motion.div
-                          layoutId="activeWhoopTab"
-                          className={`absolute inset-0 rounded-lg sm:rounded-xl bg-gradient-to-r ${tab.gradient} opacity-90 shadow-lg shadow-purple-500/30`}
-                          transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                        />
-                      )}
-                      <motion.span
-                        className="relative z-10"
-                        animate={isActive ? { scale: [1, 1.1, 1] } : {}}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${isActive ? 'text-white' : tab.color}`} />
-                      </motion.span>
-                      <span className="relative z-10">{tab.label}</span>
-                      {isActive && (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white shadow-lg hidden sm:block"
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="mb-4 sm:mb-8">
+              <DashboardUnderlineTabs
+                layoutId="whoopSubTabUnderline"
+                activeId={activeTab}
+                onTabChange={setActiveTab}
+                tabs={[
+                  { id: 'overview', label: 'Overview', icon: TrendingUp },
+                  { id: 'recovery', label: 'Recovery', icon: Heart },
+                  { id: 'sleep', label: 'Sleep', icon: Moon },
+                  { id: 'strain', label: 'Strain', icon: Activity },
+                  { id: 'stress', label: 'Stress', icon: Brain },
+                  { id: 'cycles', label: 'Cycles', icon: Calendar },
+                ]}
+              />
             </div>
 
             <AnimatePresence mode="wait">

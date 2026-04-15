@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp,
   TrendingDown,
@@ -37,6 +37,7 @@ import { LogMeasurementsModal } from './progress/LogMeasurementsModal';
 import { UploadPhotoModal } from './progress/UploadPhotoModal';
 import { PhotoComparisonWithAI } from './progress/PhotoComparisonWithAI';
 import toast from 'react-hot-toast';
+import { DashboardUnderlineTabs } from '../DashboardUnderlineTabs';
 
 // Types
 interface WeightRecord {
@@ -917,36 +918,12 @@ export function ProgressTab() {
         </div>
       </div>
 
-      {/* Tab Navigation - Premium with animated indicator */}
-      <LayoutGroup id="progress-tabs">
-        <div className="relative flex items-center gap-1 p-1 overflow-x-auto scrollbar-hide rounded-xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-sm">
-          {tabItems.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 whitespace-nowrap z-10 ${
-                  isActive
-                    ? 'text-white'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="progress-active-tab"
-                    className="absolute inset-0 rounded-lg bg-white/[0.08] border border-white/[0.08]"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  />
-                )}
-                <Icon className={`w-4 h-4 relative z-10 ${isActive ? 'text-emerald-400' : ''}`} />
-                <span className="relative z-10">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </LayoutGroup>
+      <DashboardUnderlineTabs
+        layoutId="progressSubTabUnderline"
+        activeId={activeTab}
+        onTabChange={(id) => setActiveTab(id as typeof activeTab)}
+        tabs={tabItems.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+      />
 
       {/* Tab Content */}
       <AnimatePresence mode="wait">

@@ -91,6 +91,17 @@ export interface LifestyleContext {
     itemCount: number;
     categories: string[];
   }>;
+  scheduleContext?: {
+    stressLevel: string;
+    totalItems: number;
+    busyHours: number;
+    freeHours: number;
+    freeWindows: Array<{ startTime: string; endTime: string; durationMinutes: number }>;
+    hasEarlyMorning: boolean;
+    hasLateNight: boolean;
+    longestFreeWindowMinutes: number | null;
+    backToBackCount: number;
+  };
   activeHabits?: number;
   routines?: Array<{
     name: string;
@@ -306,6 +317,7 @@ export interface ComprehensiveUserContext {
   competitions: CompetitionContext;
   progressTrend: ProgressTrendContext;
   activityStatus: ActivityStatusContext;
+  contextState?: import('./correlation-engine.service.js').UserContextState;
 }
 
 // ============================================
@@ -392,6 +404,14 @@ class ComprehensiveUserContextService {
         gamification, habits, mentalHealth, waterIntake, dailyScore, nutritionAnalysis,
         competitions, progressTrend, activityStatus,
       };
+
+      // Compute unified life state via correlation engine
+      try {
+        const { correlationEngine } = await import('./correlation-engine.service.js');
+        result.contextState = correlationEngine.computeState(result);
+      } catch {
+        // Correlation engine is non-critical
+      }
 
       // Cache the result
       this.contextCache.set(userId, {
@@ -831,6 +851,36 @@ class ComprehensiveUserContextService {
           itemCount: parseInt(row.item_count as unknown as string, 10),
           categories: (row.categories as string[]) || [],
         }));
+      }
+
+      // Get today's schedule context (stress, free windows, busy hours)
+      try {
+        const { scheduleContextService } = await import('./schedule-context.service.js');
+        const dayCtx = await scheduleContextService.getDayContext(userId);
+        context.scheduleContext = {
+          stressLevel: dayCtx.stressLevel,
+          totalItems: dayCtx.totalItems,
+          busyHours: dayCtx.busyHours,
+          freeHours: dayCtx.freeHours,
+          freeWindows: dayCtx.freeWindows,
+          hasEarlyMorning: dayCtx.hasEarlyMorning,
+          hasLateNight: dayCtx.hasLateNight,
+          longestFreeWindowMinutes: dayCtx.longestFreeWindow?.durationMinutes ?? null,
+          backToBackCount: dayCtx.backToBackCount,
+        };
+      } catch {
+        // Schedule context is non-critical — don't block lifestyle context
+      }
+
+      // Get special days (Ramadan, holidays, etc.)
+      try {
+        const { specialDaysService } = await import('./special-days.service.js');
+        const specialDays = await specialDaysService.getSpecialDays(userId);
+        if (specialDays.length > 0) {
+          (context as Record<string, unknown>).specialDays = specialDays;
+        }
+      } catch {
+        // Special days is non-critical
       }
 
       // Get active habits count
@@ -1949,6 +1999,27 @@ class ComprehensiveUserContextService {
   formatContextForPrompt(context: ComprehensiveUserContext): string {
     const sections: string[] = [];
 
+    // Unified Life State (inline format — no dynamic import needed)
+    if (context.contextState) {
+      const s = context.contextState;
+      const modeDesc = s.recommendedMode === 'short' ? 'keep responses concise and supportive' :
+        s.recommendedMode === 'deep' ? 'engage in deeper coaching and goal exploration' : 'normal conversational coaching';
+      sections.push('UNIFIED LIFE STATE:');
+      sections.push(`- Stress: ${s.stressLevel.toUpperCase()} (${s.stressScore}/100)`);
+      sections.push(`- Energy: ${s.energyLevel.toUpperCase()} (${s.energyScore}/100)`);
+      sections.push(`- Availability: ${s.availability.toUpperCase()} (${s.availabilityScore}/100)`);
+      sections.push(`- Mood: ${s.mood.toUpperCase()} (${s.moodScore}/100)`);
+      sections.push(`- Recommended Interaction: ${s.recommendedMode.toUpperCase()} — ${modeDesc}`);
+      sections.push(`- Tone: ${s.toneAdjustment}`);
+      if (s.correlations.length > 0) {
+        sections.push('- Key Insights:');
+        for (const c of s.correlations.slice(0, 3)) {
+          sections.push(`  • ${c}`);
+        }
+      }
+      sections.push('');
+    }
+
     // WHOOP Data (enriched with trends, baselines, sleep stages)
     if (context.whoop.isConnected) {
       sections.push('WHOOP Data:');
@@ -2063,30 +2134,51 @@ class ComprehensiveUserContextService {
       sections.push('');
     }
 
-    // Lifestyle
-    if (context.lifestyle.dailySchedules && context.lifestyle.dailySchedules.length > 0) {
-      sections.push('Daily Schedules:');
-      sections.push(`- ${context.lifestyle.dailySchedules.length} day(s) with scheduled activities in last 7 days`);
-      const todaySchedule = context.lifestyle.dailySchedules.find(s => s.date === new Date().toISOString().split('T')[0]);
-      if (todaySchedule) {
-        sections.push(`- Today's Schedule: ${todaySchedule.itemCount} scheduled items`);
-        if (todaySchedule.categories.length > 0) {
-          sections.push(`- Categories: ${todaySchedule.categories.join(', ')}`);
-        }
+    // Lifestyle & Schedule Context
+    const sCtx = context.lifestyle.scheduleContext;
+    if (sCtx && sCtx.totalItems > 0) {
+      sections.push(`Today's Schedule Context:`);
+      sections.push(`- Stress Level: ${sCtx.stressLevel.toUpperCase()} (${sCtx.totalItems} items, ${sCtx.backToBackCount} back-to-back)`);
+      sections.push(`- Busy: ${sCtx.busyHours}h | Free: ${sCtx.freeHours}h`);
+      if (sCtx.freeWindows.length > 0) {
+        const windowStrs = sCtx.freeWindows.slice(0, 4).map(w => `${w.startTime}-${w.endTime} (${Math.round(w.durationMinutes / 60 * 10) / 10}h)`);
+        sections.push(`- Free windows: ${windowStrs.join(', ')}`);
+      } else {
+        sections.push(`- Free windows: NONE — fully booked`);
       }
-      if (context.lifestyle.activeHabits) {
-        sections.push(`- Active Habits: ${context.lifestyle.activeHabits}`);
-      }
-      if (context.lifestyle.preferences) {
-        if (context.lifestyle.preferences.preferredWorkoutTime) {
-          sections.push(`- Preferred Workout Time: ${context.lifestyle.preferences.preferredWorkoutTime}`);
-        }
-        if (context.lifestyle.preferences.coachingStyle) {
-          sections.push(`- Coaching Style: ${context.lifestyle.preferences.coachingStyle}`);
-        }
+      if (sCtx.hasEarlyMorning) sections.push(`- ⚠️ Early morning item (before 6 AM)`);
+      if (sCtx.hasLateNight) sections.push(`- ⚠️ Late night item (after 10 PM)`);
+      sections.push('');
+    } else if (context.lifestyle.dailySchedules && context.lifestyle.dailySchedules.length > 0) {
+      sections.push('Schedule: ' + context.lifestyle.dailySchedules.length + ' day(s) with activities in last 7 days');
+      sections.push('');
+    }
+
+    // Special days (Ramadan, holidays, etc.)
+    const specialDays = (context.lifestyle as Record<string, unknown>).specialDays as Array<{ type: string; name: string; adjustments: { customMessage?: string; reduceWorkoutIntensity?: boolean; adjustMealTiming?: boolean } }> | undefined;
+    if (specialDays && specialDays.length > 0) {
+      sections.push('Special Day Context:');
+      for (const day of specialDays) {
+        sections.push(`- ${day.name} (${day.type})`);
+        if (day.adjustments.customMessage) sections.push(`  ${day.adjustments.customMessage}`);
+        if (day.adjustments.reduceWorkoutIntensity) sections.push('  → Reduce workout intensity');
+        if (day.adjustments.adjustMealTiming) sections.push('  → Adjust meal timing');
       }
       sections.push('');
     }
+
+    if (context.lifestyle.activeHabits) {
+      sections.push(`Active Habits: ${context.lifestyle.activeHabits}`);
+    }
+    if (context.lifestyle.preferences) {
+      if (context.lifestyle.preferences.preferredWorkoutTime) {
+        sections.push(`Preferred Workout Time: ${context.lifestyle.preferences.preferredWorkoutTime}`);
+      }
+      if (context.lifestyle.preferences.coachingStyle) {
+        sections.push(`Coaching Style: ${context.lifestyle.preferences.coachingStyle}`);
+      }
+    }
+    sections.push('');
     
     // Body Stats
     if (context.bodyStats.latestWeight) {

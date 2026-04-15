@@ -89,6 +89,9 @@ export interface PlanStatusOverride {
   goalOverride: GoalOverride;
   adjustmentDetails?: string;
   userConfirmed: boolean;
+  alternativeWorkouts?: AlternativeWorkout[];
+  mealSuggestions?: MealSuggestion[];
+  recoveryPlan?: RecoveryPlan[];
 }
 
 // ─── Status Patterns ────────────────────────────────────────────────────────
@@ -103,6 +106,40 @@ export interface StatusPattern {
   firstObserved: string;
   lastConfirmed: string;
   suggestion: string;
+}
+
+// ─── Alternative Plan Content ──────────────────────────────────────────────
+
+export interface AlternativeWorkout {
+  name: string;
+  duration: number;
+  intensity: 'very_low' | 'low' | 'moderate';
+  exercises: Array<{
+    name: string;
+    sets?: number;
+    reps?: string;
+    duration?: string;
+    notes?: string;
+  }>;
+  equipmentNeeded: string[];
+  suitableFor: ActivityStatus[];
+}
+
+export interface MealSuggestion {
+  name: string;
+  category: 'comfort' | 'anti_inflammatory' | 'light' | 'hydrating' | 'energy';
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  description: string;
+  approximateCalories: number;
+  benefits: string[];
+}
+
+export interface RecoveryPlan {
+  day: number;
+  intensityPercent: number;
+  workoutModification: string;
+  nutritionNote: string;
+  wellbeingTip: string;
 }
 
 // ─── Activity Status Context (for ComprehensiveUserContext) ─────────────────

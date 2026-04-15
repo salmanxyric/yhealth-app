@@ -20,9 +20,16 @@ export {
   CircularProgress,
   MiniCircularProgress,
   DailyProgressCard,
-  WeeklyProgressOverview
+  WeeklyProgressOverview,
+  DonutChart,
 } from './CircularProgress';
 export { PlanCompletionCelebration, PlanCompletedBanner } from './PlanCompletionCelebration';
+export { ActiveSessionBanner } from './ActiveSessionBanner';
+export { RestTimerModal } from './RestTimerModal';
+export { WorkoutCompletionModal } from './WorkoutCompletionModal';
+
+// Sub-tab views
+export { TodayView, PlanView } from './tabs';
 
 // Types
 export type {
@@ -78,6 +85,10 @@ export {
   buildFullPlanProgress,
   calculatePlanStats,
 } from './utils';
+
+// Hooks
+export { useWorkoutSession } from './hooks/useWorkoutSession';
+export { useWorkoutData } from './hooks/useWorkoutData';
 
 // Logger
 export { workoutLogger } from './logger';

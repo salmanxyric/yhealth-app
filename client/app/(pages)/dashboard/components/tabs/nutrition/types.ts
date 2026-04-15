@@ -103,6 +103,7 @@ export interface RecipeFormData {
   instructions: RecipeInstruction[];
   tags: string[];
   dietaryFlags: string[];
+  imageUrl?: string | null;
 }
 
 export interface ShoppingFormData {

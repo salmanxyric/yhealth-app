@@ -27,6 +27,15 @@ import { lifeHistoryDigestJob } from "./jobs/life-history-digest.job.js";
 import { engagementScoringJob } from "./jobs/engagement-scoring.job.js";
 import { startEmailDigestJob, stopEmailDigestJob } from "./jobs/email-digest.job.js";
 import { streakValidationJob } from "./jobs/streak-validation.job.js";
+import { statusFollowUpJob } from "./jobs/status-followup.job.js";
+import { statusPatternAnalysisJob } from "./jobs/status-pattern-analysis.job.js";
+import { accountabilityTriggerJob } from "./jobs/accountability-trigger.job.js";
+import { contractEvaluationJob } from "./jobs/contract-evaluation.job.js";
+import { obstacleDetectorJob } from "./jobs/obstacle-detector.job.js";
+import { goalReconnectionJob } from "./jobs/goal-reconnection.job.js";
+import { startMicroWinsJob, stopMicroWinsJob } from "./jobs/micro-wins.job.js";
+import { startBuddySuggestionJob, stopBuddySuggestionJob } from "./jobs/buddy-suggestion.job.js";
+import { calendarSyncJob } from "./jobs/calendar-sync.job.js";
 import { activityEventProcessor } from "./workers/activity-event-processor.worker.js";
 import { ensureDefaultPlans } from "./services/subscription.service.js";
 import { query } from "./database/pg.js";
@@ -97,6 +106,27 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
     streakValidationJob.stop();
     logger.info("Streak validation job stopped");
+
+    statusFollowUpJob.stop();
+    logger.info("Status follow-up job stopped");
+
+    statusPatternAnalysisJob.stop();
+    logger.info("Status pattern analysis job stopped");
+
+    accountabilityTriggerJob.stop();
+    logger.info("Accountability trigger job stopped");
+
+    calendarSyncJob.stop();
+    logger.info("Calendar sync job stopped");
+
+    contractEvaluationJob.stop();
+    logger.info("Contract evaluation job stopped");
+
+    stopMicroWinsJob();
+    logger.info("Micro-wins job stopped");
+
+    stopBuddySuggestionJob();
+    logger.info("Buddy suggestion job stopped");
 
     await activityEventProcessor.stop();
     logger.info("Activity event processor stopped");
@@ -351,6 +381,51 @@ async function startServer(): Promise<void> {
           streakValidationJob.start();
           logger.info("Streak validation job started (staggered 600s)");
         }, 600_000);
+
+        setTimeout(() => {
+          statusFollowUpJob.start();
+          logger.info("Status follow-up job started (staggered 660s)");
+        }, 660_000);
+
+        setTimeout(() => {
+          statusPatternAnalysisJob.start();
+          logger.info("Status pattern analysis job started (staggered 720s)");
+        }, 720_000);
+
+        setTimeout(() => {
+          accountabilityTriggerJob.start();
+          logger.info("Accountability trigger job started (staggered 780s)");
+        }, 780_000);
+
+        setTimeout(() => {
+          contractEvaluationJob.start();
+          logger.info("Contract evaluation job started (staggered 840s)");
+        }, 840_000);
+
+        setTimeout(() => {
+          startMicroWinsJob();
+          logger.info("Micro-wins job started (staggered 900s)");
+        }, 900_000);
+
+        setTimeout(() => {
+          startBuddySuggestionJob();
+          logger.info("Buddy suggestion job started (staggered 960s)");
+        }, 960_000);
+
+        setTimeout(() => {
+          calendarSyncJob.start();
+          logger.info("Calendar sync job started (staggered 1020s)");
+        }, 1020_000);
+
+        setTimeout(() => {
+          obstacleDetectorJob.start();
+          logger.info("Obstacle detector job started (staggered 1080s)");
+        }, 1080_000);
+
+        setTimeout(() => {
+          goalReconnectionJob.start();
+          logger.info("Goal reconnection job started (staggered 1140s)");
+        }, 1140_000);
       }
 
       if (!backgroundJobsEnabled) {

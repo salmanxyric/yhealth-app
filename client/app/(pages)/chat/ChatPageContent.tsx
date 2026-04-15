@@ -48,9 +48,9 @@ export function ChatPageContent() {
 
   if (authLoading) {
     return (
-      <div className="flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-linear-to-b from-slate-50 to-slate-100 dark:from-[#0a0f1a] dark:to-[#0d1117]">
+      <div className="flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950">
         {/* Sidebar skeleton */}
-        <div className="hidden lg:flex h-full w-[340px] xl:w-[380px] flex-col border-r border-slate-200/60 dark:border-white/6 bg-white dark:bg-[#111827]">
+        <div className="hidden lg:flex h-full w-[340px] xl:w-[380px] flex-col border-r border-white/[0.04] bg-slate-900/95 backdrop-blur-xl">
           <div className="px-5 py-4 flex items-center justify-between">
             <Skeleton className="h-6 w-24 rounded-md" />
             <Skeleton className="h-8 w-8 rounded-lg" />
@@ -71,8 +71,8 @@ export function ChatPageContent() {
           </div>
         </div>
         {/* Messages area skeleton */}
-        <div className="flex flex-1 flex-col min-w-0 bg-white dark:bg-[#0d1117]">
-          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex flex-1 flex-col min-w-0 bg-slate-950">
+          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/[0.04]">
             <Skeleton className="h-10 w-10 rounded-full" />
             <div className="space-y-1.5">
               <Skeleton className="h-4 w-28 rounded" />
@@ -92,7 +92,7 @@ export function ChatPageContent() {
               <Skeleton className="h-20 w-60 rounded-2xl rounded-bl-md" />
             </div>
           </div>
-          <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="px-4 py-3 border-t border-white/[0.04]">
             <Skeleton className="h-12 w-full rounded-2xl" />
           </div>
         </div>
@@ -105,7 +105,7 @@ export function ChatPageContent() {
   }
 
   return (
-    <div className="relative flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-linear-to-b from-slate-50 to-slate-100 dark:from-[#0a0f1a] dark:to-[#0d1117]">
+    <div className="relative flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950">
       {/* Overlay for mobile when sidebar is open */}
       {showSidebar && (
         <motion.div
@@ -126,7 +126,7 @@ export function ChatPageContent() {
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className={cn(
           'flex h-full flex-col',
-          'bg-white dark:bg-[#111827] border-r border-slate-200/60 dark:border-white/6',
+          'bg-slate-900/95 backdrop-blur-xl border-r border-white/[0.04]',
           'lg:w-[340px] xl:w-[380px] lg:relative lg:translate-x-0',
           showSidebar
             ? 'fixed inset-y-0 left-0 w-[85vw] max-w-[380px] z-30 shadow-2xl shadow-black/10'
@@ -146,7 +146,7 @@ export function ChatPageContent() {
       </motion.div>
 
       {/* Messages View */}
-      <div className="relative flex flex-1 flex-col min-w-0 overflow-hidden bg-white dark:bg-[#0d1117]">
+      <div className="relative flex flex-1 flex-col min-w-0 overflow-hidden bg-slate-950">
         <MessagesView
           chatId={selectedChatId}
           onBack={() => {

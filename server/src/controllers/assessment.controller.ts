@@ -627,6 +627,24 @@ export const createGoal = asyncHandler(async (req: AuthenticatedRequest, res: Re
     data.isPrimary || existingGoalsCount === 0
   );
 
+  // Auto-generate achievements for this goal (fire-and-forget)
+  import('../services/dynamic-achievements.service.js').then(({ dynamicAchievementsService }) => {
+    dynamicAchievementsService.generateGoalAchievements(userId, {
+      id: goal.id,
+      title: data.title,
+      description: data.description,
+      category: data.category,
+      target_value: data.targetValue,
+      target_unit: data.targetUnit,
+      status: 'active',
+    }).catch((err: unknown) => {
+      logger.error('Failed to generate goal achievements', {
+        goalId: goal.id,
+        error: err instanceof Error ? err.message : 'Unknown',
+      });
+    });
+  }).catch(() => {});
+
   ApiResponse.created(res, {
     goal: mapGoalRow(goal),
     safetyWarnings: safetyResult.warnings,

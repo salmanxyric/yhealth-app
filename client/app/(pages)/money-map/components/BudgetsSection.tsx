@@ -16,8 +16,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
-import { type FinanceBudget, type FinanceCategory, type CreateBudgetInput, FINANCE_CATEGORY_ICONS,
-  FINANCE_CATEGORY_LABELS, } from "@shared/types/domain/finance";
+import type { FinanceBudget, FinanceCategory, CreateBudgetInput } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 import {
   formatCurrency,
   AnimatedCurrency,

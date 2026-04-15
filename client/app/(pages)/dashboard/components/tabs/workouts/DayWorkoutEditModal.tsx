@@ -10,6 +10,7 @@ import {
   Dumbbell,
 
 } from "lucide-react";
+import toast from "react-hot-toast";
 import { DayWorkout, Exercise } from "./types";
 import { workoutsService } from "@/src/shared/services";
 import { MUSCLE_GROUPS } from "./constants";
@@ -180,10 +181,11 @@ export function DayWorkoutEditModal({
       };
 
       await onSave(dayOfWeek, updatedWorkout);
+      toast.success(`${DAY_LABELS[dayOfWeek] || "Workout"} saved`);
       onClose();
     } catch (error) {
       console.error("Failed to save workout:", error);
-      alert("Failed to save workout. Please try again.");
+      toast.error("Failed to save workout. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -215,10 +217,11 @@ export function DayWorkoutEditModal({
     setIsSaving(true);
     try {
       await onSave(dayOfWeek, null);
+      toast.success(`${DAY_LABELS[dayOfWeek] || "Workout"} removed`);
       onClose();
     } catch (error) {
       console.error("Failed to remove workout:", error);
-      alert("Failed to remove workout. Please try again.");
+      toast.error("Failed to remove workout. Please try again.");
     } finally {
       setIsSaving(false);
     }

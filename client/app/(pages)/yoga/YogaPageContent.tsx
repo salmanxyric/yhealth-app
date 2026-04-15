@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, lazy, Suspense } from "react";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Flower2,
   Library,
@@ -10,6 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout";
+import { DashboardUnderlineTabs } from "@/app/(pages)/dashboard/components/DashboardUnderlineTabs";
 import { cn } from "@/lib/utils";
 import { useYogaSession } from "@/hooks/use-yoga-session";
 import type { YogaSession } from "@shared/types/domain/yoga";
@@ -244,91 +245,29 @@ function TabBar({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.6 }}
     >
-      <LayoutGroup id="yoga-tabs">
-        <div
-          className={cn(
-            "relative inline-flex gap-1 rounded-2xl p-1.5",
-            "bg-white/[0.03] backdrop-blur-2xl",
-            "border border-white/[0.06]",
-            "shadow-[0_2px_20px_rgba(0,0,0,0.15)]"
-          )}
-        >
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onChange(tab.id)}
-                className={cn(
-                  "relative flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm font-medium transition-colors duration-200",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:ring-offset-0",
-                  isActive
-                    ? "text-white"
-                    : "text-zinc-500 hover:text-zinc-300"
-                )}
-              >
-                {/* Active background */}
-                {isActive && (
-                  <motion.div
-                    layoutId="yoga-active-tab"
-                    className={cn(
-                      "absolute inset-0 rounded-xl",
-                      "bg-gradient-to-b from-white/[0.08] to-white/[0.03]",
-                      "border border-white/[0.08]",
-                      "shadow-[0_0_20px_rgba(16,185,129,0.1),inset_0_1px_0_rgba(255,255,255,0.06)]"
-                    )}
-                    transition={{
-                      type: "spring",
-                      duration: 0.5,
-                      bounce: 0.15,
-                    }}
-                  />
-                )}
-
-                {/* Active glow */}
-                {isActive && (
-                  <motion.div
-                    layoutId="yoga-tab-glow"
-                    className="absolute inset-0 -z-10 rounded-xl bg-emerald-500/[0.08] blur-xl"
-                    transition={{
-                      type: "spring",
-                      duration: 0.5,
-                      bounce: 0.15,
-                    }}
-                  />
-                )}
-
-                <span className="relative z-10 flex items-center gap-2">
-                  <Icon
-                    className={cn(
-                      "h-4 w-4 transition-all duration-300",
-                      isActive
-                        ? "text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]"
-                        : ""
-                    )}
-                  />
-                  {/* Full label on desktop, short on mobile */}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className="sm:hidden">{tab.shortLabel}</span>
-                </span>
-
-                {/* AI Coach sparkle indicator */}
-                {tab.id === "ai-coach" && !isActive && (
-                  <motion.div
-                    animate={{
-                      scale: [1, 1.3, 1],
-                      opacity: [0.5, 1, 0.5],
-                    }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-amber-400"
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </LayoutGroup>
+      <DashboardUnderlineTabs
+        layoutId="yogaSubTabUnderline"
+        activeId={activeTab}
+        onTabChange={(id) => onChange(id as YogaTab)}
+        tabs={tabs.map((tab) => ({
+          id: tab.id,
+          label: tab.label,
+          shortLabel: tab.shortLabel,
+          icon: tab.icon,
+          suffix:
+            tab.id === "ai-coach" && activeTab !== "ai-coach" ? (
+              <motion.span
+                aria-hidden
+                animate={{
+                  scale: [1, 1.3, 1],
+                  opacity: [0.5, 1, 0.5],
+                }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle"
+              />
+            ) : undefined,
+        }))}
+      />
     </motion.div>
   );
 }

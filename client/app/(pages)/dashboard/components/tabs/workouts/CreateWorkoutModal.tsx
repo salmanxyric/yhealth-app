@@ -562,8 +562,8 @@ export function CreateWorkoutModal({
                 onClick={() => setMode("ai")}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   mode === "ai"
-                    ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-sky-600 text-white shadow-lg shadow-sky-500/25 hover:bg-sky-500"
+                    : "text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}
               >
                 <Wand2 className="w-4 h-4" />
@@ -573,8 +573,8 @@ export function CreateWorkoutModal({
                 onClick={() => setMode("manual")}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   mode === "manual"
-                    ? "bg-orange-500 text-white"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-sky-600 text-white shadow-lg shadow-sky-500/25 hover:bg-sky-500"
+                    : "text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}
               >
                 <Dumbbell className="w-4 h-4" />
@@ -936,8 +936,8 @@ export function CreateWorkoutModal({
                           className={`
                             px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-[11px] sm:text-sm font-medium transition-all
                             ${isSelected
-                              ? "bg-orange-500/20 border-orange-500 text-orange-400"
-                              : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                              ? "bg-sky-600/20 border-sky-500 text-sky-400 hover:bg-sky-600/30"
+                              : "bg-slate-800 border-slate-700 text-slate-400 hover:border-sky-500/50 hover:text-sky-400"
                             }
                           `}
                         >
@@ -1135,7 +1135,7 @@ export function CreateWorkoutModal({
               <button
                 onClick={handleGenerateAIPlan}
                 disabled={!aiFormData.description.trim() || isLoadingAI}
-                className="flex items-center gap-2 px-4 sm:px-6 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 text-white font-medium text-[13px] sm:text-sm hover:from-violet-600 hover:to-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 rounded-xl bg-sky-600 text-white font-medium text-[13px] sm:text-sm hover:bg-sky-500 hover:shadow-lg hover:shadow-sky-500/25 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoadingAI ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -1148,7 +1148,7 @@ export function CreateWorkoutModal({
               <button
                 onClick={handleCreateWorkout}
                 disabled={!formData.name || formData.exercises.length === 0 || isCreating}
-                className="flex items-center gap-2 px-4 sm:px-6 py-2 rounded-xl bg-orange-500 text-white font-medium text-[13px] sm:text-sm hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 rounded-xl bg-sky-600 text-white font-medium text-[13px] sm:text-sm hover:bg-sky-500 hover:shadow-lg hover:shadow-sky-500/25 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isCreating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

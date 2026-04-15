@@ -36,7 +36,8 @@ import {
   Package,
   type LucideIcon,
 } from 'lucide-react';
-import { type GraphNode, type GraphNodeType, type GraphNodeCategory, NODE_CATEGORY_COLORS } from '@shared/types/domain/knowledge-graph';
+import type { GraphNode, GraphNodeType, GraphNodeCategory } from '@shared/types/domain/knowledge-graph';
+import { NODE_CATEGORY_COLORS } from '@shared/types/domain/knowledge-graph';
 
 interface TimelineViewProps {
   nodes: GraphNode[];

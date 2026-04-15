@@ -3,14 +3,37 @@
  * @description API routes for daily schedules
  */
 
-import { Router } from 'express';
+import { Router, type Response } from 'express';
+import type { AuthenticatedRequest } from '../types/index.js';
 import { scheduleController } from '../controllers/schedule.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { scheduleContextService } from '../services/schedule-context.service.js';
+import { specialDaysService } from '../services/special-days.service.js';
+import { ApiResponse } from '../utils/ApiResponse.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+/**
+ * @route   GET /api/v1/schedules/context
+ * @desc    Get AI-computed day context (stress, free windows, special days)
+ * @access  Private
+ */
+router.get('/context', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
+
+  const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+  const [dayContext, specialDays] = await Promise.all([
+    scheduleContextService.getDayContext(userId, date),
+    specialDaysService.getSpecialDays(userId, date),
+  ]);
+
+  ApiResponse.success(res, { ...dayContext, specialDays });
+}));
 
 /**
  * @route   GET /api/v1/schedules/calendar

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { sanitizeHtml } from "@/lib/sanitize";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -260,7 +261,7 @@ export default function WebinarDetailPage() {
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 }}
-                  dangerouslySetInnerHTML={{ __html: webinar.content }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(webinar.content) }}
                   className="prose prose-invert max-w-none [&_p]:mb-4 [&_a]:text-emerald-400 [&_a]:hover:text-sky-400 mb-8"
                 />
               )}

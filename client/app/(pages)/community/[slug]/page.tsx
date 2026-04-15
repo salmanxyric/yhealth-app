@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { sanitizeHtml } from "@/lib/sanitize";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -257,7 +258,7 @@ export default function CommunityPostDetailPage() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.35 }}
-                dangerouslySetInnerHTML={{ __html: post.content }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }}
                 className="prose prose-invert max-w-none [&_p]:mb-4 [&_p]:leading-relaxed [&_a]:text-emerald-400 [&_a]:hover:text-sky-400 [&_ul]:list-disc [&_ul]:ml-6 [&_ol]:list-decimal [&_ol]:ml-6"
               />
 

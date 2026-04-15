@@ -683,6 +683,31 @@ export const nutritionService = {
   toggleRecipeFavorite: (recipeId: string) =>
     api.patch<RecipeResponse>(`/diet-plans/recipes/${recipeId}/favorite`, {}),
 
+  /**
+   * Upload a recipe image to R2 and return its public URL.
+   * Reuses the generic POST /api/upload/image endpoint, which uploads the buffer
+   * and returns { key, url, publicUrl, ... }. We prefer publicUrl (non-expiring)
+   * when present, falling back to url.
+   */
+  uploadRecipeImage: async (file: File): Promise<{ imageUrl: string; key: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const resp = await api.upload<{
+      key: string;
+      encodedKey: string;
+      url: string;
+      publicUrl?: string;
+      size: number;
+      mimeType: string;
+      originalName: string;
+    }>("/upload/image", form);
+    const data = resp.data;
+    if (!data) {
+      throw new Error("Image upload failed: empty response");
+    }
+    return { imageUrl: data.publicUrl || data.url, key: data.key };
+  },
+
   // ============================================
   // ADAPTIVE NUTRITION
   // ============================================

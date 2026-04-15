@@ -132,7 +132,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         >
           <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={message.senderAvatar || undefined} alt={message.senderName || 'User'} />
-            <AvatarFallback className="bg-linear-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
+            <AvatarFallback className="bg-linear-to-br from-emerald-600 to-sky-600 text-white text-xs font-semibold">
               {getInitials(message.senderName || '')}
             </AvatarFallback>
           </Avatar>

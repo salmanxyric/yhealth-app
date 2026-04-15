@@ -2,8 +2,8 @@
 
 import { motion, type Variants } from "framer-motion";
 import { ArrowRight, Receipt } from "lucide-react";
-import { type FinanceTransaction, FINANCE_CATEGORY_ICONS,
-  FINANCE_CATEGORY_LABELS, } from "@shared/types/domain/finance";
+import type { FinanceTransaction } from "@shared/types/domain/finance";
+import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 import {
   formatCurrency,
   staggerContainer,

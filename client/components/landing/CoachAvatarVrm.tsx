@@ -73,7 +73,15 @@ export function CoachAvatarVrm({
 
     const loadVrm = async () => {
       try {
-        const loader = new GLTFLoader();
+        // Silence cosmetic blob:/data: texture errors — VRM still renders
+        // with fallback materials for textures the browser can't decode.
+        const manager = new THREE.LoadingManager();
+        manager.onError = (failedUrl: string) => {
+          if (failedUrl.startsWith("blob:") || failedUrl.startsWith("data:")) return;
+          console.warn("[CoachAvatarVrm] Asset failed to load:", failedUrl);
+        };
+        const loader = new GLTFLoader(manager);
+        loader.setCrossOrigin("anonymous");
         loader.register((parser) => new VRMLoaderPlugin(parser));
         const gltf = await loader.loadAsync(vrmUrl);
         const loaded = gltf.userData.vrm as VRM | undefined;

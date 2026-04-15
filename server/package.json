@@ -48,6 +48,8 @@
     "db:migrate:roles": "tsx src/database/run-role-permissions-migration.ts",
     "db:migrate:visitors": "tsx src/database/run-migration.ts add-visitor-visits.sql",
     "db:migrate:subscriptions": "tsx src/database/run-migration.ts add-subscription-tables.sql",
+    "db:migrate:obstacles": "tsx src/database/run-migration.ts 20260416000000_goal_obstacles.sql",
+    "db:migrate:reconnections": "tsx src/database/run-migration.ts 20260417000000_goal_reconnections.sql",
     "db:seed:questions": "tsx src/database/seed-assessment-questions.ts",
     "db:seed:community": "tsx src/database/seed-community-group.ts",
     "db:seed:blogs": "tsx src/database/seed-blogs.ts",

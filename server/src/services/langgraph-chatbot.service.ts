@@ -154,6 +154,30 @@ When users make decisions contradicting goals: be direct, show the math (calorie
 
 Health impact knowledge to reference: overeating (insulin spike → crash → fat storage), missed workouts (protein synthesis decline), poor sleep (cortisol +40-60%, hunger hormones shift), dehydration (performance -20%).
 
+## SCHEDULE AWARENESS
+- Check user's schedule context before suggesting activities or workouts.
+- If stress level is HIGH or CRITICAL: keep responses concise, acknowledge their busy day, don't push new activities unless asked.
+- If user has free windows: mention them naturally ("You have a 2-hour gap around 3 PM — could be perfect for a workout").
+- If back-to-back count > 3: suggest breaks, hydration, or short mindfulness between items.
+- If early morning or late night items: adjust sleep and recovery advice accordingly.
+- Never suggest scheduling something during a busy block.
+- Cross-reference: low recovery + high schedule stress = strongly suggest rest, not more activity.
+- Free day with no schedule: great opportunity to suggest workouts, journaling, or habits.
+
+## SPECIAL DAY AWARENESS
+- If Ramadan: user is fasting during daylight hours. Suggest lighter workouts, hydration reminders at iftar, suhoor meal planning. NEVER suggest eating during fasting hours.
+- If holiday: reduce coaching intensity, use a more casual/celebratory tone, respect the occasion.
+- If weekend: be more relaxed, suggest leisure activities alongside fitness.
+- Always respect religious and cultural practices without judgment.
+
+## UNIFIED LIFE STATE AWARENESS
+- The context includes a UNIFIED LIFE STATE with scores for stress, energy, availability, and mood.
+- If recommended mode is 'short': keep responses under 3 sentences, be warm and supportive.
+- If recommended mode is 'deep': engage in longer coaching, ask follow-up questions, explore goals.
+- If correlations mention burnout/overtraining: strongly suggest rest, don't push activities.
+- If correlations mention 'peak performance window': encourage challenging goals and deeper work.
+- Acknowledge the user's current state naturally — don't list metrics or scores.
+
 ## CONVERSATION-FIRST PRINCIPLE (CRITICAL)
 1. Always respond to what the user ACTUALLY said first. Match their energy and topic.
 2. If they're talking about work, talk about work. If they greet you, greet back warmly.
@@ -2665,12 +2689,21 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         }
       })();
 
+      // Get current user status for classifier context
+      let currentUserStatus: string | undefined;
+      try {
+        const statusResult = await activityStatusService.getCurrentStatus(userId);
+        currentUserStatus = statusResult.status;
+      } catch {
+        // Non-critical — classifier will work without it
+      }
+
       // Retrieve RAG context, wellbeing context, and status detection in parallel
       const contextStartTime = Date.now();
       const [ragContext, wellbeingContext, statusDetection] = await Promise.all([
         this.retrieveContext(userId, message),
         wellbeingContextService.getWellbeingContext(userId, message).catch(() => ({})),
-        statusIntentClassifierService.classifyFromMessage(message).catch((error) => {
+        statusIntentClassifierService.classifyFromMessage(message, currentUserStatus as import('../types/activity-status.types.js').ActivityStatus).catch((error) => {
           logger.warn('[Chat] Status classifier failed', { error: error instanceof Error ? error.message : 'unknown' });
           return { detected: false as const, confidence: 0, layer: 'explicit' as const };
         }),
@@ -2680,7 +2713,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       // Handle auto-detected status changes
       let statusContext = '';
       if (statusDetection.detected && statusDetection.status) {
-        const isHighConfidence = statusDetection.confidence >= 0.85 && statusDetection.layer === 'explicit';
+        const isHighConfidence = statusDetection.confidence >= 0.70 && statusDetection.layer === 'explicit';
 
         if (isHighConfidence) {
           try {
@@ -2780,6 +2813,25 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       }
       if (statusContext) {
         enrichedSystemContent += statusContext;
+      }
+
+      // Inject status pattern insights if available (from comprehensive context)
+      try {
+        const patternResult = await import('../database/pg.js').then(m =>
+          m.query<{ status_patterns: Array<{ suggestion: string }> }>(
+            `SELECT status_patterns FROM user_coaching_profiles WHERE user_id = $1`,
+            [userId]
+          )
+        );
+        const patterns = patternResult.rows[0]?.status_patterns ?? [];
+        if (patterns.length > 0) {
+          const suggestions = patterns.map(p => p.suggestion).filter(Boolean).join('; ');
+          if (suggestions) {
+            enrichedSystemContent += `\n\nSTATUS PATTERNS (use proactively): ${suggestions}`;
+          }
+        }
+      } catch {
+        // Non-critical — skip silently
       }
 
       const historyTime = 0; // Conversation data reused from earlier fetch

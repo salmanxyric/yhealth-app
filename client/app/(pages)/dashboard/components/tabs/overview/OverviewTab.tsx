@@ -23,11 +23,13 @@ import { EmotionTrendsWidget } from '../../wellbeing';
 import { AnalyticsTab } from './AnalyticsTab';
 import { ScoringTab } from './ScoringTab';
 import { AlarmsTab } from '../alarms/AlarmsTab';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, LayoutDashboard, BarChart3, Award, Bell } from 'lucide-react';
 import { WeatherWidget } from './WeatherWidget';
+import { StatusWidget } from './widgets/StatusWidget';
 import { UnifiedHealthDashboard } from './widgets/UnifiedHealthDashboard';
 import type { EnhancedHealthMetrics } from './widgets/UnifiedHealthDashboard';
 import { DashboardCard } from './widgets/DashboardCard';
+import { DashboardUnderlineTabs } from '../../DashboardUnderlineTabs';
 
 interface OverviewTabProps {
   plan: Plan | null;
@@ -222,10 +224,10 @@ export function OverviewTab({
   const [activeTab, setActiveTab] = useState<'dashboard' | 'analytics' | 'scoring' | 'alarms'>('dashboard');
 
   const tabs = [
-    { id: 'dashboard' as const, label: 'Dashboard' },
-    { id: 'analytics' as const, label: 'Analytics' },
-    { id: 'scoring' as const, label: 'Scoring' },
-    { id: 'alarms' as const, label: 'Alarms' },
+    { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
+    { id: 'scoring' as const, label: 'Scoring', icon: Award },
+    { id: 'alarms' as const, label: 'Alarms', icon: Bell },
   ];
 
   return (
@@ -240,45 +242,25 @@ export function OverviewTab({
         <WeatherWidget />
       </motion.div>
 
-      {/* Tab Bar: Underline tabs + Refresh */}
-      <div className="border-b border-white/[0.06]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 sm:gap-6">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative pb-3 text-sm font-medium transition-colors ${
-                    isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {tab.label}
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeTabUnderline"
-                      className="absolute bottom-0 left-0 right-0 h-[2px] bg-emerald-500 rounded-full"
-                      transition={{ type: 'spring', bounce: 0.15, duration: 0.5 }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Refresh button */}
-          {onRefresh && (
+      {/* Tab Bar: underline + icon (shared Workouts-style) */}
+      <DashboardUnderlineTabs
+        layoutId="overviewSubTabUnderline"
+        tabs={tabs}
+        activeId={activeTab}
+        onTabChange={(id) => setActiveTab(id as typeof activeTab)}
+        trailing={
+          onRefresh ? (
             <button
+              type="button"
               onClick={onRefresh}
-              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-white transition-colors pb-3"
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-white transition-colors"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Refresh now</span>
             </button>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Tab Content with AnimatePresence */}
       <AnimatePresence mode="wait">
@@ -344,6 +326,7 @@ export function OverviewTab({
                   transition={{ delay: 0.2 }}
                   className="space-y-4"
                 >
+                  <StatusWidget />
                   <StreakWidget />
                   <EmotionTrendsWidget compact />
                   {plan && <CurrentPlanCard plan={plan} />}

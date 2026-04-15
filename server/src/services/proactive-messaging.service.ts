@@ -46,7 +46,9 @@ export type ProactiveMessageType =
   | 'life_goal_encouragement' | 'intention_reminder' | 'intention_reflection'
   // Activity status follow-ups
   | 'status_followup_sick' | 'status_followup_injury' | 'status_followup_travel'
-  | 'status_followup_vacation' | 'status_followup_stress' | 'status_return' | 'status_stale';
+  | 'status_followup_vacation' | 'status_followup_stress' | 'status_return' | 'status_stale'
+  // Schedule-aware messages
+  | 'free_window_suggestion' | 'busy_day_support';
 
 export interface ProactiveContext {
   type: ProactiveMessageType;
@@ -1869,7 +1871,15 @@ class ProactiveMessagingService {
                   )),
                   EXTRACT(DAY FROM NOW() - COALESCE(lg.last_mentioned_at, lg.created_at))
                 )::text as days_inactive
-         FROM life_goals lg WHERE lg.user_id = $1 AND lg.status = 'active'
+         FROM life_goals lg
+         WHERE lg.user_id = $1 AND lg.status = 'active'
+           -- Suppress stalled nudge while a Goal Reconnection prompt is active for this goal
+           AND NOT EXISTS (
+             SELECT 1 FROM goal_reconnections gr
+             WHERE gr.life_goal_id = lg.id
+               AND gr.resolved_at IS NULL
+               AND (gr.snoozed_until IS NULL OR gr.snoozed_until < CURRENT_DATE)
+           )
          GROUP BY lg.id, lg.title, lg.category, lg.created_at, lg.last_mentioned_at
          HAVING GREATEST(
            EXTRACT(DAY FROM NOW() - COALESCE(
@@ -2694,6 +2704,25 @@ class ProactiveMessagingService {
           eligible: context.activityStatus != null && !['working', 'excellent', 'good'].includes(context.activityStatus.current) && (context.activityStatus?.daysSinceLastWorkingStatus ?? 0) >= 7 && !sent('status_stale'),
           timeWindowValid: hour >= 9 && hour < 18,
           score: 65,
+        },
+        // --- Schedule-aware messages ---
+        {
+          type: 'free_window_suggestion',
+          eligible: !!(context.lifestyle?.scheduleContext?.freeWindows?.some(
+            (w: { durationMinutes: number; startTime: string }) => {
+              const wStart = parseInt(w.startTime.split(':')[0]) * 60 + parseInt(w.startTime.split(':')[1]);
+              const nowMins = hour * 60 + new Date().getMinutes();
+              return w.durationMinutes >= 60 && wStart >= nowMins - 30 && wStart <= nowMins + 120;
+            }
+          )) && !sent('free_window_suggestion') && (missedWorkouts > 0 || (context.workouts?.todayCompletedCount || 0) === 0),
+          timeWindowValid: hour >= 9 && hour < 20,
+          score: 65,
+        },
+        {
+          type: 'busy_day_support',
+          eligible: !!(context.lifestyle?.scheduleContext?.stressLevel === 'high' || context.lifestyle?.scheduleContext?.stressLevel === 'critical') && !sent('busy_day_support'),
+          timeWindowValid: hour >= 7 && hour < 10,
+          score: 75,
         },
       ];
 

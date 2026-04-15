@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface HeartRateCardProps {
@@ -67,6 +67,17 @@ export function HeartRateCard({
   const displayBpm = isLoading ? '--' : (bpm ?? '--');
   const { color, rgb, label } = bpmMeta(bpm);
   const targetFillY = bpmToFillY(bpm);
+
+  // Keep SVG transform off the React tree: a controlled `transform` prop would be
+  // re-applied on every parent re-render and overwrite RAF `setAttribute` updates.
+  useLayoutEffect(() => {
+    const el = fillGroupRef.current;
+    if (!el) return;
+    el.setAttribute(
+      'transform',
+      `translate(0,${currentY.current.toFixed(2)})`,
+    );
+  }, [targetFillY]);
 
   // ── Smooth RAF-driven fill animation ─────────────────────────────────────────
   // Inline style / framer-motion cannot animate SVG `transform` attribute
@@ -228,7 +239,7 @@ export function HeartRateCard({
 
               {/* ── LIQUID FILL — all children translated by RAF ── */}
               <g clipPath="url(#hr-clip)">
-                <g ref={fillGroupRef} transform={`translate(0,${targetFillY})`}>
+                <g ref={fillGroupRef}>
                   {/* Base gradient */}
                   <rect x="0" y="-14" width="204" height="230" fill="url(#hr-fill)" />
                   {/* Shimmer sweeps */}

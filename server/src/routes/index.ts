@@ -85,6 +85,7 @@ import financeRoutes from './finance.routes.js';
 import streakRoutes from './streak.routes.js';
 import calendarRoutes from './calendar.routes.js';
 import obstacleRoutes from './obstacle.routes.js';
+import reconnectionRoutes from './reconnection.routes.js';
 import { env } from '../config/env.config.js';
 
 const router = Router();
@@ -398,5 +399,8 @@ router.use('/calendar', calendarRoutes);
 
 // Obstacle Diagnosis — proactive coach-led diagnosis of repeatedly-missed goals
 router.use('/obstacles', obstacleRoutes);
+
+// Goal Reconnection — proactive re-surface of goals gone silent for 21/42/70 days
+router.use('/reconnections', reconnectionRoutes);
 
 export default router;

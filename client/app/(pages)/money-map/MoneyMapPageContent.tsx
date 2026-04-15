@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { sanitizeHtml } from "@/lib/sanitize";
 import {
   LayoutDashboard,
   Receipt,
@@ -448,7 +449,7 @@ function InsightsView({ insights, onDismiss }: {
                     {msg.role === "assistant" ? (
                       <div
                         className="text-sm leading-relaxed prose-finance"
-                        dangerouslySetInnerHTML={{ __html: formatAIMessage(msg.content) }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(formatAIMessage(msg.content)) }}
                       />
                     ) : (
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>

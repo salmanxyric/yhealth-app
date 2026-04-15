@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { sanitizeHtml } from "@/lib/sanitize";
 import {
   ChevronRight,
   ChevronLeft,
@@ -473,7 +474,7 @@ export function BlogFormStepper({
               )}
               <div
                 className="prose prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: formData.content }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(formData.content) }}
               />
             </div>
 

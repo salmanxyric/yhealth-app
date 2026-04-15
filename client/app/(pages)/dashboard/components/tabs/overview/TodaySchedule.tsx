@@ -449,14 +449,13 @@ function ActivityCard({
 
           {/* ── Right actions ── */}
           <div className="flex flex-col items-center gap-2 shrink-0 pt-0.5">
-            {/* Complete button */}
-            {/* <motion.button
+            <motion.button
               type="button"
               aria-label={isCompleted ? 'Unmark as complete' : 'Mark as complete'}
               onClick={onComplete}
               whileHover={{ scale: 1.15 }}
               whileTap={{ scale: 0.85 }}
-              className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center"
+              className="relative z-10 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center"
               style={{
                 background: isCompleted
                   ? 'linear-gradient(135deg, rgba(16,185,129,0.22), rgba(5,150,105,0.14))'
@@ -481,7 +480,7 @@ function ActivityCard({
               ) : (
                 <Check className="w-3.5 h-3.5 text-transparent group-hover/card:text-white/20 transition-colors duration-200" />
               )}
-            </motion.button> */}
+            </motion.button>
 
             {/* Chevron toggle */}
             <motion.div

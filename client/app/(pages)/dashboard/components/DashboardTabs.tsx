@@ -19,9 +19,11 @@ import {
   Utensils,
   Brain,
   Wallet,
+  Shield,
+  Users,
 } from 'lucide-react';
 
-export type TabId = 'overview' | 'intelligence' | 'goals' | 'plans' | 'progress' | 'activity' | 'achievements' | 'notifications' | 'chat-history' | 'preferences' | 'settings' | 'profile' | 'wellbeing' | 'workouts' | 'nutrition' | 'finance';
+export type TabId = 'overview' | 'intelligence' | 'goals' | 'plans' | 'progress' | 'activity' | 'achievements' | 'notifications' | 'chat-history' | 'preferences' | 'settings' | 'profile' | 'wellbeing' | 'workouts' | 'nutrition' | 'finance' | 'accountability' | 'social';
 
 interface Tab {
   id: TabId;
@@ -143,6 +145,20 @@ const tabs: Tab[] = [
     icon: <Wallet className="w-4 h-4" />,
     gradient: 'from-emerald-500 to-teal-500',
     glowColor: 'shadow-emerald-500/30',
+  },
+  {
+    id: 'accountability',
+    label: 'Contracts',
+    icon: <Shield className="w-4 h-4" />,
+    gradient: 'from-cyan-500 to-emerald-500',
+    glowColor: 'shadow-cyan-500/30',
+  },
+  {
+    id: 'social',
+    label: 'Social',
+    icon: <Users className="w-4 h-4" />,
+    gradient: 'from-indigo-500 to-violet-500',
+    glowColor: 'shadow-indigo-500/30',
   },
 ];
 

@@ -22,12 +22,12 @@ function WorkoutsContent() {
     <DashboardLayout activeTab="workouts">
       <div className="max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 overflow-x-hidden">
         {/* Page Header */}
-        <div className="flex items-center justify-between mb-6">
+        {/* <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Workouts</h1>
-        </div>
+        </div> */}
 
         {/* Tab Switcher — clean underline style */}
-        <div className="border-b border-white/[0.06] mb-6">
+        {/* <div className="border-b border-white/[0.06] mb-6">
           <div className="flex gap-0">
             {[
               { id: "workouts" as const, label: "Workouts", icon: <Dumbbell className="w-4 h-4" /> },
@@ -55,7 +55,7 @@ function WorkoutsContent() {
               );
             })}
           </div>
-        </div>
+        </div> */}
 
         {/* Tab Content */}
         <AnimatePresence mode="wait">

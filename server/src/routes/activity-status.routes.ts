@@ -78,6 +78,13 @@ router.get('/calendar', authenticate, activityStatusController.getCalendar);
 router.get('/stats', authenticate, activityStatusController.getStats);
 
 /**
+ * @route   GET /api/activity-status/enhanced-current
+ * @desc    Get enhanced current status with duration, overrides, and 7-day summary
+ * @access  Private
+ */
+router.get('/enhanced-current', authenticate, activityStatusController.getEnhancedCurrent);
+
+/**
  * @route   GET /api/activity-status/date/:date
  * @desc    Get status for a specific date
  * @access  Private

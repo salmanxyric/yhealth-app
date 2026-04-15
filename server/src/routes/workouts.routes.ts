@@ -929,7 +929,11 @@ router.get(
     };
 
     // Get user's workout plans to determine weekly goal
-    const plans = await workoutPlanService.getUserPlans(userId, 'active');
+    // Try active plans first, fallback to all plans so stats show even for draft plans
+    let plans = await workoutPlanService.getUserPlans(userId, 'active');
+    if (plans.length === 0) {
+      plans = await workoutPlanService.getUserPlans(userId);
+    }
     const activePlanIds = plans.map(p => p.id);
 
     // Get workout logs for this week
@@ -1070,13 +1074,19 @@ router.get(
     const userId = req.user!.userId;
     const { planId } = req.query;
 
-    // Get the specified plan or first active plan
+    // Get the specified plan, or first active plan, or fallback to any plan
     let plan;
     if (planId) {
       plan = await workoutPlanService.getPlanById(planId as string);
     } else {
-      const plans = await workoutPlanService.getUserPlans(userId, 'active');
-      plan = plans.length > 0 ? plans[0] : null;
+      const activePlans = await workoutPlanService.getUserPlans(userId, 'active');
+      if (activePlans.length > 0) {
+        plan = activePlans[0];
+      } else {
+        // Fallback: use any plan (draft plans still have valid weekly schedules)
+        const allPlans = await workoutPlanService.getUserPlans(userId);
+        plan = allPlans.length > 0 ? allPlans[0] : null;
+      }
     }
 
     if (!plan) {
@@ -1150,8 +1160,12 @@ router.get(
         // No weeklySchedule defined but has a log for this day - use log's workout name
         workoutName = dayLogs[0].workoutName || plan.name;
         isRest = false;
-      } else if (!hasWeeklySchedule && index === todayIndex) {
-        // No weeklySchedule but it's today - show plan name (user might want to work out)
+      } else if (!hasWeeklySchedule && plan.scheduleDays && plan.scheduleDays.includes(day)) {
+        // No weeklySchedule but plan has scheduleDays — this day is a workout day
+        workoutName = plan.name;
+        isRest = false;
+      } else if (!hasWeeklySchedule && !plan.scheduleDays && index === todayIndex) {
+        // No weeklySchedule or scheduleDays but it's today - show plan name
         workoutName = plan.name;
         isRest = false;
       }

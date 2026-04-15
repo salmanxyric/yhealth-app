@@ -1,66 +1,83 @@
+/**
+ * @file Status Pattern Analyzer Service
+ * Analyzes historical activity status data to detect recurring patterns
+ * that the AI coach can use for proactive plan adjustments.
+ *
+ * Three pattern detectors:
+ *  1. Day-of-week patterns (e.g., stress on Mondays)
+ *  2. Post-event recovery patterns (slow ramp-up after illness/travel)
+ *  3. Streak disruption patterns (status changes that break streaks)
+ */
+
 import { query } from '../database/pg.js';
 import { logger } from './logger.service.js';
-import type { StatusPattern } from '../types/activity-status.types.js';
+import type { ActivityStatus, StatusPattern, StatusPatternType } from '../types/activity-status.types.js';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const NON_WORKING_STATUSES = ['sick', 'injury', 'rest', 'vacation', 'travel', 'stress', 'poor', 'fair'];
-// Minimum history needed before patterns are meaningful (avoids false positives from sparse data)
-const MIN_WEEKS_FOR_PATTERNS = 4;
-// Day must have non-working status in >=40% of tracked weeks to count as a pattern
-const MIN_FREQUENCY_THRESHOLD = 0.4;
 
 class StatusPatternAnalyzerService {
-  async analyzeDayOfWeekPatterns(userId: string): Promise<StatusPattern[]> {
+  /**
+   * Run all three detectors and return combined results.
+   */
+  async analyzePatterns(userId: string): Promise<StatusPattern[]> {
+    const [dayOfWeek, postEvent, streakDisruption] = await Promise.all([
+      this.detectDayOfWeekPatterns(userId),
+      this.detectPostEventRecoveryPatterns(userId),
+      this.detectStreakDisruptionPatterns(userId),
+    ]);
+
+    const patterns = [...dayOfWeek, ...postEvent, ...streakDisruption];
+
+    logger.info('[StatusPatternAnalyzer] Analysis complete', {
+      userId: userId.slice(0, 8),
+      dayOfWeekPatterns: dayOfWeek.length,
+      postEventPatterns: postEvent.length,
+      streakDisruptionPatterns: streakDisruption.length,
+      totalPatterns: patterns.length,
+    });
+
+    return patterns;
+  }
+
+  /**
+   * Detect recurring status patterns by day of week.
+   * E.g., user tends to report "stress" on Mondays.
+   */
+  private async detectDayOfWeekPatterns(userId: string): Promise<StatusPattern[]> {
     const result = await query<{
-      day_of_week: number;
-      status: string;
-      count: string;
+      dow: number;
+      activity_status: ActivityStatus;
+      cnt: string;
     }>(
-      `SELECT EXTRACT(DOW FROM status_date)::int AS day_of_week,
-              activity_status AS status,
-              COUNT(*)::text AS count
+      `SELECT EXTRACT(DOW FROM status_date)::int as dow, activity_status, COUNT(*) as cnt
        FROM activity_status_history
        WHERE user_id = $1
-         AND status_date >= CURRENT_DATE - INTERVAL '8 weeks'
-       GROUP BY day_of_week, activity_status
-       ORDER BY day_of_week, count DESC`,
+         AND status_date >= CURRENT_DATE - INTERVAL '90 days'
+         AND activity_status NOT IN ('working', 'excellent', 'good')
+       GROUP BY dow, activity_status
+       HAVING COUNT(*) >= 3`,
       [userId]
     );
 
-    if (result.rows.length === 0) return [];
-
     const patterns: StatusPattern[] = [];
-    const byDay = new Map<number, { status: string; count: number }[]>();
+    const weeksInWindow = 90 / 7; // ~12.86 weeks
 
     for (const row of result.rows) {
-      const day = row.day_of_week;
-      if (!byDay.has(day)) byDay.set(day, []);
-      byDay.get(day)!.push({ status: row.status, count: parseInt(row.count, 10) });
-    }
+      const count = parseInt(row.cnt, 10);
+      const confidence = count / weeksInWindow;
 
-    for (const [day, statuses] of byDay) {
-      const total = statuses.reduce((sum, s) => sum + s.count, 0);
-      const nonWorking = statuses
-        .filter(s => NON_WORKING_STATUSES.includes(s.status))
-        .reduce((sum, s) => sum + s.count, 0);
-      const frequency = nonWorking / total;
-
-      if (frequency >= MIN_FREQUENCY_THRESHOLD && total >= MIN_WEEKS_FOR_PATTERNS) {
-        const dayName = DAY_NAMES[day] ?? `Day ${day}`;
-        const topStatus = statuses
-          .filter(s => NON_WORKING_STATUSES.includes(s.status))
-          .sort((a, b) => b.count - a.count)[0];
-
-        if (!topStatus) continue; // Skip if no non-working statuses after filtering
+      if (confidence >= 0.4) {
+        const dayName = DAY_NAMES[row.dow];
+        const status = row.activity_status;
 
         patterns.push({
-          type: 'day_of_week',
-          pattern: `Low energy on ${dayName}s (${topStatus.status} ${Math.round(frequency * 100)}% of the time)`,
-          confidence: Math.min(frequency + 0.1, 1.0),
-          frequency,
-          firstObserved: new Date().toISOString(),
-          lastConfirmed: new Date().toISOString(),
-          suggestion: `Schedule lighter ${dayName} sessions or make ${dayName} an intentional rest day`,
+          type: 'day_of_week' as StatusPatternType,
+          pattern: `${status}_on_${dayName.toLowerCase()}`,
+          confidence: Math.round(confidence * 100) / 100,
+          frequency: count,
+          firstObserved: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          lastConfirmed: new Date().toISOString().split('T')[0],
+          suggestion: this.getDayOfWeekSuggestion(status, dayName),
         });
       }
     }
@@ -68,85 +85,158 @@ class StatusPatternAnalyzerService {
     return patterns;
   }
 
-  async analyzePostEventPatterns(userId: string): Promise<StatusPattern[]> {
+  /**
+   * Generate contextual suggestion for day-of-week patterns.
+   */
+  private getDayOfWeekSuggestion(status: ActivityStatus, dayName: string): string {
+    switch (status) {
+      case 'stress':
+        return `You tend to feel stressed on ${dayName}s. Consider scheduling lighter activities or mindfulness sessions on those days.`;
+      case 'rest':
+        return `You often rest on ${dayName}s. I'll plan recovery-friendly activities for that day.`;
+      case 'sick':
+        return `You've reported feeling unwell on ${dayName}s more than usual. Keep an eye on patterns that might be contributing.`;
+      case 'injury':
+        return `${dayName}s seem to be when injuries flare up. Consider extra warm-up or preventive exercises earlier in the week.`;
+      case 'fair':
+        return `You tend to feel just okay on ${dayName}s. I'll keep workouts moderate to match your energy.`;
+      case 'poor':
+        return `${dayName}s seem to be tough days for you. I'll plan lighter sessions and check in more often.`;
+      default:
+        return `You tend to feel ${status} on ${dayName}s. Consider scheduling lighter activities on those days.`;
+    }
+  }
+
+  /**
+   * Detect slow recovery patterns after non-working status periods.
+   * Looks at workout skip rates in the 3 days after returning to working status.
+   */
+  private async detectPostEventRecoveryPatterns(userId: string): Promise<StatusPattern[]> {
     const result = await query<{
-      trigger_status: string;
-      next_day_status: string;
-      count: string;
+      prev_status: ActivityStatus;
+      event_count: string;
+      avg_skip_rate: string;
     }>(
-      `SELECT a1.activity_status AS trigger_status,
-              a2.activity_status AS next_day_status,
-              COUNT(*)::text AS count
-       FROM activity_status_history a1
-       JOIN activity_status_history a2
-         ON a1.user_id = a2.user_id
-        AND a2.status_date = a1.status_date + INTERVAL '1 day'
-       WHERE a1.user_id = $1
-         AND a1.activity_status IN ('travel', 'vacation', 'sick', 'injury')
-         AND a1.status_date >= CURRENT_DATE - INTERVAL '12 weeks'
-       GROUP BY trigger_status, next_day_status
-       ORDER BY trigger_status, count DESC`,
+      `WITH resets AS (
+        SELECT user_id, status_date as reset_date,
+          LAG(activity_status) OVER (PARTITION BY user_id ORDER BY status_date) as prev_status
+        FROM activity_status_history
+        WHERE user_id = $1 AND status_date >= CURRENT_DATE - INTERVAL '180 days'
+      ),
+      reset_events AS (
+        SELECT reset_date, prev_status FROM resets
+        WHERE prev_status IN ('sick', 'injury', 'travel', 'vacation')
+          AND prev_status IS DISTINCT FROM 'working'
+      )
+      SELECT prev_status, COUNT(*) as event_count,
+        AVG(skip_rate) as avg_skip_rate
+      FROM reset_events re
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          SUM(CASE WHEN al.status IN ('skipped', 'missed') THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0), 0
+        ) as skip_rate
+        FROM activity_logs al
+        WHERE al.user_id = $1
+          AND al.scheduled_date BETWEEN re.reset_date AND re.reset_date + INTERVAL '3 days'
+      ) skip_data ON true
+      GROUP BY prev_status
+      HAVING COUNT(*) >= 2`,
       [userId]
     );
 
-    if (result.rows.length === 0) return [];
-
     const patterns: StatusPattern[] = [];
-    const byTrigger = new Map<string, { status: string; count: number }[]>();
 
     for (const row of result.rows) {
-      if (!byTrigger.has(row.trigger_status)) byTrigger.set(row.trigger_status, []);
-      byTrigger.get(row.trigger_status)!.push({
-        status: row.next_day_status,
-        count: parseInt(row.count, 10),
+      const avgSkipRate = parseFloat(row.avg_skip_rate || '0');
+      const eventCount = parseInt(row.event_count, 10);
+
+      if (avgSkipRate > 0.5) {
+        const status = row.prev_status;
+
+        patterns.push({
+          type: 'post_event' as StatusPatternType,
+          pattern: `slow_recovery_after_${status}`,
+          confidence: Math.round(Math.min(avgSkipRate, 1.0) * 100) / 100,
+          frequency: eventCount,
+          firstObserved: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          lastConfirmed: new Date().toISOString().split('T')[0],
+          suggestion: `After being ${status}, you usually take a few days to get back to full activity. I'll plan a gradual ramp-up next time.`,
+        });
+      }
+    }
+
+    return patterns;
+  }
+
+  /**
+   * Detect correlation between non-working statuses and streak breaks.
+   * If status changes frequently coincide with streak breaks, flag it.
+   */
+  private async detectStreakDisruptionPatterns(userId: string): Promise<StatusPattern[]> {
+    const result = await query<{
+      activity_status: ActivityStatus;
+      disruption_count: string;
+    }>(
+      `SELECT ash.activity_status, COUNT(*) as disruption_count
+       FROM activity_status_history ash
+       JOIN streak_activity_log sal
+         ON sal.user_id = ash.user_id
+         AND sal.activity_date = ash.status_date
+         AND sal.action = 'break'
+       WHERE ash.user_id = $1
+         AND ash.status_date >= CURRENT_DATE - INTERVAL '180 days'
+         AND ash.activity_status NOT IN ('working', 'excellent', 'good')
+       GROUP BY ash.activity_status
+       HAVING COUNT(*) >= 3`,
+      [userId]
+    );
+
+    const patterns: StatusPattern[] = [];
+
+    for (const row of result.rows) {
+      const count = parseInt(row.disruption_count, 10);
+      const status = row.activity_status;
+
+      patterns.push({
+        type: 'streak_disruption' as StatusPatternType,
+        pattern: `streak_break_during_${status}`,
+        confidence: Math.round(Math.min(count / 10, 1.0) * 100) / 100,
+        frequency: count,
+        firstObserved: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        lastConfirmed: new Date().toISOString().split('T')[0],
+        suggestion: `Your streaks tend to break when you're ${status}. Consider using streak freezes or adjusted goals during those periods to protect your progress.`,
       });
     }
 
-    for (const [trigger, outcomes] of byTrigger) {
-      const total = outcomes.reduce((sum, o) => sum + o.count, 0);
-      const nonWorking = outcomes
-        .filter(o => NON_WORKING_STATUSES.includes(o.status))
-        .reduce((sum, o) => sum + o.count, 0);
-      const frequency = nonWorking / total;
-
-      if (frequency >= MIN_FREQUENCY_THRESHOLD && total >= 2) {
-        patterns.push({
-          type: 'post_event',
-          pattern: `Usually needs recovery after ${trigger} (${Math.round(frequency * 100)}% drop-off rate)`,
-          confidence: Math.min(frequency, 1.0),
-          frequency,
-          firstObserved: new Date().toISOString(),
-          lastConfirmed: new Date().toISOString(),
-          suggestion: `Plan a light recovery day after ${trigger} ends`,
-        });
-      }
-    }
-
     return patterns;
   }
 
-  async analyzeAllPatterns(userId: string): Promise<StatusPattern[]> {
-    const [dayPatterns, eventPatterns] = await Promise.all([
-      this.analyzeDayOfWeekPatterns(userId),
-      this.analyzePostEventPatterns(userId),
-    ]);
-
-    const allPatterns = [...dayPatterns, ...eventPatterns];
-
-    logger.info('[StatusPatternAnalyzer] Analysis complete', {
-      userId,
-      dayPatterns: dayPatterns.length,
-      eventPatterns: eventPatterns.length,
-    });
-
-    return allPatterns;
-  }
-
+  /**
+   * Persist detected patterns to the user's coaching profile.
+   * Upserts into user_coaching_profiles.
+   */
   async persistPatterns(userId: string, patterns: StatusPattern[]): Promise<void> {
-    await query(
+    const patternsJson = JSON.stringify(patterns);
+
+    const result = await query(
       `UPDATE user_coaching_profiles SET status_patterns = $1, updated_at = NOW() WHERE user_id = $2`,
-      [JSON.stringify(patterns), userId]
+      [patternsJson, userId]
     );
+
+    // If no row was updated, insert one
+    if (result.rowCount === 0) {
+      await query(
+        `INSERT INTO user_coaching_profiles (user_id, status_patterns, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET status_patterns = $2, updated_at = NOW()`,
+        [userId, patternsJson]
+      );
+    }
+
+    logger.info('[StatusPatternAnalyzer] Persisted patterns', {
+      userId: userId.slice(0, 8),
+      patternCount: patterns.length,
+    });
   }
 }
 

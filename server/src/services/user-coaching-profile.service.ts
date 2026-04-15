@@ -572,7 +572,7 @@ class UserCoachingProfileService {
 
     // Status pattern analysis (day-of-week, post-event patterns)
     const statusPatterns = await this.safeCall(
-      () => statusPatternAnalyzerService.analyzeAllPatterns(userId), []
+      () => statusPatternAnalyzerService.analyzePatterns(userId), []
     );
     if (statusPatterns.length > 0) {
       statusPatternAnalyzerService.persistPatterns(userId, statusPatterns).catch((error) => {

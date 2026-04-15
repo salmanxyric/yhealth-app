@@ -346,26 +346,32 @@ class ActivityStatusService {
         }
       });
 
-      // Find most common status
-      const mostCommonStatus = Object.entries(statusDistribution).reduce((a, b) =>
-        statusDistribution[a[0] as ActivityStatus] > statusDistribution[b[0] as ActivityStatus] ? a : b
-      )[0] as ActivityStatus;
+      // Find most common status (guard against empty distribution)
+      let mostCommonStatus: ActivityStatus = 'working';
+      if (totalDays > 0) {
+        const entries = Object.entries(statusDistribution).filter(([, v]) => v > 0);
+        if (entries.length > 0) {
+          mostCommonStatus = entries.reduce((a, b) => a[1] > b[1] ? a : b)[0] as ActivityStatus;
+        }
+      }
 
       // Calculate streak (consecutive days with status)
       let streakDays = 0;
       if (result.rows.length > 0) {
-        const sortedRows = [...result.rows].sort((a, b) => 
-          b.status_date.getTime() - a.status_date.getTime()
-        );
-        
+        const sortedRows = [...result.rows].sort((a, b) => {
+          const dateA = new Date(a.status_date).getTime();
+          const dateB = new Date(b.status_date).getTime();
+          return dateB - dateA;
+        });
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         let checkDate = new Date(today);
-        
+
         for (const row of sortedRows) {
           const rowDate = new Date(row.status_date);
           rowDate.setHours(0, 0, 0, 0);
-          
+
           if (rowDate.getTime() === checkDate.getTime()) {
             streakDays++;
             checkDate.setDate(checkDate.getDate() - 1);
@@ -475,32 +481,58 @@ class ActivityStatusService {
     expectedEndDate?: string,
     reason?: string,
   ): Promise<CurrentStatusResponse> {
-    // Wrap in transaction to prevent partial state (status updated but lifecycle fields not)
     const { transaction } = await import('../database/pg.js');
 
     let result: CurrentStatusResponse | undefined;
     await transaction(async (client) => {
-      // Update user profile status
+      // Step 1: Update user profile status (always succeeds with original columns)
       const statusResult = await client.query(
-        `UPDATE users SET current_activity_status = $1, activity_status_updated_at = NOW()
+        `UPDATE users SET current_activity_status = $1, activity_status_updated_at = NOW(), updated_at = NOW()
          WHERE id = $2 RETURNING current_activity_status AS status, activity_status_updated_at AS "updatedAt"`,
         [status, userId]
       );
       result = statusResult.rows[0] ?? { status, updatedAt: new Date() };
 
-      // Upsert today's history entry
-      await client.query(
-        `INSERT INTO activity_status_history (user_id, status_date, activity_status, expected_end_date, detected_from, notes, follow_up_sent, source)
-         VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, false, $4)
-         ON CONFLICT (user_id, status_date) DO UPDATE SET
-           activity_status = $2,
-           expected_end_date = $3,
-           detected_from = $4,
-           notes = COALESCE($5, activity_status_history.notes),
-           follow_up_sent = false,
-           updated_at = NOW()`,
-        [userId, status, expectedEndDate ?? null, source, reason ?? null]
-      );
+      // Step 2: Try lifecycle-aware upsert with SAVEPOINT fallback
+      // If lifecycle columns don't exist (migration not run), fall back to simple upsert
+      try {
+        await client.query('SAVEPOINT lifecycle_upsert');
+        await client.query(
+          `INSERT INTO activity_status_history (user_id, status_date, activity_status, expected_end_date, detected_from, notes, follow_up_sent, source)
+           VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, false, $4)
+           ON CONFLICT (user_id, status_date) DO UPDATE SET
+             activity_status = $2,
+             expected_end_date = $3,
+             detected_from = $4,
+             notes = COALESCE($5, activity_status_history.notes),
+             follow_up_sent = false,
+             source = $4,
+             updated_at = NOW()`,
+          [userId, status, expectedEndDate ?? null, source, reason ?? null]
+        );
+        await client.query('RELEASE SAVEPOINT lifecycle_upsert');
+      } catch (lifecycleError) {
+        // Lifecycle columns likely don't exist — rollback to savepoint and use simple upsert
+        logger.warn('[ActivityStatus] Lifecycle upsert failed, using simple fallback', {
+          error: lifecycleError instanceof Error ? lifecycleError.message : 'unknown',
+          hint: 'Run migration add-status-awareness-fields.sql to enable lifecycle tracking',
+        });
+        await client.query('ROLLBACK TO SAVEPOINT lifecycle_upsert');
+
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        await client.query(
+          `INSERT INTO activity_status_history (user_id, status_date, activity_status, mood, notes, source)
+           VALUES ($1, $2::DATE, $3, $4, $5, $6)
+           ON CONFLICT (user_id, status_date)
+           DO UPDATE SET
+             activity_status = EXCLUDED.activity_status,
+             notes = EXCLUDED.notes,
+             source = EXCLUDED.source,
+             updated_at = CURRENT_TIMESTAMP`,
+          [userId, todayStr, status, null, reason ?? null, source]
+        );
+      }
     });
 
     return result!;

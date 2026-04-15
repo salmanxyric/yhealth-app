@@ -34,10 +34,14 @@ import {
   WellbeingTab,
   IntelligenceTab,
   FinanceTab,
+  AccountabilityTab,
+  SocialTab,
 } from "./components";
 import { DashboardLayout } from "@/components/layout";
 import { SubscriptionAccessProvider } from "@/app/context/SubscriptionAccessContext";
 import { TrialBanner } from "@/components/subscription/SubscriptionGate";
+import { ObstacleCard } from "./components/ObstacleCard";
+import { ReconnectionCard } from "./components/ReconnectionCard";
 import dynamic from "next/dynamic";
 
 // Dynamically import ActivityStatusPageContent to avoid layout conflicts
@@ -423,6 +427,10 @@ function DashboardContent() {
         return <IntelligenceTab />;
       case "finance":
         return <FinanceTab />;
+      case "accountability":
+        return <AccountabilityTab />;
+      case "social":
+        return <SocialTab />;
       default:
         return (
           <OverviewTab
@@ -512,6 +520,14 @@ function DashboardContent() {
           {/* Trial banner when in free trial */}
           <div className="mb-4">
             <TrialBanner />
+          </div>
+          {/* Obstacle diagnosis invitations (proactive coach) */}
+          <div className="mb-4">
+            <ObstacleCard />
+          </div>
+          {/* Goal reconnection prompts (DKA prevention) */}
+          <div className="mb-4">
+            <ReconnectionCard />
           </div>
           {/* Tab Content */}
           {renderTabContent()}

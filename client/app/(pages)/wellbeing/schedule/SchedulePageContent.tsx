@@ -45,6 +45,8 @@ import {
   type ScheduleItem,
   type CalendarSchedule,
 } from "@/src/shared/services/schedule.service";
+import { calendarApiService, type DayContext } from "@/src/shared/services/calendar.service";
+import { ActivityFormModal } from "@/app/(pages)/dashboard/components/wellbeing/schedule/ActivityFormModal";
 import { ApiError } from "@/lib/api-client";
 
 // ============================================
@@ -214,9 +216,10 @@ function MiniCalendar({
 // TIMELINE ITEM
 // ============================================
 
-function TimelineItem({ item, index }: { item: ScheduleItem; index: number }) {
+function TimelineItem({ item, index, onEdit, onDelete }: { item: ScheduleItem; index: number; onEdit?: (item: ScheduleItem) => void; onDelete?: (itemId: string) => void }) {
   const style = getCategoryStyle(item.category);
   const duration = getDuration(item.startTime, item.endTime, item.durationMinutes);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <motion.div
@@ -250,7 +253,6 @@ function TimelineItem({ item, index }: { item: ScheduleItem; index: number }) {
 
             {/* Meta Row */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Time */}
               <div className="flex items-center gap-1 text-[11px] text-slate-500">
                 {getTimeOfDayIcon(item.startTime)}
                 <span className="font-medium">
@@ -258,16 +260,12 @@ function TimelineItem({ item, index }: { item: ScheduleItem; index: number }) {
                   {item.endTime && ` - ${formatTime(item.endTime)}`}
                 </span>
               </div>
-
-              {/* Duration */}
               {duration && (
                 <div className="flex items-center gap-1 text-[11px] text-slate-500">
                   <Timer className="w-3 h-3" />
                   <span>{duration}</span>
                 </div>
               )}
-
-              {/* Category Tag */}
               {item.category && (
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${style.bg} ${style.text}`}>
                   <Tag className="w-2.5 h-2.5" />
@@ -277,10 +275,45 @@ function TimelineItem({ item, index }: { item: ScheduleItem; index: number }) {
             </div>
           </div>
 
-          {/* Actions */}
-          <button className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all shrink-0">
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
+          {/* 3-dot menu with Edit/Delete */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+            <AnimatePresence>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-8 z-50 w-36 rounded-xl border border-white/[0.08] py-1 shadow-xl"
+                    style={{ background: '#14151f' }}
+                  >
+                    <button
+                      onClick={() => { setMenuOpen(false); onEdit?.(item); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit Activity
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpen(false); onDelete?.(item.id); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      Delete
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -433,6 +466,10 @@ function ScheduleContent() {
   const [calendarSchedules, setCalendarSchedules] = useState<CalendarSchedule[]>([]);
   const [viewMode, setViewMode] = useState<"timeline" | "list">("timeline");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [dayContext, setDayContext] = useState<DayContext | null>(null);
+  const [editingActivity, setEditingActivity] = useState<ScheduleItem | null>(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [googleEvents, setGoogleEvents] = useState<Array<{ id: string; title: string; startTime: string; endTime: string; allDay: boolean; location: string | null }>>([]);
 
   const scheduleDates = useMemo(() => {
     const set = new Set<string>();
@@ -446,14 +483,30 @@ function ScheduleContent() {
     setIsLoadingSchedule(true);
     try {
       const dateStr = format(date, "yyyy-MM-dd");
-      const result = await scheduleService.getScheduleByDate(`${dateStr}?_t=${Date.now()}`);
+      const [result, ctxResult, eventsResult] = await Promise.all([
+        scheduleService.getScheduleByDate(`${dateStr}?_t=${Date.now()}`),
+        calendarApiService.getScheduleContext(dateStr).catch(() => null),
+        calendarApiService.getCalendarEvents(dateStr, dateStr).catch(() => null),
+      ]);
       if (result.success && result.data) {
         setSelectedSchedule(result.data.schedule);
       } else {
         setSelectedSchedule(null);
       }
+      if (ctxResult?.success && ctxResult.data) {
+        setDayContext(ctxResult.data);
+      } else {
+        setDayContext(null);
+      }
+      if (eventsResult?.success && eventsResult.data?.events) {
+        setGoogleEvents(eventsResult.data.events);
+      } else {
+        setGoogleEvents([]);
+      }
     } catch {
       setSelectedSchedule(null);
+      setDayContext(null);
+      setGoogleEvents([]);
     } finally {
       setIsLoadingSchedule(false);
     }
@@ -513,6 +566,22 @@ function ScheduleContent() {
   const handleNavigateToEditor = () => {
     router.push(`/wellbeing/schedule/${format(selectedDate, "yyyy-MM-dd")}`);
   };
+
+  // ── Activity Modal (Edit/Create) ──
+  const handleEditActivity = useCallback((item: ScheduleItem) => {
+    setEditingActivity(item);
+    setShowActivityModal(true);
+  }, []);
+
+  const handleDeleteActivity = useCallback(async (itemId: string) => {
+    if (!confirm('Delete this activity?')) return;
+    try {
+      await scheduleService.deleteScheduleItem(itemId);
+      await loadSchedule(selectedDate);
+    } catch (err) {
+      console.error('Failed to delete activity:', err);
+    }
+  }, [selectedDate, loadSchedule]);
 
   const sortedItems = useMemo(() => {
     if (!selectedSchedule?.items) return [];
@@ -628,45 +697,48 @@ function ScheduleContent() {
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar - Calendar + Stats */}
-          <AnimatePresence>
-            {sidebarOpen && (
-              <motion.aside
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 340, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="hidden lg:flex shrink-0 flex-col border-r border-white/[0.06] bg-[#0a0a0f]/50 overflow-hidden"
+        {/* Main Content Area — 2-col grid on large, 1-col on small */}
+        <div className="flex-1 overflow-y-auto" style={{
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+        }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+              {/* LEFT COLUMN — Calendar + Stats (full height) */}
+              <motion.div
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-5 lg:sticky lg:top-6 lg:self-start"
               >
-                <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                  {/* Mini Calendar */}
+                {/* Mini Calendar Card — full height */}
+                <div className="rounded-2xl border border-white/[0.06] p-6 sm:p-8 overflow-hidden min-h-[420px] flex flex-col justify-center" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
                   <MiniCalendar
                     selectedDate={selectedDate}
                     onDateSelect={handleDateSelect}
                     scheduleDates={scheduleDates}
                   />
+                </div>
 
-                  {/* Divider */}
-                  <div className="border-t border-white/[0.06]" />
-
-                  {/* Stats */}
-                  {selectedSchedule && selectedSchedule.items.length > 0 && (
+                {/* Stats Card */}
+                {selectedSchedule && selectedSchedule.items.length > 0 && (
+                  <div className="rounded-2xl border border-white/[0.06] p-5" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
                     <StatsBar items={selectedSchedule.items} />
-                  )}
+                  </div>
+                )}
 
-                  {/* Category Legend */}
-                  {selectedSchedule && selectedSchedule.items.length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="text-[10px] uppercase tracking-wider font-semibold text-slate-500">Categories</h4>
-                      <div className="space-y-1">
-                        {Array.from(new Set(selectedSchedule.items.map((i) => i.category).filter(Boolean))).map(
-                          (cat) => {
-                            const style = getCategoryStyle(cat);
-                            const count = selectedSchedule.items.filter((i) => i.category === cat).length;
-                            return (
-                              <div key={cat} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/[0.03] transition-colors">
+                {/* Category Legend Card */}
+                {selectedSchedule && selectedSchedule.items.length > 0 && (
+                  <div className="rounded-2xl border border-white/[0.06] p-5" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
+                    <h4 className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-3">Categories</h4>
+                    <div className="space-y-1">
+                      {Array.from(new Set(selectedSchedule.items.map((i) => i.category).filter(Boolean))).map(
+                        (cat) => {
+                          const style = getCategoryStyle(cat);
+                          const count = selectedSchedule.items.filter((i) => i.category === cat).length;
+                          return (
+                            <div key={cat} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/[0.03] transition-colors">
                                 <div className="flex items-center gap-2">
                                   <span className={`w-2 h-2 rounded-full ${style.dot}`} />
                                   <span className="text-xs text-slate-300 capitalize">{cat}</span>
@@ -678,62 +750,131 @@ function ScheduleContent() {
                         )}
                       </div>
                     </div>
-                  )}
-                </div>
-              </motion.aside>
-            )}
-          </AnimatePresence>
-
-          {/* Mobile Sidebar Overlay */}
-          <AnimatePresence>
-            {sidebarOpen && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <motion.div
-                  initial={{ x: -300 }}
-                  animate={{ x: 0 }}
-                  exit={{ x: -300 }}
-                  transition={{ type: "spring", damping: 25, stiffness: 250 }}
-                  className="absolute left-0 top-0 h-full w-[340px] bg-[#0f0f18] border-r border-white/[0.06] overflow-y-auto p-5 space-y-5"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MiniCalendar
-                    selectedDate={selectedDate}
-                    onDateSelect={(date) => {
-                      handleDateSelect(date);
-                      setSidebarOpen(false);
-                    }}
-                    scheduleDates={scheduleDates}
-                  />
-                  <div className="border-t border-white/[0.06]" />
-                  {selectedSchedule && selectedSchedule.items.length > 0 && (
-                    <StatsBar items={selectedSchedule.items} />
-                  )}
-                </motion.div>
+                )}
               </motion.div>
-            )}
-          </AnimatePresence>
 
-          {/* Schedule Content */}
-          <main className="flex-1 overflow-y-auto">
-            <div className="max-w-5xl mx-auto px-4 sm:px-8 lg:px-12 py-6">
-              {/* Date Header */}
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-white">
-                  {isToday(selectedDate) ? "Today" : format(selectedDate, "EEEE")}
-                </h2>
-                <p className="text-sm text-slate-500 mt-0.5">
-                  {format(selectedDate, "MMMM d, yyyy")}
-                  {selectedSchedule && ` \u00B7 ${selectedSchedule.items.length} activities`}
-                </p>
-              </div>
+              {/* RIGHT COLUMN — Schedule Content */}
+              <motion.div
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+              >
+                {/* Stress Indicator Bar */}
+                {dayContext && dayContext.totalItems > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-4 rounded-xl border border-white/[0.06] p-4"
+                    style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${
+                          dayContext.stressLevel === 'critical' ? 'bg-red-500 animate-pulse' :
+                          dayContext.stressLevel === 'high' ? 'bg-orange-500' :
+                          dayContext.stressLevel === 'medium' ? 'bg-amber-400' :
+                          'bg-emerald-400'
+                        }`} />
+                        <span className="text-xs font-semibold text-white uppercase tracking-wider">
+                          {dayContext.stressLevel} stress
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500">
+                        {dayContext.busyHours}h busy · {dayContext.freeHours}h free
+                      </span>
+                    </div>
+                    {/* Stress bar */}
+                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min((dayContext.busyHours / 17) * 100, 100)}%` }}
+                        transition={{ duration: 0.8, ease: 'easeOut' }}
+                        className={`h-full rounded-full ${
+                          dayContext.stressLevel === 'critical' ? 'bg-gradient-to-r from-red-600 to-red-400' :
+                          dayContext.stressLevel === 'high' ? 'bg-gradient-to-r from-orange-600 to-orange-400' :
+                          dayContext.stressLevel === 'medium' ? 'bg-gradient-to-r from-amber-600 to-amber-400' :
+                          'bg-gradient-to-r from-emerald-600 to-emerald-400'
+                        }`}
+                      />
+                    </div>
+                    {/* AI Insight */}
+                    <p className="text-[11px] text-slate-400 mt-2">
+                      {dayContext.stressLevel === 'critical' || dayContext.stressLevel === 'high'
+                        ? `Busy day — ${dayContext.backToBackCount} back-to-back items. Take breaks when you can.`
+                        : dayContext.totalItems === 0
+                        ? 'Free day! Great time for a workout or journaling.'
+                        : dayContext.freeWindows.length > 0
+                        ? `${dayContext.freeWindows.length} free window${dayContext.freeWindows.length > 1 ? 's' : ''} available — ${dayContext.freeWindows[0].startTime}–${dayContext.freeWindows[0].endTime} (${Math.round(dayContext.freeWindows[0].durationMinutes / 60 * 10) / 10}h)`
+                        : 'Balanced day ahead.'}
+                    </p>
+                    {/* Special days */}
+                    {dayContext.specialDays && dayContext.specialDays.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {dayContext.specialDays.map((sd) => (
+                          <span key={sd.name} className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                            {sd.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
 
-              {/* Content */}
+                {/* Free Windows Quick View */}
+                {dayContext && dayContext.freeWindows.length > 0 && !isLoadingSchedule && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="mb-4 flex gap-2 overflow-x-auto pb-1 scrollbar-hide"
+                  >
+                    {dayContext.freeWindows.slice(0, 3).map((fw, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setEditingActivity(null); setShowActivityModal(true); }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] text-xs text-emerald-400 whitespace-nowrap flex-shrink-0 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        {fw.startTime}–{fw.endTime}
+                        <span className="text-emerald-500/50">({Math.round(fw.durationMinutes / 60 * 10) / 10}h)</span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+
+                <div className="rounded-2xl border border-white/[0.06] p-5 sm:p-6" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
+                  {/* Date Header + Action Buttons */}
+                  <div className="flex items-start justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-bold text-white">
+                        {isToday(selectedDate) ? "Today" : format(selectedDate, "EEEE")}
+                      </h2>
+                      <p className="text-sm text-slate-500 mt-0.5">
+                        {format(selectedDate, "MMMM d, yyyy")}
+                        {selectedSchedule && ` \u00B7 ${selectedSchedule.items.length} activities`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setEditingActivity(null); setShowActivityModal(true); }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Activity
+                      </button>
+                      {selectedSchedule && (
+                        <button
+                          onClick={handleNavigateToEditor}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-xs font-medium transition-colors border border-white/[0.08]"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Content */}
               <AnimatePresence mode="wait">
                 {isLoadingSchedule ? (
                   <motion.div
@@ -747,7 +888,20 @@ function ScheduleContent() {
                   </motion.div>
                 ) : !selectedSchedule || selectedSchedule.items.length === 0 ? (
                   <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <EmptySchedule onCreateSchedule={handleCreateSchedule} />
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="w-14 h-14 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4">
+                        <CalendarIcon className="w-6 h-6 text-slate-600" />
+                      </div>
+                      <h3 className="text-base font-semibold text-white mb-1">No activities scheduled</h3>
+                      <p className="text-sm text-slate-500 mb-5 max-w-xs">Start planning your day by adding activities</p>
+                      <button
+                        onClick={() => { setEditingActivity(null); setShowActivityModal(true); }}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Activity
+                      </button>
+                    </div>
                   </motion.div>
                 ) : viewMode === "timeline" ? (
                   <motion.div
@@ -774,7 +928,7 @@ function ScheduleContent() {
                         {/* Timeline Items */}
                         <div className="ml-1">
                           {group.items.map((item, idx) => (
-                            <TimelineItem key={item.id} item={item} index={idx} />
+                            <TimelineItem key={item.id} item={item} index={idx} onEdit={handleEditActivity} onDelete={handleDeleteActivity} />
                           ))}
                         </div>
                       </div>
@@ -828,10 +982,66 @@ function ScheduleContent() {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-          </main>
-        </div>
+
+                  {/* Google Calendar Events */}
+                  {googleEvents.length > 0 && (
+                    <div className="mt-5 pt-4 border-t border-white/[0.06]">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg className="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Google Calendar</span>
+                        <span className="text-[10px] text-slate-600">{googleEvents.length} event{googleEvents.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {googleEvents.map((event, idx) => {
+                          const startDate = new Date(event.startTime);
+                          const endDate = new Date(event.endTime);
+                          const startStr = event.allDay ? 'All day' : `${String(startDate.getHours()).padStart(2,'0')}:${String(startDate.getMinutes()).padStart(2,'0')}`;
+                          const endStr = event.allDay ? '' : `${String(endDate.getHours()).padStart(2,'0')}:${String(endDate.getMinutes()).padStart(2,'0')}`;
+                          return (
+                            <motion.div
+                              key={event.id}
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.04 }}
+                              className="flex items-center gap-3 p-3 rounded-xl bg-blue-500/[0.04] border border-blue-500/10 hover:bg-blue-500/[0.08] transition-colors"
+                            >
+                              <div className="w-1 h-8 rounded-full bg-blue-400 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white font-medium truncate">{event.title}</p>
+                                <p className="text-[11px] text-slate-500">
+                                  {startStr}{endStr ? ` – ${endStr}` : ''}
+                                  {event.location ? ` · ${event.location}` : ''}
+                                </p>
+                              </div>
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 shrink-0">
+                                Google
+                              </span>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+
+            </div>{/* end grid */}
+          </div>{/* end max-w container */}
+        </div>{/* end overflow wrapper */}
       </div>
+
+      {/* ── Activity Form Modal (Full Edit/Create) ── */}
+      <ActivityFormModal
+        isOpen={showActivityModal}
+        onClose={() => { setShowActivityModal(false); setEditingActivity(null); }}
+        activity={editingActivity}
+        onSave={async () => {
+          setShowActivityModal(false);
+          setEditingActivity(null);
+          await loadSchedule(selectedDate);
+        }}
+        scheduleId={selectedSchedule?.id}
+      />
     </DashboardLayout>
   );
 }

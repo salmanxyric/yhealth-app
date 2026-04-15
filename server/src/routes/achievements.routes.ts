@@ -26,4 +26,17 @@ router.get('/leaderboard', achievementsController.getLeaderboard);
 // Check for new achievements
 router.post('/check', achievementsController.checkNewAchievements);
 
+// ============================================
+// Micro-Wins & Dynamic Achievements
+// ============================================
+
+// Get recent micro-wins
+router.get('/micro-wins', achievementsController.getMicroWins);
+
+// Dismiss a micro-win
+router.patch('/micro-wins/:microWinId/dismiss', achievementsController.dismissMicroWin);
+
+// Generate achievements from a goal
+router.post('/goal-map', achievementsController.generateGoalAchievements);
+
 export default router;
