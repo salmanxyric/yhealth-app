@@ -8,6 +8,7 @@ import {
   BookOpen, Target, Heart, Shield, Zap, Cpu,
   Briefcase, DollarSign,
 } from "lucide-react";
+import { HeroSplineScene } from "./spline/HeroSplineScene";
 import { useAuth } from "@/app/context/AuthContext";
 
 // ─── Constants ────────────────────────────────────────────────────────
@@ -32,9 +33,44 @@ const ORBIT_RY = 148;  // vertical radius (independent of RX — no TILT multipl
 const HERO_CSS = `
   .h-root  { font-family:'DM Sans',system-ui,sans-serif; }
   .h-disp  { font-family:'Bricolage Grotesque',system-ui,sans-serif; }
-  .h-hero-title { line-height: 1.14; text-wrap: balance; }
-  .h-hero-line { display: block; }
-  .h-hero-line-dynamic { display: block; overflow: hidden; min-height: 1.2em; }
+  /* Headline: scoped classes — avoid global .animate-shimmer (globals.css) which collides and breaks bg-clip-text + transforms */
+  .h-hero-title {
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+    line-height: 1.12;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .h-hero-line { display: block; padding-bottom: 0.04em; }
+  .h-hero-grad-wrap {
+    display: block;
+    overflow: hidden;
+    min-height: 1.12em;
+  }
+  .h-hero-grad-text {
+    display: block;
+    padding-bottom: 0.04em;
+    background-image: linear-gradient(
+      92deg,
+      #fde68a 0%,
+      #fbbf24 18%,
+      #fb923c 42%,
+      #f97316 58%,
+      #c084fc 82%,
+      #a78bfa 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    /* One animation property: shimmer (background-position) + enter (transform) — two rules on one element overwrite each other */
+    animation:
+      h-shimmer 4s linear infinite,
+      h-word-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
 
   @keyframes h-aurora1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(60px,-40px) scale(1.12)} }
   @keyframes h-aurora2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-50px,30px) scale(0.9)} }
@@ -44,7 +80,10 @@ const HERO_CSS = `
   @keyframes h-ping    { 0%{transform:scale(1);opacity:.9} 100%{transform:scale(2.2);opacity:0} }
   @keyframes h-ticker  { from{transform:translateX(0)} to{transform:translateX(-50%)} }
   @keyframes h-shimmer { from{background-position:-200% 0} to{background-position:200% 0} }
-  @keyframes h-word    { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
+  @keyframes h-word-enter {
+    from { opacity: 0; transform: translate3d(0, 100%, 0); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
   @keyframes h-scan    { 0%{transform:translateY(-74px);opacity:0} 12%{opacity:.7} 88%{opacity:.7} 100%{transform:translateY(74px);opacity:0} }
   @keyframes h-fade-up { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
   @keyframes h-orb-glow{ 0%,100%{box-shadow:0 0 80px rgba(14,165,233,.38),0 0 160px rgba(139,92,246,.18),inset 0 0 55px rgba(0,0,0,.85)} 50%{box-shadow:0 0 100px rgba(14,165,233,.48),0 0 200px rgba(139,92,246,.25),inset 0 0 55px rgba(0,0,0,.85)} }
@@ -311,12 +350,6 @@ export function HeroSection() {
 
   return (
     <>
-      {/* Font import as <link> — @import inside <style> is unreliable */}
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap"
-      />
       <style>{HERO_CSS}</style>
 
       <section
@@ -393,33 +426,25 @@ export function HeroSection() {
           }}>
             <LiveBadge />
 
-            {/* Headline */}
-            <div className="h-disp">
-              <h1 className="h-hero-title" style={{
-                fontSize: "clamp(46px, 5.5vw, 78px)",
-                fontWeight: 800,
-                letterSpacing: "-.035em",
-                margin: 0,
-                color: "rgba(255,255,255,.93)",
-              }}>
-                <span className="h-hero-line">Your Life,</span>
-                <span className="h-hero-line">Intelligently</span>
-                <span className="h-hero-line-dynamic">
-                  <span
-                    key={wordKey}
-                    style={{
-                      display: "inline-block",
-                      background: "linear-gradient(135deg, #fbbf24 0%, #f97316 40%, #a78bfa 100%)",
-                      backgroundSize: "200% 100%",
-                      WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text",
-                      animation: "h-shimmer 4s linear infinite, h-word .4s cubic-bezier(.25,.46,.45,.94) forwards",
-                    }}
-                  >
-                    {WORDS[word]}
-                  </span>
-                </span>
-              </h1>
-            </div>
+            {/* Headline — gradient word uses .h-hero-grad-text (not global animate-shimmer) */}
+            {/* <div className="flex flex-col gap-0.5">
+  <h1 className="h-hero-title m-0 text-[clamp(2.75rem,5.5vw,4.875rem)] font-extrabold text-white/93">
+    
+    <span className="block h-hero-line">Your Life,</span>
+    
+    <span className="block h-hero-line">Intelligently</span>
+    
+    <span
+      className="block h-hero-line h-hero-grad-wrap"
+      aria-live="polite"
+    >
+      <span key={wordKey} className="h-hero-grad-text">
+        {WORDS[word]}
+      </span>
+    </span>
+
+  </h1>
+</div> */}
 
             {/* Subtitle */}
             <p style={{
@@ -495,7 +520,11 @@ export function HeroSection() {
           </div>
 
           {/* RIGHT: 3D Orb */}
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 560 }}>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: 560, position: "relative" }}>
+            {/* Spline 3D background layer */}
+            <div style={{ position: "absolute", inset: -40, zIndex: 0, opacity: 0.85 }}>
+              <HeroSplineScene />
+            </div>
             <div
               style={{
                 position: "relative",

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useRef, useState } from "react";
 import { useGSAP } from "@/hooks/use-gsap";
 import { gsap } from "@/lib/gsap-init";
+import { HealthOrbitSpline } from "./spline/HealthOrbitSpline";
 import {
   Dumbbell,
   Moon,
@@ -109,6 +110,11 @@ export function HealthOrbitSection() {
 
   return (
     <section ref={ref} className="relative py-20 sm:py-28 overflow-hidden">
+      {/* Spline 3D background layer */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <HealthOrbitSpline />
+      </div>
+
       {/* Ambient background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full" style={{ background: "radial-gradient(circle, rgba(14,165,233,0.04) 0%, rgba(16,185,129,0.02) 35%, transparent 65%)" }} />

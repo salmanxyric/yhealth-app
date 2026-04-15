@@ -5,6 +5,7 @@ import Link from "next/link";
 import confetti from "canvas-confetti";
 import { motion, useMotionValue, useSpring, useInView } from "framer-motion";
 import { ArrowRight, Sparkles, Heart, Footprints, Trophy, Check } from "lucide-react";
+import { CTASplineScene } from "./spline/CTASplineScene";
 import { Button } from "@/components/ui/button";
 import { FadeUp } from "@/components/common/motion";
 import { useGSAP } from "@/hooks/use-gsap";
@@ -174,6 +175,11 @@ export function CTASection() {
 
   return (
     <section ref={sectionRef} className="py-20 md:py-28 lg:py-32 relative overflow-hidden">
+      {/* Spline 3D background layer */}
+      <div className="absolute inset-0 -z-20 pointer-events-none">
+        <CTASplineScene />
+      </div>
+
       {/* Background */}
       <AnimatedGradientMesh intensity={0.25} speed={1} blur={120} />
       <div className="absolute inset-0 animated-gradient opacity-10" />

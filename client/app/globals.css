@@ -740,14 +740,3 @@ body::-webkit-scrollbar {
   display: none;
 }
 
-/* Cinematic landing — scroll snap between scenes */
-@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
-  html {
-    scroll-snap-type: y proximity; /* proximity (not mandatory) — lets users scroll freely but snaps near edges */
-    scroll-behavior: smooth;
-  }
-  .cinematic-snap > section {
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-  }
-}

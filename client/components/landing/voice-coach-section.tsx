@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { VoiceCoachSpline } from "./spline/VoiceCoachSpline";
 import {
   Mic,
   Waves,
@@ -368,6 +369,11 @@ export function VoiceCoachSection() {
       ref={sectionRef}
       className="relative py-24 md:py-32 lg:py-40 overflow-hidden"
     >
+      {/* Spline 3D background layer */}
+      <div className="absolute inset-0 -z-20 pointer-events-none">
+        <VoiceCoachSpline />
+      </div>
+
       {/* Background */}
       <div className="absolute inset-0 -z-10">
         <AnimatedGradientMesh intensity={0.14} blur={120} />

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { motion, useInView } from "framer-motion";
+import { HowItWorksSpline } from "./spline/HowItWorksSpline";
 import {
   Compass,
   Cpu,
@@ -404,6 +405,11 @@ export function HowItWorksSection() {
       className="py-20 md:py-28 lg:py-32 relative overflow-hidden"
       ref={scrollContainerRef}
     >
+      {/* Spline 3D background layer */}
+      <div className="absolute inset-0 -z-10 pointer-events-none">
+        <HowItWorksSpline />
+      </div>
+
       <div className="absolute inset-0 cyber-grid opacity-20" />
       <AnimatedGradientMesh intensity={0.18} speed={0.9} blur={100} />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 rounded-full blur-3xl" />
