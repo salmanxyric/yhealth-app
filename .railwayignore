@@ -47,3 +47,7 @@ temp
 # Large media (keep client/public assets — needed by Dockerfile COPY)
 *.mp4
 *.webm
+
+# Avatar models: only coach-avatar.vrm (~11 MB) is kept;
+# Char2/girl1/Alina were removed from disk to shrink the snapshot.
+
