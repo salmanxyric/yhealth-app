@@ -29,12 +29,15 @@ import { api } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import ReactMarkdown from "react-markdown";
 import { ImageAnalysisModal } from "../modals/ImageAnalysisModal";
+import { RoutingChip } from "@/components/ai-coach/RoutingChip";
+import type { RoutingChip as RoutingChipData } from "@/app/(pages)/life-areas/types";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  routingChip?: RoutingChipData | null;
 }
 
 export function AICoachTab() {
@@ -178,6 +181,7 @@ export function AICoachTab() {
         role: "assistant",
         content: response.message,
         timestamp: new Date(),
+        routingChip: (response as { routingChip?: RoutingChipData | null }).routingChip ?? null,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -844,6 +848,16 @@ export function AICoachTab() {
                           }
                           return null;
                         })()}
+                        {message.routingChip && (
+                          <RoutingChip
+                            chip={message.routingChip}
+                            onReroute={async () => {
+                              // Phase 1: reroute simply navigates to /life-areas.
+                              // Full reroute endpoint is Phase 2.
+                              window.location.href = '/life-areas';
+                            }}
+                          />
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm whitespace-pre-wrap">{message.content}</p>
