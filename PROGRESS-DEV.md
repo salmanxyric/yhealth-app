@@ -490,3 +490,25 @@ kb_summary: Active development progress tracker for yHealth app features and fix
 **Refs:**
 - Spec: `docs/superpowers/specs/2026-04-15-universal-self-improvement-design.md`
 - Plan: `docs/superpowers/plans/2026-04-15-universal-self-improvement-phase1.md`
+
+## 2026-04-15 — Cinematic Landing Phase 2.A (Shell + Hero)
+
+**Shipped:**
+- Archived 21 pre-cinematic landing sections to `client/components/landing/_archive/` with restoration README.
+- tsconfig exclude for `_archive/**` so archived files don't break type-check.
+- New scene infra: `Scene3D` (placeholder today, clean Spline swap point), `SceneSkeleton`, `SceneShell`, `useSceneTimeline`.
+- `client/data/siteContent.ts` with all copy tagged `// COPY-REVIEW`.
+- Scene 1 (Hero) — full implementation with scrub-driven fade/blur, mouse parallax, glass eyebrow, gradient CTAs.
+- `client/app/page.tsx` rebuilt as cinematic shell: Hero + 8 lazy-loaded scene placeholders + Pricing + FAQ.
+
+**Deferred to later phases:**
+- Scenes 2-5 implementations — Phase 2.B
+- Scenes 6-9 implementations — Phase 2.C (Scene 6 Life Areas carousel pulls from `server/src/config/life-area-domains.ts`)
+- Pricing + FAQ dark-tokens visual pass — Phase 2.D
+- Real Spline scene URLs — drop into `Scene3D` `splineUrl` prop when ready; zero code change beyond a URL string in `siteContent.ts`
+- Lighthouse + axe sweep — Phase 2.D
+
+**Refs:**
+- Spec: `docs/superpowers/specs/2026-04-15-cinematic-landing-page-design.md`
+- Plan: `docs/superpowers/plans/2026-04-15-cinematic-landing-phase2a.md`
+- Manual QA: `docs/superpowers/verification/2026-04-15-cinematic-phase2a-manual-qa.md`
