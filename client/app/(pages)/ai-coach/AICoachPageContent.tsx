@@ -78,9 +78,9 @@ function AICoachLayout() {
         <AICoachHeader onToggleSidebar={() => coach.setShowSidebar((prev) => !prev)} isSidebarOpen={coach.showSidebar} />
 
         {/* Main container with gradient border */}
-        <div className="flex-1 flex flex-col min-h-0 m-2 sm:m-4 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 mx-2 sm:mx-4 mt-2 sm:mt-3 mb-0 overflow-hidden">
           <div
-            className="flex-1 flex flex-col min-h-0 rounded-[32px] border border-white/[0.17] overflow-hidden"
+            className="flex-1 flex flex-col min-h-0 rounded-t-[32px] rounded-b-none border border-b-0 border-white/[0.17] overflow-hidden"
             style={{
               backgroundImage:
                 "linear-gradient(173.75deg, rgba(2, 132, 199, 0) 2.64%, rgba(2, 132, 199, 0.1) 98.73%)",
