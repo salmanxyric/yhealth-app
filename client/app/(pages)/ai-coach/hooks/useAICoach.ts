@@ -31,6 +31,7 @@ export function useAICoach() {
   const [actionResults, setActionResults] = useState<Map<string, ActionExecutionResult>>(new Map());
   const [showImageModal, setShowImageModal] = useState(false);
   const [imageModalMode, setImageModalMode] = useState<"camera" | "upload">("upload");
+  const [isNewChat, setIsNewChat] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -50,12 +51,12 @@ export function useAICoach() {
     fetchConversations();
   }, []);
 
-  // Auto-load last conversation
+  // Auto-load last conversation (skip if user explicitly started a new chat)
   useEffect(() => {
-    if (conversations.length > 0 && !activeConversationId && messages.length === 0 && !isLoading) {
+    if (conversations.length > 0 && !activeConversationId && messages.length === 0 && !isLoading && !isNewChat) {
       loadConversation(conversations[0].id);
     }
-  }, [conversations, activeConversationId, messages.length, isLoading]);
+  }, [conversations, activeConversationId, messages.length, isLoading, isNewChat]);
 
   // Scroll to bottom
   useEffect(() => {
@@ -84,6 +85,7 @@ export function useAICoach() {
 
   const loadConversation = async (conversationId: string) => {
     setIsLoading(true);
+    setIsNewChat(false);
     try {
       const result = await ragChatService.getConversation(conversationId, 100);
       setActiveConversationId(conversationId);
@@ -108,6 +110,7 @@ export function useAICoach() {
   const startNewConversation = () => {
     setActiveConversationId(null);
     setMessages([]);
+    setIsNewChat(true);
     if (window.innerWidth < 1024) setShowSidebar(false);
   };
 
@@ -304,6 +307,7 @@ export function useAICoach() {
 
       if (!activeConversationId && response.conversationId) {
         setActiveConversationId(response.conversationId);
+        setIsNewChat(false);
         fetchConversations();
       }
 
