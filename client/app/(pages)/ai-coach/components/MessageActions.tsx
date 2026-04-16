@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, RefreshCw, Share2, MoreHorizontal, Volume2, VolumeX } from "lucide-react";
+import { Copy, RefreshCw, Share2, MoreHorizontal, Volume2, VolumeX, X, MessageSquare, Mail, Link2, Check } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface MessageActionsProps {
@@ -14,9 +14,22 @@ interface MessageActionsProps {
   isRegenerating?: boolean;
 }
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s/g, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, ""))
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^[-*+]\s/gm, "• ")
+    .trim();
+}
+
 export function MessageActions({ content, onRegenerate, isRegenerating }: MessageActionsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -47,18 +60,35 @@ export function MessageActions({ content, onRegenerate, isRegenerating }: Messag
   }
 
   function handleShare() {
-    // Strip markdown syntax for a clean shareable text
-    const plain = content
-      .replace(/#{1,6}\s/g, "")
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, ""))
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/^[-*+]\s/gm, "• ")
-      .trim();
-    navigator.clipboard.writeText(plain).then(() => {
-      toast.success("Message copied for sharing", { duration: 1500 });
+    // Try native Web Share API first (mobile)
+    const plain = stripMarkdown(content);
+    if (navigator.share) {
+      navigator.share({ title: "yHealth Coach", text: plain }).catch(() => {
+        // User cancelled or API unavailable — fall back to modal
+        setShareOpen(true);
+      });
+    } else {
+      setShareOpen(true);
+    }
+  }
+
+  function handleCopyShareText() {
+    navigator.clipboard.writeText(stripMarkdown(content)).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
     });
+  }
+
+  function shareVia(channel: "whatsapp" | "x" | "email") {
+    const plain = stripMarkdown(content);
+    const encoded = encodeURIComponent(plain);
+    const urls: Record<string, string> = {
+      whatsapp: `https://wa.me/?text=${encoded}`,
+      x: `https://x.com/intent/tweet?text=${encoded}`,
+      email: `mailto:?subject=${encodeURIComponent("From my yHealth Coach")}&body=${encoded}`,
+    };
+    window.open(urls[channel], "_blank", "noopener");
+    setShareOpen(false);
   }
 
   function handleReadAloud() {
@@ -95,6 +125,97 @@ export function MessageActions({ content, onRegenerate, isRegenerating }: Messag
         disabled={isRegenerating}
       />
       <ActionButton icon={<Share2 className="w-3.5 h-3.5" />} title="Share" onClick={handleShare} />
+
+      {/* Share portal */}
+      <AnimatePresence>
+        {shareOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={() => setShareOpen(false)}
+          >
+            <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 12 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                <h3 className="text-base font-semibold text-white">Share message</h3>
+                <button
+                  onClick={() => setShareOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Preview */}
+              <div className="mx-5 rounded-xl border border-white/10 bg-white/5 p-4 max-h-40 overflow-y-auto">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-6 h-6 rounded-md bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center shrink-0 mt-0.5">
+                    <MessageSquare className="w-3 h-3 text-white" />
+                  </div>
+                  <p className="text-sm text-slate-300 leading-relaxed line-clamp-6">
+                    {stripMarkdown(content)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Share channels */}
+              <div className="px-5 pt-4 pb-2">
+                <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-3">Share via</div>
+                <div className="flex gap-3">
+                  <ShareChannel
+                    label="WhatsApp"
+                    color="bg-emerald-600"
+                    icon={<MessageSquare className="w-5 h-5" />}
+                    onClick={() => shareVia("whatsapp")}
+                  />
+                  <ShareChannel
+                    label="X"
+                    color="bg-slate-700"
+                    icon={<span className="text-sm font-bold">𝕏</span>}
+                    onClick={() => shareVia("x")}
+                  />
+                  <ShareChannel
+                    label="Email"
+                    color="bg-blue-600"
+                    icon={<Mail className="w-5 h-5" />}
+                    onClick={() => shareVia("email")}
+                  />
+                </div>
+              </div>
+
+              {/* Copy text button */}
+              <div className="px-5 pt-3 pb-5">
+                <button
+                  onClick={handleCopyShareText}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2.5 text-sm text-slate-200 transition"
+                >
+                  {linkCopied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="w-4 h-4" />
+                      Copy text
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* More menu */}
       <div className="relative" ref={menuRef}>
@@ -134,6 +255,30 @@ export function MessageActions({ content, onRegenerate, isRegenerating }: Messag
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+function ShareChannel({
+  label,
+  color,
+  icon,
+  onClick,
+}: {
+  label: string;
+  color: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 group/share"
+    >
+      <div className={`w-12 h-12 rounded-full ${color} flex items-center justify-center text-white group-hover/share:scale-110 transition-transform`}>
+        {icon}
+      </div>
+      <span className="text-[11px] text-slate-400">{label}</span>
+    </button>
   );
 }
 
