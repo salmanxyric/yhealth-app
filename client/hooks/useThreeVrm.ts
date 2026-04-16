@@ -187,7 +187,23 @@ export function useThreeVrm({
         loader.setCrossOrigin("anonymous");
         loader.register((parser) => new VRMLoaderPlugin(parser));
 
-        const gltf = await loader.loadAsync(url);
+        // Suppress cosmetic Three.js errors during VRM loading:
+        // - "Couldn't load texture blob:..." (embedded textures browser can't decode)
+        // - "Cannot set properties of undefined (setting 'colorSpace')" (cascading)
+        // The VRM renders correctly with fallback materials; these are console noise.
+        const _origConsoleError = console.error;
+        console.error = (...args: unknown[]) => {
+          const first = typeof args[0] === 'string' ? args[0] : '';
+          if (first.includes("Couldn't load texture") || first.includes('colorSpace')) return;
+          _origConsoleError.apply(console, args);
+        };
+
+        let gltf;
+        try {
+          gltf = await loader.loadAsync(url);
+        } finally {
+          console.error = _origConsoleError;
+        }
         if (failedTextures > 0) {
           console.warn(
             `[useThreeVrm] ${failedTextures} embedded texture(s) failed to decode — VRM loaded with fallback materials.`,
