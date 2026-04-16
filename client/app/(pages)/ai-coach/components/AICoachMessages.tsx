@@ -32,18 +32,18 @@ export function AICoachMessages({
           key={message.id}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`group flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+          className={`group flex gap-3 items-start ${message.role === "user" ? "justify-end" : "justify-start"}`}
         >
           {message.role === "assistant" && (
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center shrink-0 mt-1">
               <Bot className="w-4 h-4 text-white" />
             </div>
           )}
           <div
-            className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-3 ${
+            className={`rounded-2xl px-4 py-3 break-words ${
               message.role === "user"
-                ? "bg-sky-500/15 text-slate-100 border border-sky-400/20 shadow-sm shadow-sky-500/5"
-                : "bg-white/5 text-slate-200 border border-white/10"
+                ? "max-w-[85%] sm:max-w-[75%] bg-sky-500/15 text-slate-100 border border-sky-400/20 shadow-sm shadow-sky-500/5"
+                : "max-w-[85%] sm:max-w-[80%] bg-white/5 text-slate-200 border border-white/10"
             }`}
           >
             {message.role === "assistant" ? (
@@ -117,7 +117,7 @@ export function AICoachMessages({
             )}
           </div>
           {message.role === "user" && (
-            <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/20 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/20 flex items-center justify-center shrink-0 mt-1">
               <User className="w-4 h-4 text-sky-300" />
             </div>
           )}
