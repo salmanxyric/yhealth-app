@@ -42,7 +42,7 @@ export function AICoachMessages({
           <div
             className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-3 ${
               message.role === "user"
-                ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white"
+                ? "bg-sky-500/15 text-slate-100 border border-sky-400/20 shadow-sm shadow-sky-500/5"
                 : "bg-white/5 text-slate-200 border border-white/10"
             }`}
           >
@@ -117,8 +117,8 @@ export function AICoachMessages({
             )}
           </div>
           {message.role === "user" && (
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shrink-0">
-              <User className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/20 flex items-center justify-center shrink-0">
+              <User className="w-4 h-4 text-sky-300" />
             </div>
           )}
         </motion.div>
