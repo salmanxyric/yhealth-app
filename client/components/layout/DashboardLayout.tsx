@@ -55,7 +55,15 @@ export function DashboardLayout({
     if (pathname === "/notifications") return "notifications";
     if (pathname === "/settings") return "settings";
     if (pathname === "/profile") return "profile";
-    
+    if (pathname === "/preferences") return "preferences";
+    if (pathname === "/help") return "help";
+    if (pathname.startsWith("/money-map")) return "money-map";
+    if (pathname.startsWith("/life-areas")) return "life-areas";
+    if (pathname.startsWith("/knowledge-graph")) return "knowledge-graph";
+    if (pathname.startsWith("/voice-assistant")) return "voice-assistant";
+    if (pathname.startsWith("/voice-call")) return "call-coach";
+    if (pathname.startsWith("/admin")) return "admin-panel";
+
     return "overview";
   };
 
