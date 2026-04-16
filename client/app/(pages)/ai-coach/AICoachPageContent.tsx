@@ -2,16 +2,21 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { AICoachTab } from "../dashboard/components/tabs/AICoachTab";
 import { useAuth } from "@/app/context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAICoach } from "./hooks/useAICoach";
+import { AICoachSidebar } from "./components/AICoachSidebar";
+import { AICoachHeader } from "./components/AICoachHeader";
+import { AICoachWelcome } from "./components/AICoachWelcome";
+import { AICoachInput } from "./components/AICoachInput";
+import { AICoachMessages } from "./components/AICoachMessages";
+import { ImageAnalysisModal } from "../dashboard/components/modals/ImageAnalysisModal";
 
 export default function AICoachPageContent() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push("/auth/signin?callbackUrl=/ai-coach");
@@ -20,7 +25,7 @@ export default function AICoachPageContent() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="h-screen flex items-center justify-center bg-[#02000f]">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -42,25 +47,90 @@ export default function AICoachPageContent() {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
+
+  return <AICoachLayout />;
+}
+
+function AICoachLayout() {
+  const coach = useAICoach();
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      {/* Main Content - Full Width (No Sidebar) */}
-      <div className="min-h-screen overflow-x-hidden">
-        {/* Animated Background */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl" />
-        </div>
+    <div className="h-screen bg-[#02000f] flex overflow-hidden">
+      {/* Sidebar */}
+      <AICoachSidebar
+        conversations={coach.conversations}
+        activeConversationId={coach.activeConversationId}
+        isLoading={coach.isLoading}
+        dropdownOpen={coach.dropdownOpen}
+        showSidebar={coach.showSidebar}
+        onSelectConversation={coach.loadConversation}
+        onNewChat={coach.startNewConversation}
+        onDeleteConversation={coach.deleteConversation}
+        onArchiveConversation={coach.archiveConversation}
+        onSetDropdownOpen={coach.setDropdownOpen}
+        onCloseSidebar={() => coach.setShowSidebar(false)}
+      />
 
-        <div className="relative">
-          <AICoachTab />
+      {/* Main area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <AICoachHeader onToggleSidebar={() => coach.setShowSidebar((prev) => !prev)} isSidebarOpen={coach.showSidebar} />
+
+        {/* Main container with gradient border */}
+        <div className="flex-1 flex flex-col min-h-0 m-2 sm:m-4 overflow-hidden">
+          <div
+            className="flex-1 flex flex-col min-h-0 rounded-[32px] border border-white/[0.17] overflow-hidden"
+            style={{
+              backgroundImage:
+                "linear-gradient(173.75deg, rgba(2, 132, 199, 0) 2.64%, rgba(2, 132, 199, 0.1) 98.73%)",
+            }}
+          >
+            {/* Content: Welcome or Messages */}
+            {coach.messages.length === 0 ? (
+              <div className="flex-1 overflow-y-auto">
+                <AICoachWelcome onSuggestionClick={(text) => coach.sendMessage(text)} />
+              </div>
+            ) : (
+              <AICoachMessages
+                messages={coach.messages}
+                isSending={coach.isSending}
+                executingActions={coach.executingActions}
+                actionResults={coach.actionResults}
+                messagesEndRef={coach.messagesEndRef}
+                onRegenerateMessage={coach.regenerateMessage}
+              />
+            )}
+
+            {/* Input */}
+            <AICoachInput
+              inputMessage={coach.inputMessage}
+              isSending={coach.isSending}
+              inputRef={coach.inputRef}
+              onInputChange={coach.setInputMessage}
+              onSend={() => coach.sendMessage()}
+              onKeyDown={coach.handleKeyDown}
+              onAttach={() => {
+                coach.setImageModalMode("upload");
+                coach.setShowImageModal(true);
+              }}
+              onCamera={() => {
+                coach.setImageModalMode("camera");
+                coach.setShowImageModal(true);
+              }}
+            />
+          </div>
         </div>
       </div>
+
+      {/* Image Analysis Modal */}
+      <ImageAnalysisModal
+        isOpen={coach.showImageModal}
+        onClose={() => coach.setShowImageModal(false)}
+        onAnalysisComplete={coach.handleImageAnalysisComplete}
+        mode={coach.imageModalMode}
+        conversationId={coach.activeConversationId || undefined}
+      />
     </div>
   );
 }
