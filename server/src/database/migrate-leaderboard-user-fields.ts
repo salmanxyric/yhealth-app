@@ -6,7 +6,7 @@
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 
 const __filename = fileURLToPath(import.meta.url);

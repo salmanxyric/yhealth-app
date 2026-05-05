@@ -32,6 +32,7 @@ import {
 import { useOnboarding } from '@/src/features/onboarding/context/OnboardingContext';
 import { lifeGoalsService } from '@/src/shared/services/wellbeing.service';
 import type { LifeGoalCategory } from '@shared/types/domain/wellbeing';
+import { useLifeCoachQuestions } from '../hooks/useLifeCoachQuestions';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -101,7 +102,7 @@ const MOTIVATION_OPTIONS: Array<{
 ];
 
 // ---------------------------------------------------------------------------
-// Questions
+// Question type (matches hook output)
 // ---------------------------------------------------------------------------
 
 interface Question {
@@ -111,34 +112,6 @@ interface Question {
   optional?: boolean;
   placeholder?: string;
 }
-
-const QUESTIONS: Question[] = [
-  {
-    id: 'improvement',
-    text: "What's the #1 thing you want to improve in your life?",
-    type: 'text',
-    placeholder: 'e.g., Get fit, be more present, save money...',
-  },
-  {
-    id: 'motivation',
-    text: 'How motivated are you to make changes right now?',
-    type: 'cards',
-  },
-  {
-    id: 'past_attempts',
-    text: "What have you tried before that didn't work?",
-    type: 'text',
-    optional: true,
-    placeholder: 'e.g., Gym memberships, diets, meditation apps...',
-  },
-  {
-    id: 'other_goals',
-    text: 'Any other life goals? (e.g., save money, pray more, read books, reduce screen time)',
-    type: 'text',
-    optional: true,
-    placeholder: 'Type anything you want to work on...',
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Client-side fallback goal generation
@@ -325,7 +298,10 @@ function TypingIndicator() {
  * Sub-steps: conversation -> suggestions -> confirm
  */
 export function LifeGoalsStep() {
-  const { nextStep } = useOnboarding();
+  const { nextStep, selectedGoal } = useOnboarding();
+
+  // AI-generated questions (replaces static QUESTIONS array)
+  const { questions: QUESTIONS, isLoading: isLoadingQuestions, error: questionsError, retry: retryQuestions } = useLifeCoachQuestions();
 
   // Sub-step navigation
   const [subStep, setSubStep] = useState<SubStep>('conversation');
@@ -364,7 +340,7 @@ export function LifeGoalsStep() {
       const timer = setTimeout(() => setIsTyping(false), 800);
       return () => clearTimeout(timer);
     }
-  }, [currentQuestionIndex]);
+  }, [currentQuestionIndex, QUESTIONS.length]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -554,6 +530,80 @@ export function LifeGoalsStep() {
   // -------------------------------------------------------------------------
 
   if (subStep === 'conversation') {
+    // Loading state while AI generates life-coach questions
+    if (isLoadingQuestions) {
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-[60vh]">
+          <motion.div
+            className="text-center max-w-md mx-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <motion.div
+              className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-sky-500/20 to-teal-500/20 flex items-center justify-center"
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <Sparkles className="w-8 h-8 text-sky-400" />
+            </motion.div>
+            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3">
+              Preparing your coaching session...
+            </h2>
+            <p className="text-sm sm:text-base text-white/60 mb-8">
+              Creating personalized questions based on your{' '}
+              {selectedGoal === 'custom' ? 'personal' : selectedGoal?.replace(/_/g, ' ')} goal
+            </p>
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <motion.div
+                  key={i}
+                  className="h-14 rounded-xl bg-white/5 border border-white/10"
+                  animate={{ opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center justify-center gap-2 mt-8">
+              <Loader2 className="w-4 h-4 text-sky-400 animate-spin" />
+              <span className="text-sm text-white/40">This usually takes 2-3 seconds</span>
+            </div>
+          </motion.div>
+        </div>
+      );
+    }
+
+    // Error state (only if no fallback questions loaded)
+    if (questionsError && QUESTIONS.length === 0) {
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-[60vh]">
+          <motion.div
+            className="text-center max-w-md mx-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-500/10 flex items-center justify-center">
+              <Sparkles className="w-8 h-8 text-red-400" />
+            </div>
+            <h2 className="text-xl font-semibold text-white mb-3">
+              Couldn&apos;t prepare your coaching session
+            </h2>
+            <p className="text-sm text-white/60 mb-6">
+              We had trouble generating your questions. Let&apos;s try again.
+            </p>
+            <motion.button
+              onClick={retryQuestions}
+              className="flex items-center gap-2 mx-auto px-6 py-3 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-500 transition-all"
+              whileTap={{ scale: 0.97 }}
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Try Again</span>
+            </motion.button>
+          </motion.div>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col h-full min-h-[60vh]">
         {/* Header */}

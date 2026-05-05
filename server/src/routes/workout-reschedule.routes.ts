@@ -12,7 +12,7 @@ import type { AuthenticatedRequest } from '../types/index.js';
 import { workoutAuditService } from '../services/workout-audit.service.js';
 import { workoutRescheduleWorkflowService } from '../services/workout-reschedule-workflow.service.js';
 import { workoutConstraintService } from '../services/workout-constraint.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 // import { workoutAuditJob } from '../jobs/workout-audit.job.js'; // TODO: Use for manual audit trigger
 import { logger } from '../services/logger.service.js';
 

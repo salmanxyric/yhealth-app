@@ -4,7 +4,7 @@
  * (workouts, meals, mood, habits, journal entries) and task completion.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 export interface DataSignal {

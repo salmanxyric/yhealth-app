@@ -9,7 +9,18 @@ import type {
   GraphNode,
   GraphNodeCategory,
 } from '@shared/types/domain/knowledge-graph';
-import { CATEGORY_COLORS } from '../constants/graph-config';
+import {
+  CATEGORY_COLORS,
+  AI_COACH_NODE_COLOR,
+  FEATURE_STATUS_COLORS,
+  REASONING_EDGE_COLORS,
+  REASONING_NODE_RADIUS,
+} from '../constants/graph-config';
+import type {
+  ReasoningOverlayData,
+  ReasoningOverlayNode,
+  ReasoningOverlayEdge,
+} from '@/src/shared/services/knowledge-graph.service';
 
 // ============================================
 // D3 graph types
@@ -26,6 +37,10 @@ export interface D3Node {
   entryCount: number;
   date?: string;
   forceLabel: boolean;
+  healthScore?: number;
+  status?: 'active' | 'dormant' | 'never_used';
+  isBrain?: boolean;
+  route?: string;
   // D3 will add these:
   x?: number;
   y?: number;
@@ -212,6 +227,63 @@ export function buildD3Graph(data: KnowledgeGraphData): D3GraphData {
         });
       }
     }
+  }
+
+  return { nodes, links };
+}
+
+// ============================================
+// Reasoning graph builder (Architecture View)
+// ============================================
+
+export function buildReasoningGraph(data: ReasoningOverlayData): D3GraphData {
+  const nodes: D3Node[] = [];
+  const links: D3Link[] = [];
+
+  for (const node of data.nodes) {
+    const isBrain = node.id === 'ai-coach';
+    const isActive = node.status === 'active';
+
+    const color = isBrain
+      ? AI_COACH_NODE_COLOR
+      : isActive
+        ? (CATEGORY_COLORS as Record<string, string>)[node.category] || '#64748B'
+        : (FEATURE_STATUS_COLORS as Record<string, string>)[node.status] || '#334155';
+
+    const r = isBrain
+      ? REASONING_NODE_RADIUS.brain
+      : node.parentNodeId === 'ai-coach' || node.parentNodeId === null
+        ? REASONING_NODE_RADIUS.hub
+        : REASONING_NODE_RADIUS.leaf;
+
+    nodes.push({
+      id: node.id,
+      label: node.label,
+      category: (node.category || 'intelligence') as GraphNodeCategory,
+      nodeKind: isBrain ? 'special' : 'hub',
+      r,
+      color,
+      entries: [],
+      entryCount: node.activityCount7d,
+      forceLabel: true,
+      healthScore: node.healthScore,
+      status: node.status,
+      isBrain,
+      route: node.route,
+    });
+  }
+
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  for (const edge of data.edges) {
+    if (!edge.source || !edge.target || !nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue;
+    const edgeColor = (REASONING_EDGE_COLORS as Record<string, string>)[edge.edgeType] || '#475569';
+    links.push({
+      source: edge.source,
+      target: edge.target,
+      value: Math.max(0.5, (edge.weight || 0.5) * 3),
+      color: edgeColor,
+      label: edge.label,
+    });
   }
 
   return { nodes, links };

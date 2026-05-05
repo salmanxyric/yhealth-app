@@ -7,7 +7,7 @@
 import { aiProviderService } from './ai-provider.service.js';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
 import { JobPriorities } from '../config/queue.config.js';
 
@@ -1108,7 +1108,7 @@ Respond with a JSON object containing dietPlan, workoutPlan, and overallAnalysis
   "dietPlan": {
     "name": "string (creative, motivating name)",
     "description": "string (2-3 sentences explaining the nutritional strategy)",
-    "goalCategory": "weight_loss|muscle_building|sleep_improvement|stress_wellness|energy_productivity|event_training|health_condition|habit_building|overall_optimization|custom",
+    "goalCategory": "weight_loss|muscle_building|sleep_improvement|stress_wellness|energy_productivity|event_training|health_condition|habit_building|overall_optimization|nutrition|fitness|custom",
     "dailyCalories": number,
     "proteinGrams": number,
     "carbsGrams": number,

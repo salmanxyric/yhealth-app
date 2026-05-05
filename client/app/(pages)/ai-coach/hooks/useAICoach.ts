@@ -2,11 +2,39 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ragChatService, RAGConversation, RAGChatMessage, ActionCommand } from "@/src/shared/services/rag-chat.service";
+import {
+  ragChatService,
+  RAGConversation,
+  RAGChatMessage,
+  ActionCommand,
+  StreamEvent,
+  StreamToolCallEvent,
+  StreamToolResultEvent,
+} from "@/src/shared/services/rag-chat.service";
 import { parseActionsFromResponse, executeActions, ActionExecutionResult } from "@/src/shared/services/action-handler.service";
 import { api } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import type { RoutingChip as RoutingChipData } from "@/app/(pages)/life-areas/types";
+import type { Artifact } from "../components/ArtifactCard";
+
+export interface AnalysisStepEvent {
+  id: string;
+  label: string;
+  status: "pending" | "active" | "completed" | "failed";
+  durationMs?: number;
+  resultSummary?: string;
+}
+
+export interface ToolTimelineEvent {
+  operationId: string;
+  toolName: string;
+  label: string;
+  icon?: string;
+  status: "pending" | "completed" | "failed" | "undone";
+  success?: boolean;
+  delta?: string;
+  undoable?: boolean;
+}
 
 export interface Message {
   id: string;
@@ -14,6 +42,12 @@ export interface Message {
   content: string;
   timestamp: Date;
   routingChip?: RoutingChipData | null;
+  agentTurnId?: string;
+  timelineEvents?: ToolTimelineEvent[];
+  thinkingLabel?: string;
+  thinkingDurationMs?: number;
+  artifacts?: Artifact[];
+  analysisSteps?: AnalysisStepEvent[];
 }
 
 export function useAICoach() {
@@ -30,6 +64,12 @@ export function useAICoach() {
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set());
   const [actionResults, setActionResults] = useState<Map<string, ActionExecutionResult>>(new Map());
   const [showImageModal, setShowImageModal] = useState(false);
+  // Agentic timeline state
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingLabel, setThinkingLabel] = useState("");
+  const [liveTimelineEvents, setLiveTimelineEvents] = useState<ToolTimelineEvent[]>([]);
+  const [liveAnalysisSteps, setLiveAnalysisSteps] = useState<AnalysisStepEvent[]>([]);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const [imageModalMode, setImageModalMode] = useState<"camera" | "upload">("upload");
   const [isNewChat, setIsNewChat] = useState(false);
 
@@ -284,6 +324,28 @@ export function useAICoach() {
     }
   }, [router, handleNavigate, handleUpdate, handleCreate, handleDelete, handleOpenModal]);
 
+  const undoTimelineEvent = useCallback(async (messageId: string, operationId: string) => {
+    try {
+      const result = await ragChatService.undoOperation(operationId);
+      if (result.success) {
+        setMessages((prev) => prev.map((m) => {
+          if (m.id !== messageId) return m;
+          return {
+            ...m,
+            timelineEvents: m.timelineEvents?.map((ev) =>
+              ev.operationId === operationId ? { ...ev, status: "undone" as const } : ev,
+            ),
+          };
+        }));
+        toast.success("Action undone");
+      } else {
+        toast.error(result.error || "Failed to undo");
+      }
+    } catch {
+      toast.error("Failed to undo action");
+    }
+  }, []);
+
   const sendMessage = async (overrideMessage?: string) => {
     const text = overrideMessage || inputMessage.trim();
     if (!text || isSending) return;
@@ -298,43 +360,202 @@ export function useAICoach() {
     setMessages((prev) => [...prev, userMessage]);
     setInputMessage("");
     setIsSending(true);
+    setIsThinking(false);
+    setThinkingLabel("");
+    setLiveTimelineEvents([]);
+
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+
+    let accumulatedContent = "";
+    const timelineEvents: ToolTimelineEvent[] = [];
+    const artifacts: Artifact[] = [];
+    const analysisSteps: AnalysisStepEvent[] = [];
+    let conversationId = activeConversationId || undefined;
+    let agentTurnId: string | undefined;
+    const streamingMsgId = `streaming-${Date.now()}`;
+    let streamingMsgCreated = false;
+    let savedThinkingLabel = "";
+    let savedThinkingDuration = 0;
+
+    const MAX_RETRIES = 2;
+    const BACKOFF_BASE_MS = 1500;
+    let sendStart = 0;
+    let ttfbRecorded = false;
+
+    const attemptSend = async (attempt: number): Promise<void> => {
+      sendStart = performance.now();
+      ttfbRecorded = false;
+
+      try {
+        await ragChatService.sendMessageStreaming({
+          message: userMessage.content,
+          conversationId,
+          signal: abortController.signal,
+          onEvent: (event: StreamEvent) => {
+            // Track TTFB on first token
+            if (!ttfbRecorded && (event.type === "token" || event.type === "thinking_start")) {
+              ttfbRecorded = true;
+              const ttfb = Math.round(performance.now() - sendStart);
+              if (typeof window !== "undefined") {
+                console.debug(`[AI Coach] TTFB: ${ttfb}ms`);
+              }
+            }
+
+            switch (event.type) {
+              case "thinking_start":
+              savedThinkingLabel = event.label;
+              setIsThinking(true);
+              setThinkingLabel(event.label);
+              break;
+
+            case "thinking_end":
+              savedThinkingDuration = event.durationMs;
+              setIsThinking(false);
+              break;
+
+            case "tool_call": {
+              const toolEvent: ToolTimelineEvent = {
+                operationId: event.operationId,
+                toolName: event.toolName,
+                label: event.label,
+                icon: event.icon,
+                status: "pending",
+              };
+              timelineEvents.push(toolEvent);
+              setLiveTimelineEvents([...timelineEvents]);
+              break;
+            }
+
+            case "tool_result": {
+              const idx = timelineEvents.findIndex((e) => e.operationId === event.operationId);
+              if (idx >= 0) {
+                timelineEvents[idx] = {
+                  ...timelineEvents[idx],
+                  status: event.success ? "completed" : "failed",
+                  success: event.success,
+                  delta: event.delta,
+                  undoable: event.undoable,
+                  label: event.label || timelineEvents[idx].label,
+                };
+              }
+              setLiveTimelineEvents([...timelineEvents]);
+              break;
+            }
+
+            case "artifact":
+              artifacts.push(event.artifact as unknown as Artifact);
+              break;
+
+            case "analysis_step": {
+              const step = event.step as AnalysisStepEvent;
+              const existingIdx = analysisSteps.findIndex(s => s.id === step.id);
+              if (existingIdx >= 0) {
+                analysisSteps[existingIdx] = step;
+              } else {
+                analysisSteps.push(step);
+              }
+              setLiveAnalysisSteps([...analysisSteps]);
+              break;
+            }
+
+            case "token":
+              accumulatedContent += event.content;
+              if (!streamingMsgCreated) {
+                streamingMsgCreated = true;
+                setMessages((prev) => [...prev, {
+                  id: streamingMsgId,
+                  role: "assistant",
+                  content: accumulatedContent,
+                  timestamp: new Date(),
+                  timelineEvents: timelineEvents.length > 0 ? [...timelineEvents] : undefined,
+                }]);
+              } else {
+                setMessages((prev) => prev.map((m) =>
+                  m.id === streamingMsgId
+                    ? { ...m, content: accumulatedContent, timelineEvents: timelineEvents.length > 0 ? [...timelineEvents] : undefined }
+                    : m,
+                ));
+              }
+              break;
+
+            case "conversation_id":
+              conversationId = event.conversationId;
+              if (!activeConversationId) {
+                setActiveConversationId(event.conversationId);
+                setIsNewChat(false);
+                fetchConversations();
+              }
+              break;
+
+            case "done": {
+              agentTurnId = event.agentTurnId;
+              const finalContent = event.message || accumulatedContent;
+
+              const assistantMessage: Message = {
+                id: event.messageId || `resp-${Date.now()}`,
+                role: "assistant",
+                content: finalContent,
+                timestamp: new Date(),
+                agentTurnId: event.agentTurnId,
+                timelineEvents: timelineEvents.length > 0 ? [...timelineEvents] : undefined,
+                thinkingLabel: savedThinkingLabel || undefined,
+                thinkingDurationMs: savedThinkingDuration || undefined,
+                artifacts: artifacts.length > 0 ? [...artifacts] : undefined,
+                analysisSteps: analysisSteps.length > 0 ? [...analysisSteps] : undefined,
+              };
+
+              if (streamingMsgCreated) {
+                setMessages((prev) => prev.map((m) =>
+                  m.id === streamingMsgId ? assistantMessage : m,
+                ));
+              } else {
+                setMessages((prev) => [...prev, assistantMessage]);
+              }
+              setLiveTimelineEvents([]);
+              setLiveAnalysisSteps([]);
+
+              if (event.toolCalls?.length) {
+                const journalTools = ["createJournalEntry", "updateJournalEntry", "deleteJournalEntry"];
+                const checkinTools = ["createDailyCheckin"];
+                if (event.toolCalls.some((tc) => journalTools.includes(tc.tool))) window.dispatchEvent(new Event("journal-logged"));
+                if (event.toolCalls.some((tc) => checkinTools.includes(tc.tool))) window.dispatchEvent(new Event("checkin-completed"));
+              }
+
+              const rawActions = event.actions || parseActionsFromResponse(finalContent);
+              if (rawActions && rawActions.length > 0) {
+                const safeActions = rawActions.filter((a) => a.type !== "navigate");
+                if (safeActions.length > 0) setTimeout(() => executeActionsAsync(safeActions), 500);
+              }
+              break;
+            }
+
+            case "error":
+              console.error("[AI Coach] Stream error:", event.error);
+              break;
+          }
+        },
+      });
+    } catch (error: unknown) {
+      if (abortController.signal.aborted) return;
+
+      const status = error && typeof error === "object" && "statusCode" in error ? (error as any).statusCode : 0;
+      if (status === 503 && attempt < MAX_RETRIES) {
+        const delay = BACKOFF_BASE_MS * Math.pow(2, attempt);
+        console.warn(`[AI Coach] Server busy (503), retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`);
+        await new Promise((r) => setTimeout(r, delay));
+        return attemptSend(attempt + 1);
+      }
+
+      throw error;
+    }
+    };
 
     try {
-      const response = await ragChatService.sendMessage({
-        message: userMessage.content,
-        conversationId: activeConversationId || undefined,
-      });
-
-      if (!activeConversationId && response.conversationId) {
-        setActiveConversationId(response.conversationId);
-        setIsNewChat(false);
-        fetchConversations();
-      }
-
-      const assistantMessage: Message = {
-        id: response.messageId || `resp-${Date.now()}`,
-        role: "assistant",
-        content: response.message,
-        timestamp: new Date(),
-        routingChip: (response as { routingChip?: RoutingChipData | null }).routingChip ?? null,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      if (response.toolCalls?.length) {
-        const journalTools = ["createJournalEntry", "updateJournalEntry", "deleteJournalEntry"];
-        const checkinTools = ["createDailyCheckin"];
-        if (response.toolCalls.some((tc) => journalTools.includes(tc.tool))) window.dispatchEvent(new Event("journal-logged"));
-        if (response.toolCalls.some((tc) => checkinTools.includes(tc.tool))) window.dispatchEvent(new Event("checkin-completed"));
-      }
-
-      const rawActions = response.actions || parseActionsFromResponse(response.message);
-      if (rawActions && rawActions.length > 0) {
-        const safeActions = rawActions.filter((a) => a.type !== "navigate");
-        if (safeActions.length > 0) setTimeout(() => executeActionsAsync(safeActions), 500);
-      }
+      await attemptSend(0);
     } catch (error) {
-      const isNetworkError = error && typeof error === "object" && "code" in error && error.code === "NETWORK_ERROR";
+      if (abortController.signal.aborted) return;
+      const isNetworkError = error && typeof error === "object" && "code" in error && (error as any).code === "NETWORK_ERROR";
       if (!isNetworkError) console.error("Failed to send message:", error);
       setMessages((prev) => [...prev, {
         id: `error-${Date.now()}`,
@@ -346,6 +567,9 @@ export function useAICoach() {
       }]);
     } finally {
       setIsSending(false);
+      setIsThinking(false);
+      setThinkingLabel("");
+      streamAbortRef.current = null;
     }
   };
 
@@ -405,6 +629,11 @@ export function useAICoach() {
     actionResults,
     showImageModal,
     imageModalMode,
+    // Agentic timeline state
+    isThinking,
+    thinkingLabel,
+    liveTimelineEvents,
+    liveAnalysisSteps,
     // Refs
     messagesEndRef,
     inputRef,
@@ -423,5 +652,6 @@ export function useAICoach() {
     deleteConversation,
     archiveConversation,
     handleImageAnalysisComplete,
+    undoTimelineEvent,
   };
 }

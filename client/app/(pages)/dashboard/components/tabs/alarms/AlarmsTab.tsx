@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell,
@@ -15,13 +16,14 @@ import {
   Calendar,
   Music,
   RefreshCw,
-  Sparkles,
   Volume2,
   ChevronRight,
   Zap,
   Timer,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { api } from '@/lib/api-client';
+import { DashboardCard } from '../overview/widgets/DashboardCard';
 import { confirm } from '@/components/common/ConfirmDialog';
 import { AVAILABLE_SOUNDS, type SoundFile } from '../../../utils/sound.service';
 
@@ -42,10 +44,13 @@ interface WorkoutAlarm {
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+const ALARM_FORM_MODAL_Z = 10040;
+
 export function AlarmsTab() {
   const [alarms, setAlarms] = useState<WorkoutAlarm[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [formModalMounted, setFormModalMounted] = useState(false);
   const [editingAlarm, setEditingAlarm] = useState<WorkoutAlarm | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +84,10 @@ export function AlarmsTab() {
   useEffect(() => {
     fetchAlarms();
   }, [fetchAlarms]);
+
+  useEffect(() => {
+    setFormModalMounted(true);
+  }, []);
 
   const handleToggle = async (alarm: WorkoutAlarm) => {
     try {
@@ -141,6 +150,23 @@ export function AlarmsTab() {
     setEditingAlarm(null);
   };
 
+  useEffect(() => {
+    if (!isAddModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsAddModalOpen(false);
+        setEditingAlarm(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isAddModalOpen]);
+
   const toggleDay = (day: number) => {
     setFormDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
@@ -149,7 +175,7 @@ export function AlarmsTab() {
 
   const handleSubmit = async () => {
     if (formDays.length === 0) {
-      alert('Please select at least one day');
+      toast.error('Please select at least one day');
       return;
     }
 
@@ -281,139 +307,122 @@ export function AlarmsTab() {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Header Section */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-violet-600/20 via-violet-500/10 to-purple-600/20 border border-violet-500/20 p-4 sm:p-6 lg:p-8"
-      >
-        {/* Background decorations */}
-        <div className="absolute top-0 right-0 w-32 h-32 sm:w-64 sm:h-64 bg-violet-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 sm:w-48 sm:h-48 bg-purple-500/10 rounded-full blur-3xl" />
-
-        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="relative">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-600/40">
-                <Bell className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+    <div className="space-y-5 sm:space-y-6">
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+        <DashboardCard accent="violet" padding="md" hoverable={false} className="!p-4 sm:!p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="shrink-0 w-11 h-11 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center">
+                <Bell className="w-5 h-5 text-violet-300" />
               </div>
-              <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-                <Sparkles className="w-2 h-2 sm:w-3 sm:h-3 text-white" />
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-semibold text-white tracking-tight">
+                  Alarms
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                  Workout reminders and schedules
+                </p>
               </div>
             </div>
-            <div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-white via-violet-200 to-violet-400 bg-clip-text text-transparent">
-                Alarms
-              </h2>
-              <p className="text-violet-300/70 text-xs sm:text-sm mt-0.5 sm:mt-1">
-                Manage your workout reminders and alarms
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={async () => {
-                try {
-                  const response = await api.post<{ updated: number }>('/alarms/recalculate');
-                  if (response.success) {
-                    alert(`Recalculated ${response.data?.updated || 0} alarms`);
-                    fetchAlarms();
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={async () => {
+                  try {
+                    const response = await api.post<{ updated: number }>('/alarms/recalculate');
+                    if (response.success) {
+                      const n = response.data?.updated ?? 0;
+                      toast.success(`Recalculated ${n} alarm${n === 1 ? '' : 's'}`);
+                      fetchAlarms();
+                    } else {
+                      toast.error('Could not recalculate alarms');
+                    }
+                  } catch (err) {
+                    console.error('Failed to recalculate alarms:', err);
+                    toast.error('Failed to recalculate alarms');
                   }
-                } catch (err) {
-                  console.error('Failed to recalculate alarms:', err);
-                  alert('Failed to recalculate alarms');
-                }
-              }}
-              className="group px-3 py-2 sm:px-4 sm:py-2.5 bg-white/5 hover:bg-violet-600/20 border border-violet-500/30 hover:border-violet-500/50 text-violet-300 hover:text-violet-200 text-sm font-medium rounded-xl transition-all flex items-center gap-2"
-              title="Recalculate alarm trigger times"
-            >
-              <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-              <span className="hidden sm:inline">Recalculate</span>
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={openAddModal}
-              className="px-4 py-2 sm:px-6 sm:py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-violet-600/30 hover:shadow-violet-500/40 transition-all flex items-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              <span className="hidden sm:inline">Add Alarm</span>
-            </motion.button>
+                }}
+                className="group px-3 py-2 sm:px-4 sm:py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:text-white hover:bg-white/[0.07] text-sm font-medium transition-colors flex items-center gap-2"
+                title="Recalculate alarm trigger times"
+              >
+                <RefreshCw className="w-4 h-4 text-violet-400/90 group-hover:rotate-180 transition-transform duration-500" />
+                <span className="hidden sm:inline">Recalculate</span>
+              </motion.button>
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={openAddModal}
+                className="px-4 py-2 sm:px-5 sm:py-2 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white text-sm font-semibold shadow-lg shadow-violet-900/25 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Add alarm</span>
+              </motion.button>
+            </div>
           </div>
-        </div>
 
-        {/* Stats bar */}
-        <div className="relative mt-4 sm:mt-6 flex flex-wrap items-center gap-3 sm:gap-6">
-          <div className="flex items-center gap-2 text-sm">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-slate-400">
-              <span className="text-white font-medium">{alarms.filter(a => a.isEnabled).length}</span> active
+          <div className="mt-4 pt-4 border-t border-white/[0.06] flex flex-wrap items-center gap-x-5 gap-y-2 text-xs sm:text-sm text-slate-500">
+            <span className="inline-flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-white font-medium tabular-nums">{alarms.filter((a) => a.isEnabled).length}</span>
+              active
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+              <span className="text-white font-medium tabular-nums">{alarms.filter((a) => !a.isEnabled).length}</span>
+              inactive
+            </span>
+            <span className="inline-flex items-center gap-2 text-slate-400">
+              <Timer className="w-3.5 h-3.5 text-violet-400/80 shrink-0" />
+              {Intl.DateTimeFormat().resolvedOptions().timeZone}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <div className="w-2 h-2 rounded-full bg-slate-500" />
-            <span className="text-slate-400">
-              <span className="text-white font-medium">{alarms.filter(a => !a.isEnabled).length}</span> inactive
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-violet-300">
-            <Timer className="w-4 h-4" />
-            <span>Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
-          </div>
-        </div>
+        </DashboardCard>
       </motion.div>
 
       {/* Alarms Grid */}
       {alarms.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative overflow-hidden text-center py-12 sm:py-16 lg:py-20 bg-gradient-to-br from-slate-800/50 to-slate-900/50 rounded-2xl sm:rounded-3xl border border-slate-700/30"
-        >
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(139,92,246,0.1),transparent_70%)]" />
-          <div className="relative">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 sm:mb-6 rounded-full bg-gradient-to-br from-violet-600/20 to-purple-600/20 flex items-center justify-center border border-violet-500/20">
-              <Bell className="w-10 h-10 sm:w-12 sm:h-12 text-violet-400" />
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          <DashboardCard accent="violet" padding="lg" hoverable={false} className="text-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
+              <Bell className="w-8 h-8 sm:w-10 sm:h-10 text-violet-400/90" />
             </div>
-            <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No alarms set</h3>
-            <p className="text-slate-400 mb-6 max-w-sm mx-auto text-sm sm:text-base px-4">
-              Create your first alarm to stay on track with your workout schedule
+            <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">No alarms yet</h3>
+            <p className="text-slate-500 mb-6 max-w-sm mx-auto text-sm">
+              Add a reminder so you never miss a planned workout.
             </p>
             <motion.button
+              type="button"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={openAddModal}
-              className="px-6 py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-violet-600/30 transition-all inline-flex items-center gap-2"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white text-sm font-semibold shadow-lg shadow-violet-900/20 inline-flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
-              Create Your First Alarm
+              Create alarm
             </motion.button>
-          </div>
+          </DashboardCard>
         </motion.div>
       ) : (
-        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {alarms.map((alarm, index) => (
             <motion.div
               key={alarm.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className={`group relative overflow-hidden rounded-xl sm:rounded-2xl border transition-all duration-300 ${
-                alarm.isEnabled
-                  ? 'bg-gradient-to-br from-slate-800/80 to-slate-900/80 border-violet-500/30 hover:border-violet-500/50 shadow-lg hover:shadow-violet-500/10'
-                  : 'bg-slate-800/30 border-slate-700/30 hover:border-slate-600/50 opacity-70'
-              }`}
+              transition={{ delay: index * 0.04 }}
+              className={alarm.isEnabled ? '' : 'opacity-[0.72]'}
             >
-              {/* Glow effect for active alarms */}
-              {alarm.isEnabled && (
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-600/5 to-purple-600/5 pointer-events-none" />
-              )}
-
-              <div className="relative p-4 sm:p-5">
+              <DashboardCard
+                accent={alarm.isEnabled ? 'violet' : 'none'}
+                padding="md"
+                hoverable
+                className="h-full"
+              >
+              <div className="relative">
                 {/* Top row: Time and toggle */}
                 <div className="flex items-start justify-between mb-3 sm:mb-4">
                   <div className="flex items-center gap-3 sm:gap-4">
@@ -534,65 +543,91 @@ export function AlarmsTab() {
                   ))}
                 </div>
               </div>
+              </DashboardCard>
             </motion.div>
           ))}
         </div>
       )}
 
-      {/* Add/Edit Modal */}
-      <AnimatePresence>
-        {isAddModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/80 backdrop-blur-md z-50"
-              onClick={closeModal}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 50 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 50 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="relative w-full max-w-lg max-h-[90vh] overflow-hidden">
-                {/* Modal glow */}
-                <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-purple-600 rounded-3xl blur-xl opacity-20" />
+      {/* Add/Edit Modal — portaled to body for true viewport centering (avoids transformed ancestors) */}
+      {formModalMounted &&
+        createPortal(
+          <AnimatePresence mode="wait">
+            {isAddModalOpen && (
+              <motion.div
+                key="alarm-form-overlay"
+                role="presentation"
+                className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 min-[480px]:p-8"
+                style={{ zIndex: ALARM_FORM_MODAL_Z }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <motion.div
+                  aria-hidden
+                  className="absolute inset-0 bg-slate-950/85 backdrop-blur-md"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={closeModal}
+                />
 
-                <div className="relative bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 rounded-2xl sm:rounded-3xl border border-violet-500/20 shadow-2xl shadow-violet-600/10 overflow-hidden">
+                <motion.div
+                  key="alarm-form-panel"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="alarm-form-title"
+                  initial={{ opacity: 0, scale: 0.94, y: 28 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 20 }}
+                  transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+                  className="relative z-[1] w-full max-w-lg max-h-[min(92dvh,52rem)] mx-auto flex flex-col rounded-3xl border border-white/10 bg-slate-950/95 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_32px_64px_-24px_rgba(0,0,0,0.75)] backdrop-blur-2xl overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
+                  <div className="pointer-events-none absolute -inset-px rounded-3xl bg-gradient-to-b from-violet-500/12 via-transparent to-transparent opacity-90" />
+
                   {/* Header */}
-                  <div className="relative px-4 sm:px-6 py-4 sm:py-5 border-b border-violet-500/10">
-                    <div className="absolute inset-0 bg-gradient-to-r from-violet-600/10 to-purple-600/10" />
-                    <div className="relative flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-600/30">
-                          {editingAlarm ? <Edit2 className="w-5 h-5 sm:w-6 sm:h-6 text-white" /> : <Plus className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
+                  <div className="relative shrink-0 px-5 sm:px-6 pt-5 pb-4 border-b border-white/[0.06]">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="shrink-0 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-violet-800 text-white shadow-lg shadow-violet-900/40 ring-1 ring-white/10">
+                          {editingAlarm ? (
+                            <Edit2 className="h-5 w-5 sm:h-6 sm:w-6" />
+                          ) : (
+                            <Plus className="h-5 w-5 sm:h-6 sm:w-6" />
+                          )}
                         </div>
-                        <div>
-                          <h3 className="text-lg sm:text-xl font-bold text-white">
-                            {editingAlarm ? 'Edit Alarm' : 'Create Alarm'}
+                        <div className="min-w-0">
+                          <h3
+                            id="alarm-form-title"
+                            className="text-lg sm:text-xl font-semibold tracking-tight text-white"
+                          >
+                            {editingAlarm ? 'Edit alarm' : 'Create alarm'}
                           </h3>
-                          <p className="text-violet-300/60 text-xs sm:text-sm">
-                            {editingAlarm ? 'Modify your alarm settings' : 'Set up a new workout reminder'}
+                          <p className="mt-0.5 text-xs sm:text-sm text-slate-400">
+                            {editingAlarm
+                              ? 'Update time, days, and sound for this reminder.'
+                              : 'Schedule a workout reminder that fits your routine.'}
                           </p>
                         </div>
                       </div>
                       <motion.button
-                        whileHover={{ scale: 1.1, rotate: 90 }}
-                        whileTap={{ scale: 0.9 }}
+                        type="button"
+                        whileHover={{ scale: 1.06 }}
+                        whileTap={{ scale: 0.94 }}
                         onClick={closeModal}
-                        className="p-2 sm:p-2.5 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                        className="shrink-0 rounded-xl p-2 text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+                        aria-label="Close"
                       >
-                        <X className="w-5 h-5 sm:w-6 sm:h-6" />
+                        <X className="h-5 w-5 sm:h-6 sm:w-6" />
                       </motion.button>
                     </div>
                   </div>
 
                   {/* Form */}
-                  <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-h-[60vh] overflow-y-auto">
+                  <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5">
                     {/* Time Input */}
                     <div>
                       <label className="block text-sm font-medium text-violet-300 mb-2">
@@ -676,17 +711,23 @@ export function AlarmsTab() {
                       <div className="flex items-center justify-between">
                         <label className="text-sm font-medium text-violet-300">Sound</label>
                         <motion.button
-                          whileTap={{ scale: 0.95 }}
+                          type="button"
+                          role="switch"
+                          aria-checked={formSound}
+                          whileTap={{ scale: 0.96 }}
                           onClick={() => setFormSound(!formSound)}
-                          className={`relative w-12 h-7 rounded-full transition-all ${
+                          className={`inline-flex h-8 w-14 shrink-0 items-center rounded-full p-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
                             formSound
-                              ? 'bg-gradient-to-r from-violet-600 to-purple-600 shadow-lg shadow-violet-600/30'
+                              ? 'bg-gradient-to-r from-violet-600 to-violet-500 shadow-md shadow-violet-900/35'
                               : 'bg-slate-700'
                           }`}
                         >
-                          <motion.div
-                            animate={{ x: formSound ? 20 : 2 }}
-                            className="absolute top-1 left-0 w-5 h-5 rounded-full bg-white shadow-md"
+                          <motion.span
+                            layout
+                            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                            className={`block h-6 w-6 rounded-full bg-white shadow-sm ring-1 ring-black/10 ${
+                              formSound ? 'ml-auto' : 'mr-auto'
+                            }`}
                           />
                         </motion.button>
                       </div>
@@ -727,7 +768,7 @@ export function AlarmsTab() {
                           exit={{ opacity: 0, y: -10 }}
                           className="p-3 sm:p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2"
                         >
-                          <X className="w-4 h-4 flex-shrink-0" />
+                          <X className="h-4 w-4 shrink-0" />
                           {error}
                         </motion.div>
                       )}
@@ -735,43 +776,45 @@ export function AlarmsTab() {
                   </div>
 
                   {/* Actions */}
-                  <div className="px-4 sm:px-6 py-4 sm:py-5 border-t border-violet-500/10 bg-slate-900/50">
-                    <div className="flex gap-3">
+                  <div className="relative shrink-0 border-t border-white/[0.06] bg-slate-950/90 px-5 sm:px-6 py-4">
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:gap-3">
                       <motion.button
+                        type="button"
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.99 }}
                         onClick={closeModal}
-                        className="flex-1 px-4 py-2.5 sm:py-3 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl sm:rounded-2xl transition-colors"
+                        className="flex-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-slate-200 transition-colors hover:bg-white/[0.08] hover:text-white"
                       >
                         Cancel
                       </motion.button>
                       <motion.button
+                        type="button"
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.99 }}
                         onClick={handleSubmit}
                         disabled={isSubmitting}
-                        className="flex-1 px-4 py-2.5 sm:py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl sm:rounded-2xl shadow-lg shadow-violet-600/30 hover:shadow-violet-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="flex-1 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-900/35 transition-all hover:from-violet-500 hover:to-violet-400 disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         {isSubmitting ? (
                           <>
-                            <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                            <span className="text-sm sm:text-base">Saving...</span>
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span>Saving…</span>
                           </>
                         ) : (
                           <>
-                            <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-                            <span className="text-sm sm:text-base">{editingAlarm ? 'Update' : 'Create'}</span>
+                            <Check className="h-5 w-5" />
+                            <span>{editingAlarm ? 'Save changes' : 'Create alarm'}</span>
                           </>
                         )}
                       </motion.button>
                     </div>
                   </div>
-                </div>
-              </div>
-            </motion.div>
-          </>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
     </div>
   );
 }

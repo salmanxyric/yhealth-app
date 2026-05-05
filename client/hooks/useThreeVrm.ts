@@ -185,12 +185,17 @@ export function useThreeVrm({
 
         const loader = new GLTFLoader(manager);
         loader.setCrossOrigin("anonymous");
+
+        // NOTE: We intentionally do NOT inject a white 1x1 fallback for failed
+        // textures here. The MToon patch in `patches/` already guards against
+        // `setTextureColorSpace(undefined)` crashing on missing textures. When
+        // a VRM's baseColor (`map`) texture fails to decode, leaving the slot
+        // undefined causes MToon to render using the authored material color
+        // factors (litColorFactor / shadeColorFactor) — which is the correct
+        // authored color. Injecting a white texture multiplies against that
+        // color and collapses skin/clothing shading to grey/washed-out.
         loader.register((parser) => new VRMLoaderPlugin(parser));
 
-        // Suppress cosmetic Three.js errors during VRM loading:
-        // - "Couldn't load texture blob:..." (embedded textures browser can't decode)
-        // - "Cannot set properties of undefined (setting 'colorSpace')" (cascading)
-        // The VRM renders correctly with fallback materials; these are console noise.
         const _origConsoleError = console.error;
         console.error = (...args: unknown[]) => {
           const first = typeof args[0] === 'string' ? args[0] : '';
@@ -327,6 +332,10 @@ export function useThreeVrm({
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // MToon is unlit + toon-shaded — any renderer tone mapping will desaturate
+    // and wash out the authored VRM colors. Disabling keeps colors true-to-source.
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.toneMappingExposure = 1;
     renderer.setSize(w, h);
     rendererRef.current = renderer;
 
@@ -340,12 +349,19 @@ export function useThreeVrm({
     camera.lookAt(CAMERA_LOOK_AT);
     cameraRef.current = camera;
 
-    // Lights
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    dirLight.position.set(1, 2, 1);
+    // Lights — MToon is a toon/unlit hybrid. Over-bright light totals push shaded
+    // zones past the lit threshold, which visually desaturates the VRM and makes
+    // the skin/clothing look washed-out or "whiteish". Keep the sum near 1.0–1.2
+    // and favor ambient so shade colors remain readable.
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.75);
+    dirLight.position.set(1, 2, 2);
     scene.add(dirLight);
 
-    const ambLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
+    fillLight.position.set(-1, 1, -1);
+    scene.add(fillLight);
+
+    const ambLight = new THREE.AmbientLight(0xffffff, 0.55);
     scene.add(ambLight);
 
     // Resize observer

@@ -4,7 +4,7 @@
  * Runs every 6 hours and processes users whose profiles are stale or missing.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { userCoachingProfileService } from '../services/user-coaching-profile.service.js';
 import { llmCircuitBreaker } from '../services/llm-circuit-breaker.service.js';

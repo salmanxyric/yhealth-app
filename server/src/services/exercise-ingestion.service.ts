@@ -5,7 +5,7 @@
  */
 
 import axios from 'axios';
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { cache } from './cache.service.js';
 import { withRetry } from '../utils/asyncHandler.js';

@@ -3,7 +3,7 @@
  * @description Handles energy level monitoring and pattern analysis (F7.4)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type { EnergyLog, EnergyContextTag } from '@shared/types/domain/wellbeing.js';
 import { detectTimeOfDayPattern } from './utils/pattern-detection.js';

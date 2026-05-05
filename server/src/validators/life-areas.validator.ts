@@ -12,6 +12,9 @@ const slugSchema = z
 const preferencesSchema = z
   .object({
     preferredTimeOfDay: z.enum(['morning', 'afternoon', 'evening', 'night']).optional(),
+    /** Local hour 0–23 inclusive — optional window for coach check-ins on this life area */
+    checkInWindowStartHour: z.number().int().min(0).max(23).optional(),
+    checkInWindowEndHour: z.number().int().min(0).max(23).optional(),
     blockedDays: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])).optional(),
     tone: z.enum(['gentle', 'direct', 'playful', 'neutral']).optional(),
     followUpFrequency: z.enum(['daily', 'every-other-day', 'weekly', 'off']).optional(),

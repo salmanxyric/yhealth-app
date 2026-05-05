@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { emotionalCheckInController } from '../controllers/emotional-checkin.controller.js';
 import { createUploadMiddleware } from '../middlewares/upload.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 
 const router = Router();
 
@@ -22,7 +23,12 @@ router.use(authenticate);
  * @desc    Start new emotional check-in session
  * @access  Private
  */
-router.post('/start', emotionalCheckInController.startCheckIn);
+router.post(
+  '/start',
+  requireFeature('ai.emotion.checkin'),
+  consumeCredits('ai.emotion.checkin'),
+  emotionalCheckInController.startCheckIn
+);
 
 /**
  * @route   POST /api/v1/wellbeing/emotional-checkin/:sessionId/respond
@@ -67,6 +73,8 @@ router.get('/trends', emotionalCheckInController.getTrends);
 router.post(
   '/:sessionId/analyze-camera',
   createUploadMiddleware('image', 'image'),
+  requireFeature('ai.emotion.camera_analyze'),
+  consumeCredits('ai.emotion.camera_analyze'),
   emotionalCheckInController.analyzeCameraImage
 );
 

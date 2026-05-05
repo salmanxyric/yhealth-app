@@ -6,11 +6,13 @@ import { useAuth } from "@/app/context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAICoach } from "./hooks/useAICoach";
+import { useIntelligenceFiles } from "./hooks/useIntelligenceFiles";
 import { AICoachSidebar } from "./components/AICoachSidebar";
 import { AICoachHeader } from "./components/AICoachHeader";
 import { AICoachWelcome } from "./components/AICoachWelcome";
 import { AICoachInput } from "./components/AICoachInput";
 import { AICoachMessages } from "./components/AICoachMessages";
+import { IntelligenceFilesDrawer } from "./components/IntelligenceFilesDrawer";
 import { ImageAnalysisModal } from "../dashboard/components/modals/ImageAnalysisModal";
 
 export default function AICoachPageContent() {
@@ -54,6 +56,7 @@ export default function AICoachPageContent() {
 
 function AICoachLayout() {
   const coach = useAICoach();
+  const intelligence = useIntelligenceFiles();
 
   return (
     <div className="h-screen bg-[#02000f] flex overflow-hidden">
@@ -75,7 +78,7 @@ function AICoachLayout() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <AICoachHeader onToggleSidebar={() => coach.setShowSidebar((prev) => !prev)} isSidebarOpen={coach.showSidebar} />
+        <AICoachHeader onToggleSidebar={() => coach.setShowSidebar((prev) => !prev)} isSidebarOpen={coach.showSidebar} onOpenIntelligence={intelligence.openDrawer} />
 
         {/* Main container with gradient border */}
         <div className="flex-1 flex flex-col min-h-0 mx-2 sm:mx-4 mt-2 sm:mt-3 mb-0 overflow-hidden">
@@ -99,6 +102,11 @@ function AICoachLayout() {
                 actionResults={coach.actionResults}
                 messagesEndRef={coach.messagesEndRef}
                 onRegenerateMessage={coach.regenerateMessage}
+                isThinking={coach.isThinking}
+                thinkingLabel={coach.thinkingLabel}
+                liveTimelineEvents={coach.liveTimelineEvents}
+                onUndoTimelineEvent={coach.undoTimelineEvent}
+                liveAnalysisSteps={coach.liveAnalysisSteps}
               />
             )}
 
@@ -122,6 +130,9 @@ function AICoachLayout() {
           </div>
         </div>
       </div>
+
+      {/* Intelligence Files Drawer */}
+      <IntelligenceFilesDrawer hook={intelligence} />
 
       {/* Image Analysis Modal */}
       <ImageAnalysisModal

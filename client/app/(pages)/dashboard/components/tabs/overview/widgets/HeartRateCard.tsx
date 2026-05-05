@@ -116,6 +116,7 @@ export function HeartRateCard({
       <style>{CARD_CSS}</style>
 
       <motion.div
+        data-tour="overview-heart-rate"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         whileHover={{ y: -5, transition: { type: 'spring', stiffness: 380, damping: 24 } }}

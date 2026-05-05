@@ -18,6 +18,7 @@ import {
   adminBulkToggleActive,
   adminToggleActive,
   adminGetExerciseStats,
+  adminImportExercises,
 } from '../services/exercise-library.service.js';
 import {
   ingestFromExerciseDB,
@@ -30,6 +31,7 @@ import {
   bulkDeleteExercisesSchema,
   bulkToggleActiveSchema,
   syncExercisesSchema,
+  importExercisesSchema,
 } from '../validators/admin-exercise.validator.js';
 
 /**
@@ -87,6 +89,22 @@ export const createExercise = asyncHandler(
     const data = createExerciseSchema.parse(req.body);
     const exercise = await adminCreateExercise(data);
     ApiResponse.created(res, exercise, 'Exercise created successfully');
+  }
+);
+
+/**
+ * Import exercises (batch JSON)
+ * POST /api/admin/exercises/import
+ */
+export const importExercises = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { exercises } = importExercisesSchema.parse(req.body);
+    const result = await adminImportExercises(exercises);
+    ApiResponse.success(
+      res,
+      result,
+      `Import completed: ${result.inserted} inserted, ${result.skipped} skipped, ${result.failed} failed`
+    );
   }
 );
 

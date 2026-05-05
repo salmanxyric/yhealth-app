@@ -12,7 +12,7 @@
  */
 
 import 'dotenv/config';
-import { pool } from './pg.js';
+import { pool } from '../config/database.config.js';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';

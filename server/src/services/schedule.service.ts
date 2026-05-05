@@ -3,8 +3,9 @@
  * @description Handles daily schedules with drag-drop items and workflow-style linking
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
+import { logger } from './logger.service.js';
 
 // ============================================
 // TYPES
@@ -20,6 +21,13 @@ export interface ScheduleTemplate {
   updatedAt: string;
 }
 
+/**
+ * Polymorphic source discriminator. Manual items are user-created; google and
+ * prayer items are materialised by the scheduled sync from external providers
+ * (Google Calendar + prayer_schedules) and are read-only from the mutation APIs.
+ */
+export type ScheduleItemSource = 'manual' | 'google' | 'prayer';
+
 export interface ScheduleItem {
   id: string;
   scheduleId: string;
@@ -33,6 +41,12 @@ export interface ScheduleItem {
   category?: string;
   position: number;
   metadata: Record<string, unknown>;
+  source: ScheduleItemSource;
+  externalSource?: string; // e.g. 'google_calendar', 'prayer_times'
+  externalId?: string;     // provider's ID — Google event id / prayer row id
+  sourceUpdatedAt?: string;
+  completed: boolean;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -161,6 +175,12 @@ interface ScheduleItemRow {
   shape: string | null;
   position: number;
   metadata: Record<string, unknown>;
+  source: string | null;
+  external_source: string | null;
+  external_id: string | null;
+  source_updated_at: Date | null;
+  completed: boolean | null;
+  completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -182,11 +202,15 @@ interface ScheduleLinkRow {
 
 class ScheduleService {
   /**
-   * Get schedule for a specific date
+   * Get schedule for a specific date.
+   * Also triggers an external sync (Google Calendar + prayers) so the returned
+   * items reflect the latest provider state without a separate round-trip.
+   * Sync errors are swallowed — a transient provider failure must not block
+   * the user from seeing their manual items.
    */
   async getScheduleByDate(userId: string, date: string): Promise<DailySchedule | null> {
     const result = await query<DailyScheduleRow>(
-      `SELECT * FROM daily_schedules 
+      `SELECT * FROM daily_schedules
        WHERE user_id = $1 AND schedule_date = $2 AND is_template = false
        LIMIT 1`,
       [userId, date]
@@ -197,6 +221,18 @@ class ScheduleService {
     }
 
     const schedule = result.rows[0];
+
+    try {
+      await this.syncExternalSlots(userId, schedule.id, date);
+    } catch (err) {
+      logger.warn('[Schedule] External sync failed, continuing with cached items', {
+        userId,
+        scheduleId: schedule.id,
+        date,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     const items = await this.getScheduleItems(schedule.id);
     const links = await this.getScheduleLinks(schedule.id);
 
@@ -205,6 +241,253 @@ class ScheduleService {
       items,
       links,
     };
+  }
+
+  /**
+   * Materialise the day's Google Calendar events and prayer schedule into
+   * `schedule_items` so they participate in the canvas, conflict detection,
+   * and history like any manual row. Idempotent: unique partial index
+   * `(schedule_id, external_source, external_id)` makes this an upsert; rows
+   * no longer in the provider response are pruned.
+   */
+  async syncExternalSlots(
+    userId: string,
+    scheduleId: string,
+    date: string,
+  ): Promise<{ google: number; prayer: number; pruned: number }> {
+    const upsertKeys: Array<{ source: string; externalId: string }> = [];
+    let googleCount = 0;
+    let prayerCount = 0;
+
+    // Resolve the user's timezone so HH:mm reflects what they actually see
+    // in Google Calendar / the prayer widget, not the server's local time
+    // (which is typically UTC in production).
+    const userTz = await this.getUserTimezone(userId);
+
+    // ── Google Calendar ──
+    // Extract the local clock-face HH:mm directly in SQL via `AT TIME ZONE`
+    // so we don't depend on the Node process's timezone.
+    try {
+      const gRes = await query<{
+        external_id: string;
+        title: string;
+        description: string | null;
+        start_hhmm: string;
+        end_hhmm: string;
+        duration_minutes: string;
+        all_day: boolean;
+        location: string | null;
+      }>(
+        `SELECT
+           e.external_id,
+           e.title,
+           e.description,
+           TO_CHAR(e.start_time AT TIME ZONE $3, 'HH24:MI') AS start_hhmm,
+           TO_CHAR(e.end_time   AT TIME ZONE $3, 'HH24:MI') AS end_hhmm,
+           GREATEST(1, CEIL(EXTRACT(EPOCH FROM (e.end_time - e.start_time)) / 60))::int AS duration_minutes,
+           e.all_day,
+           e.location
+         FROM calendar_events e
+         WHERE e.user_id = $1
+           AND e.status <> 'cancelled'
+           AND (e.start_time AT TIME ZONE $3)::date <= $2::date
+           AND (e.end_time   AT TIME ZONE $3)::date >= $2::date`,
+        [userId, date, userTz],
+      );
+
+      for (const r of gRes.rows) {
+        const desc = r.location ? `📍 ${r.location}` : r.description || null;
+        await this.upsertExternalItem({
+          scheduleId,
+          source: 'google',
+          externalSource: 'google_calendar',
+          externalId: r.external_id,
+          title: r.title || 'Google event',
+          description: desc,
+          startTime: r.start_hhmm,
+          endTime: r.end_hhmm,
+          durationMinutes: Number(r.duration_minutes) || null,
+          color: '#2d9cdb',
+          icon: null,
+          category: null,
+        });
+        upsertKeys.push({ source: 'google', externalId: r.external_id });
+        googleCount++;
+      }
+    } catch (err) {
+      logger.warn('[Schedule] Google calendar sync query failed', {
+        error: err instanceof Error ? err.message : String(err),
+        userTz,
+      });
+    }
+
+    // ── Prayers ──
+    // Same `AT TIME ZONE` trick — prayer_schedules stores TIMESTAMPTZ so the
+    // raw getHours() approach was returning UTC on UTC servers.
+    try {
+      const pRes = await query<{
+        id: string;
+        prayer_name: string;
+        start_hhmm: string;
+        end_hhmm: string;
+        completed: boolean;
+        completed_at: Date | null;
+      }>(
+        `SELECT
+           id,
+           prayer_name,
+           TO_CHAR(scheduled_time AT TIME ZONE $3, 'HH24:MI') AS start_hhmm,
+           TO_CHAR((scheduled_time + INTERVAL '15 minutes') AT TIME ZONE $3, 'HH24:MI') AS end_hhmm,
+           completed,
+           completed_at
+         FROM prayer_schedules
+         WHERE user_id = $1 AND prayer_date = $2::date
+         ORDER BY scheduled_time ASC`,
+        [userId, date, userTz],
+      );
+
+      for (const r of pRes.rows) {
+        await this.upsertExternalItem({
+          scheduleId,
+          source: 'prayer',
+          externalSource: 'prayer_times',
+          externalId: r.id,
+          title: r.prayer_name,
+          description: null,
+          startTime: r.start_hhmm,
+          endTime: r.end_hhmm,
+          durationMinutes: 15,
+          color: '#a855f7',
+          icon: null,
+          category: null,
+          completed: r.completed,
+          completedAt: r.completed_at,
+        });
+        upsertKeys.push({ source: 'prayer', externalId: r.id });
+        prayerCount++;
+      }
+    } catch (err) {
+      logger.warn('[Schedule] Prayer sync query failed', {
+        error: err instanceof Error ? err.message : String(err),
+        userTz,
+      });
+    }
+
+    // ── Prune stale external items ──
+    // Anything in this schedule with source <> 'manual' whose (source, external_id)
+    // is NOT in the upsert set for this run has been deleted upstream.
+    const pruned = await this.pruneStaleExternals(scheduleId, upsertKeys);
+
+    return { google: googleCount, prayer: prayerCount, pruned };
+  }
+
+  private async upsertExternalItem(args: {
+    scheduleId: string;
+    source: 'google' | 'prayer';
+    externalSource: string;
+    externalId: string;
+    title: string;
+    description: string | null;
+    startTime: string;
+    endTime: string;
+    durationMinutes: number | null;
+    color: string | null;
+    icon: string | null;
+    category: string | null;
+    completed?: boolean;
+    completedAt?: Date | null;
+  }): Promise<void> {
+    const {
+      scheduleId, source, externalSource, externalId,
+      title, description, startTime, endTime, durationMinutes,
+      color, icon, category, completed = false, completedAt = null,
+    } = args;
+
+    await query(
+      `INSERT INTO schedule_items (
+         schedule_id, title, description, start_time, end_time,
+         duration_minutes, color, icon, category, shape, position, metadata,
+         source, external_source, external_id, source_updated_at,
+         completed, completed_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'rounded', 0, '{}'::jsonb,
+               $10, $11, $12, NOW(), $13, $14)
+       ON CONFLICT (schedule_id, external_source, external_id)
+       WHERE external_source IS NOT NULL AND external_id IS NOT NULL
+       DO UPDATE SET
+         title = EXCLUDED.title,
+         description = EXCLUDED.description,
+         start_time = EXCLUDED.start_time,
+         end_time = EXCLUDED.end_time,
+         duration_minutes = EXCLUDED.duration_minutes,
+         color = EXCLUDED.color,
+         source_updated_at = NOW(),
+         completed = EXCLUDED.completed,
+         completed_at = EXCLUDED.completed_at,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        scheduleId, title, description, startTime, endTime, durationMinutes,
+        color, icon, category,
+        source, externalSource, externalId,
+        completed, completedAt,
+      ],
+    );
+  }
+
+  private async pruneStaleExternals(
+    scheduleId: string,
+    keep: Array<{ source: string; externalId: string }>,
+  ): Promise<number> {
+    if (keep.length === 0) {
+      const result = await query(
+        `DELETE FROM schedule_items
+         WHERE schedule_id = $1 AND source <> 'manual'
+         RETURNING id`,
+        [scheduleId],
+      );
+      return result.rows.length;
+    }
+    // Build a parameterised "NOT IN" using a VALUES table to avoid array-type issues.
+    const params: Array<string> = [scheduleId];
+    const tuples: string[] = [];
+    keep.forEach((k) => {
+      const p1 = params.length + 1;
+      const p2 = params.length + 2;
+      params.push(k.source, k.externalId);
+      tuples.push(`($${p1}::text, $${p2}::text)`);
+    });
+    const result = await query(
+      `DELETE FROM schedule_items
+       WHERE schedule_id = $1
+         AND source <> 'manual'
+         AND (source, external_id) NOT IN (${tuples.join(', ')})
+       RETURNING id`,
+      params,
+    );
+    return result.rows.length;
+  }
+
+  /**
+   * Resolve the user's IANA timezone. Falls back to `UTC` so we still
+   * produce *some* HH:mm rather than crashing, but the canvas will show
+   * wall-clock = UTC in that case (visible clue that tz isn't set yet).
+   */
+  private async getUserTimezone(userId: string): Promise<string> {
+    try {
+      const result = await query<{ timezone: string | null }>(
+        `SELECT timezone FROM user_preferences WHERE user_id = $1 LIMIT 1`,
+        [userId],
+      );
+      const tz = result.rows[0]?.timezone;
+      // Reject empty strings / obviously bad values.
+      if (tz && /^[A-Za-z_+\-0-9/]+$/.test(tz)) return tz;
+    } catch (err) {
+      logger.warn('[Schedule] Failed to resolve user timezone', {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return 'UTC';
   }
 
   /**
@@ -432,9 +715,12 @@ class ScheduleService {
     itemId: string,
     input: UpdateScheduleItemInput
   ): Promise<ScheduleItem> {
-    // Verify item belongs to user's schedule
-    const itemResult = await query<{ schedule_id: string }>(
-      `SELECT schedule_id FROM schedule_items WHERE id = $1`,
+    // Verify item belongs to user's schedule AND is user-editable (manual).
+    // External items (google/prayer) are owned by their provider and must
+    // not be mutated through this endpoint — they'll just get overwritten by
+    // the next sync anyway.
+    const itemResult = await query<{ schedule_id: string; source: string | null }>(
+      `SELECT schedule_id, source FROM schedule_items WHERE id = $1`,
       [itemId]
     );
 
@@ -443,6 +729,32 @@ class ScheduleService {
     }
 
     await this.verifyScheduleOwnership(userId, itemResult.rows[0].schedule_id);
+
+    // External items (google / prayer) are owned by their provider — block
+    // content edits, but allow position-only updates so the user can still
+    // rearrange them on the canvas. A drag-move sends only a metadata patch
+    // containing `x`/`y`; any other field means the client is trying to
+    // edit content we must refuse.
+    const isExternal = itemResult.rows[0].source && itemResult.rows[0].source !== 'manual';
+    if (isExternal) {
+      const contentKeys = [
+        input.title, input.description, input.startTime, input.endTime,
+        input.durationMinutes, input.color, input.icon, input.category,
+        input.position,
+      ];
+      const touchesContent = contentKeys.some((v) => v !== undefined);
+      const metadataKeys = input.metadata ? Object.keys(input.metadata) : [];
+      const metadataIsPositionOnly =
+        metadataKeys.length > 0 &&
+        metadataKeys.every((k) => k === 'x' || k === 'y');
+      const metadataTouchesContent = input.metadata !== undefined && !metadataIsPositionOnly;
+
+      if (touchesContent || metadataTouchesContent) {
+        throw ApiError.badRequest(
+          'This activity is synced from an external source. You can reposition it on the canvas, but its content must be edited in the original provider.',
+        );
+      }
+    }
 
     const updates: string[] = [];
     const values: (string | number | null)[] = [];
@@ -548,8 +860,8 @@ class ScheduleService {
    */
   async deleteScheduleItem(userId: string, itemId: string): Promise<void> {
     // Verify item belongs to user's schedule
-    const itemResult = await query<{ schedule_id: string }>(
-      `SELECT schedule_id FROM schedule_items WHERE id = $1`,
+    const itemResult = await query<{ schedule_id: string; source: string | null }>(
+      `SELECT schedule_id, source FROM schedule_items WHERE id = $1`,
       [itemId]
     );
 
@@ -558,6 +870,12 @@ class ScheduleService {
     }
 
     await this.verifyScheduleOwnership(userId, itemResult.rows[0].schedule_id);
+
+    if (itemResult.rows[0].source && itemResult.rows[0].source !== 'manual') {
+      throw ApiError.badRequest(
+        'This activity is synced from an external source and cannot be deleted here. Remove it from the original provider to stop syncing.',
+      );
+    }
 
     // Delete associated links
     await query(
@@ -580,9 +898,12 @@ class ScheduleService {
   ): Promise<ScheduleLink> {
     await this.verifyScheduleOwnership(userId, scheduleId);
 
-    // Verify both items belong to this schedule
+    // Verify both items belong to this schedule. External items (google /
+    // prayer) are allowed as link endpoints now — they're real UUIDs and
+    // `schedule_links` ON DELETE CASCADE auto-cleans if an external row
+    // is pruned during a later sync.
     const itemsResult = await query<{ id: string }>(
-      `SELECT id FROM schedule_items 
+      `SELECT id FROM schedule_items
        WHERE id IN ($1, $2) AND schedule_id = $3`,
       [input.sourceItemId, input.targetItemId, scheduleId]
     );
@@ -776,19 +1097,26 @@ class ScheduleService {
   }
 
   private mapRowToScheduleItem(row: ScheduleItemRow): ScheduleItem {
+    const source = (row.source || 'manual') as ScheduleItemSource;
     const item: ScheduleItem = {
       id: row.id,
       scheduleId: row.schedule_id,
       title: row.title,
       description: row.description || undefined,
-      startTime: row.start_time,
-      endTime: row.end_time || undefined,
+      startTime: typeof row.start_time === 'string' ? row.start_time.slice(0, 5) : row.start_time,
+      endTime: row.end_time ? (typeof row.end_time === 'string' ? row.end_time.slice(0, 5) : row.end_time) : undefined,
       durationMinutes: row.duration_minutes || undefined,
       color: row.color || undefined,
       icon: row.icon || undefined,
       category: row.category || undefined,
       position: row.position,
       metadata: row.metadata || {},
+      source,
+      externalSource: row.external_source || undefined,
+      externalId: row.external_id || undefined,
+      sourceUpdatedAt: row.source_updated_at ? row.source_updated_at.toISOString() : undefined,
+      completed: !!row.completed,
+      completedAt: row.completed_at ? row.completed_at.toISOString() : undefined,
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
     };

@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { pool } from './pg.js';
+import { pool } from '../config/database.config.js';
 
 async function check() {
   // Check MuscleWiki exercises

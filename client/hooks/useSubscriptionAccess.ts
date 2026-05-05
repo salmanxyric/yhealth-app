@@ -1,14 +1,31 @@
+// CLIENT GATES ARE UX HINTS ONLY.
+// The server is the source of truth for entitlement and credit checks.
+
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/app/context/AuthContext';
-import { api } from '@/lib/api-client';
+/**
+ * @deprecated Use `useEntitlements` from '@/app/context/EntitlementsContext'.
+ *
+ * This hook is a backward-compatibility shim that maps the new
+ * EntitlementBundle onto the legacy SubscriptionAccessState shape so existing
+ * callers keep working during the migration. Remove this file once every
+ * caller has been updated (see /audit grep for remaining imports).
+ *
+ * New callers should use `useEntitlements()` directly — it exposes the full
+ * plan, features, menus, pages, wallet, and a stable canUse(featureKey) API
+ * rather than the legacy binary hasAccess flag.
+ */
+
+import { useCallback } from 'react';
+import { useEntitlements } from '@/app/context/EntitlementsContext';
 
 export interface SubscriptionAccessState {
   hasAccess: boolean;
   isSubscribed: boolean;
   isTrial: boolean;
   isExpired: boolean;
+  isPaused: boolean;
+  isIncomplete: boolean;
   trialEndsAt: string | null;
   daysLeftInTrial: number;
   isLoading: boolean;
@@ -17,75 +34,28 @@ export interface SubscriptionAccessState {
 }
 
 export function useSubscriptionAccess(): SubscriptionAccessState {
-  const { isAuthenticated, user } = useAuth();
-  const [hasAccess, setHasAccess] = useState(false);
-  const [isTrial, setIsTrial] = useState(false);
-  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
-  const [daysLeftInTrial, setDaysLeftInTrial] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const { bundle, isLoading, error, refetch } = useEntitlements();
+  const status = bundle?.subscription.status ?? 'none';
+  const isSubscribed = status === 'active' || status === 'past_due' || status === 'grace';
+  const isTrial = status === 'trialing';
+  const isExpired = status === 'canceled' || status === 'incomplete_expired' || status === 'none';
+  const isPaused = status === 'paused';
+  const isIncomplete = status === 'incomplete';
+  const hasAccess = isSubscribed || isTrial;
 
-  const fetchAccess = useCallback(async () => {
-    if (!isAuthenticated || !user) {
-      setHasAccess(false);
-      setIsTrial(false);
-      setTrialEndsAt(null);
-      setDaysLeftInTrial(0);
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    setError(false);
-    try {
-      const res = await api.get<{
-        subscription: unknown;
-        access: {
-          allowed: boolean;
-          reason: string;
-          trialEndsAt?: string;
-          daysLeftInTrial?: number;
-        };
-      }>('/subscription/me');
-      const data = res.data as typeof res.data & { access?: { allowed: boolean; reason: string; trialEndsAt?: string; daysLeftInTrial?: number } };
-      const access = data?.access;
-      if (!access) {
-        // Missing access field — grant access by default (don't lock out on malformed response)
-        setHasAccess(true);
-        setIsTrial(false);
-        setTrialEndsAt(null);
-        setDaysLeftInTrial(0);
-        setIsLoading(false);
-        return;
-      }
-      setHasAccess(!!access.allowed);
-      setIsTrial(access.reason === 'trial');
-      setTrialEndsAt(access.trialEndsAt ?? null);
-      setDaysLeftInTrial(access.daysLeftInTrial ?? 0);
-    } catch {
-      setError(true);
-      // On API error, grant access by default — don't lock users out due to network/auth failures
-      setHasAccess(true);
-      setIsTrial(false);
-      setTrialEndsAt(null);
-      setDaysLeftInTrial(0);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAuthenticated, user]);
-
-  useEffect(() => {
-    fetchAccess();
-  }, [fetchAccess]);
+  const refetchCb = useCallback(() => refetch(), [refetch]);
 
   return {
     hasAccess,
-    isSubscribed: hasAccess && !isTrial,
+    isSubscribed,
     isTrial,
-    isExpired: !hasAccess && !isLoading && isAuthenticated && !error,
-    trialEndsAt,
-    daysLeftInTrial,
+    isExpired,
+    isPaused,
+    isIncomplete,
+    trialEndsAt: bundle?.subscription.trialEndsAt ?? null,
+    daysLeftInTrial: bundle?.subscription.daysLeftInTrial ?? 0,
     isLoading,
-    error,
-    refetch: fetchAccess,
+    error: !!error,
+    refetch: refetchCb,
   };
 }

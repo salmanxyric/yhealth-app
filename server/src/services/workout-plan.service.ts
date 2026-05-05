@@ -3,7 +3,7 @@
  * Handles workout plan generation, management, and adaptive difficulty
  */
 
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { gamificationService } from './gamification.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';

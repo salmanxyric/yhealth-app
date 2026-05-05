@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ExternalLink } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { GraphNode, GraphEdge } from '@shared/types/domain/knowledge-graph';
 import { CATEGORY_LABELS, CATEGORY_COLORS } from '../constants/graph-config';
 

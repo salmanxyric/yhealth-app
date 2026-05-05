@@ -1,18 +1,14 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { DashboardLayout } from "@/components/layout";
+import { DashboardPageSkeleton } from "@/components/loading";
 import { ChatHistoryTab } from "@/app/(pages)/dashboard/components/tabs/ChatHistoryTab";
 
 function ChatHistoryLoading() {
-  return (
-    <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-    </div>
-  );
+  return <DashboardPageSkeleton activeTab="chat-history" variant="compact" />;
 }
 
 function ChatHistoryContent() {
@@ -26,13 +22,7 @@ function ChatHistoryContent() {
   }, [isAuthenticated, authLoading, router]);
 
   if (authLoading) {
-    return (
-      <DashboardLayout activeTab="chat-history">
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-slate-400">Loading...</div>
-        </div>
-      </DashboardLayout>
-    );
+    return <DashboardPageSkeleton activeTab="chat-history" variant="compact" />;
   }
 
   if (!isAuthenticated) {

@@ -4,7 +4,7 @@
  * Separate from user_goals (which is locked to health_pillar enum)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../logger.service.js';
 import type {
@@ -124,6 +124,30 @@ class LifeGoalsService {
       throw ApiError.badRequest(`Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
     }
 
+    // SMART refinement: if goal lacks specifics, refine it before saving
+    let finalTitle = input.title.trim();
+    let finalDescription = input.description ?? null;
+    const lacksSpecifics = !input.targetValue && !input.targetUnit && (!input.description || input.description.length < 30);
+
+    if (lacksSpecifics) {
+      try {
+        const { goalDecompositionService } = await import('../goal-decomposition.service.js');
+        const refinement = await goalDecompositionService.refineToSmart(
+          finalTitle,
+          finalDescription,
+          input.category,
+          input.motivation ?? null
+        );
+        if (refinement) {
+          finalTitle = refinement.refinedTitle;
+          finalDescription = refinement.refinedDescription;
+          logger.info('[LifeGoals] Applied SMART refinement', { userId, original: input.title, refined: finalTitle });
+        }
+      } catch (err) {
+        logger.warn('[LifeGoals] SMART refinement failed, proceeding with original', { error: (err as Error).message });
+      }
+    }
+
     const result = await query<LifeGoalRow>(
       `INSERT INTO life_goals (
         user_id, category, title, description, motivation,
@@ -134,8 +158,8 @@ class LifeGoalsService {
       [
         userId,
         input.category,
-        input.title.trim(),
-        input.description ?? null,
+        finalTitle,
+        finalDescription,
         input.motivation ?? null,
         input.trackingMethod ?? 'journal_mentions',
         input.targetValue ?? null,

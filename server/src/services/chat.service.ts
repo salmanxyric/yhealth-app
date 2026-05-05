@@ -3,7 +3,7 @@
  * @description Handles chat CRUD operations, participant management, and community group handling
  */
 
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import type { PoolClient } from 'pg';
 import { logger } from './logger.service.js';
 import { chatCacheService } from './chat-cache.service.js';

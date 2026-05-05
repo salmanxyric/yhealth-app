@@ -4,10 +4,11 @@
  */
 
 import Stripe from 'stripe';
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { mailHelper } from '../helper/mail.js';
+import { grantCredits } from './credit.service.js';
 import type { CreatePlanInput, UpdatePlanInput } from '../validators/subscription.validator.js';
 
 let stripeClient: Stripe | null = null;
@@ -74,23 +75,22 @@ const DEFAULT_PLANS = [
   {
     name: 'Free',
     slug: 'free',
-    description: '1 week free full access, then continue with essential tracking and community.',
+    description: 'Essential tracking and community access. Start your wellness journey today.',
     amount_cents: 0,
     currency: 'usd',
     interval: 'month',
     features: [
       '1 week free full access to all features',
       'Basic activity & mood tracking',
-      'Daily step counter',
-      'Water intake logging',
+      'Daily step counter & water intake',
       '7-day history',
       'Community access',
     ],
     sort_order: 0,
   },
   {
-    name: '1 Month',
-    slug: 'monthly',
+    name: 'Pro',
+    slug: 'pro',
     description: 'Full access, billed monthly. Cancel anytime.',
     amount_cents: 999,
     currency: 'usd',
@@ -101,25 +101,30 @@ const DEFAULT_PLANS = [
       'Advanced analytics & trends',
       'Nutrition & meal planning',
       'Sleep & recovery analysis',
+      'Workout plans & exercise library',
+      'Mood & journal tracking',
       'Unlimited history',
       'Priority support',
     ],
     sort_order: 1,
   },
   {
-    name: '3 Month',
-    slug: '3-month',
-    description: 'Full access, billed every 3 months. Best value.',
-    amount_cents: 2499,
+    name: 'Premium',
+    slug: 'premium',
+    description: 'Everything in Pro plus exclusive features. Billed yearly — save vs monthly.',
+    amount_cents: 19999,
     currency: 'usd',
-    interval: 'month',
+    interval: 'year',
     features: [
-      'Everything in 1 Month',
-      'Billed every 3 months — save vs monthly',
-      'Unlimited AI coaching & insights',
-      'Nutrition & meal planning',
-      'Sleep & recovery analysis',
-      'Priority support',
+      'Everything in Pro',
+      'Voice AI assistant',
+      'Knowledge graph insights',
+      'Money map & financial wellness',
+      'Premium competitions & leaderboards',
+      'Webinars & exclusive content',
+      'Advanced export & reports',
+      'Soundscape & guided meditation',
+      'Billed yearly — save vs monthly',
     ],
     sort_order: 2,
   },
@@ -292,9 +297,9 @@ export async function deletePlan(id: string): Promise<boolean> {
       logger.warn('[Subscription] Could not deactivate Stripe product', { id: plan.stripe_product_id });
     }
   }
-  await query('UPDATE subscription_plans SET is_active = false, updated_at = NOW() AT TIME ZONE \'UTC\' WHERE id = $1', [
-    id,
-  ]);
+  // Remove any user subscriptions referencing this plan first
+  await query('DELETE FROM user_subscriptions WHERE plan_id = $1', [id]);
+  await query('DELETE FROM subscription_plans WHERE id = $1', [id]);
   return true;
 }
 
@@ -505,6 +510,9 @@ async function syncSubscriptionFromStripe(sub: Stripe.Subscription): Promise<voi
       ]
     );
   });
+  if (status === 'active') {
+    await grantInitialPlanCredits(userId, plan.id, sub.id);
+  }
   logger.info('[Subscription] Verified/synced subscription', { subscriptionId: sub.id, userId, status });
 }
 
@@ -521,6 +529,29 @@ async function ensureUserStripeCustomerId(userId: string, stripeCustomerId: stri
     [stripeCustomerId, userId]
   );
   logger.info('[Subscription] Linked Stripe customer to user', { userId, stripeCustomerId });
+}
+
+/**
+ * Grant initial plan credits when a subscription is first activated.
+ * Idempotent via subscription-scoped key so safe to call from multiple paths.
+ */
+async function grantInitialPlanCredits(userId: string, planId: string, subscriptionId: string): Promise<void> {
+  const planRow = await query<{ credits_included_monthly: number }>(
+    `SELECT credits_included_monthly FROM subscription_plans WHERE id = $1`,
+    [planId]
+  );
+  const credits = planRow.rows[0]?.credits_included_monthly ?? 0;
+  if (credits <= 0) return;
+
+  await grantCredits({
+    userId,
+    amount: credits,
+    bucket: 'plan',
+    reason: 'subscription:activated:initial_grant',
+    kind: 'grant',
+    idempotencyKey: `subscription:initial:${subscriptionId}:${userId}`,
+  });
+  logger.info('[Subscription] Granted initial plan credits', { userId, planId, credits });
 }
 
 /** Verify checkout session from Stripe and sync to DB (callback when webhook not run). High-level payment validation included. */
@@ -575,26 +606,41 @@ export async function verifyCheckoutSession(
       }
     }
     const { start, end } = getPeriodEndForPlan(plan);
+    let wasInserted = false;
     try {
       await transaction(async (client) => {
-        await client.query(
-          `UPDATE user_subscriptions SET status = 'canceled', updated_at = NOW() AT TIME ZONE 'UTC'
-           WHERE user_id = $1 AND status = 'active'`,
-          [userId]
-        );
-        await client.query(
+        const insertResult = await client.query(
           `INSERT INTO user_subscriptions (
             user_id, plan_id, stripe_subscription_id, stripe_customer_id, status,
-            current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, updated_at
-          ) VALUES ($1, $2, NULL, $3, 'active', $4::timestamptz, $5::timestamptz, false, NULL, $6::timestamptz, $6::timestamptz)`,
-          [userId, plan.id, customerId, start, end, new Date().toISOString()]
+            current_period_start, current_period_end, cancel_at_period_end, canceled_at,
+            checkout_session_id, created_at, updated_at
+          ) VALUES ($1, $2, NULL, $3, 'active', $4::timestamptz, $5::timestamptz, false, NULL,
+                    $7, $6::timestamptz, $6::timestamptz)
+           ON CONFLICT (checkout_session_id) DO NOTHING
+           RETURNING id`,
+          [userId, plan.id, customerId, start, end, new Date().toISOString(), sessionId]
         );
+        wasInserted = insertResult.rows.length > 0;
+        if (wasInserted) {
+          await client.query(
+            `UPDATE user_subscriptions SET status = 'canceled', updated_at = NOW() AT TIME ZONE 'UTC'
+             WHERE user_id = $1 AND status = 'active' AND checkout_session_id IS DISTINCT FROM $2`,
+            [userId, sessionId]
+          );
+        }
       });
     } catch (txErr) {
       logger.error('[Subscription] Verify: failed to save subscription', { userId, planId: plan.id, error: (txErr as Error).message });
       return { success: false, reason: 'invalid_payment', error: 'Failed to activate subscription. Please contact support with your receipt.' };
     }
+    if (!wasInserted) {
+      const existing = await getSubscriptionByUserId(userId);
+      return { success: true, reason: 'already_synced', subscription: existing ?? undefined };
+    }
     const sub = await getSubscriptionByUserId(userId);
+    if (sub?.id) {
+      await grantInitialPlanCredits(userId, plan.id, sub.id);
+    }
     logger.info('[Subscription] Verified one-time payment and granted access', { userId, planId: plan.id, subscriptionId: sub?.id });
     return { success: true, reason: 'paid', subscription: sub ?? undefined };
   }
@@ -670,6 +716,9 @@ export async function syncSubscriptionFromStripeRecovery(userId: string): Promis
         );
       });
       const sub = await getSubscriptionByUserId(userId);
+      if (sub?.id) {
+        await grantInitialPlanCredits(userId, plan.id, sub.id);
+      }
       logger.info('[Subscription] Recovery: synced from Stripe checkout session', { userId, planId: plan.id, sessionId: session.id });
       return { synced: true, subscription: sub ?? undefined, reason: 'synced_from_stripe' };
     } catch (err) {

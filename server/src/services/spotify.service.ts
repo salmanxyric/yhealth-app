@@ -8,7 +8,7 @@
  */
 
 import crypto from 'crypto';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import { env } from '../config/env.config.js';

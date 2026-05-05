@@ -13,6 +13,18 @@ import { jest } from '@jest/globals';
 
 const mockQuery = jest.fn<(...args: any[]) => any>();
 
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
+  query: mockQuery,
+  transaction: jest.fn(),
+  pool: { query: mockQuery, end: jest.fn() },
+  database: { healthCheck: jest.fn() },
+  getClient: jest.fn(),
+  closePool: jest.fn(),
+  testConnection: jest.fn(),
+  getPoolStats: jest.fn(),
+  default: {},
+}));
+
 jest.unstable_mockModule('../../../src/database/pg.js', () => ({
   query: mockQuery,
 }));

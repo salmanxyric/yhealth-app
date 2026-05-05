@@ -18,6 +18,8 @@ interface LeaderboardViewProps {
   currentUserId?: string;
 }
 
+const PAGE_SIZE = 10;
+
 export function LeaderboardView({
   boardType,
   timeFilter,
@@ -25,19 +27,17 @@ export function LeaderboardView({
   competitionId,
   currentUserId,
 }: LeaderboardViewProps) {
-  const [offset, setOffset] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardResponse | null>(null);
-  const limit = 100;
 
-  // Determine endpoint based on competition or regular leaderboard and time filter
+  const offset = (currentPage - 1) * PAGE_SIZE;
+
   const getEndpoint = () => {
     if (competitionId) {
-      return `/competitions/${competitionId}/leaderboard?limit=${limit}&offset=${offset}`;
+      return `/competitions/${competitionId}/leaderboard?limit=${PAGE_SIZE}&offset=${offset}`;
     }
 
-    // 'competition' type without a specific competitionId is meaningless — fall back to global
-    const effectiveBoardType = boardType === 'competition' ? 'global' : boardType;
-    const baseParams = `type=${effectiveBoardType}&limit=${limit}&offset=${offset}`;
+    const baseParams = `type=${boardType}&limit=${PAGE_SIZE}&offset=${offset}`;
 
     switch (timeFilter) {
       case 'daily':
@@ -55,18 +55,16 @@ export function LeaderboardView({
 
   const endpoint = getEndpoint();
 
-  // Include all dependencies that affect the endpoint
   const {
     data: fetchedData,
     isLoading,
     error,
     refetch,
-  } = useFetch<LeaderboardResponse>(endpoint, { 
-    immediate: !!currentUserId, 
-    deps: [currentUserId, boardType, timeFilter, date, competitionId, offset] 
+  } = useFetch<LeaderboardResponse>(endpoint, {
+    immediate: !!currentUserId,
+    deps: [currentUserId, boardType, timeFilter, date, competitionId, currentPage]
   });
 
-  // Update local state when data is fetched
   useEffect(() => {
     if (fetchedData) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -74,12 +72,10 @@ export function LeaderboardView({
     }
   }, [fetchedData]);
 
-  // Real-time socket updates
   useLeaderboardSocket({
     userId: currentUserId,
     enabled: !!currentUserId,
     onRankUpdate: (data) => {
-      // Update leaderboard data optimistically
       if (leaderboardData && data.board_type === boardType) {
         setLeaderboardData((prev) => {
           if (!prev) return prev;
@@ -88,7 +84,6 @@ export function LeaderboardView({
               ? { ...entry, rank: data.rank, total_score: data.total_score }
               : entry
           );
-          // Re-sort by rank
           updatedRanks.sort((a, b) => a.rank - b.rank);
           return { ...prev, ranks: updatedRanks };
         });
@@ -96,11 +91,20 @@ export function LeaderboardView({
     },
   });
 
-  // Reset offset and refetch when filters change
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOffset(0);
+    setCurrentPage(1);
   }, [boardType, timeFilter, date, competitionId]);
+
+  const totalItems = leaderboardData?.pagination?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   if (isLoading && !leaderboardData) {
     return (
@@ -153,20 +157,11 @@ export function LeaderboardView({
         transition={{ duration: 0.4 }}
         className="relative bg-gradient-to-br from-white/5 via-white/3 to-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-12 text-center w-full overflow-hidden"
       >
-        {/* Animated background gradient */}
         <motion.div
           className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-purple-500/5 to-pink-500/5"
-          animate={{
-            opacity: [0.3, 0.5, 0.3],
-          }}
-          transition={{
-            duration: 4,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
+          animate={{ opacity: [0.3, 0.5, 0.3] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
         />
-
-        {/* Grid pattern */}
         <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
@@ -175,42 +170,25 @@ export function LeaderboardView({
             backgroundSize: '32px 32px',
           }}
         />
-
         <motion.div
           initial={{ scale: 0, rotate: -180 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 200, damping: 15 }}
           className="relative z-10 w-20 h-20 mx-auto mb-6"
         >
-          {/* Glow effect */}
           <motion.div
             className="absolute inset-0 rounded-full bg-emerald-500/20 blur-2xl"
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.4, 0.7, 0.4],
-            }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
+            animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.7, 0.4] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
           <motion.div
-            animate={{ 
-              y: [0, -10, 0],
-              rotate: [0, 5, -5, 0]
-            }}
-            transition={{ 
-              duration: 3, 
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
+            animate={{ y: [0, -10, 0], rotate: [0, 5, -5, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
             className="relative w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center backdrop-blur-sm"
           >
             <Trophy className="w-10 h-10 text-emerald-400" />
           </motion.div>
         </motion.div>
-        
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -224,60 +202,51 @@ export function LeaderboardView({
     );
   }
 
-  const topThree = leaderboardData.ranks.slice(0, 3);
-  const remainingRanks = leaderboardData.ranks.slice(3);
+  const isFirstPage = currentPage === 1;
+  const topThree = isFirstPage ? leaderboardData.ranks.slice(0, 3) : [];
+  const remainingRanks = isFirstPage ? leaderboardData.ranks.slice(3) : leaderboardData.ranks;
+  const listStartRank = isFirstPage ? 4 : offset + 1;
 
   return (
-    <motion.div 
+    <motion.div
       className="space-y-6 w-full"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
-      {/* Top 3 Podium */}
-      {topThree.length > 0 && (
+      {/* Top 3 Podium — first page only */}
+      {isFirstPage && topThree.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 30, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ 
-            duration: 0.6, 
-            ease: [0.25, 0.46, 0.45, 0.94],
-            delay: 0.1
-          }}
+          transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }}
           className="w-full"
         >
           <TopThreePodium entries={topThree} />
         </motion.div>
       )}
 
-      {/* Remaining Leaderboard */}
+      {/* Remaining Leaderboard with pagination */}
       {remainingRanks.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 30, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ 
-            duration: 0.6, 
-            delay: 0.3,
-            ease: [0.25, 0.46, 0.45, 0.94]
-          }}
+          transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
           className="w-full"
         >
           <LeaderboardList
             entries={remainingRanks}
-            startRank={4}
-            total={leaderboardData.pagination.total}
+            startRank={listStartRank}
+            total={totalItems}
             currentUserId={currentUserId}
             isLoading={isLoading}
-            onLoadMore={() => {
-              if (leaderboardData.pagination.total > offset + limit) {
-                setOffset(offset + limit);
-              }
-            }}
-            hasMore={leaderboardData.pagination.total > offset + limit}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={PAGE_SIZE}
+            onPageChange={handlePageChange}
           />
         </motion.div>
       )}
     </motion.div>
   );
 }
-

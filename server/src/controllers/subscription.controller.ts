@@ -25,7 +25,7 @@ import {
 } from '../services/subscription.service.js';
 import type { CreatePlanInput, UpdatePlanInput } from '../validators/subscription.validator.js';
 import { getRevenueStats } from '../services/subscription-revenue.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 export const getPlansHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const activeOnly = (req.query.activeOnly as string) !== 'false';

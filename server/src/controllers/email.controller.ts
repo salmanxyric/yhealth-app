@@ -6,7 +6,7 @@
 import type { Request, Response } from 'express';
 import { emailEngine } from '../services/email-engine.service.js';
 import { emailQueueService } from '../services/email-queue.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import {
   updatePreferenceSchema,

@@ -6,7 +6,7 @@
 import OpenAI from 'openai';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { parseLlmJson } from '../helper/llm-json-parser.js';
 
 // ============================================

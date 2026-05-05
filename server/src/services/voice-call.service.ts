@@ -1,4 +1,4 @@
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import type {
@@ -327,6 +327,21 @@ class VoiceCallService {
         channel: request.channel,
         status: call.status,
       });
+
+      try {
+        const hasInitiator = await this.checkColumnExists('initiator_source');
+        if (hasInitiator) {
+          await query(
+            `UPDATE voice_calls SET initiator_source = $2 WHERE id = $1`,
+            [callId, request.initiator_source || 'user']
+          );
+        }
+      } catch (e) {
+        logger.warn('[VoiceCallService] initiator_source update skipped', {
+          callId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
 
       // Step 6: Log call event
       try {
@@ -709,6 +724,47 @@ class VoiceCallService {
         duration: callDuration,
         reason: reason || 'user_ended',
       });
+
+      try {
+        const hasCheckin = await this.checkColumnExists('checkin_outcome');
+        if (hasCheckin) {
+          const full = await query<{
+            initiator_source: string | null;
+            checkin_followup_sent_at: Date | null;
+          }>(
+            `SELECT initiator_source, checkin_followup_sent_at FROM voice_calls WHERE id = $1`,
+            [callId]
+          );
+          const initiator = full.rows[0]?.initiator_source;
+          if (initiator === 'system_checkin') {
+            const answered = Boolean(call.connected_at) && callDuration >= 10;
+            const outcome = answered ? 'answered' : 'missed';
+            await query(`UPDATE voice_calls SET checkin_outcome = $2 WHERE id = $1`, [callId, outcome]);
+            if (!answered && !full.rows[0]?.checkin_followup_sent_at) {
+              const { notificationEngine } = await import('./notification-engine.service.js');
+              await notificationEngine.send({
+                userId,
+                type: 'check_in_followup',
+                title: 'Missed check-in',
+                message:
+                  "Hey — you didn't pick up when I tried to reach you. Was that okay? Open chat to let me know.",
+                priority: 'normal',
+                category: 'coaching',
+                actionUrl: '/chat',
+              });
+              await query(
+                `UPDATE voice_calls SET checkin_followup_sent_at = NOW() WHERE id = $1`,
+                [callId]
+              );
+            }
+          }
+        }
+      } catch (e) {
+        logger.warn('[VoiceCallService] check-in outcome / follow-up skipped', {
+          callId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
 
       return {
         callId,

@@ -26,9 +26,6 @@ export default function PlansPageContent() {
     if (!isAuthenticated) return;
     setCheckingSubscription(true);
     let cancelled = false;
-    const timeout = window.setTimeout(() => {
-      if (!cancelled) setCheckingSubscription(false);
-    }, 3000);
     (async () => {
       try {
         const res = await api.get<SubscriptionMe>('/subscription/me');
@@ -42,10 +39,7 @@ export default function PlansPageContent() {
         if (!cancelled) setCheckingSubscription(false);
       }
     })();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-    };
+    return () => { cancelled = true; };
   }, [isAuthenticated, router]);
 
   useEffect(() => {

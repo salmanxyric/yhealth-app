@@ -140,6 +140,9 @@ class SocketService {
         connectedAt: new Date().toISOString(),
       });
 
+      // Broadcast online presence to all connected users
+      socket.broadcast.emit('userOnline', { userId: user.userId });
+
       // Handle custom events
       this.setupSocketEvents(socket);
 
@@ -159,8 +162,12 @@ class SocketService {
         );
 
         if (!hasOtherConnections) {
-          // Clean up any active streams or viewer sessions
           competitionStreamService.handleDisconnect(user.userId);
+
+          // Broadcast offline presence
+          if (this.io) {
+            this.io.emit('userOffline', { userId: user.userId });
+          }
 
           updateUserOnlineStatus(user.userId, false).catch((error) => {
             logger.error('Failed to update user online status on disconnect', {
@@ -651,6 +658,16 @@ class SocketService {
   /**
    * Emit event to a chat room
    */
+  public isUserOnline(userId: string): boolean {
+    return Array.from(this.connectedUsers.values()).some((u) => u.userId === userId);
+  }
+
+  public getOnlineUserIds(): string[] {
+    const ids = new Set<string>();
+    for (const u of this.connectedUsers.values()) ids.add(u.userId);
+    return [...ids];
+  }
+
   public emitToChat(chatId: string, event: string, data: unknown): void {
     if (!this.io) return;
     this.io.to(`chat:${chatId}`).emit(event, data);

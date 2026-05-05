@@ -4,7 +4,7 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { accountabilityConsentService } from '../services/accountability-consent.service.js';
 import { accountabilityTriggerService } from '../services/accountability-trigger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 class AccountabilityController {

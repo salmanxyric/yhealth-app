@@ -1,13 +1,13 @@
 /**
  * @file Intelligent Intervention Service
- * @description 10 decision trees that auto-adjust user plans based on detected
+ * @description 14 decision trees that auto-adjust user plans based on detected
  * contradictions and recovery state. The AI FIXES problems, not just warns.
  *
  * Decision Trees:
- * 1. OVERTRAINING_RESPONSE   6. PLATEAU_BREAK
- * 2. SLEEP_DEBT_RESPONSE     7. STREAK_SAVE
- * 3. NUTRITION_DEFICIT       8. GOAL_REALIGNMENT
- * 4. HYDRATION_CRISIS        9. DELOAD_INJECTION
+ * 1. OVERTRAINING_RESPONSE   6. PLATEAU_BREAK          11. STATUS_AWARENESS_RESPONSE
+ * 2. SLEEP_DEBT_RESPONSE     7. STREAK_SAVE            12. COMPLEXITY_REDUCTION
+ * 3. NUTRITION_DEFICIT       8. GOAL_REALIGNMENT       13. CHALLENGE_ESCALATION
+ * 4. HYDRATION_CRISIS        9. DELOAD_INJECTION       14. FRICTION_REMOVAL
  * 5. RECOVERY_OVERRIDE      10. MENTAL_HEALTH_RESPONSE
  *
  * Guardrails:
@@ -17,7 +17,7 @@
  * - User can dismiss any intervention (logged for learning)
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import type { ComprehensiveUserContext } from './comprehensive-user-context.service.js';
 import type { DetectedContradiction } from './cross-pillar-intelligence.service.js';
@@ -350,6 +350,109 @@ const decisionTrees: DecisionTree[] = [
           requiresUserApproval: false,
           expiresInHours: Math.min(Math.ceil(daysOff / 2), 5) * 24,
           priority: 'high' as const,
+        };
+      }
+
+      return null;
+    },
+  },
+
+  // 12. COMPLEXITY_REDUCTION — When user is stuck or overwhelmed, simplify their plan
+  {
+    id: 'COMPLEXITY_REDUCTION',
+    evaluate({ snapshot, context }) {
+      const goals = (context as { goals?: { activeGoals?: unknown[] } }).goals;
+      const activeGoalCount = goals?.activeGoals?.length ?? 0;
+      const completionRate = snapshot.componentScores?.habits ?? 50;
+
+      // Overwhelmed: many goals + very low completion
+      if (activeGoalCount > 5 && completionRate < 20) {
+        return {
+          type: 'reduce_active_goals',
+          decisionTree: 'COMPLEXITY_REDUCTION',
+          adjustments: {
+            maxActiveActions: 2,
+            recommendation: 'Pause all but top 2 goals',
+            activeGoalCount,
+            completionRate,
+          },
+          reasoning: `User has ${activeGoalCount} active goals but only ${completionRate}% completion rate. Recommending pause on non-essential goals to reduce overwhelm and focus on the most impactful 1-2 goals.`,
+          requiresUserApproval: true,
+          expiresInHours: 168,
+          priority: 'high' as const,
+        };
+      }
+
+      // Stuck: stagnant with low completion for extended period
+      if (completionRate < 30 && (snapshot.totalScore ?? 50) < 35) {
+        return {
+          type: 'simplify_action_plan',
+          decisionTree: 'COMPLEXITY_REDUCTION',
+          adjustments: {
+            maxActiveActions: 2,
+            recommendation: 'Reduce to 1-2 actions per goal',
+            completionRate,
+          },
+          reasoning: `User completion rate is ${completionRate}% with overall score below 35. Current plan is too complex. Recommending simplification to 1-2 core actions only.`,
+          requiresUserApproval: true,
+          expiresInHours: 168,
+          priority: 'medium' as const,
+        };
+      }
+
+      return null;
+    },
+  },
+
+  // 13. CHALLENGE_ESCALATION — When user is consistently progressing, increase difficulty
+  {
+    id: 'CHALLENGE_ESCALATION',
+    evaluate({ snapshot }) {
+      const completionRate = snapshot.componentScores?.habits ?? 50;
+      const totalScore = snapshot.totalScore ?? 50;
+
+      // Progressing: high completion + good overall score
+      if (completionRate >= 75 && totalScore >= 70) {
+        return {
+          type: 'increase_challenge',
+          decisionTree: 'CHALLENGE_ESCALATION',
+          adjustments: {
+            challengeMultiplier: 1.15,
+            recommendation: 'Increase targets by 10-15% or add one new action',
+            completionRate,
+            totalScore,
+          },
+          reasoning: `User is consistently completing ${completionRate}% of actions with a score of ${totalScore}. They have capacity for increased challenge. Suggesting 10-15% target increase or one additional action.`,
+          requiresUserApproval: true,
+          expiresInHours: 168,
+          priority: 'low' as const,
+        };
+      }
+
+      return null;
+    },
+  },
+
+  // 14. FRICTION_REMOVAL — When user is inconsistent, identify and fix friction points
+  {
+    id: 'FRICTION_REMOVAL',
+    evaluate({ snapshot }) {
+      const completionRate = snapshot.componentScores?.habits ?? 50;
+      const totalScore = snapshot.totalScore ?? 50;
+
+      // Inconsistent: moderate average but high variance (total score middling, completion unstable)
+      if (completionRate > 20 && completionRate < 60 && totalScore > 30 && totalScore < 60) {
+        return {
+          type: 'reduce_friction',
+          decisionTree: 'FRICTION_REMOVAL',
+          adjustments: {
+            recommendation: 'Identify most-skipped action and reschedule or simplify',
+            completionRate,
+          },
+          reasoning: `User shows inconsistent completion (${completionRate}%) — some days strong, others completely missed. Suggesting: identify the most-skipped action and either reschedule it to a better time or replace with a lower-friction alternative.`,
+          requiresUserApproval: true,
+          expiresInHours: 168,
+          priority: 'medium' as const,
         };
       }
 

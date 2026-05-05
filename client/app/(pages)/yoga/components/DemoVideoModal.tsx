@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Play, Loader2, ExternalLink, Youtube } from "lucide-react";
+import { X, Play, Loader2, Youtube } from "lucide-react";
 import { youtubeService } from "@/src/shared/services/yoga.service";
 import type { YouTubeVideo } from "@shared/types/domain/yoga";
 
@@ -17,7 +17,7 @@ export default function DemoVideoModal({
   isOpen,
   onClose,
   sessionName,
-  accentColor,
+  accentColor: _accentColor,
 }: DemoVideoModalProps) {
   const [videos, setVideos] = useState<YouTubeVideo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,6 +149,7 @@ export default function DemoVideoModal({
                         }`}
                       >
                         <div className="relative shrink-0 w-20 aspect-video rounded-lg overflow-hidden bg-black">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- external YouTube thumbnail */}
                           <img
                             src={video.thumbnail}
                             alt={video.title}

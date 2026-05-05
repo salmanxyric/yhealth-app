@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { JwtPayload } from 'jsonwebtoken';
+import type { RequestTrace } from '../middlewares/performance-tracing.middleware.js';
 
 // Environment types
 export type NodeEnv = 'development' | 'production' | 'test' | 'staging';
@@ -41,6 +42,7 @@ export interface AuthenticatedRequest extends Request {
   user?: IJwtPayload;
   sessionId?: string;
   requestId?: string;
+  trace?: RequestTrace;
 }
 
 // Controller handler type

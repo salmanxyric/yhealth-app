@@ -7,7 +7,7 @@ import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { query } from './pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 
 const __filename = fileURLToPath(import.meta.url);

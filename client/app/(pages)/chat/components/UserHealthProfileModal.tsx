@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Loader2, AlertCircle, Droplet, Heart, Thermometer, Activity, Moon, Zap, AlertTriangle, Trophy, Star, Flame, Crown, Gauge } from 'lucide-react';
+import { Loader2, AlertCircle, Droplet, Heart, Thermometer, Activity, Moon, Zap, AlertTriangle, Trophy, Star, Flame, Crown, Gauge, ShieldOff, UserPlus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -307,7 +307,28 @@ export function UserHealthProfileModal({
             </div>
           )}
 
-          {error && (
+          {error && error.statusCode === 403 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-20 h-20 rounded-full bg-slate-800/80 flex items-center justify-center mb-5">
+                <ShieldOff className="h-10 w-10 text-slate-500" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                Health Profile Hidden
+              </h3>
+              <p className="text-sm text-slate-400 max-w-md mb-6">
+                {error.message || 'This user has restricted access to their health profile.'}
+              </p>
+              {error.message?.includes('friends') && (
+                <button
+                  onClick={onClose}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors text-sm font-medium"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Send Friend Request
+                </button>
+              )}
+            </div>
+          ) : error ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <AlertCircle className="h-16 w-16 text-orange-400 mb-4" />
               <h3 className="text-xl font-semibold text-white mb-2">
@@ -317,7 +338,7 @@ export function UserHealthProfileModal({
                 {error.message || 'Failed to fetch health data. Please try again later.'}
               </p>
             </div>
-          )}
+          ) : null}
 
           {showMainMetrics && hasData && (
             <div className="space-y-10">

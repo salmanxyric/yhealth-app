@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Poppins, Cinzel, Nunito } from "next/font/google";
+import { Inter, Poppins, Cinzel, Nunito, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { VoiceAssistantModal } from "@/components/common/voice-assistant-modal";
@@ -30,6 +30,13 @@ const nunito = Nunito({
   variable: "--font-nunito",
   subsets: ["latin"],
   weight: ["300", "400", "500"],
+});
+
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: ["400"],
+  style: ["normal", "italic"],
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://balencia.app";
@@ -110,7 +117,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Instrument+Serif:ital@0;1&display=swap"
         />
         <script
           type="application/ld+json"
@@ -122,7 +129,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${poppins.variable} ${cinzel.variable} ${nunito.variable} font-sans antialiased`}
+        className={`${inter.variable} ${poppins.variable} ${cinzel.variable} ${nunito.variable} ${instrumentSerif.variable} font-sans antialiased`}
       >
         <Providers>
           <AlarmProvider>

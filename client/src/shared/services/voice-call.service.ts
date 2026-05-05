@@ -23,7 +23,8 @@ export type CallPurpose =
   | 'general_health'
   | 'fitness'
   | 'wellness'
-  | 'recovery';
+  | 'recovery'
+  | 'check_in';
 
 export interface VoiceCall {
   id: string;

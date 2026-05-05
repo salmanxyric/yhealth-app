@@ -76,7 +76,7 @@ export interface KnowledgeSearchResult {
   trustScore: number;
 }
 
-export type SessionType = 
+export type SessionType =
   | 'quick_checkin'
   | 'coaching_session'
   | 'emergency_support'
@@ -86,6 +86,92 @@ export type SessionType =
   | 'fitness'
   | 'wellness';
 export type ProfileSection = 'goals' | 'conditions' | 'preferences' | 'history' | 'metrics';
+
+// Streaming SSE event types for the agentic execution timeline
+export interface StreamThinkingStartEvent {
+  type: 'thinking_start';
+  label: string;
+  timestamp: number;
+}
+
+export interface StreamThinkingEndEvent {
+  type: 'thinking_end';
+  label: string;
+  durationMs: number;
+}
+
+export interface StreamToolCallEvent {
+  type: 'tool_call';
+  operationId: string;
+  toolName: string;
+  label: string;
+  icon?: string;
+}
+
+export interface StreamToolResultEvent {
+  type: 'tool_result';
+  operationId: string;
+  toolName: string;
+  success: boolean;
+  delta: string;
+  icon?: string;
+  undoable: boolean;
+  label?: string;
+}
+
+export interface StreamTokenEvent {
+  type: 'token';
+  content: string;
+}
+
+export interface StreamConversationIdEvent {
+  type: 'conversation_id';
+  conversationId: string;
+}
+
+export interface StreamDoneEvent {
+  type: 'done';
+  message: string;
+  conversationId: string;
+  messageId: string;
+  agentTurnId?: string;
+  actions?: ActionCommand[];
+  toolCalls?: Array<{ tool: string; result: string }>;
+}
+
+export interface StreamErrorEvent {
+  type: 'error';
+  error: string;
+}
+
+export interface StreamArtifactEvent {
+  type: 'artifact';
+  artifact: Record<string, unknown>;
+  toolName: string;
+}
+
+export interface StreamAnalysisStepEvent {
+  type: 'analysis_step';
+  step: {
+    id: string;
+    label: string;
+    status: 'pending' | 'active' | 'completed' | 'failed';
+    durationMs?: number;
+    resultSummary?: string;
+  };
+}
+
+export type StreamEvent =
+  | StreamThinkingStartEvent
+  | StreamThinkingEndEvent
+  | StreamToolCallEvent
+  | StreamToolResultEvent
+  | StreamTokenEvent
+  | StreamConversationIdEvent
+  | StreamDoneEvent
+  | StreamErrorEvent
+  | StreamArtifactEvent
+  | StreamAnalysisStepEvent;
 
 // ============================================================================
 // RAG Chat Service
@@ -107,6 +193,89 @@ class RAGChatService {
     });
     if (!response.success || !response.data) {
       throw new Error('Failed to send message');
+    }
+    return response.data;
+  }
+
+  /**
+   * Send a message via SSE streaming — emits tool calls, thinking labels,
+   * token chunks, and the final done event through the onEvent callback.
+   */
+  async sendMessageStreaming(params: {
+    message: string;
+    conversationId?: string;
+    imageBase64?: string;
+    onEvent: (event: StreamEvent) => void;
+    signal?: AbortSignal;
+  }): Promise<void> {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const token = typeof document !== 'undefined'
+      ? document.cookie.split('; ').find(c => c.startsWith('balencia_access_token='))?.split('=')[1]
+      : undefined;
+
+    const response = await fetch(`${apiUrl}${this.baseUrl}/message/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        message: params.message,
+        conversationId: params.conversationId,
+        imageBase64: params.imageBase64,
+      }),
+      signal: params.signal,
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Stream request failed (${response.status}): ${text}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body for streaming');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const payload = line.slice(6).trim();
+          if (!payload || payload === '[DONE]') continue;
+
+          try {
+            const raw = JSON.parse(payload);
+            const event = normalizeSSEEvent(raw);
+            if (event) params.onEvent(event);
+          } catch {
+            // skip malformed SSE frames
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
+   * Undo a tool operation from the agentic execution timeline
+   */
+  async undoOperation(operationId: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.post<{ success: boolean; error?: string }>(
+      `${this.baseUrl}/operations/${operationId}/undo`,
+    );
+    if (!response.success || !response.data) {
+      throw new Error('Failed to undo operation');
     }
     return response.data;
   }
@@ -296,6 +465,50 @@ class RAGChatService {
       throw error; // Let caller handle fallback
     }
   }
+}
+
+/**
+ * Normalize raw SSE payloads from the server into typed StreamEvent objects.
+ * The server currently emits events without a `type` field:
+ *   { token: "..." }
+ *   { conversationId: "..." }
+ *   { done: true, message: "...", ... }
+ *   { error: "..." }
+ * This function maps both the legacy format and the new typed format.
+ */
+function normalizeSSEEvent(raw: any): StreamEvent | null {
+  // Already has a type field — new format
+  if (raw.type) return raw as StreamEvent;
+
+  // Legacy: token chunk
+  if ('token' in raw && !raw.done) {
+    return { type: 'token', content: raw.token } as StreamTokenEvent;
+  }
+
+  // Legacy: conversation ID
+  if ('conversationId' in raw && !raw.done) {
+    return { type: 'conversation_id', conversationId: raw.conversationId } as StreamConversationIdEvent;
+  }
+
+  // Legacy: done event
+  if (raw.done) {
+    return {
+      type: 'done',
+      message: raw.message || '',
+      conversationId: raw.conversationId || '',
+      messageId: raw.messageId || `resp-${Date.now()}`,
+      agentTurnId: raw.agentTurnId,
+      actions: raw.actions,
+      toolCalls: raw.toolCalls,
+    } as StreamDoneEvent;
+  }
+
+  // Legacy: error
+  if ('error' in raw) {
+    return { type: 'error', error: raw.error || raw.errorMessage || 'Unknown error' } as StreamErrorEvent;
+  }
+
+  return null;
 }
 
 // Export singleton instance

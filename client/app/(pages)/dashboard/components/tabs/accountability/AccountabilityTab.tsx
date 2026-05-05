@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Shield,
   Plus,
@@ -11,22 +11,25 @@ import {
   CheckCircle2,
   XCircle,
   Sparkles,
-  Zap,
   FileText,
   TrendingUp,
+  Users,
+  Trash2,
+  CheckSquare,
+  X,
+  Loader2,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api-client";
 import { DashboardUnderlineTabs } from "../../DashboardUnderlineTabs";
 
 import { ContractCard } from "./ContractCard";
 import { CreateContractModal } from "./CreateContractModal";
-import { statusConfig, staggerChildren, fadeInUp } from "./constants";
+import { SocialAccountabilitySection } from "./SocialAccountabilitySection";
 import type {
   Contract,
   ContractStats,
   ContractSuggestion,
   ContractsResponse,
-  ContractStatus,
 } from "./types";
 
 /* ── Skeleton ── */
@@ -94,6 +97,7 @@ function StatCard({
 /* ── Main Tab ── */
 export function AccountabilityTab() {
   const prefersReducedMotion = useReducedMotion();
+  const [activeSubTab, setActiveSubTab] = useState<"contracts" | "social">("contracts");
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [stats, setStats] = useState<ContractStats | null>(null);
   const [suggestions, setSuggestions] = useState<ContractSuggestion[]>([]);
@@ -101,7 +105,37 @@ export function AccountabilityTab() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const [editingContract, setEditingContract] = useState<Contract | null>(null);
+  const [_selectedContract, setSelectedContract] = useState<Contract | null>(null);
+
+  // Selection & delete
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(contracts.map(c => c.id)));
+  }, [contracts]);
+
+  const deselectAll = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -139,6 +173,45 @@ export function AccountabilityTab() {
     }
   }, [filter]);
 
+  const handleEdit = useCallback((contract: Contract) => {
+    setEditingContract(contract);
+    setShowCreate(true);
+  }, []);
+
+  const handleDeleteSingle = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/contracts/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      fetchData();
+    } catch {
+      // handled silently
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteTarget, fetchData]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setDeleting(true);
+    try {
+      await api.post("/contracts/bulk-delete", { ids: Array.from(selectedIds) });
+      setShowBulkDeleteConfirm(false);
+      exitSelectionMode();
+      fetchData();
+    } catch {
+      // handled silently
+    } finally {
+      setDeleting(false);
+    }
+  }, [selectedIds, exitSelectionMode, fetchData]);
+
+  const allSelected = useMemo(
+    () => contracts.length > 0 && selectedIds.size === contracts.length,
+    [contracts, selectedIds]
+  );
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -168,43 +241,132 @@ export function AccountabilityTab() {
   }
 
   return (
-    <motion.div variants={staggerChildren} initial="hidden" animate="visible" className="space-y-5 sm:space-y-6">
-      {/* ─── Header + Create Button ── */}
-      <motion.div variants={fadeInUp} className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-white">Accountability Contracts</h2>
-            <p className="text-[12px] text-zinc-500">Self-imposed commitments with real consequences</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold
-            bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20
-            transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">New Contract</span>
-        </button>
-      </motion.div>
+    <div className="space-y-5 sm:space-y-6">
+      {/* ─── Top Level Tab Switch ── */}
+      <div>
+        <DashboardUnderlineTabs
+          layoutId="accountabilitySubTabUnderline"
+          activeId={activeSubTab}
+          onTabChange={(id) => setActiveSubTab(id as "contracts" | "social")}
+          tabs={[
+            { id: "contracts", label: "Contracts", icon: Shield },
+            { id: "social", label: "Social Accountability", icon: Users },
+          ]}
+        />
+      </div>
+
+      {/* ─── Social Accountability Sub-Tab ── */}
+      {activeSubTab === "social" && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+          <SocialAccountabilitySection
+            onNavigateToSettings={() => {
+              window.location.href = "/settings?section=accountability";
+            }}
+          />
+        </motion.div>
+      )}
+
+      {/* ─── Contracts Sub-Tab ── */}
+      {activeSubTab === "contracts" && (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-5 sm:space-y-6">
+
+      {/* ─── Header + Actions ── */}
+      <AnimatePresence mode="wait">
+        {selectionMode ? (
+          <motion.div
+            key="selection-bar"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center justify-between px-4 py-3 rounded-2xl border border-emerald-500/15"
+            style={{ background: "linear-gradient(135deg, rgba(52,211,153,0.04), transparent 60%)" }}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={exitSelectionMode}
+                className="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4 text-zinc-400" />
+              </button>
+              <span className="text-[13px] font-medium text-zinc-300">
+                {selectedIds.size} selected
+              </span>
+              <button
+                onClick={allSelected ? deselectAll : selectAll}
+                className="text-[12px] font-medium text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+              >
+                {allSelected ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+            <button
+              onClick={() => selectedIds.size > 0 && setShowBulkDeleteConfirm(true)}
+              disabled={selectedIds.size === 0}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold
+                bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 border border-rose-500/20
+                disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete ({selectedIds.size})
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="header"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Accountability Contracts</h2>
+                <p className="text-[12px] text-zinc-500">Self-imposed commitments with real consequences</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {contracts.length > 0 && (
+                <button
+                  onClick={() => setSelectionMode(true)}
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[13px] font-medium
+                    text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.06]
+                    transition-all cursor-pointer"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  <span className="hidden sm:inline">Select</span>
+                </button>
+              )}
+              <button
+                onClick={() => { setEditingContract(null); setShowCreate(true); }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold
+                  bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20
+                  transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">New Contract</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── Stats Row ── */}
       {stats && (
-        <motion.div variants={fadeInUp} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard icon={Shield} value={stats.activeCount} label="Active" color="#34d399" index={0} />
           <StatCard icon={CheckCircle2} value={`${stats.overallSuccessRate}%`} label="Success Rate" color="#38bdf8" index={1} />
           <StatCard icon={XCircle} value={stats.totalViolations} label="Violations" color="#fb7185" index={2} />
           <StatCard icon={BarChart3} value={stats.completedCount} label="Completed" color="#a78bfa" index={3} />
-        </motion.div>
+        </div>
       )}
 
       {/* ─── AI Suggestions ── */}
       {suggestions.length > 0 && (
-        <motion.div
-          variants={fadeInUp}
+        <div
           className="rounded-2xl border border-indigo-500/10 p-5"
           style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(139,92,246,0.03))" }}
         >
@@ -239,11 +401,11 @@ export function AccountabilityTab() {
               </motion.button>
             ))}
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* ─── Filters ── */}
-      <motion.div variants={fadeInUp}>
+      <div>
         <DashboardUnderlineTabs
           layoutId="contractFilterUnderline"
           activeId={filter}
@@ -257,10 +419,10 @@ export function AccountabilityTab() {
             { id: "completed", label: "Completed", icon: CheckCircle2 },
           ]}
         />
-      </motion.div>
+      </div>
 
       {/* ─── Contract Cards Grid ── */}
-      <motion.div variants={fadeInUp} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <AnimatePresence mode="popLayout">
           {contracts.map((contract, index) => (
             <ContractCard
@@ -268,14 +430,19 @@ export function AccountabilityTab() {
               contract={contract}
               index={index}
               onClick={setSelectedContract}
+              onEdit={handleEdit}
+              onDelete={setDeleteTarget}
+              selectable={selectionMode}
+              selected={selectedIds.has(contract.id)}
+              onToggleSelect={toggleSelect}
             />
           ))}
         </AnimatePresence>
-      </motion.div>
+      </div>
 
       {/* ─── Empty State ── */}
       {contracts.length === 0 && !loading && (
-        <motion.div variants={fadeInUp} className="text-center py-20">
+        <div className="text-center py-20">
           <div className="w-20 h-20 rounded-3xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mx-auto mb-5">
             <Shield className="w-9 h-9 text-zinc-700" />
           </div>
@@ -292,15 +459,143 @@ export function AccountabilityTab() {
             <Plus className="w-4 h-4" />
             Create Contract
           </button>
-        </motion.div>
+        </div>
       )}
 
-      {/* ─── Create Modal ── */}
+      {/* ─── Create / Edit Modal ── */}
       <CreateContractModal
         isOpen={showCreate}
-        onClose={() => setShowCreate(false)}
+        onClose={() => { setShowCreate(false); setEditingContract(null); }}
         onSuccess={fetchData}
+        editContract={editingContract}
       />
-    </motion.div>
+
+      {/* ─── Single Delete Confirmation ── */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+            onClick={() => !deleting && setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-sm rounded-2xl overflow-hidden"
+              style={{ background: "linear-gradient(180deg, #0d1117 0%, #0a0e13 100%)", border: "1px solid rgba(255,255,255,0.06)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/15 flex items-center justify-center mx-auto mb-4">
+                  <Trash2 className="w-6 h-6 text-rose-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white text-center mb-1">Delete Contract</h3>
+                <p className="text-[13px] text-zinc-500 text-center mb-1">
+                  Are you sure you want to delete
+                </p>
+                <p className="text-[13px] text-white font-medium text-center mb-5">
+                  &ldquo;{deleteTarget.title}&rdquo;?
+                </p>
+                <p className="text-[11px] text-zinc-600 text-center mb-5">
+                  This action cannot be undone. All associated violations and checks will be removed.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    disabled={deleting}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-medium text-zinc-400 hover:text-white
+                      bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06]
+                      transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteSingle}
+                    disabled={deleting}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold
+                      bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 border border-rose-500/20
+                      transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Bulk Delete Confirmation ── */}
+      <AnimatePresence>
+        {showBulkDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+            onClick={() => !deleting && setShowBulkDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-sm rounded-2xl overflow-hidden"
+              style={{ background: "linear-gradient(180deg, #0d1117 0%, #0a0e13 100%)", border: "1px solid rgba(255,255,255,0.06)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/15 flex items-center justify-center mx-auto mb-4">
+                  <Trash2 className="w-6 h-6 text-rose-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white text-center mb-1">Delete {selectedIds.size} Contracts</h3>
+                <p className="text-[13px] text-zinc-500 text-center mb-5">
+                  Are you sure you want to delete {selectedIds.size} selected contract{selectedIds.size > 1 ? "s" : ""}?
+                  This action cannot be undone.
+                </p>
+                <div className="max-h-[140px] overflow-y-auto space-y-1 mb-5 px-1">
+                  {contracts.filter(c => selectedIds.has(c.id)).map(c => (
+                    <div key={c.id} className="flex items-center gap-2 text-[12px] text-zinc-400 px-3 py-1.5 rounded-lg bg-white/[0.02]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400/60 flex-shrink-0" />
+                      <span className="truncate">{c.title}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowBulkDeleteConfirm(false)}
+                    disabled={deleting}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-medium text-zinc-400 hover:text-white
+                      bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06]
+                      transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBulkDelete}
+                    disabled={deleting}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold
+                      bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 border border-rose-500/20
+                      transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    Delete All
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      </motion.div>)}
+    </div>
   );
 }

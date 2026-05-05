@@ -12,7 +12,7 @@ import {
   LayoutGrid,
   List,
   Timer,
-  MapPin,
+  
   Tag,
   MoreHorizontal,
   Pencil,
@@ -20,9 +20,14 @@ import {
   Sunrise,
   Sunset,
   Moon,
+  Trash2,
+  Workflow,
+  Bell,
+  BellRing,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { api } from "@/lib/api-client";
 import {
   format,
   addDays,
@@ -31,12 +36,12 @@ import {
   endOfWeek,
   isToday,
   isSameDay,
-  parseISO,
-  isWithinInterval,
+  
+  
   startOfMonth,
   endOfMonth,
   eachDayOfInterval,
-  getDay,
+  
 } from "date-fns";
 import { DashboardLayout } from "@/components/layout";
 import {
@@ -47,7 +52,10 @@ import {
 } from "@/src/shared/services/schedule.service";
 import { calendarApiService, type DayContext } from "@/src/shared/services/calendar.service";
 import { ActivityFormModal } from "@/app/(pages)/dashboard/components/wellbeing/schedule/ActivityFormModal";
+import { ConfirmModal } from "@/app/(pages)/dashboard/components/wellbeing/schedule/ConfirmModal";
+import { ActivityDetailsDrawer, type DrawerItem } from "@/app/(pages)/dashboard/components/wellbeing/schedule/ActivityDetailsDrawer";
 import { ApiError } from "@/lib/api-client";
+import { dataSourceService, type PrayerScheduleItem, type DailyCorrelation } from "@/src/shared/services/data-source.service";
 
 // ============================================
 // CONSTANTS
@@ -216,10 +224,46 @@ function MiniCalendar({
 // TIMELINE ITEM
 // ============================================
 
-function TimelineItem({ item, index, onEdit, onDelete }: { item: ScheduleItem; index: number; onEdit?: (item: ScheduleItem) => void; onDelete?: (itemId: string) => void }) {
+function TimelineItem({ item, index, onEdit, onDelete, onOpen }: { item: ScheduleItem; index: number; onEdit?: (item: ScheduleItem) => void; onDelete?: (itemId: string) => void; onOpen?: (item: ScheduleItem) => void }) {
   const style = getCategoryStyle(item.category);
   const duration = getDuration(item.startTime, item.endTime, item.durationMinutes);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [alarmState, setAlarmState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // Add an alarm that fires on every day of the week at the activity's start
+  // time. We keep it light: no modal, one tap → alarm created. Users manage
+  // them (edit / delete) in the regular alarms widget.
+  const handleAddAlarm = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!item.startTime) return;
+      if (alarmState === "saving" || alarmState === "saved") return;
+      setAlarmState("saving");
+      try {
+        const normalizedTime = item.startTime
+          .split(":")
+          .slice(0, 2)
+          .map((p) => p.padStart(2, "0"))
+          .join(":");
+        const res = await api.post("/alarms", {
+          title: item.title || "Activity reminder",
+          alarmTime: normalizedTime,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          soundEnabled: true,
+          soundFile: "alarm.wav",
+        });
+        setAlarmState(res?.success ? "saved" : "error");
+      } catch {
+        setAlarmState("error");
+      } finally {
+        // Bounce back to idle after a moment unless we successfully saved.
+        setTimeout(() => {
+          setAlarmState((prev) => (prev === "error" ? "idle" : prev));
+        }, 2500);
+      }
+    },
+    [item.startTime, item.title, alarmState]
+  );
 
   return (
     <motion.div
@@ -236,7 +280,20 @@ function TimelineItem({ item, index, onEdit, onDelete }: { item: ScheduleItem; i
 
       {/* Card */}
       <div
-        className={`flex-1 mb-3 p-4 rounded-xl border ${style.border} bg-slate-800/40 hover:bg-slate-800/60 transition-all duration-200 group-hover:border-opacity-60`}
+        role={onOpen ? "button" : undefined}
+        tabIndex={onOpen ? 0 : undefined}
+        onClick={onOpen ? () => onOpen(item) : undefined}
+        onKeyDown={
+          onOpen
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpen(item);
+                }
+              }
+            : undefined
+        }
+        className={`flex-1 mb-3 p-4 rounded-xl border ${style.border} bg-slate-800/40 hover:bg-slate-800/60 transition-all duration-200 group-hover:border-opacity-60 ${onOpen ? "cursor-pointer" : ""}`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -275,10 +332,43 @@ function TimelineItem({ item, index, onEdit, onDelete }: { item: ScheduleItem; i
             </div>
           </div>
 
-          {/* 3-dot menu with Edit/Delete */}
-          <div className="relative shrink-0">
+          {/* Action cluster: Add Alarm + 3-dot menu */}
+          <div className="relative shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
+              type="button"
+              onClick={handleAddAlarm}
+              disabled={alarmState === "saving" || alarmState === "saved"}
+              aria-label={
+                alarmState === "saved"
+                  ? "Alarm added"
+                  : alarmState === "saving"
+                    ? "Adding alarm"
+                    : `Add alarm at ${formatTime(item.startTime)}`
+              }
+              title={
+                alarmState === "saved"
+                  ? "Alarm added"
+                  : `Add alarm at ${formatTime(item.startTime)}`
+              }
+              className={`p-1.5 rounded-lg transition-all
+                ${alarmState === "saved"
+                  ? "opacity-100 bg-emerald-500/15 text-emerald-300"
+                  : alarmState === "error"
+                    ? "opacity-100 bg-rose-500/15 text-rose-300"
+                    : "opacity-0 group-hover:opacity-100 hover:bg-white/5 text-slate-500 hover:text-emerald-300"
+                }
+                disabled:cursor-not-allowed`}
+            >
+              {alarmState === "saving" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : alarmState === "saved" ? (
+                <BellRing className="w-4 h-4" />
+              ) : (
+                <Bell className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
               className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/5 text-slate-500 hover:text-slate-300 transition-all"
             >
               <MoreHorizontal className="w-4 h-4" />
@@ -286,7 +376,7 @@ function TimelineItem({ item, index, onEdit, onDelete }: { item: ScheduleItem; i
             <AnimatePresence>
               {menuOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} />
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9, y: -4 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -296,14 +386,14 @@ function TimelineItem({ item, index, onEdit, onDelete }: { item: ScheduleItem; i
                     style={{ background: '#14151f' }}
                   >
                     <button
-                      onClick={() => { setMenuOpen(false); onEdit?.(item); }}
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onEdit?.(item); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.06] hover:text-white transition-colors"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                       Edit Activity
                     </button>
                     <button
-                      onClick={() => { setMenuOpen(false); onDelete?.(item.id); }}
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete?.(item.id); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -393,7 +483,7 @@ function DayStrip({
 // EMPTY STATE
 // ============================================
 
-function EmptySchedule({ onCreateSchedule }: { onCreateSchedule: () => void }) {
+function _EmptySchedule({ onCreateSchedule }: { onCreateSchedule: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -470,6 +560,10 @@ function ScheduleContent() {
   const [editingActivity, setEditingActivity] = useState<ScheduleItem | null>(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [googleEvents, setGoogleEvents] = useState<Array<{ id: string; title: string; startTime: string; endTime: string; allDay: boolean; location: string | null }>>([]);
+  const [prayers, setPrayers] = useState<PrayerScheduleItem[]>([]);
+  const [dailyCorrelation, setDailyCorrelation] = useState<DailyCorrelation | null>(null);
+  const [isDeletingSchedule, setIsDeletingSchedule] = useState(false);
+  const [drawerItem, setDrawerItem] = useState<DrawerItem | null>(null);
 
   const scheduleDates = useMemo(() => {
     const set = new Set<string>();
@@ -503,6 +597,14 @@ function ScheduleContent() {
       } else {
         setGoogleEvents([]);
       }
+      try {
+        const [prayerData, corrData] = await Promise.all([
+          dataSourceService.getPrayerSchedule(dateStr).catch(() => []),
+          dataSourceService.getDailyCorrelation(dateStr).catch(() => null),
+        ]);
+        setPrayers(prayerData);
+        setDailyCorrelation(corrData);
+      } catch { /* graceful degradation */ }
     } catch {
       setSelectedSchedule(null);
       setDayContext(null);
@@ -533,23 +635,71 @@ function ScheduleContent() {
     loadCalendarSchedules(selectedDate);
   }, [selectedDate, loadSchedule, loadCalendarSchedules]);
 
+  // Auto-sync Google Calendar: pull the latest events from Google on mount and
+  // every 60s while the page is visible, then re-read the selected day so new
+  // events added in Google Calendar appear here without a manual refresh.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const runSync = async () => {
+      try {
+        const res = await calendarApiService.syncCalendar();
+        if (cancelled) return;
+        if (res?.success) {
+          // Re-read the current day's events from the synced store.
+          loadSchedule(selectedDate);
+        }
+      } catch {
+        /* user not connected or transient error — silent */
+      }
+    };
+
+    runSync();
+    timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      runSync();
+    }, 60_000);
+
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") runSync();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisible);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisible);
+      }
+    };
+  }, [selectedDate, loadSchedule]);
+
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
   };
 
-  const handleCreateSchedule = async () => {
+  const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
+
+  const ensureSchedule = useCallback(async (): Promise<DailySchedule | null> => {
+    if (selectedSchedule) return selectedSchedule;
     const dateStr = format(selectedDate, "yyyy-MM-dd");
+    setIsCreatingSchedule(true);
     try {
       const existingResult = await scheduleService.getScheduleByDate(dateStr);
       if (existingResult.success && existingResult.data?.schedule) {
         setSelectedSchedule(existingResult.data.schedule);
-        return;
+        return existingResult.data.schedule;
       }
       const result = await scheduleService.createSchedule({ schedule_date: dateStr });
       if (result.success && result.data) {
         setSelectedSchedule(result.data.schedule);
         loadCalendarSchedules(selectedDate);
+        return result.data.schedule;
       }
+      return null;
     } catch (err: unknown) {
       const errorMessage = err instanceof ApiError || err instanceof Error ? err.message : String(err);
       if (errorMessage.includes("already exists")) {
@@ -557,15 +707,21 @@ function ScheduleContent() {
           const existingResult = await scheduleService.getScheduleByDate(dateStr);
           if (existingResult.success && existingResult.data?.schedule) {
             setSelectedSchedule(existingResult.data.schedule);
+            return existingResult.data.schedule;
           }
         } catch { /* silent */ }
       }
+      return null;
+    } finally {
+      setIsCreatingSchedule(false);
     }
-  };
+  }, [selectedDate, selectedSchedule, loadCalendarSchedules]);
 
-  const handleNavigateToEditor = () => {
-    router.push(`/wellbeing/schedule/${format(selectedDate, "yyyy-MM-dd")}`);
-  };
+  const handleAddActivity = useCallback(async () => {
+    setEditingActivity(null);
+    await ensureSchedule();
+    setShowActivityModal(true);
+  }, [ensureSchedule]);
 
   // ── Activity Modal (Edit/Create) ──
   const handleEditActivity = useCallback((item: ScheduleItem) => {
@@ -573,15 +729,51 @@ function ScheduleContent() {
     setShowActivityModal(true);
   }, []);
 
-  const handleDeleteActivity = useCallback(async (itemId: string) => {
-    if (!confirm('Delete this activity?')) return;
-    try {
-      await scheduleService.deleteScheduleItem(itemId);
-      await loadSchedule(selectedDate);
-    } catch (err) {
-      console.error('Failed to delete activity:', err);
+  // Confirmation modal state (activity vs schedule deletion)
+  const [confirmState, setConfirmState] = useState<
+    | { kind: "activity"; itemId: string }
+    | { kind: "schedule" }
+    | null
+  >(null);
+  const [isDeletingActivity, setIsDeletingActivity] = useState(false);
+
+  const handleDeleteActivity = useCallback((itemId: string) => {
+    setConfirmState({ kind: "activity", itemId });
+  }, []);
+
+  const handleDeleteSchedule = useCallback(() => {
+    if (!selectedSchedule) return;
+    setConfirmState({ kind: "schedule" });
+  }, [selectedSchedule]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!confirmState) return;
+    if (confirmState.kind === "activity") {
+      setIsDeletingActivity(true);
+      try {
+        await scheduleService.deleteScheduleItem(confirmState.itemId);
+        await loadSchedule(selectedDate);
+      } catch (err) {
+        console.error("Failed to delete activity:", err);
+      } finally {
+        setIsDeletingActivity(false);
+        setConfirmState(null);
+      }
+    } else {
+      if (!selectedSchedule) return;
+      setIsDeletingSchedule(true);
+      try {
+        await scheduleService.deleteSchedule(selectedSchedule.id);
+        setSelectedSchedule(null);
+        loadCalendarSchedules(selectedDate);
+      } catch (err) {
+        console.error("Failed to delete schedule:", err);
+      } finally {
+        setIsDeletingSchedule(false);
+        setConfirmState(null);
+      }
     }
-  }, [selectedDate, loadSchedule]);
+  }, [confirmState, selectedSchedule, selectedDate, loadSchedule, loadCalendarSchedules]);
 
   const sortedItems = useMemo(() => {
     if (!selectedSchedule?.items) return [];
@@ -611,48 +803,63 @@ function ScheduleContent() {
   return (
     <DashboardLayout activeTab="wellbeing">
       <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-[#0a0a0f]">
-        {/* Top Bar */}
-        <div className="shrink-0 border-b border-white/[0.06] bg-[#0a0a0f]/80 backdrop-blur-xl">
-          <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Hero Header — full width, modern */}
+        <div className="shrink-0 relative overflow-hidden border-b border-white/[0.06]">
+          {/* Ambient gradient */}
+          <div className="absolute inset-0 pointer-events-none" style={{
+            background: 'radial-gradient(ellipse at top left, rgba(16,185,129,0.08) 0%, transparent 50%), radial-gradient(ellipse at top right, rgba(59,130,246,0.05) 0%, transparent 50%), linear-gradient(180deg, #0a0a0f 0%, rgba(10,10,15,0.95) 100%)'
+          }} />
+
+          <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
             {/* Row 1: Header */}
-            <div className="flex items-center justify-between py-4">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3 py-4 sm:py-5">
+              <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => router.push("/wellbeing")}
-                  className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                  className="shrink-0 p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                  aria-label="Back to Wellbeing"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </button>
-                <div>
-                  <h1 className="text-xl font-bold text-white">Schedule</h1>
-                  <p className="text-xs text-slate-500 hidden sm:block">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight bg-gradient-to-r from-white via-white to-emerald-200/90 bg-clip-text text-transparent">
+                      Schedule
+                    </h1>
+                    <span className="hidden sm:inline-flex px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
+                      {format(selectedDate, "MMM d")}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5 truncate">
                     Plan your day with time-based activities
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 {/* Today Button */}
                 {!isToday(selectedDate) && (
                   <button
                     onClick={() => setSelectedDate(new Date())}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/20 transition-colors"
+                    className="hidden sm:inline-flex px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/20 transition-colors"
                   >
                     Today
                   </button>
                 )}
 
                 {/* View Toggle */}
-                <div className="hidden sm:flex items-center bg-white/[0.03] rounded-lg border border-white/[0.06] p-0.5">
+                <div className="hidden md:flex items-center bg-white/[0.03] rounded-lg border border-white/[0.06] p-0.5">
                   <button
                     onClick={() => setViewMode("timeline")}
                     className={`p-1.5 rounded-md transition-colors ${viewMode === "timeline" ? "bg-white/10 text-white" : "text-slate-500 hover:text-white"}`}
+                    aria-label="Timeline view"
                   >
                     <List className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setViewMode("list")}
                     className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-white/10 text-white" : "text-slate-500 hover:text-white"}`}
+                    aria-label="Grid view"
                   >
                     <LayoutGrid className="w-4 h-4" />
                   </button>
@@ -662,32 +869,29 @@ function ScheduleContent() {
                 <button
                   onClick={() => setSidebarOpen(!sidebarOpen)}
                   className="lg:hidden p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                  aria-label="Toggle calendar"
                 >
                   <CalendarIcon className="w-5 h-5" />
                 </button>
 
-                {/* Edit / Create */}
+                {/* Primary CTA — always "Add Activity" with auto-create */}
                 <button
-                  onClick={selectedSchedule ? handleNavigateToEditor : handleCreateSchedule}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors shadow-lg shadow-emerald-500/20"
+                  onClick={handleAddActivity}
+                  disabled={isCreatingSchedule}
+                  className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold transition-all shadow-lg shadow-emerald-500/25 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  {selectedSchedule ? (
-                    <>
-                      <Pencil className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Edit</span>
-                    </>
+                  {isCreatingSchedule ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <>
-                      <Plus className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Create</span>
-                    </>
+                    <Plus className="w-4 h-4" />
                   )}
+                  <span className="hidden sm:inline">Add Activity</span>
                 </button>
               </div>
             </div>
 
             {/* Row 2: Day Strip */}
-            <div className="pb-3">
+            <div className="pb-4">
               <DayStrip
                 selectedDate={selectedDate}
                 onDateSelect={handleDateSelect}
@@ -697,23 +901,23 @@ function ScheduleContent() {
           </div>
         </div>
 
-        {/* Main Content Area — 2-col grid on large, 1-col on small */}
+        {/* Main Content Area — fully responsive */}
         <div className="flex-1 overflow-y-auto" style={{
           backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)',
           backgroundSize: '24px 24px',
         }}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
 
-              {/* LEFT COLUMN — Calendar + Stats (full height) */}
+              {/* LEFT COLUMN — Calendar + Stats (sticky on desktop) */}
               <motion.div
                 initial={{ opacity: 0, x: -16 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.3 }}
-                className="space-y-5 lg:sticky lg:top-6 lg:self-start"
+                className={`space-y-4 sm:space-y-5 lg:sticky lg:top-6 lg:self-start ${sidebarOpen ? 'block' : 'hidden lg:block'}`}
               >
-                {/* Mini Calendar Card — full height */}
-                <div className="rounded-2xl border border-white/[0.06] p-6 sm:p-8 overflow-hidden min-h-[420px] flex flex-col justify-center" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
+                {/* Mini Calendar Card */}
+                <div className="rounded-2xl border border-white/[0.06] p-5 sm:p-6 overflow-hidden" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
                   <MiniCalendar
                     selectedDate={selectedDate}
                     onDateSelect={handleDateSelect}
@@ -817,6 +1021,29 @@ function ScheduleContent() {
                         ))}
                       </div>
                     )}
+                    {/* Holiday context */}
+                    {dayContext.holidayContext && (dayContext.holidayContext.activeHolidays.length > 0 || dayContext.holidayContext.upcomingHolidays.length > 0) && (
+                      <div className="mt-2 space-y-1.5">
+                        {dayContext.holidayContext.isFastingPeriod && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/15">
+                            <span className="text-[11px]">🌙</span>
+                            <span className="text-[10px] font-medium text-amber-400">
+                              {dayContext.holidayContext.fastingName} — fasting period active
+                            </span>
+                          </div>
+                        )}
+                        {dayContext.holidayContext.activeHolidays.filter(h => !dayContext.holidayContext?.isFastingPeriod || h.name !== dayContext.holidayContext?.fastingName).map((h) => (
+                          <span key={h.id} className="inline-flex mr-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium bg-cyan-500/15 text-cyan-400 border border-cyan-500/20">
+                            {h.name}
+                          </span>
+                        ))}
+                        {dayContext.holidayContext.suggestedAdjustments.length > 0 && (
+                          <p className="text-[10px] text-slate-500 italic">
+                            {dayContext.holidayContext.suggestedAdjustments[0]}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 )}
 
@@ -831,7 +1058,7 @@ function ScheduleContent() {
                     {dayContext.freeWindows.slice(0, 3).map((fw, i) => (
                       <button
                         key={i}
-                        onClick={() => { setEditingActivity(null); setShowActivityModal(true); }}
+                        onClick={handleAddActivity}
                         className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] text-xs text-emerald-400 whitespace-nowrap flex-shrink-0 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-colors cursor-pointer"
                       >
                         <Plus className="w-3 h-3" />
@@ -842,33 +1069,79 @@ function ScheduleContent() {
                   </motion.div>
                 )}
 
-                <div className="rounded-2xl border border-white/[0.06] p-5 sm:p-6" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
+                {/* Correlation Context Banner */}
+                {dailyCorrelation && dailyCorrelation.stressScore > 60 && (
+                  <div className="mb-4 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-amber-400 text-sm font-medium">⚡ High Stress Day Detected</span>
+                      <span className="text-xs text-slate-500">Stress: {dailyCorrelation.stressScore}/100</span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {dailyCorrelation.calendarLoad > 0 && `${dailyCorrelation.calendarLoad} calendar events. `}
+                      {dailyCorrelation.musicMood && `Music mood: ${dailyCorrelation.musicMood}. `}
+                      {dailyCorrelation.recommendedMode === 'short' && 'Consider shorter activities today.'}
+                    </p>
+                    {dailyCorrelation.correlations.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {dailyCorrelation.correlations.map((c, i) => (
+                          <span key={i} className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                            c.severity === 'critical' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                            c.severity === 'warning' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                            'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                          }`}>
+                            {c.description}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-white/[0.06] p-4 sm:p-5 lg:p-6" style={{ background: 'linear-gradient(145deg, #0f1219 0%, #0a0d14 100%)' }}>
                   {/* Date Header + Action Buttons */}
-                  <div className="flex items-start justify-between mb-6">
-                    <div>
-                      <h2 className="text-xl sm:text-2xl font-bold text-white">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5 sm:mb-6">
+                    <div className="min-w-0">
+                      <h2 className="text-xl sm:text-2xl font-bold text-white truncate">
                         {isToday(selectedDate) ? "Today" : format(selectedDate, "EEEE")}
                       </h2>
-                      <p className="text-sm text-slate-500 mt-0.5">
+                      <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
                         {format(selectedDate, "MMMM d, yyyy")}
-                        {selectedSchedule && ` \u00B7 ${selectedSchedule.items.length} activities`}
+                        {selectedSchedule && ` \u00B7 ${selectedSchedule.items.length} ${selectedSchedule.items.length === 1 ? "activity" : "activities"}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={() => { setEditingActivity(null); setShowActivityModal(true); }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
+                        onClick={handleAddActivity}
+                        disabled={isCreatingSchedule}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        {isCreatingSchedule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                         Add Activity
                       </button>
+                      {selectedSchedule && selectedSchedule.items.length > 0 && (
+                        <button
+                          onClick={() => router.push(`/wellbeing/schedule/${format(selectedDate, "yyyy-MM-dd")}`)}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 text-xs font-medium transition-colors border border-sky-500/20 hover:border-sky-500/30"
+                          aria-label="View workflow details"
+                          title="Open workflow view"
+                        >
+                          <Workflow className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Details</span>
+                        </button>
+                      )}
                       {selectedSchedule && (
                         <button
-                          onClick={handleNavigateToEditor}
-                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-xs font-medium transition-colors border border-white/[0.08]"
+                          onClick={handleDeleteSchedule}
+                          disabled={isDeletingSchedule}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-medium transition-colors border border-red-500/20 hover:border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                          aria-label="Delete schedule"
                         >
-                          <Pencil className="w-3.5 h-3.5" />
-                          Edit
+                          {isDeletingSchedule ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          <span className="hidden sm:inline">Delete</span>
                         </button>
                       )}
                     </div>
@@ -888,18 +1161,24 @@ function ScheduleContent() {
                   </motion.div>
                 ) : !selectedSchedule || selectedSchedule.items.length === 0 ? (
                   <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <div className="w-14 h-14 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4">
-                        <CalendarIcon className="w-6 h-6 text-slate-600" />
+                    <div className="flex flex-col items-center justify-center py-12 sm:py-16 text-center">
+                      <div className="relative mb-5">
+                        <div className="absolute inset-0 bg-emerald-500/20 blur-2xl rounded-full" />
+                        <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 flex items-center justify-center">
+                          <CalendarIcon className="w-7 h-7 text-emerald-400" />
+                        </div>
                       </div>
-                      <h3 className="text-base font-semibold text-white mb-1">No activities scheduled</h3>
-                      <p className="text-sm text-slate-500 mb-5 max-w-xs">Start planning your day by adding activities</p>
+                      <h3 className="text-lg font-semibold text-white mb-1.5">No activities scheduled</h3>
+                      <p className="text-sm text-slate-500 mb-6 max-w-sm px-4">
+                        Tap below to start planning your day — we&apos;ll set everything up for you
+                      </p>
                       <button
-                        onClick={() => { setEditingActivity(null); setShowActivityModal(true); }}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors"
+                        onClick={handleAddActivity}
+                        disabled={isCreatingSchedule}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold transition-all shadow-lg shadow-emerald-500/25 disabled:opacity-70 disabled:cursor-not-allowed"
                       >
-                        <Plus className="w-4 h-4" />
-                        Add Activity
+                        {isCreatingSchedule ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        {isCreatingSchedule ? "Setting up..." : "Add Activity"}
                       </button>
                     </div>
                   </motion.div>
@@ -928,7 +1207,14 @@ function ScheduleContent() {
                         {/* Timeline Items */}
                         <div className="ml-1">
                           {group.items.map((item, idx) => (
-                            <TimelineItem key={item.id} item={item} index={idx} onEdit={handleEditActivity} onDelete={handleDeleteActivity} />
+                            <TimelineItem
+                              key={item.id}
+                              item={item}
+                              index={idx}
+                              onEdit={handleEditActivity}
+                              onDelete={handleDeleteActivity}
+                              onOpen={(it) => setDrawerItem({ kind: "activity", data: it })}
+                            />
                           ))}
                         </div>
                       </div>
@@ -952,7 +1238,16 @@ function ScheduleContent() {
                           initial={{ opacity: 0, y: 12 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: idx * 0.04 }}
-                          className={`p-4 rounded-xl border ${style.border} bg-slate-800/40 hover:bg-slate-800/60 transition-all group`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setDrawerItem({ kind: "activity", data: item })}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setDrawerItem({ kind: "activity", data: item });
+                            }
+                          }}
+                          className={`p-4 rounded-xl border ${style.border} bg-slate-800/40 hover:bg-slate-800/60 transition-all group cursor-pointer`}
                         >
                           <div className="flex items-center gap-2 mb-2">
                             {item.icon && <span className="text-base">{item.icon}</span>}
@@ -983,6 +1278,59 @@ function ScheduleContent() {
                 )}
               </AnimatePresence>
 
+                  {/* Prayer Times */}
+                  {prayers.length > 0 && (
+                    <div className="mt-5 pt-4 border-t border-white/[0.06]">
+                      <h4 className="text-xs font-medium text-emerald-400 uppercase tracking-wide mb-2">Prayer Times</h4>
+                      <div className="space-y-1.5">
+                        {prayers.map((prayer) => {
+                          const parsed = prayer.scheduledTime ? new Date(prayer.scheduledTime) : null;
+                          const timeLabel = parsed && !isNaN(parsed.getTime())
+                            ? parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : '--:--';
+                          const nameLabel = prayer.prayerName ? prayer.prayerName : 'Prayer';
+                          return (
+                            <div
+                              key={prayer.id}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setDrawerItem({ kind: "prayer", data: prayer })}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setDrawerItem({ kind: "prayer", data: prayer });
+                                }
+                              }}
+                              className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10 hover:bg-emerald-500/10 cursor-pointer transition-colors"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-emerald-400">🕌</span>
+                                <span className="text-sm text-white capitalize truncate">{nameLabel}</span>
+                                <span className="text-xs text-slate-400 tabular-nums">{timeLabel}</span>
+                              </div>
+                              {prayer.completed ? (
+                                <span className="text-xs text-emerald-400 shrink-0">✓ Done</span>
+                              ) : (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await dataSourceService.markPrayerComplete(prayer.id);
+                                      setPrayers(prev => prev.map(p => p.id === prayer.id ? { ...p, completed: true, completedAt: new Date().toISOString() } : p));
+                                    } catch { /* ignore */ }
+                                  }}
+                                  className="px-2 py-0.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors shrink-0"
+                                >
+                                  Mark Done
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Google Calendar Events */}
                   {googleEvents.length > 0 && (
                     <div className="mt-5 pt-4 border-t border-white/[0.06]">
@@ -1003,7 +1351,16 @@ function ScheduleContent() {
                               initial={{ opacity: 0, x: -8 }}
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: idx * 0.04 }}
-                              className="flex items-center gap-3 p-3 rounded-xl bg-blue-500/[0.04] border border-blue-500/10 hover:bg-blue-500/[0.08] transition-colors"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setDrawerItem({ kind: "google", data: event })}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setDrawerItem({ kind: "google", data: event });
+                                }
+                              }}
+                              className="flex items-center gap-3 p-3 rounded-xl bg-blue-500/[0.04] border border-blue-500/10 hover:bg-blue-500/[0.08] transition-colors cursor-pointer"
                             >
                               <div className="w-1 h-8 rounded-full bg-blue-400 shrink-0" />
                               <div className="flex-1 min-w-0">
@@ -1041,6 +1398,46 @@ function ScheduleContent() {
           await loadSchedule(selectedDate);
         }}
         scheduleId={selectedSchedule?.id}
+      />
+
+      {/* ── Delete Confirmation Modal ── */}
+      <ConfirmModal
+        isOpen={!!confirmState}
+        onClose={() => {
+          if (isDeletingActivity || isDeletingSchedule) return;
+          setConfirmState(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title={confirmState?.kind === "schedule" ? "Delete Schedule?" : "Delete Activity?"}
+        message={
+          confirmState?.kind === "schedule"
+            ? `This will permanently delete the entire schedule and all ${selectedSchedule?.items.length ?? 0} activities for ${format(selectedDate, "MMMM d, yyyy")}. This cannot be undone.`
+            : "This will permanently remove this activity from your schedule. This cannot be undone."
+        }
+        confirmText={confirmState?.kind === "schedule" ? "Delete Schedule" : "Delete Activity"}
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeletingActivity || isDeletingSchedule}
+      />
+
+      {/* ── Activity Details Drawer (right sidebar) ── */}
+      <ActivityDetailsDrawer
+        item={drawerItem}
+        onClose={() => setDrawerItem(null)}
+        onEditActivity={handleEditActivity}
+        onDeleteActivity={handleDeleteActivity}
+        onMarkPrayerDone={async (prayerId) => {
+          try {
+            await dataSourceService.markPrayerComplete(prayerId);
+            setPrayers((prev) =>
+              prev.map((p) =>
+                p.id === prayerId
+                  ? { ...p, completed: true, completedAt: new Date().toISOString() }
+                  : p,
+              ),
+            );
+          } catch { /* ignore */ }
+        }}
       />
     </DashboardLayout>
   );

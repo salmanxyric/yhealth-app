@@ -5,7 +5,7 @@
  * Only generates one digest per user per day via upsert.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { lifeHistoryEmbeddingService } from '../services/life-history-embedding.service.js';
 

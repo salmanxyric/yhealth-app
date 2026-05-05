@@ -10,7 +10,7 @@
  * - micro-win: Wraps micro-win detections as achievements
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import type { MicroWin } from './micro-wins.service.js';
 
@@ -182,7 +182,7 @@ class DynamicAchievementsService {
           `INSERT INTO dynamic_achievements
             (user_id, title, description, icon, category, rarity, type, xp_reward, source_goal_id, max_progress, emotional_context)
            VALUES ($1, $2, $3, $4, 'milestone', $5, 'goal', $6, $7, $8, $9)
-           ON CONFLICT DO NOTHING
+           ON CONFLICT (user_id, source_goal_id, title) DO NOTHING
            RETURNING id, created_at`,
           [
             userId,

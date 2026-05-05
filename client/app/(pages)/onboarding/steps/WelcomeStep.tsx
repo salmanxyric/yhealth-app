@@ -226,24 +226,50 @@ export function WelcomeStep() {
       {showCustomInput && (
         <motion.div
           className="mb-6 sm:mb-8"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.3 }}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 12 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
         >
-          <div className="relative">
-            <textarea
-              value={customGoalText}
-              onChange={(e) => setCustomGoalText(e.target.value.slice(0, 200))}
-              placeholder="Describe your custom health goal..."
-              className="w-full px-4 sm:px-5 py-3 sm:py-4 rounded-xl bg-[#02000f] border border-white/[0.24]
-                       text-white placeholder-slate-500 resize-none text-sm sm:text-base
-                       focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20
-                       transition-all duration-300"
-              rows={3}
-            />
-            <div className="absolute bottom-3 right-4 text-xs text-slate-500 font-medium">
-              {customGoalText.length}/200
+          <div className="relative group rounded-2xl p-[1px] bg-gradient-to-br from-emerald-500/40 via-sky-500/20 to-purple-500/30 transition-all duration-500 focus-within:from-emerald-400/60 focus-within:via-sky-400/40 focus-within:to-purple-400/50 focus-within:shadow-[0_0_24px_rgba(16,185,129,0.12)]">
+            <div className="relative rounded-[15px] bg-[#060214]/95 backdrop-blur-sm overflow-hidden">
+              {/* Subtle glow accent */}
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent" />
+
+              <div className="flex items-start gap-3 px-4 sm:px-5 pt-4 sm:pt-5">
+                <div className="shrink-0 mt-0.5 w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                  <Image
+                    src={`${ICON_BASE}/Custom Goal.svg`}
+                    alt=""
+                    width={18}
+                    height={18}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <label className="block text-xs font-medium text-emerald-400/80 mb-1 tracking-wide uppercase">
+                    Your Goal
+                  </label>
+                  <textarea
+                    value={customGoalText}
+                    onChange={(e) => setCustomGoalText(e.target.value.slice(0, 200))}
+                    placeholder="e.g., Improve my prayer routine and spiritual discipline, save money by cooking at home, read 20 books this year..."
+                    className="w-full bg-transparent text-white placeholder-slate-500/70 resize-none text-sm sm:text-base leading-relaxed focus:outline-none"
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              {/* Footer bar */}
+              <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 border-t border-white/[0.06] bg-white/[0.02]">
+                <p className="text-[11px] sm:text-xs text-slate-500">
+                  Be specific — AI will tailor questions to your exact goal
+                </p>
+                <span className={`text-xs font-medium tabular-nums transition-colors ${
+                  customGoalText.length >= 180 ? "text-amber-400" : customGoalText.length > 0 ? "text-emerald-500/70" : "text-slate-600"
+                }`}>
+                  {customGoalText.length}/200
+                </span>
+              </div>
             </div>
           </div>
         </motion.div>

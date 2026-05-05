@@ -3,7 +3,7 @@
  * Handles blog CRUD operations, slug generation, reading time calculation, and search
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from './logger.service.js';
 import { aiProviderService } from './ai-provider.service.js';

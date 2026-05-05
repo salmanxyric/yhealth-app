@@ -5,7 +5,7 @@
  * timezone rollovers and ensure timely report generation.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { dailyAnalysisService } from '../services/daily-analysis.service.js';
 import { userCoachingProfileService } from '../services/user-coaching-profile.service.js';

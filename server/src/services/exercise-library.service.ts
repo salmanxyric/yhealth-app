@@ -6,7 +6,7 @@
  */
 
 import { createHash } from 'crypto';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { cache } from './cache.service.js';
 import { redisCacheService } from './redis-cache.service.js';
 import type {
@@ -27,6 +27,14 @@ import type {
   CreateExerciseInput,
   UpdateExerciseInput,
 } from '../validators/admin-exercise.validator.js';
+
+/** Result of admin batch import */
+export interface AdminImportExercisesResult {
+  inserted: number;
+  skipped: number;
+  failed: number;
+  errors: { index: number; name: string; slug: string; error: string }[];
+}
 import { invalidateExerciseCache } from './exercise-ingestion.service.js';
 
 // ============================================
@@ -600,10 +608,19 @@ export async function adminGetExerciseById(id: string): Promise<ExerciseDetail |
   return { ...exerciseResult.rows[0], media: mediaResult.rows };
 }
 
+function isPostgresUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: string }).code === '23505'
+  );
+}
+
 /**
- * Admin: Create a new exercise
+ * Admin: insert a single exercise row (no cache invalidation — use for batch import).
  */
-export async function adminCreateExercise(input: CreateExerciseInput): Promise<ExerciseRow> {
+export async function adminInsertExerciseRow(input: CreateExerciseInput): Promise<ExerciseRow> {
   const slug = input.slug || slugify(input.name);
 
   const result = await query<ExerciseRow>(
@@ -635,8 +652,61 @@ export async function adminCreateExercise(input: CreateExerciseInput): Promise<E
     ]
   );
 
-  invalidateExerciseCache();
   return result.rows[0];
+}
+
+/**
+ * Admin: Create a new exercise
+ */
+export async function adminCreateExercise(input: CreateExerciseInput): Promise<ExerciseRow> {
+  const row = await adminInsertExerciseRow(input);
+  invalidateExerciseCache();
+  return row;
+}
+
+/**
+ * Admin: import many exercises (insert; duplicate slug = skipped, other DB errors = failed)
+ */
+export async function adminImportExercises(items: CreateExerciseInput[]): Promise<AdminImportExercisesResult> {
+  const errors: AdminImportExercisesResult['errors'] = [];
+  let inserted = 0;
+  let skipped = 0;
+  let failed = 0;
+  let anyMutation = false;
+
+  for (let i = 0; i < items.length; i++) {
+    const input = items[i]!;
+    const slug = input.slug || slugify(input.name);
+    try {
+      await adminInsertExerciseRow(input);
+      inserted += 1;
+      anyMutation = true;
+    } catch (err: unknown) {
+      if (isPostgresUniqueViolation(err)) {
+        skipped += 1;
+        errors.push({
+          index: i,
+          name: input.name,
+          slug,
+          error: 'Duplicate slug',
+        });
+        continue;
+      }
+      failed += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push({
+        index: i,
+        name: input.name,
+        slug,
+        error: message,
+      });
+    }
+  }
+
+  if (anyMutation) {
+    invalidateExerciseCache();
+  }
+  return { inserted, skipped, failed, errors };
 }
 
 /**
@@ -833,6 +903,7 @@ export const exerciseLibraryService = {
   adminBulkToggleActive,
   adminToggleActive,
   adminGetExerciseStats,
+  adminImportExercises,
 };
 
 export default exerciseLibraryService;

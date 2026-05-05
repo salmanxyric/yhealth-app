@@ -14,9 +14,10 @@
  *  - Apply an accepted adjustment to the underlying goal.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { aiProviderService } from './ai-provider.service.js';
+import { ApiError } from '../utils/ApiError.js';
 import type {
   GoalObstacle,
   GoalRefType,
@@ -92,6 +93,10 @@ export interface DetectionCandidate {
 }
 
 class ObstacleService {
+  /** Per-user+obstacle LLM throttle (protects cost at scale). */
+  private static diagnoseThrottle = new Map<string, number>();
+  private static readonly DIAGNOSE_COOLDOWN_MS = 5_000;
+
   /**
    * Find goals that meet the miss pattern for all active users.
    * Filters out any goal that already has an obstacle row within the cooldown window.
@@ -109,10 +114,12 @@ class ObstacleService {
     }>(
       `
       WITH active_goals AS (
-        SELECT id, user_id, title
-        FROM life_goals
-        WHERE status = 'active'
-          AND tracking_method IN ('daily_checkin', 'hybrid')
+        SELECT lg.id, lg.user_id, lg.title
+        FROM life_goals lg
+        JOIN users u ON u.id = lg.user_id
+        WHERE lg.status = 'active'
+          AND u.is_active = true
+          AND lg.tracking_method IN ('daily_checkin', 'hybrid')
       ),
       window_days AS (
         SELECT generate_series(
@@ -167,9 +174,11 @@ class ObstacleService {
     }>(
       `
       WITH active_goals AS (
-        SELECT id, user_id, title, updated_at::date AS last_progress_date
-        FROM user_goals
-        WHERE status = 'active' AND target_value IS NOT NULL
+        SELECT ug.id, ug.user_id, ug.title, ug.updated_at::date AS last_progress_date
+        FROM user_goals ug
+        JOIN users u ON u.id = ug.user_id
+        WHERE ug.status = 'active' AND ug.target_value IS NOT NULL
+          AND u.is_active = true
       ),
       window_days AS (
         SELECT generate_series(
@@ -209,26 +218,29 @@ class ObstacleService {
       sample_text: string;
     }>(
       `
-      SELECT user_id,
+      SELECT di.user_id,
              COUNT(*)::int AS miss_count,
-             (ARRAY_AGG(id ORDER BY intention_date DESC))[1] AS sample_id,
-             (ARRAY_AGG(intention_text ORDER BY intention_date DESC))[1] AS sample_text
-      FROM daily_intentions
-      WHERE intention_date >= CURRENT_DATE - INTERVAL '${MISS_WINDOW_DAYS - 1} days'
-        AND fulfilled = false
-      GROUP BY user_id
+             (ARRAY_AGG(di.id ORDER BY di.intention_date DESC))[1] AS sample_id,
+             (ARRAY_AGG(di.intention_text ORDER BY di.intention_date DESC))[1] AS sample_text
+      FROM daily_intentions di
+      JOIN users u ON u.id = di.user_id
+      WHERE di.intention_date >= CURRENT_DATE - INTERVAL '${MISS_WINDOW_DAYS - 1} days'
+        AND di.fulfilled = false
+        AND u.is_active = true
+      GROUP BY di.user_id
       HAVING COUNT(*) >= $1
       `,
       [MISS_THRESHOLD]
     );
 
     for (const r of intentionRows.rows) {
+      const missCount = Number(r.miss_count);
       candidates.push({
         userId: r.user_id,
         goalRefType: 'daily_intention',
         goalRefId: r.sample_id,
-        goalTitle: r.sample_text?.slice(0, 120) || 'Your daily intention',
-        missCount: Number(r.miss_count),
+        goalTitle: `${missCount} unfulfilled daily intentions this week`,
+        missCount,
       });
     }
 
@@ -319,6 +331,14 @@ class ObstacleService {
   ): Promise<{ reply: string; block: ObstacleDiagnosisBlock | null }> {
     const obstacle = await this.getObstacleById(obstacleId, userId);
     if (!obstacle) throw new Error('Obstacle not found');
+
+    const throttleKey = `${userId}:${obstacleId}`;
+    const now = Date.now();
+    const last = ObstacleService.diagnoseThrottle.get(throttleKey) ?? 0;
+    if (now - last < ObstacleService.DIAGNOSE_COOLDOWN_MS) {
+      throw ApiError.tooManyRequests('Please wait a few seconds between diagnosis messages.');
+    }
+    ObstacleService.diagnoseThrottle.set(throttleKey, now);
 
     const recentContextRes = await query<{
       avg_mood: number | null;

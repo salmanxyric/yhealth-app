@@ -8,7 +8,7 @@
  * Tiers: 1 (Bronze) → 2 (Silver) → 3 (Gold) → 4 (Platinum) → 5 (Diamond)
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 

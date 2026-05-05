@@ -5,7 +5,7 @@
 
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { modelFactory } from './model-factory.service.js';
 import { messageService } from './message.service.js';
@@ -16,7 +16,9 @@ import { dailyAnalysisService } from './daily-analysis.service.js';
 import type { DailyAnalysisReport, StructuredInsight, CrossDomainInsight, CoachingDirective } from './daily-analysis.service.js';
 import type { StableTraits, CoachEmotionalState, RelationshipDepth } from './user-coaching-profile.service.js';
 import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
+import { adaptiveCoachingLoopService } from './adaptive-coaching-loop.service.js';
 import { tenorService } from './tenor.service.js';
+import { timingProfileService } from './timing-profile.service.js';
 
 
 // ============================================
@@ -48,7 +50,9 @@ export type ProactiveMessageType =
   | 'status_followup_sick' | 'status_followup_injury' | 'status_followup_travel'
   | 'status_followup_vacation' | 'status_followup_stress' | 'status_return' | 'status_stale'
   // Schedule-aware messages
-  | 'free_window_suggestion' | 'busy_day_support';
+  | 'free_window_suggestion' | 'busy_day_support'
+  // Holiday-aware messages
+  | 'holiday_adjustment' | 'post_busy_day_checkin';
 
 export interface ProactiveContext {
   type: ProactiveMessageType;
@@ -99,7 +103,7 @@ class ProactiveMessagingService {
       try {
         this._llm = modelFactory.getModel({
           tier: 'default',
-          maxTokens: 1500,
+          maxTokens: 2500,
         });
       } catch (error) {
         logger.error('[ProactiveMessaging] Failed to initialize LLM model', {
@@ -116,11 +120,36 @@ class ProactiveMessagingService {
   // ============================================
 
   /**
+   * Per-user TTL cache for getMessageCooldownState.
+   * The cooldown state is looked up from multiple paths within a single job
+   * cycle (scoring + each handler). Caching for 2 minutes collapses ~32
+   * repeated queries per user into a single one per tick without masking
+   * new sends — the service invalidates on send via `invalidateCooldownCache`.
+   */
+  private cooldownCache = new Map<string, { data: { dailyCount: number; sentTypes: Set<string> }; expiresAt: number }>();
+  private static COOLDOWN_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+  /**
+   * Per-user TTL cache for scoreMessageCandidates result.
+   * Keyed by `${userId}:${hour}:${isSunday}` because candidate eligibility
+   * depends on the local hour + weekday. TTL of 10 minutes collapses the
+   * 11+ parallel SELECTs inside scoring when the pipeline is re-entered
+   * within the same hour (e.g., overlapping jobs or back-to-back calls).
+   */
+  private candidatesCache = new Map<string, { data: MessageCandidate[]; expiresAt: number }>();
+  private static CANDIDATES_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+  /**
    * Pre-fetch ALL cooldown state for a user in ONE query.
    * Returns daily count + set of message types already sent today.
    * Pass this to every checkAndSend*() method to eliminate ~32 duplicate queries per user.
    */
   async getMessageCooldownState(userId: string): Promise<{ dailyCount: number; sentTypes: Set<string> }> {
+    const cached = this.cooldownCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      // Return a fresh Set so callers don't share mutable state
+      return { dailyCount: cached.data.dailyCount, sentTypes: new Set(cached.data.sentTypes) };
+    }
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -137,10 +166,30 @@ class ProactiveMessagingService {
         sentTypes.add(row.message_type);
         dailyCount += parseInt(row.cnt, 10);
       }
+      this.cooldownCache.set(userId, {
+        data: { dailyCount, sentTypes: new Set(sentTypes) },
+        expiresAt: Date.now() + ProactiveMessagingService.COOLDOWN_TTL_MS,
+      });
+      // Bounded cache: prune on growth
+      if (this.cooldownCache.size > 500) {
+        const now = Date.now();
+        for (const [k, v] of this.cooldownCache) {
+          if (v.expiresAt <= now) this.cooldownCache.delete(k);
+        }
+      }
       return { dailyCount, sentTypes };
     } catch {
       return { dailyCount: 0, sentTypes: new Set() };
     }
+  }
+
+  /**
+   * Invalidate cooldown cache after sending a new proactive message.
+   * Handlers should call this after a successful send so the next read
+   * reflects the increment.
+   */
+  invalidateCooldownCache(userId: string): void {
+    this.cooldownCache.delete(userId);
   }
 
   // ============================================
@@ -816,6 +865,19 @@ class ProactiveMessagingService {
       proactiveContext.coachingDirective = insightCtx.coachingDirective;
       proactiveContext.stableTraits = insightCtx.stableTraits;
 
+      // Enrich with adaptive coaching state for intelligence-driven weekly summary
+      try {
+        const adaptiveDirective = await adaptiveCoachingLoopService.evaluate(userId);
+        proactiveContext.data.coachingState = adaptiveDirective.state;
+        proactiveContext.data.coachingStrategy = adaptiveDirective.strategy;
+        if (insightCtx.report?.dropOffDate) {
+          proactiveContext.data.dropOffDate = insightCtx.report.dropOffDate;
+          proactiveContext.data.dropOffTrigger = insightCtx.report.dropOffTrigger;
+        }
+      } catch {
+        // Non-blocking — adaptive context is supplementary
+      }
+
       const message = await this.generateProactiveMessage(userId, proactiveContext);
       await this.sendProactiveMessage(userId, message, 'weekly_digest', cooldown);
       return true;
@@ -1045,24 +1107,9 @@ class ProactiveMessagingService {
       proactiveContext.coachingDirective = insightCtx.coachingDirective;
       proactiveContext.stableTraits = insightCtx.stableTraits;
 
-      // Use a higher token LLM for richer coaching messages — guard against LLM init failure
-      let prevMaxTokens: number | undefined;
-      try {
-        prevMaxTokens = (this.llm as any).maxTokens;
-        (this.llm as any).maxTokens = 1200;
-      } catch {
-        // LLM init failed — generateProactiveMessage will use its own fallback
-      }
-
-      try {
-        const message = await this.generateProactiveMessage(userId, proactiveContext);
-        await this.sendProactiveMessage(userId, message, 'coach_pro_analysis', cooldown);
-        return true;
-      } finally {
-        if (prevMaxTokens !== undefined) {
-          try { (this.llm as any).maxTokens = prevMaxTokens; } catch { /* ignore */ }
-        }
-      }
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'coach_pro_analysis', cooldown);
+      return true;
     } catch (error) {
       logger.error('[ProactiveMessaging] Error sending coach pro analysis', {
         userId,
@@ -1353,24 +1400,9 @@ class ProactiveMessagingService {
       proactiveContext.coachingDirective = insightCtx.coachingDirective;
       proactiveContext.stableTraits = insightCtx.stableTraits;
 
-      // Use higher token limit for comprehensive review — guard against LLM init failure
-      let prevMaxTokens: number | undefined;
-      try {
-        prevMaxTokens = (this.llm as any).maxTokens;
-        (this.llm as any).maxTokens = 1200;
-      } catch {
-        // LLM init failed — generateProactiveMessage will use its own fallback
-      }
-
-      try {
-        const message = await this.generateProactiveMessage(userId, proactiveContext);
-        await this.sendProactiveMessage(userId, message, 'daily_progress_review', cooldown);
-        return true;
-      } finally {
-        if (prevMaxTokens !== undefined) {
-          try { (this.llm as any).maxTokens = prevMaxTokens; } catch { /* ignore */ }
-        }
-      }
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'daily_progress_review', cooldown);
+      return true;
     } catch (error) {
       logger.error('[ProactiveMessaging] Error sending daily progress review', {
         userId,
@@ -1497,24 +1529,9 @@ class ProactiveMessagingService {
       proactiveContext.coachingDirective = insightCtx.coachingDirective;
       proactiveContext.stableTraits = insightCtx.stableTraits;
 
-      // Use higher token limit for detailed accountability messages — guard against LLM init failure
-      let prevMaxTokens: number | undefined;
-      try {
-        prevMaxTokens = (this.llm as any).maxTokens;
-        (this.llm as any).maxTokens = 1200;
-      } catch {
-        // LLM init failed — generateProactiveMessage will use its own fallback
-      }
-
-      try {
-        const message = await this.generateProactiveMessage(userId, proactiveContext);
-        await this.sendProactiveMessage(userId, message, 'plan_non_adherence', cooldown);
-        return true;
-      } finally {
-        if (prevMaxTokens !== undefined) {
-          try { (this.llm as any).maxTokens = prevMaxTokens; } catch { /* ignore */ }
-        }
-      }
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'plan_non_adherence', cooldown);
+      return true;
     } catch (error) {
       logger.error('[ProactiveMessaging] Error sending plan non-adherence message', {
         userId,
@@ -2181,6 +2198,217 @@ class ProactiveMessagingService {
   }
 
   // ============================================
+  // SCHEDULE-AWARE & HOLIDAY MESSAGES
+  // ============================================
+
+  /**
+   * Free window suggestion: user has an upcoming free window (≥60 min) and hasn't worked out yet.
+   * Suggests activities that fit the available time slot.
+   */
+  async checkAndSendFreeWindowSuggestion(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('free_window_suggestion')) return false;
+
+      const context = cachedContext;
+      const freeWindows = context?.lifestyle?.scheduleContext?.freeWindows || [];
+      const now = new Date();
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+
+      const upcomingWindow = freeWindows.find(
+        (w: { durationMinutes: number; startTime: string }) => {
+          const wStart = parseInt(w.startTime.split(':')[0]) * 60 + parseInt(w.startTime.split(':')[1]);
+          return w.durationMinutes >= 60 && wStart >= nowMins - 30 && wStart <= nowMins + 120;
+        }
+      );
+
+      if (!upcomingWindow) return false;
+
+      const proactiveContext: ProactiveContext = {
+        type: 'free_window_suggestion',
+        data: {
+          freeWindow: upcomingWindow,
+          windowDuration: upcomingWindow.durationMinutes,
+          windowStart: upcomingWindow.startTime,
+          todayWorkoutsCompleted: context?.workouts?.todayCompletedCount || 0,
+          missedWorkouts: context?.workouts?.missedScheduledCount || 0,
+          scheduledWorkout: context?.workouts?.nextScheduled || null,
+          stressLevel: context?.lifestyle?.scheduleContext?.stressLevel || 'unknown',
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'free_window_suggestion', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'free_window_suggestion', cooldown);
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error sending free window suggestion', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  /**
+   * Busy day support: early-morning encouragement when the user's schedule is high/critical stress.
+   * Provides adapted expectations and quick-win suggestions.
+   */
+  async checkAndSendBusyDaySupport(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('busy_day_support')) return false;
+
+      const context = cachedContext;
+      const scheduleCtx = context?.lifestyle?.scheduleContext;
+      const stressLevel = scheduleCtx?.stressLevel;
+
+      if (stressLevel !== 'high' && stressLevel !== 'critical') return false;
+
+      const proactiveContext: ProactiveContext = {
+        type: 'busy_day_support',
+        data: {
+          stressLevel,
+          totalMeetings: scheduleCtx?.totalMeetings || 0,
+          freeMinutes: scheduleCtx?.freeMinutesTotal || 0,
+          busyBlocks: scheduleCtx?.busyBlocks || [],
+          freeWindows: scheduleCtx?.freeWindows || [],
+          scheduledWorkouts: context?.workouts?.todayScheduled || [],
+          currentStreak: context?.gamification?.currentStreak || 0,
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'busy_day_support', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'busy_day_support', cooldown);
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error sending busy day support', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  /**
+   * Holiday adjustment: proactive plan adaptation when holidays or fasting periods are detected.
+   * Adjusts expectations for workout intensity, nutrition, and scheduling.
+   */
+  async checkAndSendHolidayAdjustment(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('holiday_adjustment')) return false;
+
+      const context = cachedContext;
+      const holidayCtx = context?.lifestyle?.scheduleContext?.holidayContext;
+
+      if (!holidayCtx) return false;
+      const hasUpcoming = holidayCtx.upcomingHolidays?.length > 0;
+      const isFasting = !!holidayCtx.isFastingPeriod;
+      if (!hasUpcoming && !isFasting) return false;
+
+      const proactiveContext: ProactiveContext = {
+        type: 'holiday_adjustment',
+        data: {
+          upcomingHolidays: holidayCtx.upcomingHolidays || [],
+          isFastingPeriod: isFasting,
+          fastingDetails: holidayCtx.fastingDetails || null,
+          currentDietPlan: context?.nutrition?.activeDietPlan?.name || null,
+          scheduledWorkouts: context?.workouts?.todayScheduled || [],
+          stressLevel: context?.lifestyle?.scheduleContext?.stressLevel || 'normal',
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'holiday_adjustment', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'holiday_adjustment', cooldown);
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error sending holiday adjustment', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  /**
+   * Post busy day check-in: evening message after a high-stress day.
+   * Acknowledges the tough day, asks how they managed, and suggests recovery.
+   */
+  async checkAndSendPostBusyDayCheckin(
+    userId: string,
+    cachedContext?: any,
+    cooldown?: { dailyCount: number; sentTypes: Set<string> }
+  ): Promise<boolean> {
+    try {
+      if (cooldown && cooldown.dailyCount >= 4) return false;
+      if (cooldown?.sentTypes.has('post_busy_day_checkin')) return false;
+
+      const context = cachedContext;
+      const scheduleCtx = context?.lifestyle?.scheduleContext;
+      const stressLevel = scheduleCtx?.stressLevel;
+
+      if (stressLevel !== 'high' && stressLevel !== 'critical') return false;
+
+      const proactiveContext: ProactiveContext = {
+        type: 'post_busy_day_checkin',
+        data: {
+          stressLevel,
+          totalMeetings: scheduleCtx?.totalMeetings || 0,
+          todayWorkoutsCompleted: context?.workouts?.todayCompletedCount || 0,
+          todayMealsLogged: context?.nutrition?.todayMealsLogged || 0,
+          todayScore: context?.dailyScore?.latestScore || null,
+          waterIntake: context?.waterIntake?.todayIntake || 0,
+          waterGoal: context?.waterIntake?.dailyGoal || 0,
+          latestMood: context?.wellbeing?.latestMoodLevel || null,
+          recoveryScore: context?.whoop?.lastRecovery?.score || null,
+        },
+        userContext: context,
+      };
+
+      const insightCtx = await this.buildInsightDrivenContext(userId, 'post_busy_day_checkin', context);
+      proactiveContext.analysisReport = insightCtx.report;
+      proactiveContext.relevantInsights = insightCtx.relevantInsights;
+      proactiveContext.crossDomainInsights = insightCtx.crossDomainInsights;
+      proactiveContext.coachingDirective = insightCtx.coachingDirective;
+      proactiveContext.stableTraits = insightCtx.stableTraits;
+
+      const message = await this.generateProactiveMessage(userId, proactiveContext);
+      await this.sendProactiveMessage(userId, message, 'post_busy_day_checkin', cooldown);
+      return true;
+    } catch (error) {
+      logger.error('[ProactiveMessaging] Error sending post busy day check-in', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+      return false;
+    }
+  }
+
+  // ============================================
   // SMART ROUTING: Score-and-Rank
   // ============================================
 
@@ -2188,6 +2416,10 @@ class ProactiveMessagingService {
    * Score all message candidates for a user.
    * Returns scored, sorted candidates — the job sends only the top 2-3.
    * Replaces 18 sequential checkAndSend* calls with prioritised ranking.
+   *
+   * Cache: results are memoized per (userId, hour, isSunday) for 10 min to
+   * collapse the 11+ parallel SELECTs when the pipeline is called more than
+   * once within the same local hour.
    */
   async scoreMessageCandidates(
     userId: string,
@@ -2196,6 +2428,11 @@ class ProactiveMessagingService {
     hour: number,
     isSunday: boolean
   ): Promise<MessageCandidate[]> {
+    const cacheKey = `${userId}:${hour}:${isSunday ? 1 : 0}`;
+    const cached = this.candidatesCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
     try {
       // Lightweight parallel queries for data not already in the context
       const [stalledGoalResult, lastLoginResult, recentAchievement, todayScheduledWorkout, coachingProfile, recoveryTrendResult, unfulfilledCommitments, missedScheduleTasksResult, stalledLifeGoalsResult, lifeGoalMilestonesResult, todayIntentionsResult] = await Promise.all([
@@ -2724,6 +2961,18 @@ class ProactiveMessagingService {
           timeWindowValid: hour >= 7 && hour < 10,
           score: 75,
         },
+        {
+          type: 'holiday_adjustment',
+          eligible: !!(context.lifestyle?.scheduleContext?.holidayContext?.upcomingHolidays?.length > 0 || context.lifestyle?.scheduleContext?.holidayContext?.isFastingPeriod) && !sent('holiday_adjustment'),
+          timeWindowValid: hour >= 8 && hour < 12,
+          score: 70,
+        },
+        {
+          type: 'post_busy_day_checkin',
+          eligible: !!(context.lifestyle?.scheduleContext?.stressLevel === 'high' || context.lifestyle?.scheduleContext?.stressLevel === 'critical') && !sent('post_busy_day_checkin'),
+          timeWindowValid: hour >= 19 && hour < 22,
+          score: 68,
+        },
       ];
 
       // Accountability-level boost: users with declining adherence get firmer messages ranked higher
@@ -2762,8 +3011,50 @@ class ProactiveMessagingService {
         // Non-critical — skip freshness boost if query fails
       }
 
+      // Contextual Timing boost: prefer user's peak engagement hours
+      try {
+        const timingProfile = await timingProfileService.getProfile(userId);
+        if (timingProfile && timingProfile.confidence >= 0.4) {
+          for (const c of candidates) {
+            if (!c.eligible || !c.timeWindowValid) continue;
+            // Peak hour ±1 window (with 24h wrapping)
+            const peakDiff = Math.min(
+              Math.abs(hour - timingProfile.peakHour),
+              24 - Math.abs(hour - timingProfile.peakHour)
+            );
+            if (peakDiff <= 1) {
+              c.score += 15;
+            } else {
+              // Secondary hour ±1 window
+              const secDiff = Math.min(
+                Math.abs(hour - timingProfile.secondaryHour),
+                24 - Math.abs(hour - timingProfile.secondaryHour)
+              );
+              if (secDiff <= 1) {
+                c.score += 8;
+              }
+            }
+          }
+        }
+      } catch {
+        // Non-critical — skip timing boost if query fails
+      }
+
       // Sort by score descending — highest-impact messages first
       candidates.sort((a, b) => b.score - a.score);
+
+      // Populate cache (key includes hour/isSunday so cache auto-expires at hour change)
+      this.candidatesCache.set(cacheKey, {
+        data: candidates,
+        expiresAt: Date.now() + ProactiveMessagingService.CANDIDATES_TTL_MS,
+      });
+      if (this.candidatesCache.size > 500) {
+        const now = Date.now();
+        for (const [k, v] of this.candidatesCache) {
+          if (v.expiresAt <= now) this.candidatesCache.delete(k);
+        }
+      }
+
       return candidates;
     } catch (error) {
       logger.error('[ProactiveMessaging] Error scoring candidates', {
@@ -3246,9 +3537,17 @@ Tell them when they CAN train again: "When recovery hits 60%+, we'll push hard. 
             `"${c.text}" (${c.category})`
           ).join(', ') || d.primaryCommitment;
           dataDescription = `Commitment: "${d.primaryCommitment}" (${d.category}). ${d.daysOverdue} day(s) overdue. ${d.totalUnfulfilled} unfulfilled total.${d.totalUnfulfilled > 1 ? ` All pending: ${commitmentsList}.` : ''}${streak ? ` Streak: ${streak} days.` : ''}${dailyScore ? ` Score: ${dailyScore}/100.` : ''}`;
-          prompt = d.daysOverdue === 0
-            ? `The user made a commitment: "${d.primaryCommitment}". Today is the follow-up day. Be direct: "You told me you'd ${d.primaryCommitment}. Today's the day. Did you do it?" Check their data for evidence — if workout logs or meal logs confirm it, acknowledge. If there's no evidence, don't let them off easy: "I'm looking at your data and I don't see it. What happened?" If they DID follow through, give them genuine props — following through on commitments is what separates talkers from doers.`
-            : `Commitments aren't suggestions. They said they'd "${d.primaryCommitment}" and it's been ${d.daysOverdue} day(s) with ZERO follow-through. Express real frustration: "You looked me in the eye and committed to ${d.primaryCommitment}. That was ${d.daysOverdue} days ago. Nothing happened. Words without action are just wishes you're telling yourself." ${d.totalUnfulfilled > 1 ? `This is the ${d.totalUnfulfilled}th unfulfilled commitment. That's not bad luck — that's a PATTERN. "You keep saying yes and not delivering. That pattern is more dangerous than missing a workout because it's teaching you that your own word doesn't matter."` : ''} End with a hard choice: "Complete this TODAY or tell me honestly that you can't. Either answer is okay — what's NOT okay is silence. What's it going to be?"`;
+          const lifeCats = ['career', 'relationships', 'creativity', 'social', 'productivity'];
+          const isLifeDomain = lifeCats.includes(String(d.category));
+          if (isLifeDomain) {
+            prompt = d.daysOverdue === 0
+              ? `The user made a life-area commitment (${d.category}): "${d.primaryCommitment}". Today is the check-in day. Be warm and curious, not harsh — you're an accountability partner, not a boss. Ask how it went in plain language. If they missed it, help reschedule or shrink the commitment (e.g. 10 minutes instead of 30). No workout/meal data shaming — this domain may not have app logs.`
+              : `Follow-up on their ${d.category} commitment: "${d.primaryCommitment}" (${d.daysOverdue} day(s) since follow-up date). Stay supportive but honest: you noticed they haven't reported back. Invite them to reset the plan (time of day, smaller step) rather than guilt. End with one concrete question about the next 24 hours.`;
+          } else {
+            prompt = d.daysOverdue === 0
+              ? `The user made a commitment: "${d.primaryCommitment}". Today is the follow-up day. Be direct: "You told me you'd ${d.primaryCommitment}. Today's the day. Did you do it?" Check their data for evidence — if workout logs or meal logs confirm it, acknowledge. If there's no evidence, don't let them off easy: "I'm looking at your data and I don't see it. What happened?" If they DID follow through, give them genuine props — following through on commitments is what separates talkers from doers.`
+              : `Commitments aren't suggestions. They said they'd "${d.primaryCommitment}" and it's been ${d.daysOverdue} day(s) with ZERO follow-through. Express real frustration: "You looked me in the eye and committed to ${d.primaryCommitment}. That was ${d.daysOverdue} days ago. Nothing happened. Words without action are just wishes you're telling yourself." ${d.totalUnfulfilled > 1 ? `This is the ${d.totalUnfulfilled}th unfulfilled commitment. That's not bad luck — that's a PATTERN. "You keep saying yes and not delivering. That pattern is more dangerous than missing a workout because it's teaching you that your own word doesn't matter."` : ''} End with a hard choice: "Complete this TODAY or tell me honestly that you can't. Either answer is okay — what's NOT okay is silence. What's it going to be?"`;
+          }
           break;
         }
 
@@ -3479,7 +3778,8 @@ ${prompt}
 - If data suggests serious health concern, recommend professional help
 - For users in crisis (very low mood, self-harm mentions): immediately switch to pure empathy and support regardless of all other signals
 
-Write ONLY the message text. No preamble, no labels, no "Here's your message:" wrapper.`;
+Write ONLY the message text. No preamble, no labels, no "Here's your message:" wrapper.
+Keep the message between 2-5 sentences. Be punchy and direct — never ramble. End with a complete sentence.`;
 
       const messages = [
         new SystemMessage(systemPrompt),
@@ -3583,6 +3883,11 @@ Write ONLY the message text. No preamble, no labels, no "Here's your message:" w
     // Remove trailing clichés
     cleaned = cleaned.replace(/\b(?:let me know!?|you've got this!?|keep up the great work!?|let's make it count!?|you can do it!?)\s*$/gim, '');
 
+    // Strip all bold/italic markdown — proactive messages are plain conversational text
+    cleaned = cleaned.replace(/\*{1,3}(.*?)\*{1,3}/g, '$1');
+    // Remove any remaining orphaned asterisks (from truncated bold markers)
+    cleaned = cleaned.replace(/\*{2,}/g, '');
+
     // Collapse multiple newlines to single newline
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
@@ -3619,7 +3924,7 @@ Write ONLY the message text. No preamble, no labels, no "Here's your message:" w
       daily_progress_review: `${userName}, today's numbers are in. I'd rather be straight with you than tell you everything's fine when it's not. What's the ONE thing you're fixing tomorrow?`,
       score_declining: `${userName}, your score is dropping and I'm genuinely worried. This isn't a blip — it's a trend. Something needs to change and it needs to change today. What's really going on?`,
       overtraining_risk: `${userName}, your recovery is critically low. I'm overriding your plan — light walk and stretching ONLY. No negotiation. Your body is telling you something and you need to listen before you get hurt.`,
-      commitment_followup: `${userName}, you made a commitment. I haven't seen follow-through. I'm not here to nag — I'm here to hold you to your own word. Did you do it or not?`,
+      commitment_followup: `${userName}, quick check-in on something you committed to — how did it go? If it didn't happen, no judgment; want to pick a smaller step or a better time?`,
       recovery_trend_alert: `${userName}, recovery has been dropping for days now. This isn't one bad night — this is your body waving a red flag. Something in your routine needs to change before this turns into a real problem.`,
       positive_momentum: `${userName}, I see what you're building. Multiple days of showing up, hitting targets, doing the work. THIS is the version of you that's going to reach those goals. Don't stop now.`,
       life_goal_checkin: `${userName}, your life goal has been quiet. I'm checking in because I care about this goal as much as you do — or at least as much as you said you did. What's the status?`,
@@ -3643,6 +3948,7 @@ Write ONLY the message text. No preamble, no labels, no "Here's your message:" w
     message: string,
     messageType: string,
     cooldown?: { dailyCount: number; sentTypes: Set<string> },
+    extras?: { obstacleId?: string; reconnectionId?: string },
   ): Promise<void> {
     try {
       // In-memory dedup: check if this type was already sent in the current cycle
@@ -3715,6 +4021,9 @@ Write ONLY the message text. No preamble, no labels, no "Here's your message:" w
           content: message,
           contentType: 'text',
           createdAt: new Date().toISOString(),
+          proactiveType: messageType,
+          ...(extras?.obstacleId ? { obstacleId: extras.obstacleId } : {}),
+          ...(extras?.reconnectionId ? { reconnectionId: extras.reconnectionId } : {}),
           sender: {
             id: AI_COACH_USER_ID,
             firstName,
@@ -3892,6 +4201,9 @@ Write ONLY the message text. No preamble, no labels, no "Here's your message:" w
          VALUES ($1, $2, $3, $4, $5)`,
         [userId, messageType, messageId, chatId, content]
       );
+      // Cached cooldown state is now stale — drop it so the next scoring pass
+      // re-reads the real daily count.
+      this.invalidateCooldownCache(userId);
     } catch (error) {
       logger.error('[ProactiveMessaging] Error logging message', {
         userId,

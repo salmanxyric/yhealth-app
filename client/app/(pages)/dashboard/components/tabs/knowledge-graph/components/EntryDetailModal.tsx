@@ -9,7 +9,7 @@ import {
   BarChart3, HeartPulse, MessageCircle, CheckSquare, CalendarClock,
   Wallet, Trophy, Landmark, Calendar, Activity,
 } from 'lucide-react';
-import type { GraphNode, GraphNodeType, GraphNodeCategory } from '@shared/types/domain/knowledge-graph';
+import type { GraphNode, GraphNodeType } from '@shared/types/domain/knowledge-graph';
 import { CATEGORY_LABELS, CATEGORY_COLORS } from '../constants/graph-config';
 
 // ── Icon map ──────────────────────────────────────────────────────

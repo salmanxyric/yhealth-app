@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { MainLayout } from '@/components/layout';
+import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { 
   CreditCard, 
@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api-client';
 import { useAuth } from '@/app/context/AuthContext';
+import { useEntitlements } from '@/app/context/EntitlementsContext';
 import { PricingSection, type PlanItem } from '@/components/subscription/PricingSection';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -221,6 +222,7 @@ function SubscriptionPageContentInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated } = useAuth();
+  const { refetch: refetchEntitlements } = useEntitlements();
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionMe | null>(null);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [loadingMe, setLoadingMe] = useState(true);
@@ -229,6 +231,7 @@ function SubscriptionPageContentInner() {
   const [managingPortal, setManagingPortal] = useState(false);
   const [syncingFromStripe, setSyncingFromStripe] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [autoSyncing, setAutoSyncing] = useState(false);
 
   const refetchSubscription = useCallback(async () => {
@@ -246,20 +249,27 @@ function SubscriptionPageContentInner() {
       return;
     }
     setLoadingMe(true);
+    setFetchError(null);
     try {
       const res = await api.get<SubscriptionMe>('/subscription/me');
       if (res.data) setSubscriptionData(res.data as SubscriptionMe);
       else setSubscriptionData(null);
-    } catch {
+    } catch (e) {
       setSubscriptionData(null);
+      setFetchError(e instanceof ApiError ? e.message : 'Failed to load subscription. Please try again.');
     } finally {
       setLoadingMe(false);
     }
   }, [isAuthenticated]);
 
+  const entitlementsRefreshed = useRef(false);
   useEffect(() => {
     fetchSubscription();
-  }, [fetchSubscription]);
+    if (!entitlementsRefreshed.current) {
+      entitlementsRefreshed.current = true;
+      refetchEntitlements();
+    }
+  }, [fetchSubscription, refetchEntitlements]);
 
   // When landing from success page (?refreshed=1), refetch so subscribed plan shows
   useEffect(() => {
@@ -364,9 +374,10 @@ function SubscriptionPageContentInner() {
     setSyncError(null);
     setSyncingFromStripe(true);
     try {
-      await api.post('/subscription/sync-from-stripe');
+      await api.post("/subscription/sync-from-stripe");
       await refetchSubscription();
-      toast.success('Subscription synced. You’re all set!');
+      await refetchEntitlements();
+      toast.success("Subscription synced. You’re all set!");
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : 'Could not sync. Try again or contact support.';
       setSyncError(msg);
@@ -466,6 +477,23 @@ function SubscriptionPageContentInner() {
               <div className="flex min-h-[140px] items-center justify-center rounded-2xl border border-slate-700/60 bg-slate-900/40">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
               </div>
+            ) : fetchError ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative overflow-hidden rounded-2xl border border-rose-500/30 bg-gradient-to-br from-slate-900/60 via-slate-900/40 to-slate-900/60 p-8 text-center backdrop-blur-xl"
+              >
+                <AlertCircle className="mx-auto h-10 w-10 text-rose-400" />
+                <p className="mt-4 text-sm text-rose-300">{fetchError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
+                  onClick={fetchSubscription}
+                >
+                  Try again
+                </Button>
+              </motion.div>
             ) : hasActive && sub?.plan ? (
               <motion.div
                 initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -854,19 +882,20 @@ function SubscriptionPageContentInner() {
           </motion.section>
         )}
 
-        {/* Plans — only show when not subscribed so subscribed users see management only */}
-        {!hasActive && (
-          <section>
-            <h2 className="mb-6 text-lg font-semibold text-white">Choose a plan</h2>
-            <PricingSection
-              plans={plans}
-              loading={loadingPlans}
-              submittingId={submittingId}
-              onSubscribe={handleSubscribe}
-              showBillingToggle
-            />
-          </section>
-        )}
+        {/* Plans */}
+        <section>
+          <h2 className="mb-6 text-lg font-semibold text-white">
+            {hasActive ? 'Change plan' : 'Choose a plan'}
+          </h2>
+          <PricingSection
+            plans={plans}
+            loading={loadingPlans}
+            submittingId={submittingId}
+            onSubscribe={handleSubscribe}
+            showBillingToggle
+            currentPlanId={hasActive ? sub?.plan?.id ?? null : null}
+          />
+        </section>
 
         {/* Trust */}
         <motion.section

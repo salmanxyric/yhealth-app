@@ -3,7 +3,7 @@
  * @description Handles mood check-ins with light/deep modes and pattern analysis
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../logger.service.js';
 import type { MoodLog, WellbeingMode, MoodEmoji, EmotionTag, TriggerCategory } from '@shared/types/domain/wellbeing.js';

@@ -3,7 +3,7 @@
  * Seeds the exercises table with a comprehensive library of exercises
  */
 
-import { pool } from './pg.js';
+import { pool } from '../config/database.config.js';
 
 interface ExerciseData {
   name: string;

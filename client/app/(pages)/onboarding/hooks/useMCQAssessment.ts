@@ -14,10 +14,12 @@ import {
   mapInsightToDisplay,
   type AICoachGoalCategory,
   GOAL_MAP,
+  GOAL_LABEL_MAP,
 } from '../steps/deep-assessment';
 
 interface UseMCQAssessmentOptions {
   selectedGoal: string | null;
+  customGoalText?: string;
   onAddAssessmentResponse: (response: { questionId: string; value: string | number | string[] }) => void;
 }
 
@@ -48,6 +50,7 @@ interface UseMCQAssessmentReturn {
 
 export function useMCQAssessment({
   selectedGoal,
+  customGoalText,
   onAddAssessmentResponse,
 }: UseMCQAssessmentOptions): UseMCQAssessmentReturn {
   const [currentQuestion, setCurrentQuestion] = useState<MCQQuestion | null>(null);
@@ -67,6 +70,7 @@ export function useMCQAssessment({
   const hasInitializedRef = useRef(false);
 
   const apiGoal: AICoachGoalCategory = GOAL_MAP[selectedGoal || 'custom'] || 'custom';
+  const goalLabel: string | undefined = selectedGoal ? GOAL_LABEL_MAP[selectedGoal] : undefined;
 
   const questionCount = useMemo(() => previousAnswers.length, [previousAnswers]);
 
@@ -80,7 +84,7 @@ export function useMCQAssessment({
     aiCoachService.checkStatus().then((status) => {
       setAiAvailable(status.available);
       if (!status.available) {
-        setError('AI Coach is not available. Please try again later.');
+        setError('Our AI health coach is temporarily offline. Switching to quick assessment mode...');
       }
     });
   }, []);
@@ -109,6 +113,8 @@ export function useMCQAssessment({
         // Generate first question
         const response = await aiCoachService.generateMCQQuestion({
           goal: apiGoal,
+          customGoalText,
+          selectedGoalLabel: goalLabel,
           phase: 'opening',
           previousAnswers: [],
           extractedInsights: session.extractedInsights || [],
@@ -125,14 +131,14 @@ export function useMCQAssessment({
         }
       } catch (err) {
         console.error('Failed to initialize MCQ assessment:', err);
-        setError('Failed to load questions. Please try again.');
+        setError('Unable to load your personalized questions. Please try again.');
       } finally {
         setIsLoading(false);
       }
     };
 
     initializeAssessment();
-  }, [apiGoal, aiAvailable, language]);
+  }, [apiGoal, customGoalText, aiAvailable, language]);
 
   const toggleOption = useCallback((option: MCQOption) => {
     setSelectedOptions((prev) => {
@@ -197,6 +203,8 @@ export function useMCQAssessment({
       // Critical path: generate next question (this is what the user waits for)
       const nextResponse = await aiCoachService.generateMCQQuestion({
         goal: apiGoal,
+        customGoalText,
+        selectedGoalLabel: goalLabel,
         phase: currentPhase,
         previousAnswers: updatedAnswers,
         extractedInsights: newInsights,
@@ -213,7 +221,7 @@ export function useMCQAssessment({
       }
     } catch (err) {
       console.error('Failed to submit answer:', err);
-      setError('Failed to process your answer. Please try again.');
+      setError('Could not process your answer. Please try again.');
     } finally {
       setIsSubmitting(false);
       setIsLoading(false);
@@ -223,6 +231,7 @@ export function useMCQAssessment({
     currentQuestion,
     isSubmitting,
     apiGoal,
+    customGoalText,
     extractedInsights,
     previousAnswers,
     currentPhase,
@@ -240,6 +249,8 @@ export function useMCQAssessment({
     aiCoachService
       .generateMCQQuestion({
         goal: apiGoal,
+        customGoalText,
+        selectedGoalLabel: goalLabel,
         phase: currentPhase,
         previousAnswers,
         extractedInsights,
@@ -252,12 +263,12 @@ export function useMCQAssessment({
       })
       .catch((err) => {
         console.error('Failed to retry question:', err);
-        setError('Failed to load question. Please try again.');
+        setError('Could not load the next question. Please try again.');
       })
       .finally(() => {
         setIsLoading(false);
       });
-  }, [aiAvailable, apiGoal, currentPhase, previousAnswers, extractedInsights, language]);
+  }, [aiAvailable, apiGoal, customGoalText, currentPhase, previousAnswers, extractedInsights, language]);
 
   const resetAssessment = useCallback(() => {
     hasInitializedRef.current = false;

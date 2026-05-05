@@ -15,8 +15,24 @@ import type {
 
 // Use unstable_mockModule for ESM compatibility
 const mockQuery = jest.fn();
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
+  query: mockQuery,
+  transaction: jest.fn(),
+  pool: { query: mockQuery, end: jest.fn() },
+  database: { healthCheck: jest.fn() },
+  getClient: jest.fn(),
+  closePool: jest.fn(),
+  testConnection: jest.fn(),
+  getPoolStats: jest.fn(),
+  default: {},
+}));
+
 jest.unstable_mockModule('../../../src/database/pg.js', () => ({
   query: mockQuery,
+}));
+
+jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
+  logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
 }));
 
 // Dynamic imports must come after mock setup

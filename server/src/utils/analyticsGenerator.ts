@@ -1,4 +1,4 @@
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 // Generate data for last 12 months (default) - PostgreSQL version
 export const generateLast12MonthData = async (tableName: string, dateColumn: string = 'created_at') => {

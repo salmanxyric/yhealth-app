@@ -3,8 +3,12 @@
 import { ReactNode, useCallback, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { DashboardSidebar, MobileBottomNav } from "@/app/(pages)/dashboard/components";
+import { useAuth } from "@/app/context/AuthContext";
 import { useSubscriptionAccessOptional } from "@/app/context/SubscriptionAccessContext";
+import { useEntitlements } from "@/app/context/EntitlementsContext";
 import { SubscriptionPaywallOverlay } from "@/components/subscription/SubscriptionGate";
+import { PausedSubscriptionOverlay } from "@/components/subscription/PausedSubscriptionOverlay";
+import { IncompleteSubscriptionOverlay } from "@/components/subscription/IncompleteSubscriptionOverlay";
 import { DashboardHeader } from "./DashboardHeader";
 
 interface DashboardLayoutProps {
@@ -20,8 +24,11 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { hasRole } = useAuth();
   const { hasAccess, isLoading } = useSubscriptionAccessOptional();
-  const locked = !isLoading && !hasAccess;
+  const { bundle } = useEntitlements();
+  const subStatus = bundle?.subscription.status ?? 'none';
+  const locked = !isLoading && !hasAccess && !hasRole("admin");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Determine active tab from pathname if not provided
@@ -62,6 +69,13 @@ export function DashboardLayout({
     if (pathname.startsWith("/knowledge-graph")) return "knowledge-graph";
     if (pathname.startsWith("/voice-assistant")) return "voice-assistant";
     if (pathname.startsWith("/voice-call")) return "call-coach";
+    if (pathname.startsWith("/settings/billing")) return "billing";
+    if (pathname.startsWith("/subscription")) return "subscription";
+    if (pathname.startsWith("/upgrade")) return "upgrade";
+    if (pathname.startsWith("/contracts")) return "contracts";
+    if (pathname.startsWith("/community")) return "community";
+    if (pathname.startsWith("/chat-history")) return "chat-history";
+    if (pathname.startsWith("/webinars")) return "webinars";
     if (pathname.startsWith("/admin")) return "admin-panel";
 
     return "overview";
@@ -74,7 +88,7 @@ export function DashboardLayout({
         router.push(tab);
       } else if (tab === "overview") {
         router.push("/dashboard");
-      } else if (["workouts", "exercises", "nutrition", "progress", "activity", "achievements", "leaderboard", "competitions"].includes(tab)) {
+      } else if (["workouts", "exercises", "nutrition", "progress", "activity", "achievements", "leaderboard", "competitions", "contracts", "community", "chat-history", "webinars"].includes(tab)) {
         // Navigate to separate pages for these tabs
         router.push(`/${tab}`);
       } else {
@@ -111,7 +125,7 @@ export function DashboardLayout({
       </div>
 
       {/* Main Content (blurred when locked, overlay on top) */}
-      <div className={`${sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} min-h-screen pb-20 md:pb-0 overflow-x-hidden transition-all duration-300 ${locked ? 'pointer-events-none select-none' : ''}`}>
+      <div className={`${sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} pb-20 md:pb-0 overflow-x-hidden transition-all duration-300 ${locked ? 'pointer-events-none select-none' : ''}`}>
         <div className={locked ? 'blur-md' : ''}>
           <DashboardHeader />
           {children}
@@ -119,7 +133,9 @@ export function DashboardLayout({
       </div>
 
       {/* Paywall overlay when subscription required */}
-      {locked && <SubscriptionPaywallOverlay />}
+      {locked && subStatus === 'paused' && <PausedSubscriptionOverlay />}
+      {locked && subStatus === 'incomplete' && <IncompleteSubscriptionOverlay />}
+      {locked && subStatus !== 'paused' && subStatus !== 'incomplete' && <SubscriptionPaywallOverlay />}
     </div>
   );
 }

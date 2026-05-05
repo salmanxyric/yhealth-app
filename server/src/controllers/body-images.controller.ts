@@ -4,7 +4,7 @@
  */
 
 import type { Response } from 'express';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -12,7 +12,7 @@ import { logger } from '../services/logger.service.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import type { FileRequest } from '../middlewares/upload.middleware.js';
 import { r2Service } from '../services/r2.service.js';
-import { aiCoachService } from '../services/ai-coach.service.js';
+import { aiCoachService } from '../services/ai-coach/index.js';
 
 type AuthFileRequest = AuthenticatedRequest & FileRequest;
 

@@ -6,6 +6,7 @@
 import { Router, type Response } from 'express';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { query } from '../config/database.config.js';
 import { googleCalendarService } from '../services/google-calendar.service.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -13,7 +14,49 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
 
-// All routes require authentication
+// ── OAuth callback must be BEFORE authenticate middleware ──
+// Google redirects here with no JWT header — userId comes from the `state` query param.
+router.get(
+  '/callback',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const clientUrl = process.env['CLIENT_URL'] || 'http://localhost:3000';
+    // Land every outcome on the premium success/error page. It auto-forwards
+    // to /wellbeing/schedule on success and shows retry options on failure.
+    const doneUrl = `${clientUrl}/calendar/connected`;
+
+    // If the user denied consent or Google returned an error in the redirect,
+    // it arrives as `?error=access_denied` (no `code`). Surface that to the UI.
+    const googleError = req.query.error as string | undefined;
+    if (googleError) {
+      return res.redirect(`${doneUrl}?status=error&reason=${encodeURIComponent(googleError)}`);
+    }
+
+    const userId = req.query.state as string;
+    const code = req.query.code as string;
+
+    if (!userId || !code) {
+      return res.redirect(`${doneUrl}?status=error&reason=${encodeURIComponent('Missing authorization code or user state')}`);
+    }
+
+    // Validate userId exists in DB to prevent abuse
+    const userCheck = await query<{ id: string }>('SELECT id FROM users WHERE id = $1', [userId]);
+    if (userCheck.rows.length === 0) {
+      return res.redirect(`${doneUrl}?status=error&reason=${encodeURIComponent('Invalid user state parameter')}`);
+    }
+
+    try {
+      const connection = await googleCalendarService.handleCallback(userId, code);
+      // Trigger initial sync (fire-and-forget)
+      googleCalendarService.syncEvents(userId, connection.id).catch(() => {});
+      return res.redirect(`${doneUrl}?status=connected`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unexpected error';
+      return res.redirect(`${doneUrl}?status=error&reason=${encodeURIComponent(message)}`);
+    }
+  }),
+);
+
+// All remaining routes require authentication
 router.use(authenticate);
 
 /**
@@ -50,6 +93,10 @@ router.post(
     if (!clientId || !clientSecret) {
       throw ApiError.badRequest('Client ID and Client Secret are required');
     }
+    // Validate optional redirect URI — must be absolute http(s) URL.
+    if (redirectUri && !/^https?:\/\//i.test(String(redirectUri))) {
+      throw ApiError.badRequest('Redirect URI must start with http:// or https://');
+    }
 
     await googleCalendarService.saveCredentials(userId, clientId, clientSecret, redirectUri);
     ApiResponse.success(res, null, 'Google Calendar credentials saved');
@@ -67,7 +114,12 @@ router.get(
     if (!userId) throw ApiError.unauthorized();
 
     const credentials = await googleCalendarService.getCredentials(userId);
-    ApiResponse.success(res, { credentials, hasCredentials: !!credentials });
+    const suggestedRedirectUri = googleCalendarService.getDefaultRedirectUri();
+    ApiResponse.success(res, {
+      credentials,
+      hasCredentials: !!credentials,
+      suggestedRedirectUri,
+    });
   }),
 );
 
@@ -83,36 +135,6 @@ router.delete(
 
     await googleCalendarService.deleteCredentials(userId);
     ApiResponse.success(res, null, 'Google Calendar credentials removed');
-  }),
-);
-
-/**
- * GET /api/calendar/callback
- * Handle OAuth2 callback from Google
- */
-router.get(
-  '/callback',
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const userId = req.user?.userId || (req.query.state as string);
-    const code = req.query.code as string;
-
-    if (!userId || !code) {
-      throw ApiError.badRequest('Missing authorization code or user state');
-    }
-
-    const connection = await googleCalendarService.handleCallback(userId, code);
-
-    // Trigger initial sync
-    googleCalendarService.syncEvents(userId, connection.id).catch((err) => {
-      console.error('[Calendar] Initial sync failed:', err);
-    });
-
-    // Redirect to settings page or return JSON based on Accept header
-    if (req.headers.accept?.includes('text/html')) {
-      res.redirect('/settings?calendar=connected');
-    } else {
-      ApiResponse.success(res, { connection }, 'Google Calendar connected');
-    }
   }),
 );
 
@@ -143,6 +165,39 @@ router.delete(
 
     await googleCalendarService.disconnect(userId, req.params.id);
     ApiResponse.success(res, null, 'Calendar disconnected');
+  }),
+);
+
+/**
+ * GET /api/calendar/connections/:id/calendars
+ * List available calendars from user's Google account
+ */
+router.get(
+  '/connections/:id/calendars',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized();
+
+    const calendars = await googleCalendarService.listCalendars(userId, req.params.id);
+    ApiResponse.success(res, { calendars });
+  }),
+);
+
+/**
+ * PUT /api/calendar/connections/:id/calendars
+ * Select which calendars to sync
+ */
+router.put(
+  '/connections/:id/calendars',
+  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized();
+
+    const { calendarIds } = req.body;
+    if (!Array.isArray(calendarIds)) throw ApiError.badRequest('calendarIds must be an array');
+
+    await googleCalendarService.updateSyncCalendars(userId, req.params.id, calendarIds);
+    ApiResponse.success(res, null, 'Sync calendars updated');
   }),
 );
 

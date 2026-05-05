@@ -1,11 +1,12 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
-import type { LifeArea, LifeAreaDomain, LifeAreaLink } from '../types';
+import type { LifeArea, LifeAreaDomain, LifeAreaLink, LifeAreasDashboardSummary, ResolvedLifeAreaLink } from '../types';
 
 export function useLifeAreas() {
   const [areas, setAreas] = useState<LifeArea[]>([]);
   const [domains, setDomains] = useState<LifeAreaDomain[]>([]);
+  const [summary, setSummary] = useState<LifeAreasDashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,12 +14,18 @@ export function useLifeAreas() {
     setIsLoading(true);
     setError(null);
     try {
-      const [areasRes, domainsRes] = await Promise.all([
+      const [areasRes, domainsRes, summaryRes] = await Promise.all([
         api.get<{ areas: LifeArea[] }>('/life-areas'),
         api.get<{ domains: LifeAreaDomain[] }>('/life-areas/domains'),
+        api.get<LifeAreasDashboardSummary>('/life-areas/summary'),
       ]);
       setAreas(areasRes.data?.areas ?? []);
       setDomains(domainsRes.data?.domains ?? []);
+      if (summaryRes.success && summaryRes.data) {
+        setSummary(summaryRes.data);
+      } else {
+        setSummary(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load life areas');
     } finally {
@@ -53,10 +60,14 @@ export function useLifeAreas() {
   }, []);
 
   const getDetail = useCallback(async (id: string) => {
-    const res = await api.get<{ area: LifeArea; links: LifeAreaLink[] }>(`/life-areas/${id}`);
+    const res = await api.get<{
+      area: LifeArea;
+      links: LifeAreaLink[];
+      resolvedLinks?: ResolvedLifeAreaLink[];
+    }>(`/life-areas/${id}`);
     if (!res.data) throw new Error('Failed to load area detail');
     return res.data;
   }, []);
 
-  return { areas, domains, isLoading, error, refresh, create, update, archive, getDetail };
+  return { areas, domains, summary, isLoading, error, refresh, create, update, archive, getDetail };
 }

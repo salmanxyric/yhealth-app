@@ -336,16 +336,18 @@ export async function joinCompetition(competitionId: string): Promise<Competitio
  * Leave a competition
  */
 export async function leaveCompetition(competitionId: string): Promise<void> {
-  const response = await api.delete<null>(`/competitions/${competitionId}/leave`);
+  return withRetry(async () => {
+    const response = await api.delete<null>(`/competitions/${competitionId}/leave`);
 
-  if (!response.success) {
-    throw new ApiError(
-      response.error?.message || 'Failed to leave competition',
-      0,
-      response.error?.code || 'COMPETITION_LEAVE_ERROR',
-      response.error?.details
-    );
-  }
+    if (!response.success) {
+      throw new ApiError(
+        response.error?.message || 'Failed to leave competition',
+        0,
+        response.error?.code || 'COMPETITION_LEAVE_ERROR',
+        response.error?.details
+      );
+    }
+  });
 }
 
 /**

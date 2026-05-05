@@ -10,7 +10,7 @@
  * 5. Updates adherence patterns for learning
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { nutritionAnalysisService, DeviationClassification } from '../services/nutrition-analysis.service.js';

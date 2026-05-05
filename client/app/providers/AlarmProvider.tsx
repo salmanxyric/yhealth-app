@@ -1,9 +1,23 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAlarmSocket } from '@/app/(pages)/dashboard/hooks/useAlarmSocket';
 import { AlarmModal } from '@/app/(pages)/dashboard/components/alarms/AlarmModal';
+
+/** Deep link: Overview tab → Alarms */
+export const ALARMS_OVERVIEW_PATH =
+  '/dashboard?tab=overview&overviewSub=alarms' as const;
+
+type AlarmRingContextValue = { isRinging: boolean };
+
+const AlarmRingContext = createContext<AlarmRingContextValue>({
+  isRinging: false,
+});
+
+export function useAlarmRing(): AlarmRingContextValue {
+  return useContext(AlarmRingContext);
+}
 
 /**
  * Global Alarm Provider
@@ -13,10 +27,14 @@ export function AlarmProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const prevConnectionState = useRef<boolean | null>(null);
   const prevAlarmState = useRef<string | null>(null);
+  const lastNavigatedAlarmId = useRef<string | null>(null);
 
   // Handle navigation to workout page when alarm action is clicked
   const handleNavigateToWorkout = (workoutPlanId: string) => {
-    console.log('[AlarmProvider] Navigating to workout', { workoutPlanId });
+    if (process.env.NODE_ENV === 'development') {
+       
+      console.log('[AlarmProvider] Navigating to workout', { workoutPlanId });
+    }
     router.push(`/workouts${workoutPlanId ? `?planId=${workoutPlanId}` : ''}`);
   };
 
@@ -28,9 +46,11 @@ export function AlarmProvider({ children }: { children: React.ReactNode }) {
     snoozeAlarm,
   } = useAlarmSocket(handleNavigateToWorkout);
 
-  // Log connection state changes
+  // Log connection state changes (dev only)
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
     if (prevConnectionState.current !== isAlarmSocketConnected) {
+       
       console.log('[AlarmProvider] Connection state changed', {
         isConnected: isAlarmSocketConnected,
         previousState: prevConnectionState.current,
@@ -39,18 +59,21 @@ export function AlarmProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAlarmSocketConnected]);
 
-  // Log alarm state changes
+  // Log alarm state changes (dev only)
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
     const currentAlarmId = activeAlarm?.alarmId || null;
     if (prevAlarmState.current !== currentAlarmId) {
       if (activeAlarm) {
-        console.log('[AlarmProvider] ✅ Alarm activated', {
+         
+        console.log('[AlarmProvider] Alarm activated', {
           alarmId: activeAlarm.alarmId,
           title: activeAlarm.title,
           workoutPlanId: activeAlarm.workoutPlanId,
           isConnected: isAlarmSocketConnected,
         });
       } else if (prevAlarmState.current !== null) {
+         
         console.log('[AlarmProvider] Alarm dismissed', {
           previousAlarmId: prevAlarmState.current,
         });
@@ -58,6 +81,18 @@ export function AlarmProvider({ children }: { children: React.ReactNode }) {
       prevAlarmState.current = currentAlarmId;
     }
   }, [activeAlarm, isAlarmSocketConnected]);
+
+  // When an alarm fires, open Overview > Alarms behind the global modal
+  useEffect(() => {
+    if (!activeAlarm) {
+      lastNavigatedAlarmId.current = null;
+      return;
+    }
+    const id = activeAlarm.alarmId;
+    if (lastNavigatedAlarmId.current === id) return;
+    lastNavigatedAlarmId.current = id;
+    router.replace(ALARMS_OVERVIEW_PATH, { scroll: false });
+  }, [activeAlarm, router]);
 
   // Log connection health periodically (only in development)
   useEffect(() => {
@@ -74,10 +109,11 @@ export function AlarmProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAlarmSocketConnected, activeAlarm]);
 
+  const isRinging = !!activeAlarm;
+
   return (
-    <>
+    <AlarmRingContext.Provider value={{ isRinging }}>
       {children}
-      {/* Global Alarm Modal - shows on any page */}
       <AlarmModal
         isOpen={!!activeAlarm}
         alarm={activeAlarm}
@@ -85,7 +121,7 @@ export function AlarmProvider({ children }: { children: React.ReactNode }) {
         onSnooze={snoozeAlarm}
         onAction={activeAlarm?.workoutPlanId ? handleNavigateToWorkout : undefined}
       />
-    </>
+    </AlarmRingContext.Provider>
   );
 }
 

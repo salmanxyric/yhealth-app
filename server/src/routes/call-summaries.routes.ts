@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { callSummaryController } from '../controllers/call-summary.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 
 const router = Router();
 
@@ -38,7 +39,12 @@ router.get('/:callId', callSummaryController.getSummaryByCallId);
  * @desc    Generate summary for a call
  * @access  Private
  */
-router.post('/generate', callSummaryController.generateSummary);
+router.post(
+  '/generate',
+  requireFeature('ai.call_summary.generate'),
+  consumeCredits('ai.call_summary.generate'),
+  callSummaryController.generateSummary
+);
 
 /**
  * @route   PATCH /api/call-summaries/action-items/:actionItemId

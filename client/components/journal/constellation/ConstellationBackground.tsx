@@ -2,9 +2,14 @@
 
 import { useRef, useEffect } from "react";
 
+/** Radians per second for micro-star field drift around canvas center (very slow). */
+const GALAXY_ROTATION_SPEED = 0.0035;
+
 interface Props {
   width: number;
   height: number;
+  /** When false, star positions stay fixed (e.g. prefers-reduced-motion). */
+  animateGalaxy?: boolean;
 }
 
 interface MicroStar {
@@ -31,7 +36,11 @@ function seededRandom(i: number): number {
   return x - Math.floor(x);
 }
 
-export function ConstellationBackground({ width, height }: Props) {
+export function ConstellationBackground({
+  width,
+  height,
+  animateGalaxy = true,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const starsRef = useRef<MicroStar[]>([]);
   const shootingRef = useRef<ShootingStar | null>(null);
@@ -110,11 +119,25 @@ export function ConstellationBackground({ width, height }: Props) {
       }
 
       // Micro stars with twinkle
+      const cx0 = width / 2;
+      const cy0 = height / 2;
+      const galaxyAngle = animateGalaxy ? t * GALAXY_ROTATION_SPEED : 0;
+      const cosG = Math.cos(galaxyAngle);
+      const sinG = Math.sin(galaxyAngle);
+
       for (const star of starsRef.current) {
         const twinkle = 0.5 + 0.5 * Math.sin(t * star.speed * Math.PI * 2 + star.phase);
         const alpha = star.alpha * twinkle;
+        let sx = star.x;
+        let sy = star.y;
+        if (animateGalaxy) {
+          const dx = star.x - cx0;
+          const dy = star.y - cy0;
+          sx = dx * cosG - dy * sinG + cx0;
+          sy = dx * sinG + dy * cosG + cy0;
+        }
         ctx.beginPath();
-        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        ctx.arc(sx, sy, star.r, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(200, 210, 255, ${alpha})`;
         ctx.fill();
       }
@@ -193,7 +216,7 @@ export function ConstellationBackground({ width, height }: Props) {
       running = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [width, height]);
+  }, [width, height, animateGalaxy]);
 
   if (width === 0 || height === 0) return null;
 

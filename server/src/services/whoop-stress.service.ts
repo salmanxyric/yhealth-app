@@ -9,7 +9,7 @@
  * It presents insights as physiological arousal trends relative to the user's personal baseline.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================

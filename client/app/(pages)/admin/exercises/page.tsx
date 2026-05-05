@@ -27,6 +27,8 @@ import {
   Lightbulb,
   AlertTriangle,
   ExternalLink,
+  Upload,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +63,7 @@ import { ExerciseSearchFilters } from "./components/ExerciseSearchFilters";
 import { ExerciseBulkActionsToolbar } from "./components/ExerciseBulkActionsToolbar";
 import { CreateEditExerciseModal } from "./components/CreateEditExerciseModal";
 import { SyncExercisesModal } from "./components/SyncExercisesModal";
+import { ImportExercisesModal } from "./components/ImportExercisesModal";
 
 const difficultyColors: Record<string, { bg: string; text: string }> = {
   beginner: { bg: "bg-emerald-500/15", text: "text-emerald-400" },
@@ -123,6 +126,8 @@ export default function AdminExercisesPage() {
   const [createEditModalOpen, setCreateEditModalOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<ExerciseListItem | null>(null);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     title: string;
@@ -199,6 +204,77 @@ export default function AdminExercisesPage() {
     setPage(1);
     setSelectedIds(new Set());
   }, [searchQuery, categoryFilter, difficultyFilter, sourceFilter, activeFilter]);
+
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const allExercises: ExerciseListItem[] = [];
+      let currentPage = 1;
+      let hasMore = true;
+
+      const filterParams: Record<string, string | number> = {
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        limit: 100,
+      };
+      if (searchQuery) filterParams.search = searchQuery;
+      if (categoryFilter !== "all") filterParams.category = categoryFilter;
+      if (difficultyFilter !== "all") filterParams.difficulty = difficultyFilter;
+      if (sourceFilter !== "all") filterParams.source = sourceFilter;
+      if (activeFilter !== "all")
+        filterParams.is_active = activeFilter === "active" ? "true" : "false";
+
+      while (hasMore) {
+        const response = await adminExercisesService.list({
+          ...filterParams,
+          page: currentPage,
+        });
+
+        if (!response.success || !response.data) break;
+
+        allExercises.push(...response.data);
+
+        const meta = response.meta;
+        hasMore =
+          !!meta &&
+          typeof meta.totalPages === "number" &&
+          currentPage < meta.totalPages;
+        currentPage += 1;
+      }
+
+      const exportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        filterSummary: {
+          search: searchQuery || null,
+          category: categoryFilter !== "all" ? categoryFilter : null,
+          difficulty: difficultyFilter !== "all" ? difficultyFilter : null,
+          source: sourceFilter !== "all" ? sourceFilter : null,
+          is_active: activeFilter !== "all" ? activeFilter : null,
+        },
+        total: allExercises.length,
+        exercises: allExercises,
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `exercises-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${allExercises.length} exercises`);
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [searchQuery, categoryFilter, difficultyFilter, sourceFilter, activeFilter, sortBy, sortOrder]);
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
@@ -371,7 +447,7 @@ export default function AdminExercisesPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <Button
                 variant="outline"
@@ -380,6 +456,36 @@ export default function AdminExercisesPage() {
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Sync APIs
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+              <Button
+                variant="outline"
+                onClick={handleExport}
+                disabled={isExporting}
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white backdrop-blur-sm"
+              >
+                {isExporting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Exporting…
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </>
+                )}
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+              <Button
+                variant="outline"
+                onClick={() => setImportModalOpen(true)}
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white backdrop-blur-sm"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import
               </Button>
             </motion.div>
             <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -756,6 +862,15 @@ export default function AdminExercisesPage() {
         open={syncModalOpen}
         onOpenChange={setSyncModalOpen}
         onSyncComplete={() => {
+          fetchExercises();
+          fetchStats();
+        }}
+      />
+
+      <ImportExercisesModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        onImportComplete={() => {
           fetchExercises();
           fetchStats();
         }}

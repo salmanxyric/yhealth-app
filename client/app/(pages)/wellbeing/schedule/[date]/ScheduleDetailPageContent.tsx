@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   Loader2,
   ArrowLeft,
@@ -21,13 +21,20 @@ import {
   scheduleService,
   type DailySchedule,
   type ScheduleItem,
-  type ScheduleLink,
+  
 } from "@/src/shared/services/schedule.service";
 import { ActivityFormModal } from "@/app/(pages)/dashboard/components/wellbeing/schedule/ActivityFormModal";
 import { ConfirmModal } from "@/app/(pages)/dashboard/components/wellbeing/schedule/ConfirmModal";
 import { AlertModal } from "@/app/(pages)/dashboard/components/wellbeing/schedule/AlertModal";
 import ScheduleWorkflow from "@/app/(pages)/dashboard/components/wellbeing/schedule/ScheduleWorkflow";
 import { ApiError } from "@/lib/api-client";
+import { calendarApiService } from "@/src/shared/services/calendar.service";
+import { dataSourceService } from "@/src/shared/services/data-source.service";
+import {
+  toMinutes,
+  minutesToHHmm,
+  type ExistingSlot,
+} from "@/lib/schedule/time-conflict";
 
 /* ─────────────────────── Loading ─────────────────────── */
 
@@ -141,6 +148,94 @@ function ScheduleDetailContent() {
     loadSchedule(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduleDate]);
+
+  // Keep external providers fresh while this page is open. The server-side
+  // `getScheduleByDate` already materialises Google events + prayers into
+  // `schedule_items`, so we only need to (a) poke the Google → DB sync so
+  // newly-added events land in `calendar_events`, then (b) reload the
+  // schedule so the materialised rows come through with real UUIDs.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const syncAndLoad = async () => {
+      try {
+        await calendarApiService.syncCalendar();
+      } catch {
+        /* not connected or transient — keep going */
+      }
+      if (cancelled) return;
+      await loadSchedule(true);
+    };
+
+    timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      syncAndLoad();
+    }, 60_000);
+
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        syncAndLoad();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisible);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisible);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleDate]);
+
+  const handlePrayerDone = useCallback(
+    async (externalId: string) => {
+      try {
+        await dataSourceService.markPrayerComplete(externalId);
+        // Optimistic local update so the "Done" state shows immediately.
+        setSchedule((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            items: prev.items.map((it) =>
+              it.source === "prayer" && it.externalId === externalId
+                ? { ...it, completed: true, completedAt: new Date().toISOString() }
+                : it,
+            ),
+          };
+        });
+      } catch {
+        /* silent — retry by tapping again */
+      }
+    },
+    [],
+  );
+
+  // Unified list of "already booked" windows used for conflict detection in
+  // the ActivityFormModal. All sources now live in schedule.items after the
+  // server sync, so we just walk that list once.
+  const existingSlots = useMemo<ExistingSlot[]>(() => {
+    const out: ExistingSlot[] = [];
+    (schedule?.items ?? []).forEach((it) => {
+      // Completed prayers shouldn't block new activities in that window.
+      if (it.source === "prayer" && it.completed) return;
+      const start = it.startTime;
+      let end = it.endTime;
+      if (!end && it.durationMinutes) {
+        const startMin = toMinutes(start);
+        if (Number.isFinite(startMin)) {
+          end = minutesToHHmm(startMin + it.durationMinutes);
+        }
+      }
+      if (!start || !end) return;
+      out.push({ id: it.id, title: it.title, source: it.source, start, end });
+    });
+    return out;
+  }, [schedule?.items]);
 
   const loadSchedule = async (forceFresh = false) => {
     setIsLoading(true);
@@ -899,6 +994,7 @@ function ScheduleDetailContent() {
                   "danger"
                 );
               }}
+              onPrayerDone={handlePrayerDone}
               onAutoConnect={async () => {
                 if (!schedule || schedule.items.length < 2) return;
                 const timeConnections = generateTimeBasedConnections();
@@ -1008,6 +1104,7 @@ function ScheduleDetailContent() {
           }
         }}
         scheduleId={schedule?.id}
+        existingSlots={existingSlots}
       />
 
       <ConfirmModal

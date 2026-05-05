@@ -1,16 +1,12 @@
 "use client";
 
 import { Suspense } from "react";
-import { Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout";
+import { DashboardPageSkeleton } from "@/components/loading";
 import { ActivityTab } from "@/app/(pages)/dashboard/components/tabs";
 
 function ActivityLoading() {
-  return (
-    <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-    </div>
-  );
+  return <DashboardPageSkeleton activeTab="activity" variant="compact" />;
 }
 
 function ActivityContent() {

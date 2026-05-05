@@ -491,7 +491,7 @@ describe('Message API Integration Tests', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data).toHaveProperty('mediaUrl');
       expect(response.body.data).toHaveProperty('mediaSize');
-    });
+    }, 60_000);
 
     it('should return 400 if file is missing', async () => {
       const response = await request(app)

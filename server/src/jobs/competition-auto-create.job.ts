@@ -6,11 +6,14 @@
  * Runs hourly. Each track checks independently so a long challenge never blocks daily creation.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { competitionService } from '../services/competition.service.js';
 import type { CompetitionRules } from '../services/competition.service.js';
 import { smartCompetitionService } from '../services/smart-competition.service.js';
+import { modelFactory } from '../services/model-factory.service.js';
+import { llmCircuitBreaker } from '../services/llm-circuit-breaker.service.js';
+import { notificationEngine } from '../services/notification-engine.service.js';
 
 // ============================================
 // CONFIGURATION
@@ -283,6 +286,121 @@ async function ensureChallengeCompetition(): Promise<void> {
 }
 
 // ============================================
+// GOAL-TARGETED COMPETITION (LLM-POWERED)
+// ============================================
+
+let lastTargetedRunMs = 0;
+const TARGETED_COOLDOWN_MS = 12 * 60 * 60 * 1000; // 12h between targeted runs
+
+async function ensureGoalTargetedCompetition(): Promise<void> {
+  if (Date.now() - lastTargetedRunMs < TARGETED_COOLDOWN_MS) return;
+
+  // Check if there's already an active ai_targeted competition
+  const existing = await query<{ count: string }>(
+    `SELECT COUNT(*)::int as count FROM competitions
+     WHERE type = 'ai_generated' AND status = 'active' AND end_date > NOW()
+       AND prize_metadata->>'track' = 'targeted'`
+  );
+  if (Number(existing.rows[0]?.count || 0) > 0) return;
+
+  if (!llmCircuitBreaker.isCallAllowed()) return;
+
+  try {
+    // Get goal distribution and dominant pillar
+    const distribution = await smartCompetitionService.getGoalDistribution();
+    if (distribution.length === 0) return;
+
+    const dominant = distribution[0];
+    if (dominant.count < 5) return; // Need 5+ users in a pillar
+
+    // Get active users in the dominant pillar
+    const userCluster = await query<{ user_id: string; category: string; title: string }>(
+      `SELECT ug.user_id, ug.category, ug.title
+       FROM user_goals ug
+       JOIN users u ON u.id = ug.user_id AND u.is_active = true AND u.last_login_at >= NOW() - INTERVAL '7 days'
+       WHERE ug.pillar = $1 AND ug.status = 'active'
+       ORDER BY ug.created_at DESC
+       LIMIT 50`,
+      [dominant.pillar]
+    );
+
+    if (userCluster.rows.length < 5) return;
+
+    const categories = [...new Set(userCluster.rows.map(r => r.category))];
+    const llm = modelFactory.getModel({ tier: 'default' });
+
+    const prompt = `You are a fitness competition designer. Create ONE group competition for users focused on ${dominant.pillar} goals.
+
+User goal categories in this group: ${categories.join(', ')}
+Group size: ${userCluster.rows.length} users
+
+Return JSON (no markdown):
+{"name":"catchy name (max 40 chars)","description":"motivating 1-sentence description","metric":"workout|nutrition|wellbeing|steps|sleep","aggregation":"total|average|streak","durationDays":7,"scoringWeights":{"workout":20,"nutrition":20,"wellbeing":20,"biometrics":10,"engagement":15,"consistency":15},"badges":["Badge Name"]}
+
+Make it specific to ${dominant.pillar}. durationDays must be 3, 7, or 14.`;
+
+    const response = await llm.invoke(prompt);
+    const text = typeof response.content === 'string' ? response.content : String(response.content);
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      llmCircuitBreaker.recordRateLimitError(new Error('No JSON in LLM response'));
+      return;
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    llmCircuitBreaker.recordSuccess();
+    lastTargetedRunMs = Date.now();
+
+    const now = new Date();
+    const endDate = new Date(now);
+    const days = [3, 7, 14].includes(parsed.durationDays) ? parsed.durationDays : 7;
+    endDate.setDate(endDate.getDate() + days);
+
+    const comp = await competitionService.createCompetition({
+      name: parsed.name || `${dominant.pillar} Challenge`,
+      type: 'ai_generated',
+      description: parsed.description || `A ${dominant.pillar}-focused challenge`,
+      startDate: now,
+      endDate,
+      rules: { metric: parsed.metric || dominant.pillar, aggregation: parsed.aggregation || 'total', min_days: 1 },
+      eligibility: { groups: [dominant.pillar] },
+      scoringWeights: parsed.scoringWeights || { workout: 20, nutrition: 20, wellbeing: 20, biometrics: 10, engagement: 15, consistency: 15 },
+      antiCheatPolicy: {},
+      prizeMetadata: { badges: parsed.badges || [`${dominant.pillar} Champion`], top_n: 10, track: 'targeted' },
+      status: 'active',
+      createdBy: null,
+    });
+
+    // Notify relevant users
+    const uniqueUsers = [...new Set(userCluster.rows.map(r => r.user_id))].slice(0, 30);
+    for (const uid of uniqueUsers) {
+      notificationEngine.send({
+        userId: uid,
+        type: 'competition',
+        title: 'New Challenge For You!',
+        message: `"${comp.name}" — matches your ${dominant.pillar} goals. Join now!`,
+        icon: '🏆',
+        priority: 'normal',
+        relatedEntityType: 'competition',
+        relatedEntityId: comp.id,
+        actionUrl: `/competitions/${comp.id}`,
+        actionLabel: 'Join Challenge',
+      }).catch(() => {});
+    }
+
+    logger.info('[CompetitionAutoCreate] Created goal-targeted competition', {
+      id: comp.id, name: comp.name, pillar: dominant.pillar, notified: uniqueUsers.length,
+    });
+  } catch (error) {
+    llmCircuitBreaker.recordRateLimitError(error);
+    logger.warn('[CompetitionAutoCreate] Goal-targeted generation failed', {
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+  }
+}
+
+// ============================================
 // JOB PROCESSOR
 // ============================================
 
@@ -291,9 +409,10 @@ async function processAutoCreate(): Promise<void> {
   isRunning = true;
 
   try {
-    // Run both tracks independently
+    // Run all tracks independently
     await ensureDailyCompetition();
     await ensureChallengeCompetition();
+    await ensureGoalTargetedCompetition();
   } catch (error) {
     logger.error('[CompetitionAutoCreate] Fatal error', {
       error: error instanceof Error ? error.message : 'Unknown error',

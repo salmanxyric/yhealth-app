@@ -7,7 +7,7 @@
 
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { comprehensiveUserContextService } from './comprehensive-user-context.service.js';
 import type { ComprehensiveUserContext } from './comprehensive-user-context.service.js';
@@ -16,9 +16,11 @@ import { aiScoringService } from './ai-scoring.service.js';
 import type { DailyScore } from './ai-scoring.service.js';
 import { mentalRecoveryScoreService } from './mental-recovery-score.service.js';
 import { gamificationService } from './gamification.service.js';
+import { z } from 'zod';
 import { env } from '../config/env.config.js';
 import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
 import { modelFactory } from './model-factory.service.js';
+import { parseLlmJson } from '../helper/llm-json-parser.js';
 
 // ============================================
 // TYPES
@@ -285,11 +287,13 @@ class UserCoachingProfileService {
   private llm: BaseChatModel;
   private tableEnsured = false;
   private ensureTablePromise: Promise<void> | null = null;
+  private inflightGenerations: Map<string, Promise<CoachingProfile>> = new Map();
 
   constructor() {
     this.llm = modelFactory.getModel({
       tier: 'reasoning',
       maxTokens: 1500,
+      responseFormat: { type: 'json_object' },
     });
   }
 
@@ -408,7 +412,7 @@ class UserCoachingProfileService {
 
       // Consider stale after 24 hours
       if (ageHours > 24) {
-        logger.info('[CoachingProfile] Profile is stale (>24h)', {
+        logger.debug('[CoachingProfile] Profile is stale (>24h)', {
           userId,
           ageHours: Math.round(ageHours),
         });
@@ -430,6 +434,67 @@ class UserCoachingProfileService {
       return profile;
     } catch (error) {
       logger.error('[CoachingProfile] Error fetching profile', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return null;
+    }
+  }
+
+  /**
+   * DB-only profile fetch for the chat hot path — returns ANY existing profile
+   * regardless of age. Never triggers generation. If the profile is stale (>6h),
+   * kicks off a background refresh via fire-and-forget.
+   * Returns null only if the user has never had a profile generated.
+   */
+  async getProfileFromCache(userId: string): Promise<CoachingProfile | null> {
+    try {
+      await this.ensureTable();
+
+      const result = await query<{
+        profile_data: CoachingProfile;
+        generated_at: string;
+        stable_traits: any;
+        recent_observations: any;
+        personal_context: any;
+      }>(
+        `SELECT profile_data, generated_at, stable_traits, recent_observations, personal_context
+         FROM user_coaching_profiles
+         WHERE user_id = $1
+         LIMIT 1`,
+        [userId]
+      );
+
+      if (result.rows.length === 0) return null;
+
+      const row = result.rows[0];
+      const profile = typeof row.profile_data === 'string'
+        ? JSON.parse(row.profile_data)
+        : row.profile_data;
+      if (row.stable_traits) {
+        profile.stableTraits = typeof row.stable_traits === 'string' ? JSON.parse(row.stable_traits) : row.stable_traits;
+      }
+      if (row.recent_observations) {
+        profile.recentObservations = typeof row.recent_observations === 'string' ? JSON.parse(row.recent_observations) : row.recent_observations;
+      }
+      if (row.personal_context) {
+        profile.personalContext = typeof row.personal_context === 'string' ? JSON.parse(row.personal_context) : row.personal_context;
+      }
+
+      // Fire-and-forget background refresh if stale
+      const ageHours = (Date.now() - new Date(row.generated_at).getTime()) / (1000 * 60 * 60);
+      if (ageHours > 6) {
+        this.generateProfile(userId).catch((err) => {
+          logger.warn('[CoachingProfile] Background refresh failed (from cache fetch)', {
+            userId,
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+      }
+
+      return profile;
+    } catch (error) {
+      logger.error('[CoachingProfile] Error in getProfileFromCache', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -514,8 +579,26 @@ class UserCoachingProfileService {
 
   /**
    * Main orchestrator: generate a full coaching profile from all data sources.
+   * Deduplicates concurrent calls for the same user — if generation is already
+   * in-flight, the existing promise is returned instead of triggering a parallel LLM call.
    */
   async generateProfile(userId: string, cachedContext?: any): Promise<CoachingProfile> {
+    const existing = this.inflightGenerations.get(userId);
+    if (existing) {
+      logger.debug('[CoachingProfile] Awaiting in-flight generation', { userId });
+      return existing;
+    }
+
+    const promise = this._doGenerateProfile(userId, cachedContext)
+      .finally(() => {
+        this.inflightGenerations.delete(userId);
+      });
+
+    this.inflightGenerations.set(userId, promise);
+    return promise;
+  }
+
+  private async _doGenerateProfile(userId: string, cachedContext?: any): Promise<CoachingProfile> {
     const startTime = Date.now();
     await this.ensureTable();
 
@@ -580,10 +663,14 @@ class UserCoachingProfileService {
       });
     }
 
+    const dataGatherTime = Date.now() - startTime;
+
     // ----- Step 3: LLM-powered insights -----
+    const llmStartTime = Date.now();
     const aiInsights = await this.generateAIInsights(
       context, historicalScores, goalAlignment, riskFlags, fitnessJourney, currentState, patterns
     );
+    const llmInsightTime = Date.now() - llmStartTime;
 
     // Compute predictions (partially LLM, partially deterministic)
     const predictions = this.computePredictions(context, historicalScores, weightHistory, aiInsights.predictions);
@@ -634,15 +721,38 @@ class UserCoachingProfileService {
     const currentVersion = versionResult.rows[0]?.profile_version ?? 0;
     profile.profileVersion = currentVersion + 1;
 
-    // ----- Step 5: Persist -----
-    await this.upsertProfile(userId, profile);
+    // ----- Step 5: Persist (only if profile passes quality gate) -----
+    const profileValid = this.isProfileValid(profile);
+    if (profileValid) {
+      await this.upsertProfile(userId, profile);
+    } else {
+      logger.warn('[CoachingProfile] Skipping DB write — profile failed validation (preserving last known good)', {
+        userId,
+        correlations: profile.correlations.length,
+        keyInsights: profile.keyInsights.length,
+        nextBestActions: profile.nextBestActions.length,
+        suggestedFocus: profile.currentState.suggestedFocus?.substring(0, 50),
+      });
+    }
 
     const elapsed = Date.now() - startTime;
+    const profileQualityScore = [
+      profile.correlations.length > 0,
+      profile.keyInsights.length > 0,
+      profile.nextBestActions.length > 0,
+      !!profile.currentState.suggestedFocus,
+    ].filter(Boolean).length;
+
     logger.info('[CoachingProfile] Profile generated', {
       userId,
       elapsed: `${elapsed}ms`,
+      dataGatherTime: `${dataGatherTime}ms`,
+      llmInsightTime: `${llmInsightTime}ms`,
       riskFlags: riskFlags.length,
       insights: aiInsights.keyInsights.length,
+      profileQualityScore,
+      wasValidated: profileValid,
+      wasPersisted: profileValid,
     });
 
     return profile;
@@ -1789,121 +1899,60 @@ Rules:
         }
       }
 
-      // Extract JSON from response (handle markdown code blocks)
-      // Strip markdown code fences first
-      const cleaned = content.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '');
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        logger.warn('[CoachingProfile] LLM response did not contain valid JSON', {
+      // Parse LLM response using robust helper (handles fences, truncation, control chars)
+      const raw = parseLlmJson<Partial<AIInsightsResult>>(content);
+      if (!raw) {
+        logger.warn('[CoachingProfile] parseLlmJson returned null', {
           contentLength: content.length,
           contentPreview: content.substring(0, 200),
         });
         return defaults;
       }
 
-      // Sanitize common LLM JSON issues
-      const sanitized = jsonMatch[0]
-        // Remove single-line comments
-        .replace(/\/\/[^\n]*/g, '')
-        // Remove multi-line comments
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        // Fix missing commas between array elements: } { or } "key" or "val" {
-        .replace(/\}\s*\{/g, '}, {')
-        // Fix missing commas between object properties: "value" "nextKey"  or  "value"\n"nextKey"
-        .replace(/"(\s*)\n(\s*)"/g, '",\n$2"')
-        // Fix missing comma: ] "key" (array end followed by next property)
-        .replace(/\]\s*"/g, '], "')
-        // Fix missing comma: true/false/null/number followed by "key" on next line
-        .replace(/(true|false|null|\d+\.?\d*)\s*\n(\s*)"/g, '$1,\n$2"')
-        // Remove trailing commas before ] or }
-        .replace(/,\s*([}\]])/g, '$1')
-        // Fix unescaped newlines inside string values
-        .replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) =>
-          match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
-        );
+      // Validate shape with Zod — coerce missing fields to defaults instead of crashing
+      const AIInsightsSchema = z.object({
+        correlations: z.array(z.object({ observation: z.string() })).default([]),
+        suggestedFocus: z.string().default(defaults.suggestedFocus),
+        openingStyle: z.string().default(defaults.openingStyle),
+        keyInsights: z.array(z.object({
+          type: z.enum(['working', 'blocking']).catch('working'),
+          text: z.string(),
+        })).default([]),
+        nextBestActions: z.array(z.object({
+          action: z.string(),
+          expectedImpact: z.string(),
+          priority: z.number(),
+        })).default([]),
+        predictions: z.array(z.object({
+          timeframe: z.string(),
+          metric: z.string(),
+          projection: z.string(),
+          confidence: z.number(),
+        })).default([]),
+      });
 
-      let parsed: Partial<AIInsightsResult>;
-      try {
-        parsed = JSON.parse(sanitized) as Partial<AIInsightsResult>;
-      } catch (firstError) {
-        // Second attempt: more aggressive cleanup for stubborn LLM output
-        try {
-          const aggressive = sanitized
-            // Remove control characters except \n\r\t
-            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
-            // Fix double commas
-            .replace(/,\s*,/g, ',')
-            // Re-strip trailing commas (may appear after previous fixes)
-            .replace(/,\s*([}\]])/g, '$1');
-          parsed = JSON.parse(aggressive) as Partial<AIInsightsResult>;
-        } catch {
-          // Third attempt: repair truncated JSON by closing unclosed brackets/braces
-          try {
-            let repaired = sanitized
-              .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
-              .replace(/,\s*,/g, ',')
-              .replace(/,\s*([}\]])/g, '$1');
-
-            // Count unclosed brackets and close them
-            let openBraces = 0;
-            let openBrackets = 0;
-            let inString = false;
-            let escaped = false;
-            for (const ch of repaired) {
-              if (escaped) { escaped = false; continue; }
-              if (ch === '\\') { escaped = true; continue; }
-              if (ch === '"') { inString = !inString; continue; }
-              if (inString) continue;
-              if (ch === '{') openBraces++;
-              else if (ch === '}') openBraces--;
-              else if (ch === '[') openBrackets++;
-              else if (ch === ']') openBrackets--;
-            }
-
-            // If we're inside a string (odd quotes), close it
-            if (inString) repaired += '"';
-            // Close unclosed structures
-            for (let i = 0; i < openBrackets; i++) repaired += ']';
-            for (let i = 0; i < openBraces; i++) repaired += '}';
-
-            // Strip trailing commas one more time after repair
-            repaired = repaired.replace(/,\s*([}\]])/g, '$1');
-
-            parsed = JSON.parse(repaired) as Partial<AIInsightsResult>;
-            logger.info('[CoachingProfile] Repaired truncated JSON successfully');
-          } catch (_repairError) {
-            logger.warn('[CoachingProfile] All JSON parse attempts failed, returning defaults', {
-              error: (firstError as Error).message,
-              contentSnippet: sanitized.substring(0, 200),
-            });
-            return defaults;
-          }
-        }
+      const validated = AIInsightsSchema.safeParse(raw);
+      if (!validated.success) {
+        logger.warn('[CoachingProfile] Schema validation failed, returning defaults', {
+          errors: validated.error.issues.slice(0, 3),
+        });
+        return defaults;
       }
 
-      return {
-        correlations: Array.isArray(parsed.correlations) ? parsed.correlations : defaults.correlations,
-        suggestedFocus: parsed.suggestedFocus || defaults.suggestedFocus,
-        openingStyle: parsed.openingStyle || defaults.openingStyle,
-        keyInsights: Array.isArray(parsed.keyInsights) ? parsed.keyInsights : defaults.keyInsights,
-        nextBestActions: Array.isArray(parsed.nextBestActions)
-          ? parsed.nextBestActions
-          : defaults.nextBestActions,
-        predictions: Array.isArray(parsed.predictions) ? parsed.predictions : defaults.predictions,
-      };
+      return validated.data;
     } catch (error) {
       if (modelFactory.isAuthError(error)) {
         // Permanently blacklist provider with invalid API key (24h cooldown)
         modelFactory.markCurrentProviderRateLimited(24 * 60 * 60 * 1000);
         logger.warn('[CoachingProfile] Provider has invalid API key, blacklisted for 24h');
         try {
-          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500, responseFormat: { type: 'json_object' } });
           logger.info('[CoachingProfile] Switched to next LLM provider after auth failure');
         } catch { /* no providers available */ }
       } else if (llmCircuitBreaker.isRateLimitError(error)) {
         llmCircuitBreaker.recordRateLimitError(error);
         try {
-          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500, responseFormat: { type: 'json_object' } });
           logger.info('[CoachingProfile] Switched to fallback LLM provider after rate limit');
         } catch { /* no providers available */ }
       }
@@ -2321,12 +2370,12 @@ Rules:
         modelFactory.markCurrentProviderRateLimited(24 * 60 * 60 * 1000);
         logger.warn('[CoachingProfile] Provider has invalid API key, blacklisted for 24h');
         try {
-          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500, responseFormat: { type: 'json_object' } });
         } catch { /* no providers available */ }
       } else if (llmCircuitBreaker.isRateLimitError(error)) {
         llmCircuitBreaker.recordRateLimitError(error);
         try {
-          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500 });
+          this.llm = modelFactory.getModel({ tier: 'reasoning', maxTokens: 1500, responseFormat: { type: 'json_object' } });
           logger.info('[CoachingProfile] Switched to fallback LLM provider after rate limit');
         } catch { /* no providers available */ }
       }
@@ -2341,6 +2390,25 @@ Rules:
   // ============================================
   // PERSISTENCE
   // ============================================
+
+  /**
+   * Check whether a profile has enough LLM-generated content to be worth persisting.
+   * Prevents overwriting a valid cached profile with empty/default data when LLM fails.
+   */
+  private isProfileValid(profile: CoachingProfile): boolean {
+    const defaultFocus = 'Continue building consistent habits across all health pillars.';
+    const hasCorrelations = profile.correlations.length > 0;
+    const hasInsights = profile.keyInsights.length > 0;
+    const hasActions = profile.nextBestActions.length > 0;
+    const hasFocus = !!profile.currentState.suggestedFocus
+      && profile.currentState.suggestedFocus !== defaultFocus;
+
+    // Require at least 2 of the 4 LLM-dependent fields to be non-default
+    const populatedCount = [hasCorrelations, hasInsights, hasActions, hasFocus]
+      .filter(Boolean).length;
+
+    return populatedCount >= 2;
+  }
 
   /**
    * Upsert the coaching profile into the database.
@@ -2582,6 +2650,112 @@ Rules:
       sharedMilestones: milestones,
       voiceStyle: 'This is a veteran relationship. Speak with deep familiarity. Reference specific past moments by name. Challenge hard — they know you care. Use "we" language. Be the coach who knows them better than they know themselves.',
     };
+  }
+  /**
+   * Generate a structured weekly progress summary for coaching intelligence.
+   * Returns a human-readable summary of what happened, what patterns emerged,
+   * what needs adjustment, and recommended focus for next week.
+   */
+  async generateWeeklyProgressSummary(userId: string): Promise<{
+    accomplished: string[];
+    patterns: string[];
+    adjustments: string[];
+    nextWeekFocus: string;
+  }> {
+    const accomplished: string[] = [];
+    const patterns: string[] = [];
+    const adjustments: string[] = [];
+
+    try {
+      // Completed actions this week
+      const completionsResult = await query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM goal_action_completions
+         WHERE user_id = $1 AND completion_date >= CURRENT_DATE - INTERVAL '7 days'`,
+        [userId]
+      );
+      const completedActions = parseInt(completionsResult.rows[0]?.count ?? '0');
+      if (completedActions > 0) {
+        accomplished.push(`Completed ${completedActions} goal actions this week`);
+      }
+
+      // Milestones hit this week
+      const milestonesResult = await query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM life_goal_milestones
+         WHERE user_id = $1 AND completed = true AND completed_at >= NOW() - INTERVAL '7 days'`,
+        [userId]
+      );
+      const milestonesHit = parseInt(milestonesResult.rows[0]?.count ?? '0');
+      if (milestonesHit > 0) {
+        accomplished.push(`Hit ${milestonesHit} milestone(s)`);
+      }
+
+      // Score trend this week
+      const scoresResult = await query<{ date: string; total_score: number }>(
+        `SELECT date, total_score FROM daily_user_scores
+         WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '7 days'
+         ORDER BY date ASC`,
+        [userId]
+      );
+      const scores = scoresResult.rows.map(r => parseFloat(r.total_score as unknown as string));
+      if (scores.length >= 3) {
+        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const firstHalf = scores.slice(0, Math.floor(scores.length / 2));
+        const secondHalf = scores.slice(Math.floor(scores.length / 2));
+        const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+        const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+
+        if (secondAvg > firstAvg + 3) {
+          patterns.push(`Scores trending UP (avg ${Math.round(avg)}/100, improving in second half of week)`);
+        } else if (secondAvg < firstAvg - 3) {
+          patterns.push(`Scores trending DOWN (avg ${Math.round(avg)}/100, declining in second half of week)`);
+          adjustments.push('Investigate what changed mid-week — schedule, stress, or habit disruption?');
+        } else {
+          patterns.push(`Scores stable this week (avg ${Math.round(avg)}/100)`);
+        }
+      }
+
+      // Most-skipped actions (friction points)
+      const skippedResult = await query<{ title: string; missed: string }>(
+        `SELECT ga.title, COUNT(*) AS missed
+         FROM goal_actions ga
+         JOIN life_goals lg ON ga.life_goal_id = lg.id
+         WHERE lg.user_id = $1 AND lg.status = 'active' AND ga.is_completed = false
+           AND ga.frequency = 'daily'
+           AND NOT EXISTS (
+             SELECT 1 FROM goal_action_completions gac
+             WHERE gac.action_id = ga.id AND gac.completion_date >= CURRENT_DATE - INTERVAL '7 days'
+           )
+         GROUP BY ga.title
+         ORDER BY missed DESC LIMIT 2`,
+        [userId]
+      );
+      for (const row of skippedResult.rows) {
+        adjustments.push(`"${row.title}" was skipped all week — consider simplifying or rescheduling`);
+      }
+
+      // Determine next week focus
+      let nextWeekFocus = 'Continue current momentum and stay consistent with daily actions.';
+      if (adjustments.length > 0) {
+        nextWeekFocus = 'Focus on removing friction from skipped actions — make them easier or move them to a better time slot.';
+      } else if (completedActions > 20) {
+        nextWeekFocus = 'Strong week — consider raising one target by 10% or adding a stretch goal.';
+      } else if (completedActions === 0) {
+        nextWeekFocus = 'Reset week — pick just ONE action and commit to it daily. Nothing else matters this week.';
+      }
+
+      return { accomplished, patterns, adjustments, nextWeekFocus };
+    } catch (err) {
+      logger.warn('[UserCoachingProfile] Weekly summary generation failed', {
+        userId,
+        error: (err as Error).message,
+      });
+      return {
+        accomplished: [],
+        patterns: [],
+        adjustments: [],
+        nextWeekFocus: 'Unable to generate summary — continue with current plan.',
+      };
+    }
   }
 }
 

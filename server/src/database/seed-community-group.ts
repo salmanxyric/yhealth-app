@@ -3,7 +3,7 @@
  * @description Creates the Balencia Community group and sends a welcome message
  */
 
-import { query, transaction } from './pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 
 const COMMUNITY_NAME = 'Balencia Community';

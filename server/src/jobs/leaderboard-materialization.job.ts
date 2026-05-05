@@ -9,7 +9,7 @@ import { leaderboardService } from '../services/leaderboard.service.js';
 import { competitionService } from '../services/competition.service.js';
 import { aiScoringService } from '../services/ai-scoring.service.js';
 import { socketService } from '../services/socket.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 // ============================================
 // CONFIGURATION
@@ -75,7 +75,7 @@ async function materializeLeaderboards(): Promise<void> {
 
     // Materialize competition leaderboards
     try {
-      const activeCompetitions = await competitionService.getActiveCompetitions();
+      const { competitions: activeCompetitions } = await competitionService.getActiveCompetitions('active', 100, 0);
       const todayDate = dates[0];
 
       for (const competition of activeCompetitions) {

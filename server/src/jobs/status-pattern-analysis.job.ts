@@ -5,7 +5,7 @@
  * Detected patterns are persisted to user_coaching_profiles for use by the AI coach.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { statusPatternAnalyzerService } from '../services/status-pattern-analyzer.service.js';
 

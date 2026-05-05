@@ -4,7 +4,7 @@
  * Integrates with diet plans and workout schedules
  */
 
-import { pool, query } from '../database/pg.js';
+import { pool, query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { notificationService } from './notification.service.js';
 

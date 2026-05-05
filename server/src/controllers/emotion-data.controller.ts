@@ -8,7 +8,7 @@ import { emotionDetectionService } from '../services/emotion-detection.service.j
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 class EmotionDataController {

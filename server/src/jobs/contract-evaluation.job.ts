@@ -8,14 +8,14 @@
  * Batch processing with inter-batch delays to prevent DB saturation.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { accountabilityContractService } from '../services/accountability-contract.service.js';
 
 const JOB_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
 const STARTUP_DELAY_MS = 840_000; // 14 minutes (after accountability-trigger at 780s)
-const BATCH_SIZE = 5;
-const INTER_BATCH_DELAY_MS = 2000;
+const BATCH_SIZE = 50;
+const INTER_BATCH_DELAY_MS = 1000;
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let running = false;

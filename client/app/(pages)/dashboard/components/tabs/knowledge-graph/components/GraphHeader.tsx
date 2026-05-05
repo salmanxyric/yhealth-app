@@ -1,6 +1,7 @@
 'use client';
 
-import { Network, List, LayoutGrid, RefreshCw, Loader2 } from 'lucide-react';
+import { Network, List, LayoutGrid, RefreshCw, Loader2, Brain, Database } from 'lucide-react';
+import type { GraphMode } from './D3ForceGraph';
 
 type ViewMode = 'graph' | 'timeline' | 'cards';
 
@@ -12,6 +13,8 @@ interface GraphHeaderProps {
   onViewModeChange: (mode: ViewMode) => void;
   onRefresh: () => void;
   isLoading: boolean;
+  graphMode?: GraphMode;
+  onGraphModeChange?: (mode: GraphMode) => void;
 }
 
 const VIEW_MODES: { mode: ViewMode; icon: typeof Network; label: string }[] = [
@@ -33,56 +36,107 @@ export function GraphHeader({
   onViewModeChange,
   onRefresh,
   isLoading,
+  graphMode = 'data',
+  onGraphModeChange,
 }: GraphHeaderProps) {
+  const isArchMode = graphMode === 'architecture';
+
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 bg-[#02000f]/50 border-b border-white/10">
-      {/* Stats */}
-      <div className="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
-        <span className="font-medium text-slate-200">
-          {totalNodes}
-          <span className="text-slate-500 font-normal"> nodes</span>
-        </span>
-        <span className="text-slate-600" aria-hidden="true">
-          &middot;
-        </span>
-        <span className="font-medium text-slate-200">
-          {totalEdges}
-          <span className="text-slate-500 font-normal"> edges</span>
-        </span>
-        <span className="text-slate-600" aria-hidden="true">
-          &middot;
-        </span>
-        <span className="text-slate-500">
-          {formatDateDisplay(dateRange.from, dateRange.to)}
-        </span>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        {/* View mode toggle */}
-        <div
-          className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10"
-          role="radiogroup"
-          aria-label="View mode"
-        >
-          {VIEW_MODES.map(({ mode, icon: Icon, label }) => (
+      {/* Left: Graph mode toggle + Stats */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Data / Architecture toggle */}
+        {onGraphModeChange && (
+          <div
+            className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10"
+            role="radiogroup"
+            aria-label="Graph mode"
+          >
             <button
-              key={mode}
-              onClick={() => onViewModeChange(mode)}
+              onClick={() => onGraphModeChange('data')}
               className={`p-2 rounded-md transition-colors ${
-                viewMode === mode
+                !isArchMode
                   ? 'bg-sky-600 text-white shadow-sm'
                   : 'bg-transparent text-slate-400 hover:text-white hover:bg-white/5'
               }`}
               role="radio"
-              aria-checked={viewMode === mode}
-              aria-label={label}
-              title={label}
+              aria-checked={!isArchMode}
+              aria-label="Data view"
+              title="Data view"
             >
-              <Icon className="w-4 h-4" />
+              <Database className="w-4 h-4" />
             </button>
-          ))}
+            <button
+              onClick={() => onGraphModeChange('architecture')}
+              className={`p-2 rounded-md transition-colors ${
+                isArchMode
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-transparent text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+              role="radio"
+              aria-checked={isArchMode}
+              aria-label="Architecture view"
+              title="Architecture view"
+            >
+              <Brain className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span className="font-medium text-slate-200">
+            {totalNodes}
+            <span className="text-slate-500 font-normal"> nodes</span>
+          </span>
+          <span className="text-slate-600" aria-hidden="true">
+            &middot;
+          </span>
+          <span className="font-medium text-slate-200">
+            {totalEdges}
+            <span className="text-slate-500 font-normal"> edges</span>
+          </span>
+          {!isArchMode && (
+            <>
+              <span className="text-slate-600" aria-hidden="true">
+                &middot;
+              </span>
+              <span className="text-slate-500">
+                {formatDateDisplay(dateRange.from, dateRange.to)}
+              </span>
+            </>
+          )}
         </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        {/* View mode toggle — only in data mode */}
+        {!isArchMode && (
+          <div
+            className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/10"
+            role="radiogroup"
+            aria-label="View mode"
+          >
+            {VIEW_MODES.map(({ mode, icon: Icon, label }) => (
+              <button
+                key={mode}
+                onClick={() => onViewModeChange(mode)}
+                className={`p-2 rounded-md transition-colors ${
+                  viewMode === mode
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'bg-transparent text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+                role="radio"
+                aria-checked={viewMode === mode}
+                aria-label={label}
+                title={label}
+              >
+                <Icon className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Refresh */}
         <button

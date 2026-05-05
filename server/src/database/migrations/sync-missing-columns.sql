@@ -27,7 +27,7 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'goal_category') THEN
-    CREATE TYPE goal_category AS ENUM ('weight_loss', 'muscle_building', 'sleep_improvement', 'stress_wellness', 'energy_productivity', 'event_training', 'health_condition', 'habit_building', 'overall_optimization', 'custom');
+    CREATE TYPE goal_category AS ENUM ('weight_loss', 'muscle_building', 'sleep_improvement', 'stress_wellness', 'energy_productivity', 'event_training', 'health_condition', 'habit_building', 'overall_optimization', 'nutrition', 'fitness', 'custom');
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'goal_status') THEN
@@ -178,6 +178,16 @@ BEGIN
     ALTER TABLE user_preferences ADD COLUMN coaching_style coaching_style DEFAULT 'supportive';
   END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'ai_coach_persona') THEN
+    ALTER TABLE user_preferences ADD COLUMN ai_coach_persona VARCHAR(32) DEFAULT 'gentle_friend';
+    UPDATE user_preferences SET ai_coach_persona = CASE coaching_style::text
+      WHEN 'direct' THEN 'drill_sergeant'
+      WHEN 'analytical' THEN 'data_driven_neutral'
+      ELSE 'gentle_friend'
+    END WHERE ai_coach_persona IS NULL;
+    ALTER TABLE user_preferences ALTER COLUMN ai_coach_persona SET NOT NULL;
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'coaching_intensity') THEN
     ALTER TABLE user_preferences ADD COLUMN coaching_intensity coaching_intensity DEFAULT 'moderate';
   END IF;
@@ -248,6 +258,11 @@ BEGIN
 
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'product_tour_completed_at') THEN
     ALTER TABLE user_preferences ADD COLUMN product_tour_completed_at TIMESTAMP;
+  END IF;
+
+  -- JSON bag for regional / religious prefs (e.g. observes_ramadan, country_code) — see special-days.service
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'metadata') THEN
+    ALTER TABLE user_preferences ADD COLUMN metadata JSONB DEFAULT '{}';
   END IF;
 END $$;
 
@@ -664,7 +679,7 @@ BEGIN
 END $$;
 
 -- ============================================
--- 30. MOOD LOGS — mood_emoji, emotion_tags columns
+-- 30. MOOD LOGS — mood_emoji, emotion_tags, mood_rating columns
 -- ============================================
 DO $$
 BEGIN
@@ -674,7 +689,30 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mood_logs' AND column_name = 'emotion_tags') THEN
     ALTER TABLE mood_logs ADD COLUMN emotion_tags emotion_tag[] DEFAULT '{}';
   END IF;
+  -- Composite 1-10 mood rating used by the cross-domain correlator.
+  -- Added here so the column always exists regardless of whether the
+  -- dedicated migration file ran.
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mood_logs' AND column_name = 'mood_rating') THEN
+    ALTER TABLE mood_logs ADD COLUMN mood_rating INTEGER CHECK (mood_rating >= 1 AND mood_rating <= 10);
+    -- Backfill from existing detailed ratings so legacy rows produce meaningful
+    -- correlator output instead of NULLs.
+    UPDATE mood_logs
+    SET mood_rating = CASE
+        WHEN happiness_rating IS NOT NULL THEN happiness_rating
+        WHEN energy_rating IS NOT NULL AND stress_rating IS NOT NULL
+            THEN GREATEST(1, LEAST(10, ROUND(((energy_rating + (11 - stress_rating)) / 2.0))::INT))
+        WHEN energy_rating IS NOT NULL THEN energy_rating
+        WHEN stress_rating IS NOT NULL THEN (11 - stress_rating)
+        WHEN anxiety_rating IS NOT NULL THEN (11 - anxiety_rating)
+        ELSE NULL
+    END
+    WHERE mood_rating IS NULL;
+  END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS idx_mood_logs_user_rating
+    ON mood_logs(user_id, logged_at DESC)
+    WHERE mood_rating IS NOT NULL;
 
 -- ============================================
 -- 31. STRESS LOGS — triggers, check_in_type columns
@@ -974,6 +1012,9 @@ END $$;
 -- Ensure enum values exist (ADD VALUE cannot run in anonymous code blocks)
 -- ============================================
 ALTER TYPE integration_provider ADD VALUE IF NOT EXISTS 'spotify';
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'ai_check_in';
+ALTER TYPE goal_category ADD VALUE IF NOT EXISTS 'nutrition';
+ALTER TYPE goal_category ADD VALUE IF NOT EXISTS 'fitness';
 
 -- ============================================
 -- Life Goal Milestones & Check-ins (table 98)
@@ -1141,6 +1182,385 @@ CREATE TABLE IF NOT EXISTS email_preferences (
 
 CREATE INDEX IF NOT EXISTS idx_email_preferences_user ON email_preferences(user_id);
 CREATE INDEX IF NOT EXISTS idx_email_preferences_token ON email_preferences(unsubscribe_token) WHERE unsubscribe_token IS NOT NULL;
+
+-- ============================================
+-- User Timing Profiles (Contextual Timing)
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_timing_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    hour_histogram INTEGER[24] NOT NULL DEFAULT '{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}',
+    peak_hour SMALLINT NOT NULL DEFAULT 9 CHECK (peak_hour >= 0 AND peak_hour <= 23),
+    secondary_hour SMALLINT NOT NULL DEFAULT 18 CHECK (secondary_hour >= 0 AND secondary_hour <= 23),
+    confidence NUMERIC(3,2) NOT NULL DEFAULT 0.00 CHECK (confidence >= 0 AND confidence <= 1),
+    event_count INTEGER NOT NULL DEFAULT 0,
+    last_computed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_timing_profiles_user ON user_timing_profiles(user_id);
+
+-- Add manual override flag to user_preferences (for Smart Timing toggle)
+DO $$ BEGIN
+    ALTER TABLE user_preferences
+        ADD COLUMN preferred_check_in_time_manual_override BOOLEAN DEFAULT false;
+EXCEPTION
+    WHEN duplicate_column THEN NULL;
+END $$;
+
+-- ============================================
+-- Buddy suggestions: add suggested_challenge column
+-- ============================================
+DO $$ BEGIN
+    ALTER TABLE buddy_suggestions_cache
+        ADD COLUMN suggested_challenge JSONB DEFAULT NULL;
+EXCEPTION
+    WHEN duplicate_column THEN NULL;
+END $$;
+
+-- ============================================
+-- Competition invitations table
+-- ============================================
+CREATE TABLE IF NOT EXISTS competition_invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    competition_id UUID NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+    inviter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    invitee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    message TEXT,
+    responded_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(competition_id, invitee_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ci_invitee_pending
+  ON competition_invitations(invitee_id, status) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_ci_competition
+  ON competition_invitations(competition_id);
+
+-- ============================================
+-- Universal Data Source Correlation tables
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS data_source_connections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_type VARCHAR(32) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'active',
+  credentials JSONB DEFAULT '{}',
+  config JSONB DEFAULT '{}',
+  last_sync_at TIMESTAMPTZ,
+  next_sync_at TIMESTAMPTZ,
+  sync_error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, source_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dsc_user_status ON data_source_connections(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_dsc_next_sync ON data_source_connections(next_sync_at) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS data_source_signals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_type VARCHAR(32) NOT NULL,
+  signal_type VARCHAR(48) NOT NULL,
+  signal_date DATE NOT NULL,
+  start_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ,
+  value JSONB NOT NULL DEFAULT '{}',
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_dss_user_date ON data_source_signals(user_id, signal_date DESC);
+CREATE INDEX IF NOT EXISTS idx_dss_source_type ON data_source_signals(user_id, source_type, signal_type);
+
+CREATE TABLE IF NOT EXISTS user_daily_correlations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  correlation_date DATE NOT NULL,
+  stress_score NUMERIC(5,2) DEFAULT 0,
+  energy_score NUMERIC(5,2) DEFAULT 0,
+  mood_score NUMERIC(5,2) DEFAULT 0,
+  availability_score NUMERIC(5,2) DEFAULT 0,
+  calendar_load INT DEFAULT 0,
+  music_mood VARCHAR(32),
+  prayer_adherence NUMERIC(5,2) DEFAULT 0,
+  spending_stress NUMERIC(5,2) DEFAULT 0,
+  correlations JSONB DEFAULT '[]',
+  recommended_mode VARCHAR(16) DEFAULT 'normal',
+  tone_adjustment VARCHAR(24) DEFAULT 'supportive',
+  signals_summary JSONB DEFAULT '{}',
+  computed_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, correlation_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_udc_user_date ON user_daily_correlations(user_id, correlation_date DESC);
+
+CREATE TABLE IF NOT EXISTS prayer_schedules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  prayer_date DATE NOT NULL,
+  prayer_name VARCHAR(32) NOT NULL,
+  scheduled_time TIMESTAMPTZ NOT NULL,
+  completed BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMPTZ,
+  source VARCHAR(16) DEFAULT 'api',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, prayer_date, prayer_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ps_user_date ON prayer_schedules(user_id, prayer_date DESC);
+
+CREATE TABLE IF NOT EXISTS spending_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  transaction_date DATE NOT NULL,
+  amount NUMERIC(12,2) NOT NULL,
+  currency VARCHAR(3) DEFAULT 'USD',
+  category VARCHAR(48),
+  description VARCHAR(256),
+  source VARCHAR(16) DEFAULT 'manual',
+  stress_indicator BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_st_user_date ON spending_transactions(user_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_st_user_cat ON spending_transactions(user_id, category);
+
+-- ============================================
+-- 21. Communication channels — accountability app group chat target
+-- ============================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'accountability_triggers' AND column_name = 'target_chat_id'
+  ) THEN
+    ALTER TABLE accountability_triggers
+      ADD COLUMN target_chat_id UUID REFERENCES chats(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_accountability_triggers_target_chat
+  ON accountability_triggers (user_id, target_chat_id)
+  WHERE is_active = true AND target_chat_id IS NOT NULL;
+
+-- ============================================
+-- 22. Push device tokens (FCM / Web)
+-- ============================================
+CREATE TABLE IF NOT EXISTS push_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL,
+  platform VARCHAR(24) NOT NULL,
+  active BOOLEAN DEFAULT true,
+  last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (user_id, token)
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user_active ON push_tokens (user_id) WHERE active = true;
+
+-- ============================================
+-- 23. User communication preferences (push / check-in / email caps)
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_communication_preferences (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  checkin_push_enabled BOOLEAN DEFAULT true,
+  quiet_hours_start SMALLINT,
+  quiet_hours_end SMALLINT,
+  workdays_only BOOLEAN DEFAULT false,
+  max_checkins_per_day SMALLINT DEFAULT 1,
+  missed_followup_hours SMALLINT DEFAULT 24,
+  push_achievements BOOLEAN DEFAULT true,
+  push_streaks BOOLEAN DEFAULT true,
+  push_nudges BOOLEAN DEFAULT true,
+  email_digest BOOLEAN DEFAULT true,
+  email_urgent_only BOOLEAN DEFAULT false,
+  checkin_miss_count_by_hour JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
+-- 24. voice_calls — system check-in metadata
+-- ============================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'voice_calls' AND column_name = 'initiator_source'
+  ) THEN
+    ALTER TABLE voice_calls
+      ADD COLUMN initiator_source VARCHAR(32) DEFAULT 'user';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'voice_calls' AND column_name = 'checkin_outcome'
+  ) THEN
+    ALTER TABLE voice_calls
+      ADD COLUMN checkin_outcome VARCHAR(32);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'voice_calls' AND column_name = 'checkin_followup_sent_at'
+  ) THEN
+    ALTER TABLE voice_calls
+      ADD COLUMN checkin_followup_sent_at TIMESTAMPTZ;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_voice_calls_checkin_pending
+  ON voice_calls (user_id, initiated_at DESC)
+  WHERE initiator_source = 'system_checkin' AND checkin_outcome IS NULL;
+
+-- ============================================
+-- Holiday / cultural calendar (schedule-aware AI)
+-- ============================================
+CREATE TABLE IF NOT EXISTS holiday_calendar (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(200) NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  type VARCHAR(50) NOT NULL CHECK (type IN ('religious', 'national', 'cultural', 'personal')),
+  region VARCHAR(10) DEFAULT 'global',
+  affects_fitness BOOLEAN DEFAULT FALSE,
+  affects_nutrition BOOLEAN DEFAULT FALSE,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_holiday_dates ON holiday_calendar(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_holiday_region ON holiday_calendar(region, start_date);
+
+CREATE TABLE IF NOT EXISTS user_holiday_preferences (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  region VARCHAR(10) DEFAULT 'global',
+  religious_calendar VARCHAR(50),
+  custom_holidays JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
+-- Mental health screening audit (hashed text only) — canonical DDL in 127-*.sql
+-- ============================================
+CREATE TABLE IF NOT EXISTS mental_health_screening_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lane VARCHAR(40) NOT NULL,
+  source VARCHAR(32) NOT NULL,
+  content_sha256 CHAR(64) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_mh_screening_user_created
+  ON mental_health_screening_events (user_id, created_at DESC);
+
+-- ============================================
+-- Contextual timing — index support for 14d UNION scans
+-- ============================================
+CREATE INDEX IF NOT EXISTS idx_messages_sender_created_at
+  ON messages (sender_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_daily_checkins_user_logged_at
+  ON daily_checkins (user_id, logged_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read_reminder
+  ON notifications (user_id, read_at)
+  WHERE read_at IS NOT NULL AND type = 'reminder';
+
+CREATE INDEX IF NOT EXISTS idx_meal_logs_user_created
+  ON meal_logs (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_workout_logs_user_created
+  ON workout_logs (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_workout_logs_user_completed
+  ON workout_logs (user_id, completed_at DESC)
+  WHERE completed_at IS NOT NULL;
+
+-- ============================================
+-- Schedule items — source / external identity columns
+-- ============================================
+-- Needed by the Wellbeing canvas so Google Calendar events and prayer times
+-- live alongside manual activities as first-class schedule_items. Safe to
+-- re-run: every statement is idempotent.
+ALTER TABLE schedule_items
+  ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'manual';
+
+ALTER TABLE schedule_items
+  ADD COLUMN IF NOT EXISTS external_source VARCHAR(50);
+
+ALTER TABLE schedule_items
+  ADD COLUMN IF NOT EXISTS external_id VARCHAR(500);
+
+ALTER TABLE schedule_items
+  ADD COLUMN IF NOT EXISTS source_updated_at TIMESTAMPTZ;
+
+ALTER TABLE schedule_items
+  ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE schedule_items
+  ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'schedule_items_source_check'
+  ) THEN
+    ALTER TABLE schedule_items
+      ADD CONSTRAINT schedule_items_source_check
+      CHECK (source IN ('manual', 'google', 'prayer'));
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_items_external_identity
+  ON schedule_items (schedule_id, external_source, external_id)
+  WHERE external_source IS NOT NULL AND external_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_schedule_items_source
+  ON schedule_items (schedule_id, source)
+  WHERE source <> 'manual';
+
+-- ============================================
+-- Accountability contract checks — `passed` column
+-- ============================================
+-- Legacy schema only has `result VARCHAR(10)` ∈ {'pass','fail','skip'} but
+-- the stats/streak query reads `ch.passed`. Add it as a generated column
+-- derived from `result` — existing INSERTs keep working (they only set
+-- `result`) and reads get the boolean shape they already expect.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'accountability_contract_checks'
+      AND column_name = 'passed'
+  ) THEN
+    BEGIN
+      ALTER TABLE accountability_contract_checks
+        ADD COLUMN passed BOOLEAN GENERATED ALWAYS AS (result = 'pass') STORED;
+    EXCEPTION WHEN others THEN
+      -- Fall back to a plain boolean column with one-shot backfill for PG
+      -- builds that reject the generated-column expression (rare).
+      ALTER TABLE accountability_contract_checks
+        ADD COLUMN IF NOT EXISTS passed BOOLEAN;
+      UPDATE accountability_contract_checks
+         SET passed = (result = 'pass')
+       WHERE passed IS NULL;
+    END;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_acc_checks_passed
+  ON accountability_contract_checks (contract_id, passed, checked_at DESC);
 
 -- ============================================
 -- MIGRATION COMPLETE

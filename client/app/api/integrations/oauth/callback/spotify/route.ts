@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Spotify OAuth callback handler.
+ *
  * Spotify redirects here with ?code=...&state=... after user authorization.
- * We forward the code/state to the Express server and redirect to settings.
+ * We exchange the code server-side (so the token never appears in the browser URL)
+ * and then redirect the user back to the Settings page with a status param the
+ * UI can react to.
+ *
+ * Recognized status params on the redirect:
+ *   ?spotify=connected          — success toast + status refetch
+ *   ?spotify=error&error=<msg>  — error toast
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -11,20 +18,21 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // Use NEXT_PUBLIC_SITE_URL for redirects — request.nextUrl.origin resolves to
-  // the internal Docker host (0.0.0.0:8080) in production, not the public domain
+  // Use NEXT_PUBLIC_SITE_URL for redirects — request.nextUrl.origin can resolve
+  // to an internal Docker host in production rather than the public domain.
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin;
   const settingsUrl = new URL('/settings', baseUrl);
+  settingsUrl.searchParams.set('section', 'integrations');
 
   if (error) {
     settingsUrl.searchParams.set('spotify', 'error');
-    settingsUrl.searchParams.set('error', error);
+    settingsUrl.searchParams.set('spotifyError', error);
     return NextResponse.redirect(settingsUrl);
   }
 
   if (!code || !state) {
     settingsUrl.searchParams.set('spotify', 'error');
-    settingsUrl.searchParams.set('error', 'missing_params');
+    settingsUrl.searchParams.set('spotifyError', 'missing_params');
     return NextResponse.redirect(settingsUrl);
   }
 
@@ -53,11 +61,11 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json().catch(() => null);
     settingsUrl.searchParams.set('spotify', 'error');
-    settingsUrl.searchParams.set('error', data?.message || 'callback_failed');
+    settingsUrl.searchParams.set('spotifyError', data?.message || 'callback_failed');
     return NextResponse.redirect(settingsUrl);
   } catch {
     settingsUrl.searchParams.set('spotify', 'error');
-    settingsUrl.searchParams.set('error', 'server_unreachable');
+    settingsUrl.searchParams.set('spotifyError', 'server_unreachable');
     return NextResponse.redirect(settingsUrl);
   }
 }

@@ -12,7 +12,7 @@ import { modelFactory } from './model-factory.service.js';
 import { logger } from './logger.service.js';
 import { vectorEmbeddingService } from './vector-embedding.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { langGraphChatbotService } from './langgraph-chatbot.service.js';
 
 // Types

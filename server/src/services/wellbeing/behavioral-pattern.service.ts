@@ -4,7 +4,7 @@
  * Patterns: negativity bias, trigger identification, euphoria-regret cycle, escalation flags
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { logger } from '../logger.service.js';
 import type { BehavioralPattern, PatternSeverity } from '@shared/types/domain/wellbeing.js';
 

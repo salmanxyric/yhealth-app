@@ -9,7 +9,7 @@ export type OnboardingStatus = 'registered' | 'consent_pending' | 'assessment_pe
 export type ConsentType = 'terms_of_service' | 'privacy_policy' | 'email_marketing' | 'whatsapp_coaching';
 
 // Assessment types
-export type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'custom';
+export type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'nutrition' | 'fitness' | 'custom';
 export type HealthPillar = 'fitness' | 'nutrition' | 'wellbeing';
 export type GoalStatus = 'draft' | 'active' | 'paused' | 'completed' | 'abandoned';
 export type AssessmentType = 'quick' | 'deep';
@@ -32,7 +32,7 @@ export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'frida
 export type ActivityLogStatus = 'pending' | 'completed' | 'skipped' | 'partial';
 
 // Export database functions
-export { query, transaction, getClient, database } from '../config/database.config.js';
+export { query, transaction, getClient, database, pool } from '../config/database.config.js';
 
 // Integration metadata (moved here from old model)
 export interface IIntegrationMeta {

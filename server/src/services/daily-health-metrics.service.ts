@@ -3,7 +3,7 @@
  * @description Service for managing daily health metrics snapshots and history
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 export interface DailBalenciaMetrics {

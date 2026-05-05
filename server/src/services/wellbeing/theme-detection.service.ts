@@ -5,7 +5,7 @@
  *   Stage B: Aggregate theme analysis (SQL, background job)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { logger } from '../logger.service.js';
 import { modelFactory } from '../model-factory.service.js';
 import type { ThemeTag, ThemeInsight } from '@shared/types/domain/wellbeing.js';

@@ -221,6 +221,8 @@ export interface MCQQuestion {
 
 export interface MCQGenerationRequest {
   goal: AICoachGoalCategory;
+  customGoalText?: string;
+  selectedGoalLabel?: string;
   phase?: ConversationPhase;
   previousAnswers?: { questionId: string; questionText?: string; selectedOptions: string[] }[];
   extractedInsights?: ExtractedInsight[];
@@ -527,6 +529,8 @@ class AICoachServiceClient {
   async generateMCQQuestion(request: MCQGenerationRequest): Promise<MCQGenerationResponse> {
     const response = await api.post<MCQGenerationResponse>('/ai-coach/mcq/question', {
       goal: request.goal,
+      customGoalText: request.customGoalText,
+      selectedGoalLabel: request.selectedGoalLabel,
       phase: request.phase,
       previousAnswers: request.previousAnswers,
       extractedInsights: request.extractedInsights,
@@ -552,6 +556,82 @@ class AICoachServiceClient {
 
     if (!response.success || !response.data) {
       throw new Error(response.error?.message || 'Failed to process MCQ answer');
+    }
+
+    return response.data;
+  }
+
+  // ============================================================================
+  // Batch MCQ & Life Coach Questions (Onboarding)
+  // ============================================================================
+
+  async generateBatchMCQQuestions(request: {
+    goal: AICoachGoalCategory;
+    customGoalText?: string;
+    count?: number;
+    language?: SupportedLanguage;
+  }): Promise<{
+    questions: { id: string; question: string; options: { id: string; text: string; insightValue?: string }[] }[];
+    goalSummary: string;
+    detectedCategories: string[];
+  }> {
+    const response = await api.post<{
+      questions: { id: string; question: string; options: { id: string; text: string; insightValue?: string }[] }[];
+      goalSummary: string;
+      detectedCategories: string[];
+    }>('/ai-coach/mcq/batch-questions', {
+      goal: request.goal,
+      customGoalText: request.customGoalText,
+      count: request.count,
+      language: request.language,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message || 'Failed to generate batch MCQ questions');
+    }
+
+    return response.data;
+  }
+
+  async generateLifeCoachQuestions(request: {
+    goal: AICoachGoalCategory;
+    customGoalText?: string;
+    selectedGoalLabel?: string;
+    assessmentResponses?: { questionText: string; value: string }[];
+    language?: SupportedLanguage;
+  }): Promise<{
+    questions: {
+      id: string;
+      question: string;
+      type: 'text' | 'cards' | 'mcq';
+      goal_area: string;
+      purpose: string;
+      optional?: boolean;
+      placeholder?: string;
+      options?: { label: string; value: string }[];
+    }[];
+  }> {
+    const response = await api.post<{
+      questions: {
+        id: string;
+        question: string;
+        type: 'text' | 'cards' | 'mcq';
+        goal_area: string;
+        purpose: string;
+        optional?: boolean;
+        placeholder?: string;
+        options?: { label: string; value: string }[];
+      }[];
+    }>('/ai-coach/life-coach-questions', {
+      goal: request.goal,
+      customGoalText: request.customGoalText,
+      selectedGoalLabel: request.selectedGoalLabel,
+      assessmentResponses: request.assessmentResponses,
+      language: request.language,
+    });
+
+    if (!response.success || !response.data) {
+      throw new Error(response.error?.message || 'Failed to generate life-coach questions');
     }
 
     return response.data;

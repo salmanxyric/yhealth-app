@@ -1,7 +1,7 @@
 import type { TourStepConfig } from "./types";
 
 /** Current tour content version — increment to re-trigger for users who completed an older version */
-export const TOUR_VERSION = 1;
+export const TOUR_VERSION = 3;
 
 /** Main tour steps shown to all users */
 export const TOUR_STEPS: TourStepConfig[] = [
@@ -10,34 +10,58 @@ export const TOUR_STEPS: TourStepConfig[] = [
     type: "fullscreen",
     title: "Welcome to Balencia, {firstName}!",
     description:
-      "Your AI-powered health companion is ready. Let me show you around your personalized dashboard — it only takes about 2 minutes.",
+      "Your AI-powered health companion is ready. In the next few minutes we will walk through your Overview, navigation, key health areas, and where to connect devices — you can skip anytime.",
     icon: "Sparkles",
     accentColor: "from-emerald-500 to-cyan-500",
     ctaPrimary: "Start Tour",
     ctaSecondary: "Skip for now",
   },
   {
-    id: "health-dashboard",
+    id: "overview-metrics",
     type: "spotlight",
-    title: "Your Health Dashboard",
+    title: "Daily metrics at a glance",
     description:
-      "Track heart rate, sleep quality, steps, hydration, and nutrition at a glance. All metrics update in real-time from your connected wearables.",
-    targetSelector: '[data-tour="health-dashboard"]',
+      "Sleep, consistency, hydration, and nutrition rings summarize your day. They refresh from connected wearables and logs so you always see a single, coherent snapshot on the Dashboard tab.",
+    targetSelector: '[data-tour="overview-metrics"]',
     tooltipPosition: "bottom",
     icon: "Activity",
     accentColor: "from-cyan-500 to-blue-500",
     navigateTo: "/dashboard",
   },
   {
-    id: "competitions",
+    id: "overview-heart-rate",
     type: "spotlight",
-    title: "Competitions & Leaderboards",
+    title: "Live vitals & detail cards",
     description:
-      "Compete with friends and the community. AI-powered scoring ensures fair matchups based on your fitness level, not just raw numbers.",
-    targetSelector: '[data-tour="competitions"]',
+      "Heart rate, health score, and water cards sit below your rings. Open them for trends, targets, and quick logging — the same premium layout on every visit to Overview.",
+    targetSelector: '[data-tour="overview-heart-rate"]',
+    tooltipPosition: "top",
+    icon: "HeartPulse",
+    accentColor: "from-rose-500 to-orange-500",
+    navigateTo: "/dashboard",
+  },
+  {
+    id: "dashboard-header",
+    type: "spotlight",
+    title: "Greeting & quick actions",
+    description:
+      "Your personalized greeting and date stay pinned up top. Notifications, alarms, and settings are one tap away without leaving your flow.",
+    targetSelector: '[data-tour="dashboard-header"]',
+    tooltipPosition: "bottom",
+    icon: "LayoutDashboard",
+    accentColor: "from-sky-500 to-indigo-500",
+    navigateTo: "/dashboard",
+  },
+  {
+    id: "sidebar",
+    type: "spotlight",
+    title: "Your command center",
+    description:
+      "Everything in Balencia lives here: Overview, AI Coach, workouts, wellbeing, nutrition, voice, and more. Use search (⌘K / Ctrl+K) when you know the name but not the section.",
+    targetSelector: '[data-tour="sidebar"]',
     tooltipPosition: "right",
-    icon: "Trophy",
-    accentColor: "from-amber-500 to-orange-500",
+    icon: "PanelLeft",
+    accentColor: "from-violet-500 to-purple-500",
     navigateTo: "/dashboard",
   },
   {
@@ -45,7 +69,7 @@ export const TOUR_STEPS: TourStepConfig[] = [
     type: "spotlight",
     title: "Your AI Coach",
     description:
-      "Chat or call your personal AI fitness coach. It learns your patterns, adjusts your plans, and provides real-time guidance during workouts.",
+      "Chat or call your personal coach. It learns your patterns, adjusts plans, and answers questions in context — start any time from the sidebar.",
     targetSelector: '[data-tour="ai-coach"]',
     tooltipPosition: "right",
     icon: "Bot",
@@ -53,11 +77,23 @@ export const TOUR_STEPS: TourStepConfig[] = [
     navigateTo: "/dashboard",
   },
   {
+    id: "competitions",
+    type: "spotlight",
+    title: "Competitions & leaderboards",
+    description:
+      "Challenge friends and the community with fair, level-aware scoring so progress stays motivating, not overwhelming.",
+    targetSelector: '[data-tour="competitions"]',
+    tooltipPosition: "right",
+    icon: "Trophy",
+    accentColor: "from-amber-500 to-orange-500",
+    navigateTo: "/dashboard",
+  },
+  {
     id: "gamification",
     type: "spotlight",
-    title: "Level Up & Earn XP",
+    title: "Level up & earn XP",
     description:
-      "Every workout, every healthy meal, every goal hit earns you XP. Maintain your streak for bonus multipliers and unlock achievements.",
+      "Workouts, meals, and goals add XP. Keep streaks alive for bonuses and unlock achievements as you build habits.",
     targetSelector: '[data-tour="xp-widget"]',
     tooltipPosition: "left",
     icon: "Flame",
@@ -67,9 +103,9 @@ export const TOUR_STEPS: TourStepConfig[] = [
   {
     id: "integrations",
     type: "spotlight",
-    title: "Connect Your Wearables",
+    title: "Connect your wearables",
     description:
-      "Sync with Fitbit, Apple Health, Google Fit, WHOOP, and Strava for automatic health data tracking. All your data in one place.",
+      "Link Fitbit, Apple Health, Google Fit, WHOOP, Strava, and more so metrics and recovery sync automatically. We open Settings on the Integrations card for you on this step.",
     targetSelector: '[data-tour="integrations"]',
     tooltipPosition: "right",
     icon: "Link",
@@ -77,42 +113,88 @@ export const TOUR_STEPS: TourStepConfig[] = [
     navigateTo: "/dashboard?tab=settings",
   },
   {
-    id: "community",
+    id: "chat",
     type: "spotlight",
-    title: "Chat, Voice & Communication",
+    title: "Chat & real-time updates",
     description:
-      "Stay connected with your AI Coach, voice assistant, and real-time chat. Get coaching, ask questions, and track your conversation history all in one place.",
-    targetSelector: '[data-tour="community"]',
+      "Message your coach and peers, see unread badges here, and keep context across voice and text — all wired to the same health profile.",
+    targetSelector: '[data-tour="chat"]',
     tooltipPosition: "right",
     icon: "Users",
     accentColor: "from-indigo-500 to-purple-500",
     navigateTo: "/dashboard",
   },
   {
+    id: "voice-assistant",
+    type: "spotlight",
+    title: "Voice Assistant",
+    description:
+      "Hands-free guidance: open the Voice Assistant for quick commands, coaching cues, and audio-first check-ins while you train or move through your day.",
+    targetSelector: '[data-tour="voice-assistant"]',
+    tooltipPosition: "right",
+    icon: "Mic",
+    accentColor: "from-sky-500 to-cyan-500",
+    navigateTo: "/dashboard",
+  },
+  {
+    id: "settings-nav",
+    type: "spotlight",
+    title: "Settings",
+    description:
+      "Account, privacy, notifications, and app preferences live in Settings. Tune how Balencia talks to you and what data you share.",
+    targetSelector: '[data-tour="settings"]',
+    tooltipPosition: "right",
+    icon: "Settings",
+    accentColor: "from-slate-400 to-slate-600",
+    navigateTo: "/dashboard",
+  },
+  {
+    id: "nutrition",
+    type: "spotlight",
+    title: "Nutrition",
+    description:
+      "Log meals, see macros, and align fuel with your goals. Nutrition connects to your dashboard rings and AI coaching for consistent feedback.",
+    targetSelector: '[data-tour="nutrition"]',
+    tooltipPosition: "right",
+    icon: "Apple",
+    accentColor: "from-green-500 to-emerald-600",
+    navigateTo: "/dashboard",
+  },
+  {
+    id: "workouts",
+    type: "spotlight",
+    title: "Workouts",
+    description:
+      "Plans, sessions, and AI-powered workout guidance in one place. Jump here whenever you are ready to train.",
+    targetSelector: '[data-tour="workouts"]',
+    tooltipPosition: "right",
+    icon: "Dumbbell",
+    accentColor: "from-orange-500 to-red-500",
+    navigateTo: "/dashboard",
+  },
+  {
+    id: "wellbeing",
+    type: "spotlight",
+    title: "Wellbeing",
+    description:
+      "Journal, mood, schedule, and restorative practices — the wellbeing hub supports the mental and emotional side of your health next to fitness data.",
+    targetSelector: '[data-tour="wellbeing"]',
+    tooltipPosition: "right",
+    icon: "Leaf",
+    accentColor: "from-teal-500 to-emerald-600",
+    navigateTo: "/dashboard",
+  },
+  {
     id: "completion",
     type: "fullscreen",
-    title: "You're All Set, {firstName}!",
+    title: "You're all set, {firstName}!",
     description:
-      "Your health journey starts now. Your AI coach is ready to create personalized plans just for you.",
+      "You have seen Overview, navigation, coach, competitions, XP, integrations, chat, voice assistant, settings, nutrition, workouts, and wellbeing. Pick any item in the sidebar to go deeper.",
     icon: "PartyPopper",
     accentColor: "from-emerald-500 via-cyan-500 to-blue-500",
     ctaPrimary: "Go to Dashboard",
   },
 ];
 
-/** Extra steps shown only to admin users (inserted before completion) */
-export const ADMIN_EXTRA_STEPS: TourStepConfig[] = [
-  {
-    id: "admin-panel",
-    type: "spotlight",
-    title: "Admin Dashboard",
-    description:
-      "As an admin, you have access to user management, analytics, and system configuration. Access it anytime from your sidebar.",
-    targetSelector: '[data-tour="admin-panel"]',
-    tooltipPosition: "right",
-    icon: "Shield",
-    accentColor: "from-red-500 to-pink-500",
-    adminOnly: true,
-    navigateTo: "/dashboard",
-  },
-];
+/** Reserved for future role-specific steps; empty so admins get the same tour as everyone. */
+export const ADMIN_EXTRA_STEPS: TourStepConfig[] = [];

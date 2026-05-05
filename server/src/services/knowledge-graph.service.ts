@@ -7,7 +7,7 @@
  * This service does NOT write data — it is a pure read-side projection.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import type {
   GraphNode,
@@ -1468,7 +1468,7 @@ class KnowledgeGraphService {
    */
   private fetchAchievements: NodeFetcher = async (userId) => {
     try {
-      const sql = `SELECT ua.user_id || '-' || ua.achievement_id as id, ua.achievement_id, ad.name, ua.progress, ua.unlocked_at FROM user_achievements ua LEFT JOIN achievement_definitions ad ON ua.achievement_id = ad.id WHERE ua.user_id = $1 ORDER BY ua.unlocked_at DESC NULLS LAST LIMIT 30`;
+      const sql = `SELECT ua.user_id || '-' || ua.achievement_id as id, ua.achievement_id, ad.title as name, ua.progress, ua.unlocked_at FROM user_achievements ua LEFT JOIN achievement_definitions ad ON ua.achievement_id = ad.id WHERE ua.user_id = $1 ORDER BY ua.unlocked_at DESC NULLS LAST LIMIT 30`;
       logger.debug('KnowledgeGraph: fetchAchievements', { userId });
       const result = await query(sql, [userId]);
 

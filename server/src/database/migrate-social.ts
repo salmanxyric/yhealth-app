@@ -1,4 +1,4 @@
-import { query, closePool } from './pg.js';
+import { query, closePool } from '../config/database.config.js';
 
 async function migrate() {
   console.log('Starting migration...');

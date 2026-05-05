@@ -1,8 +1,8 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo } from "react";
-import { ArrowLeft, ArrowRight, Zap, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, ArrowRight, Zap, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { useOnboarding } from "@/src/features/onboarding/context/OnboardingContext";
 import {
   SliderInput,
@@ -10,10 +10,8 @@ import {
   SingleSelect,
   NumberInput,
 } from "@/components/common/questions";
-import {
-  getQuestionsForGoal,
-  getQuestionIcon,
-} from "../data/goal-questions";
+import { getQuestionIcon } from "../data/goal-questions";
+import { useQuickAssessmentQuestions } from "../hooks/useQuickAssessmentQuestions";
 
 export function AssessmentStep() {
   const {
@@ -23,23 +21,19 @@ export function AssessmentStep() {
     setBodyStats,
     bodyStats,
     completeAssessment,
-    nextStep,
     prevStep,
     setAssessmentMode,
     goToStep,
   } = useOnboarding();
 
+  const { questions: assessmentQuestions, isLoading, error, retry } = useQuickAssessmentQuestions();
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isCompleting, setIsCompleting] = useState(false);
 
-  const assessmentQuestions = useMemo(
-    () => getQuestionsForGoal(selectedGoal),
-    [selectedGoal]
-  );
-
   const currentQuestion = assessmentQuestions[currentQuestionIndex];
   const totalQuestions = assessmentQuestions.length;
-  const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100;
+  const progress = totalQuestions > 0 ? ((currentQuestionIndex + 1) / totalQuestions) * 100 : 0;
 
   const getCurrentResponse = (): string | number => {
     if (!currentQuestion) return "";
@@ -90,7 +84,6 @@ export function AssessmentStep() {
     setIsCompleting(true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     completeAssessment();
-    nextStep();
   };
 
   const handleSwitchToQuick = () => {
@@ -99,6 +92,88 @@ export function AssessmentStep() {
   };
 
   const isCurrentAnswered = getCurrentResponse() !== "";
+
+  // Loading state while AI generates questions
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#02000f]">
+        <div className="flex-1 flex items-center justify-center px-6">
+          <motion.div
+            className="text-center max-w-md mx-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <motion.div
+              className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-sky-500/20 to-teal-500/20 flex items-center justify-center"
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Sparkles className="w-8 h-8 text-sky-400" />
+            </motion.div>
+
+            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3">
+              Personalizing your assessment...
+            </h2>
+            <p className="text-sm sm:text-base text-white/60 mb-8">
+              Creating questions tailored to your{" "}
+              {selectedGoal === "custom" ? "personal" : selectedGoal?.replace(/_/g, " ")} goal
+            </p>
+
+            {/* Shimmer skeleton cards */}
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <motion.div
+                  key={i}
+                  className="h-14 rounded-xl bg-white/5 border border-white/10"
+                  animate={{ opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center justify-center gap-2 mt-8">
+              <Loader2 className="w-4 h-4 text-sky-400 animate-spin" />
+              <span className="text-sm text-white/40">This usually takes 2-3 seconds</span>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state with retry (only if no fallback questions loaded)
+  if (error && assessmentQuestions.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#02000f]">
+        <div className="flex-1 flex items-center justify-center px-6">
+          <motion.div
+            className="text-center max-w-md mx-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-500/10 flex items-center justify-center">
+              <Sparkles className="w-8 h-8 text-red-400" />
+            </div>
+            <h2 className="text-xl font-semibold text-white mb-3">
+              Couldn&apos;t personalize your assessment
+            </h2>
+            <p className="text-sm text-white/60 mb-6">
+              We had trouble generating your questions. Let&apos;s try again.
+            </p>
+            <motion.button
+              onClick={retry}
+              className="flex items-center gap-2 mx-auto px-6 py-3 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-500 transition-all"
+              whileTap={{ scale: 0.97 }}
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Try Again</span>
+            </motion.button>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentQuestion) return null;
 

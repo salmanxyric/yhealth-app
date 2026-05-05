@@ -21,7 +21,7 @@ import {
   type UpdateContactInput,
 } from '../services/contact.service.js';
 import { mailHelper } from '../helper/mail.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 // ============================================
 // PUBLIC ROUTES

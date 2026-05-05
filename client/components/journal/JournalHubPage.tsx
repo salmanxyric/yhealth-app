@@ -282,9 +282,6 @@ function JournalHubContent() {
       {viewMode === "constellation" && (
         <MindConstellation
           onOpenNewEntry={handleOpenNewEntry}
-          onStartCheckin={handleStartCheckin}
-          hasCheckedInToday={hasCheckedInToday}
-          checkinLoading={checkinLoading}
           onSwitchToList={() => setViewMode("list")}
           onEditEntry={handleEditEntry}
         />

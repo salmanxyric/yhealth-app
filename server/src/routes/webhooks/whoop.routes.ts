@@ -11,7 +11,7 @@ import { ApiResponse } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../../services/logger.service.js';
 import { whoopDataService } from '../../services/whoop-data.service.js';
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import type { Request, Response } from 'express';
 
 const router = Router();

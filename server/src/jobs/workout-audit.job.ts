@@ -5,7 +5,7 @@
 
 import { workoutAuditService } from '../services/workout-audit.service.js';
 import { workoutRescheduleWorkflowService } from '../services/workout-reschedule-workflow.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 
 // ============================================

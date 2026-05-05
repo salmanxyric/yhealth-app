@@ -416,7 +416,7 @@ export const uploadVoiceAssistantAvatar = asyncHandler(
     );
 
     // Update user preferences with the avatar URL
-    const { query } = await import("../database/pg.js");
+    const { query } = await import("../config/database.config.js");
     // Convert undefined to null for PostgreSQL query
     const publicUrlValue: string | null = result.publicUrl ?? null;
     await query(

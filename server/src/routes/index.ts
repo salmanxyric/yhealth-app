@@ -29,6 +29,7 @@ import whatsappWebhookRoutes from './webhooks/whatsapp.routes.js';
 import automationRoutes from './automation.routes.js';
 import activityStatusRoutes from './activity-status.routes.js';
 import accountabilityRoutes from './accountability.routes.js';
+import communicationRoutes from './communication.routes.js';
 import accountabilityContractRoutes from './accountability-contract.routes.js';
 import lifeAreasRoutes from './life-areas.routes.js';
 import followRoutes from './follow.routes.js';
@@ -64,8 +65,12 @@ import webinarRoutes from './webinar.routes.js';
 import adminWebinarRoutes from './admin-webinar.routes.js';
 import visitorRoutes from './visitor.routes.js';
 import adminAnalyticsRoutes from './admin-analytics.routes.js';
+import adminToolsRoutes from './admin-tools.routes.js';
 import subscriptionRoutes from './subscription.routes.js';
 import adminSubscriptionRoutes from './admin-subscription.routes.js';
+import entitlementsRoutes from './entitlements.routes.js';
+import meCreditsRoutes from './me-credits.routes.js';
+import adminBillingRoutes from './admin-billing.routes.js';
 import activityEventsRoutes from './activity-events.routes.js';
 import leaderboardRoutes from './leaderboard.routes.js';
 import scoringRoutes from './scoring.routes.js';
@@ -86,6 +91,8 @@ import streakRoutes from './streak.routes.js';
 import calendarRoutes from './calendar.routes.js';
 import obstacleRoutes from './obstacle.routes.js';
 import reconnectionRoutes from './reconnection.routes.js';
+import timingProfileRoutes from './timing-profile.routes.js';
+import dataSourceRoutes from './data-source.routes.js';
 import { env } from '../config/env.config.js';
 
 const router = Router();
@@ -144,6 +151,7 @@ router.get('/', (_req, res) => {
       youtube: '/api/youtube',
       email: '/api/email',
       streaks: '/api/streaks',
+      dataSources: '/api/data-sources',
     },
   });
 });
@@ -238,6 +246,7 @@ router.use('/activity-status', activityStatusRoutes);
 
 // Social Accountability routes
 router.use('/accountability', accountabilityRoutes);
+router.use('/communication', communicationRoutes);
 
 // Accountability Contracts routes
 router.use('/contracts', accountabilityContractRoutes);
@@ -342,11 +351,19 @@ router.use('/visitors', visitorRoutes);
 // Admin analytics (visitor analytics, etc.)
 router.use('/admin/analytics', adminAnalyticsRoutes);
 
+// Admin tool metrics and audit
+router.use('/admin/tools', adminToolsRoutes);
+
 // Subscription (plans, checkout, portal, my subscription)
 router.use('/subscription', subscriptionRoutes);
 
 // Admin subscriptions (plans CRUD, list subscriptions)
 router.use('/admin/subscriptions', adminSubscriptionRoutes);
+
+// Entitlements (GET /api/me/entitlements — server-authoritative bundle)
+router.use('/me', entitlementsRoutes);
+router.use('/me', meCreditsRoutes);
+router.use('/admin/billing', adminBillingRoutes);
 
 // Leaderboard & Competition routes
 router.use('/v1/activity-events', activityEventsRoutes);
@@ -402,5 +419,11 @@ router.use('/obstacles', obstacleRoutes);
 
 // Goal Reconnection — proactive re-surface of goals gone silent for 21/42/70 days
 router.use('/reconnections', reconnectionRoutes);
+
+// Contextual Timing — learned peak engagement hours
+router.use('/timing-profile', timingProfileRoutes);
+
+// Universal Data Source Correlation
+router.use('/data-sources', dataSourceRoutes);
 
 export default router;

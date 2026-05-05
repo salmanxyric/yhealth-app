@@ -1,7 +1,7 @@
 import type { Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { query, transaction } from "../database/pg.js";
+import { query, transaction } from "../config/database.config.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";

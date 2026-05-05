@@ -11,7 +11,12 @@ import { toast } from "react-hot-toast";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter } from "next/navigation";
 
-export function VoiceCallTab() {
+interface VoiceCallTabProps {
+  /** When opening /voice-call?callId=… from a notification */
+  initialCallId?: string | null;
+}
+
+export function VoiceCallTab({ initialCallId }: VoiceCallTabProps = {} as VoiceCallTabProps) {
   const { user } = useAuth();
   const router = useRouter();
   const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
@@ -30,6 +35,22 @@ export function VoiceCallTab() {
   
   const userName = user?.firstName || "there";
   const greeting = getGreeting();
+
+  // Deep link from check-in notification: /voice-call?callId=…
+  useEffect(() => {
+    if (!initialCallId) return;
+    let cancelled = false;
+    voiceCallService
+      .getCall(initialCallId)
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return;
+        setActiveCall(res.data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [initialCallId]);
 
   // Check for active call on mount and poll for status updates
   useEffect(() => {

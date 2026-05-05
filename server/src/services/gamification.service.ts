@@ -3,7 +3,7 @@
  * Handles XP, levels, streaks, and achievements
  */
 
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================

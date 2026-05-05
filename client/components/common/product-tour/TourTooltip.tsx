@@ -9,12 +9,19 @@ import {
   Flame,
   Link,
   Users,
-  Shield,
   Sparkles,
   PartyPopper,
   ChevronLeft,
   ChevronRight,
   X,
+  HeartPulse,
+  LayoutDashboard,
+  PanelLeft,
+  Mic,
+  Settings,
+  Apple,
+  Dumbbell,
+  Leaf,
 } from "lucide-react";
 import { tooltipVariants, tooltipContentVariants, tooltipContentItem } from "./tour-variants";
 import { TourProgressBar } from "./TourProgressBar";
@@ -28,9 +35,16 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Flame,
   Link,
   Users,
-  Shield,
   Sparkles,
   PartyPopper,
+  HeartPulse,
+  LayoutDashboard,
+  PanelLeft,
+  Mic,
+  Settings,
+  Apple,
+  Dumbbell,
+  Leaf,
 };
 
 interface TourTooltipProps {

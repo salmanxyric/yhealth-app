@@ -5,9 +5,9 @@
  * and Socket.IO for real-time updates.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
-import { notificationService } from './notification.service.js';
+import { notificationEngine } from './notification-engine.service.js';
 import { socketService } from './socket.service.js';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -144,17 +144,34 @@ class FollowService {
     );
     const name = userResult.rows[0]?.first_name || 'Someone';
 
-    // Notify recipient
-    notificationService.create({
+    // Check if there's a buddy suggestion match reason to include
+    const matchData = await query<{ match_reason: string; match_score: string }>(
+      `SELECT match_reason, match_score FROM buddy_suggestions_cache
+       WHERE user_id = $1 AND suggested_user_id = $2 AND dismissed = false LIMIT 1`,
+      [requesterId, recipientId]
+    ).catch(() => ({ rows: [] as { match_reason: string; match_score: string }[] }));
+
+    if (matchData.rows.length > 0) {
+      await query(
+        'UPDATE user_follows SET match_reason = $1, match_score = $2 WHERE id = $3',
+        [matchData.rows[0].match_reason, matchData.rows[0].match_score, follow.id]
+      ).catch(() => {});
+      follow.matchReason = matchData.rows[0].match_reason;
+    }
+
+    const matchContext = follow.matchReason ? ` — "${follow.matchReason}"` : '';
+
+    // Notify recipient (real-time via notificationEngine)
+    notificationEngine.send({
       userId: recipientId,
       type: 'social',
       title: 'New Follow Request',
-      message: `${name} wants to connect with you${message ? `: "${message}"` : ''}`,
+      message: `${name} wants to connect with you${message ? `: "${message}"` : matchContext}`,
       icon: '🤝',
-      priority: 'normal',
+      priority: 'high',
       relatedEntityType: 'follow_request',
       relatedEntityId: follow.id,
-      actionUrl: '/chat',
+      actionUrl: '/dashboard?tab=social',
       actionLabel: 'View Request',
     }).catch(() => {});
 
@@ -163,6 +180,7 @@ class FollowService {
       requesterId,
       requesterName: name,
       message,
+      matchReason: follow.matchReason,
     });
 
     logger.info('[Follow] Request sent', { requesterId, recipientId });
@@ -218,13 +236,13 @@ class FollowService {
       });
     }
 
-    // Notify requester
+    // Notify requester (real-time via notificationEngine)
     const userResult = await query<{ first_name: string }>(
       'SELECT first_name FROM users WHERE id = $1', [userId]
     );
     const name = userResult.rows[0]?.first_name || 'Someone';
 
-    notificationService.create({
+    notificationEngine.send({
       userId: follow.requesterId,
       type: 'social',
       title: 'Follow Request Accepted!',
@@ -234,6 +252,8 @@ class FollowService {
       relatedEntityType: 'follow_accepted',
       relatedEntityId: followId,
       actionUrl: '/chat',
+      actionLabel: 'Open Chat',
+      metadata: { chatId: follow.chatId },
     }).catch(() => {});
 
     socketService.emitToUser(follow.requesterId, 'follow:accepted', {

@@ -3,7 +3,7 @@
  * Handles daily water consumption tracking
  */
 
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { gamificationService } from './gamification.service.js';
 

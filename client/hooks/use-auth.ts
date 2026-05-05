@@ -142,7 +142,10 @@ export function useAuth() {
         });
 
         if (result?.error) {
-          throw new Error(result.error);
+          const errorMsg = result.code === "credentials" || result.error === "CredentialsSignin"
+            ? "Invalid email or password"
+            : result.error;
+          throw new Error(errorMsg);
         }
 
         if (result?.ok) {

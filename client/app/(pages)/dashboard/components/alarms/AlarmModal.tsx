@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, X, Clock, Play } from 'lucide-react';
 import { playAlarmSound, stopAlarmSound } from '../../utils/sound.service';
@@ -11,7 +12,7 @@ export interface AlarmModalData {
   title: string;
   message: string | null;
   soundFile: SoundFile;
-  soundEnabled?: boolean; // Optional, defaults to true if not provided
+  soundEnabled?: boolean;
   workoutPlanId: string | null;
   snoozeMinutes: number;
 }
@@ -24,6 +25,8 @@ interface AlarmModalProps {
   onAction?: (workoutPlanId: string) => void;
 }
 
+const PORTAL_Z = 10050;
+
 export function AlarmModal({
   isOpen,
   alarm,
@@ -31,33 +34,50 @@ export function AlarmModal({
   onSnooze,
   onAction,
 }: AlarmModalProps) {
+  const [mounted, setMounted] = useState(false);
   const hasPlayedSound = useRef(false);
 
   useEffect(() => {
-    console.log('[AlarmModal] Effect triggered:', { 
-      isOpen, 
-      alarm: alarm?.title,
-      soundEnabled: alarm?.soundEnabled,
-      soundFile: alarm?.soundFile,
-    });
-    
+    setMounted(true);
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    stopAlarmSound();
+    hasPlayedSound.current = false;
+    onDismiss();
+  }, [onDismiss]);
+
+  const handleSnooze = useCallback(() => {
+    if (alarm) {
+      stopAlarmSound();
+      hasPlayedSound.current = false;
+      onSnooze(alarm.alarmId, alarm.snoozeMinutes);
+    }
+  }, [alarm, onSnooze]);
+
+  const handleAction = useCallback(() => {
+    if (alarm?.workoutPlanId && onAction) {
+      stopAlarmSound();
+      hasPlayedSound.current = false;
+      onAction(alarm.workoutPlanId);
+    }
+  }, [alarm, onAction]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && alarm) {
+       
+      console.log('[AlarmModal]', { isOpen, title: alarm.title });
+    }
+
     if (isOpen && alarm && !hasPlayedSound.current) {
-      // Only play sound if sound is enabled (defaults to true if not specified)
       const shouldPlaySound = alarm.soundEnabled !== false;
-      
       if (shouldPlaySound) {
-        console.log('[AlarmModal] Playing sound:', alarm.soundFile);
-        // Play sound when modal opens
         playAlarmSound(alarm.soundFile, true);
-      } else {
-        console.log('[AlarmModal] Sound is disabled, skipping playback');
       }
       hasPlayedSound.current = true;
     }
 
-    // Cleanup: stop sound when modal closes
     if (!isOpen) {
-      console.log('[AlarmModal] Modal closed, stopping sound');
       stopAlarmSound();
       hasPlayedSound.current = false;
     }
@@ -69,151 +89,151 @@ export function AlarmModal({
     };
   }, [isOpen, alarm]);
 
-  const handleDismiss = () => {
-    stopAlarmSound();
-    hasPlayedSound.current = false;
-    onDismiss();
-  };
+  useEffect(() => {
+    if (!isOpen || !alarm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleDismiss();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, alarm, handleDismiss]);
 
-  const handleSnooze = () => {
-    if (alarm) {
-      stopAlarmSound();
-      hasPlayedSound.current = false;
-      onSnooze(alarm.alarmId, alarm.snoozeMinutes);
-    }
-  };
-
-  const handleAction = () => {
-    if (alarm?.workoutPlanId && onAction) {
-      stopAlarmSound();
-      hasPlayedSound.current = false;
-      onAction(alarm.workoutPlanId);
-    }
-  };
-
-
-  console.log('[AlarmModal] Render:', { isOpen, alarm: alarm?.title, hasAlarm: !!alarm });
-
-  if (!alarm) {
-    console.log('[AlarmModal] No alarm data, returning null');
+  if (!mounted || !alarm) {
     return null;
   }
 
-  return (
+  return createPortal(
     <AnimatePresence mode="wait">
       {isOpen && (
-        <>
-          {/* Backdrop with 3D depth effect */}
+        <motion.div
+          key={alarm.alarmId}
+          role="presentation"
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{ zIndex: PORTAL_Z }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
           <motion.div
+            role="button"
+            tabIndex={-1}
+            aria-label="Dismiss alarm"
+            className="absolute inset-0 bg-gradient-to-br from-black/90 via-slate-950/90 to-black/90 backdrop-blur-md cursor-default"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-gradient-to-br from-black/95 via-emerald-950/20 to-black/95 backdrop-blur-md z-[9998]"
-            style={{ pointerEvents: 'none' }}
+            onClick={handleDismiss}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleDismiss();
+              }
+            }}
           />
 
-          {/* Modal with 3D effect */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 50, rotateX: -15 }}
-            animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 50, rotateX: -15 }}
-            transition={{ 
-              type: 'spring', 
-              damping: 20, 
-              stiffness: 300,
-              mass: 0.8
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="alarm-modal-title"
+            aria-describedby={alarm.message ? 'alarm-modal-desc' : undefined}
+            initial={{ opacity: 0, scale: 0.92, y: 24 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: 24 }}
+            transition={{
+              type: 'spring',
+              damping: 22,
+              stiffness: 320,
+              mass: 0.85,
             }}
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 perspective-1000"
-            style={{ pointerEvents: 'auto', perspective: '1000px' }}
+            className="relative z-10 max-w-md w-full perspective-1000"
+            style={{ perspective: '1000px' }}
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* 3D Container with depth */}
             <motion.div
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ scale: 1.01 }}
               transition={{ type: 'spring', stiffness: 400 }}
-              className="relative max-w-md w-full"
+              className="relative w-full"
               style={{ transformStyle: 'preserve-3d' }}
             >
-              {/* Glow effect behind modal */}
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/30 via-emerald-600/20 to-emerald-400/30 rounded-3xl blur-2xl -z-10 scale-110" />
-              
-              {/* Main modal container with 3D depth */}
-              <div className="relative bg-gradient-to-br from-slate-900/95 via-slate-800/95 to-slate-900/95 rounded-3xl shadow-[0_20px_60px_-15px_rgba(5,150,105,0.4),0_0_0_1px_rgba(5,150,105,0.1),inset_0_1px_0_rgba(255,255,255,0.1)] border border-emerald-500/30 backdrop-blur-xl overflow-hidden transform-gpu">
-                {/* Animated gradient overlay for depth */}
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/25 via-violet-500/15 to-emerald-400/25 rounded-3xl blur-2xl -z-10 scale-105" />
+
+              <div className="relative rounded-3xl border border-white/[0.12] bg-gradient-to-br from-slate-900/98 via-slate-950/98 to-slate-900/98 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl overflow-hidden">
                 <motion.div
                   animate={{
                     background: [
-                      'linear-gradient(135deg, rgba(5,150,105,0.1) 0%, rgba(5,150,105,0.05) 50%, rgba(5,150,105,0.1) 100%)',
-                      'linear-gradient(135deg, rgba(5,150,105,0.15) 0%, rgba(5,150,105,0.1) 50%, rgba(5,150,105,0.15) 100%)',
-                      'linear-gradient(135deg, rgba(5,150,105,0.1) 0%, rgba(5,150,105,0.05) 50%, rgba(5,150,105,0.1) 100%)',
+                      'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(139,92,246,0.05) 50%, rgba(16,185,129,0.08) 100%)',
+                      'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(139,92,246,0.08) 50%, rgba(16,185,129,0.12) 100%)',
+                      'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(139,92,246,0.05) 50%, rgba(16,185,129,0.08) 100%)',
                     ],
                   }}
-                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
                   className="absolute inset-0 pointer-events-none"
                 />
 
-                {/* Header with 3D bell icon */}
-                <div className="relative p-8 pb-6 border-b border-emerald-500/20 bg-gradient-to-b from-emerald-500/10 via-transparent to-transparent">
-                  <div className="flex items-center justify-center mb-6">
-                    {/* 3D Bell Icon Container */}
+                <div className="relative px-6 pt-8 pb-5 border-b border-white/[0.08]">
+                  <div className="flex items-center justify-center mb-5">
                     <motion.div
                       animate={{
-                        scale: [1, 1.15, 1],
-                        rotate: [0, 5, -5, 0],
-                        y: [0, -5, 0],
+                        scale: [1, 1.12, 1],
+                        rotate: [0, 6, -6, 0],
+                        y: [0, -4, 0],
                       }}
                       transition={{
-                        duration: 2.5,
+                        duration: 2.2,
                         repeat: Infinity,
                         ease: 'easeInOut',
                       }}
                       className="relative"
                     >
-                      {/* Outer glow ring */}
                       <motion.div
                         animate={{
-                          scale: [1, 1.2, 1],
-                          opacity: [0.3, 0.6, 0.3],
+                          scale: [1, 1.15, 1],
+                          opacity: [0.35, 0.65, 0.35],
                         }}
                         transition={{
-                          duration: 2,
+                          duration: 1.8,
                           repeat: Infinity,
                           ease: 'easeInOut',
                         }}
-                        className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 blur-xl"
+                        className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-400 to-violet-600 blur-xl opacity-70"
                       />
-                      
-                      {/* Middle ring */}
-                      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500/50 to-emerald-700/50 blur-md scale-110" />
-                      
-                      {/* Main bell container with 3D effect */}
-                      <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 via-emerald-600 to-emerald-700 flex items-center justify-center shadow-[0_10px_30px_rgba(5,150,105,0.5),inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-1px_0_rgba(0,0,0,0.3)] transform hover:scale-105 transition-transform">
-                        <Bell className="w-10 h-10 text-white drop-shadow-lg" strokeWidth={2.5} />
+                      <div className="relative w-[4.5rem] h-[4.5rem] rounded-full bg-gradient-to-br from-emerald-500 via-emerald-600 to-violet-700 flex items-center justify-center shadow-[0_12px_40px_rgba(16,185,129,0.45)] ring-2 ring-white/10">
+                        <Bell className="w-9 h-9 text-white drop-shadow-md" strokeWidth={2.25} />
                       </div>
                     </motion.div>
                   </div>
-                  
-                  <h2 className="text-3xl font-bold text-white text-center mb-2 drop-shadow-[0_2px_8px_rgba(255,255,255,0.2)] tracking-tight">
+
+                  <h2
+                    id="alarm-modal-title"
+                    className="text-2xl sm:text-3xl font-bold text-white text-center mb-2 tracking-tight"
+                  >
                     {alarm.title}
                   </h2>
-                  
+
                   {alarm.message && (
-                    <p className="text-white/90 text-center text-sm font-medium leading-relaxed">
+                    <p
+                      id="alarm-modal-desc"
+                      className="text-slate-300 text-center text-sm leading-relaxed"
+                    >
                       {alarm.message}
                     </p>
                   )}
                 </div>
 
-                {/* Content with 3D depth */}
-                <div className="relative p-8 space-y-6">
-                  {/* Time display with white text */}
-                  <div className="flex items-center justify-center gap-3 text-white">
-                    <motion.div
-                      animate={{ rotate: [0, 360] }}
-                      transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+                <div className="relative px-6 py-6 space-y-5">
+                  <div className="flex items-center justify-center gap-2 text-slate-200">
+                    <motion.span
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
+                      className="inline-flex"
                     >
-                      <Clock className="w-5 h-5 drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" />
-                    </motion.div>
-                    <span className="text-lg font-semibold tracking-wide drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]">
+                      <Clock className="w-5 h-5 text-emerald-400/90" />
+                    </motion.span>
+                    <span className="text-base font-semibold tabular-nums">
                       {new Date().toLocaleTimeString('en-US', {
                         hour: '2-digit',
                         minute: '2-digit',
@@ -221,51 +241,41 @@ export function AlarmModal({
                     </span>
                   </div>
 
-                  {/* Action Buttons with 3D effect */}
-                  <div className="flex flex-col gap-4 pt-2">
+                  <div className="flex flex-col gap-3">
                     {alarm.workoutPlanId && onAction && (
                       <motion.button
-                        whileHover={{ scale: 1.02, y: -2 }}
-                        whileTap={{ scale: 0.98, y: 0 }}
+                        type="button"
+                        whileHover={{ scale: 1.02, y: -1 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={handleAction}
-                        className="relative w-full px-6 py-4 bg-gradient-to-br from-emerald-600 via-emerald-500 to-emerald-600 hover:from-emerald-500 hover:via-emerald-400 hover:to-emerald-500 text-white font-bold rounded-2xl transition-all duration-300 shadow-[0_10px_30px_rgba(5,150,105,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(5,150,105,0.6),inset_0_1px_0_rgba(255,255,255,0.3)] flex items-center justify-center gap-3 text-lg transform-gpu overflow-hidden group"
+                        className="relative w-full overflow-hidden rounded-2xl px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-semibold shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2"
                       >
-                        {/* Shine effect */}
-                        <motion.div
-                          animate={{
-                            x: ['-100%', '100%'],
-                          }}
-                          transition={{
-                            duration: 3,
-                            repeat: Infinity,
-                            ease: 'linear',
-                          }}
-                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                        />
-                        <Play className="w-5 h-5 drop-shadow-lg group-hover:scale-110 transition-transform" />
-                        <span className="drop-shadow-lg">Start Workout</span>
+                        <Play className="w-5 h-5 shrink-0" />
+                        Start Workout
                       </motion.button>
                     )}
 
-                    <div className="flex gap-4">
+                    <div className="flex gap-3">
                       <motion.button
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95, y: 0 }}
+                        type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={handleSnooze}
-                        className="relative flex-1 px-5 py-3.5 bg-gradient-to-br from-slate-700/90 via-slate-600/90 to-slate-700/90 hover:from-slate-600 hover:via-slate-500 hover:to-slate-600 text-white font-semibold rounded-xl transition-all duration-300 shadow-[0_5px_15px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.1)] hover:shadow-[0_8px_20px_rgba(5,150,105,0.3),inset_0_1px_0_rgba(255,255,255,0.15)] border border-emerald-500/30 hover:border-emerald-500/50 flex items-center justify-center gap-2 transform-gpu"
+                        className="flex-1 rounded-xl px-4 py-3 bg-white/[0.06] border border-white/[0.1] text-white font-medium hover:bg-white/[0.1] flex items-center justify-center gap-2 transition-colors"
                       >
                         <Clock className="w-4 h-4" />
-                        <span>Snooze ({alarm.snoozeMinutes}m)</span>
+                        Snooze ({alarm.snoozeMinutes}m)
                       </motion.button>
 
                       <motion.button
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95, y: 0 }}
+                        type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={handleDismiss}
-                        className="relative flex-1 px-5 py-3.5 bg-gradient-to-br from-slate-700/90 via-slate-600/90 to-slate-700/90 hover:from-slate-600 hover:via-slate-500 hover:to-slate-600 text-white font-semibold rounded-xl transition-all duration-300 shadow-[0_5px_15px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.1)] hover:shadow-[0_8px_20px_rgba(5,150,105,0.3),inset_0_1px_0_rgba(255,255,255,0.15)] border border-emerald-500/30 hover:border-emerald-500/50 flex items-center justify-center gap-2 transform-gpu"
+                        className="flex-1 rounded-xl px-4 py-3 bg-white/[0.06] border border-white/[0.1] text-white font-medium hover:bg-white/[0.1] flex items-center justify-center gap-2 transition-colors"
                       >
                         <X className="w-4 h-4" />
-                        <span>Dismiss</span>
+                        Dismiss
                       </motion.button>
                     </div>
                   </div>
@@ -273,9 +283,9 @@ export function AlarmModal({
               </div>
             </motion.div>
           </motion.div>
-        </>
+        </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
-

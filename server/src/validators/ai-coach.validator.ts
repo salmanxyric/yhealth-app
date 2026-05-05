@@ -122,6 +122,25 @@ export const chatWithImageSchema = z.object({
   goal: goalCategoryEnum,
 });
 
+// Batch MCQ question generation schema
+export const generateBatchMCQQuestionsSchema = z.object({
+  goal: goalCategoryEnum,
+  customGoalText: z.string().max(500).optional(),
+  count: z.number().int().min(1).max(20).default(6),
+  language: supportedLanguageEnum.optional(),
+});
+
+// Life-coach question generation schema
+export const generateLifeCoachQuestionsSchema = z.object({
+  goal: goalCategoryEnum,
+  customGoalText: z.string().max(500).optional(),
+  assessmentResponses: z.array(z.object({
+    questionText: z.string(),
+    value: z.union([z.string(), z.number()]),
+  })).optional(),
+  language: supportedLanguageEnum.optional(),
+});
+
 // Types
 export type StartConversationInput = z.infer<typeof startConversationSchema>;
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;

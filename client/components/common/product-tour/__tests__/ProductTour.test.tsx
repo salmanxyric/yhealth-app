@@ -145,10 +145,10 @@ describe("ProductTour", () => {
   // ── Tooltip step (spotlight steps) ──
 
   it("renders tooltip for spotlight steps", () => {
-    mockContextValue.currentStep = 1; // health-dashboard step
+    mockContextValue.currentStep = 1; // overview-metrics step
     render(<ProductTour />);
 
-    expect(screen.getByText("Your Health Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Daily metrics at a glance")).toBeInTheDocument();
   });
 
   // ── Completion step (last step) ──
@@ -157,7 +157,7 @@ describe("ProductTour", () => {
     mockContextValue.currentStep = TOUR_STEPS.length - 1; // completion step
     render(<ProductTour />);
 
-    expect(screen.getByText("You're All Set, Alex!")).toBeInTheDocument();
+    expect(screen.getByText("You're all set, Alex!")).toBeInTheDocument();
     expect(screen.getByText("Go to Dashboard")).toBeInTheDocument();
   });
 

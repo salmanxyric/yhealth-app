@@ -13,6 +13,11 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from '../services/logger.service.js';
 import { query } from '../database/pg.js';
+import { userFilesService } from '../services/user-files.service.js';
+import { proactiveEventTriggerService } from '../services/proactive-event-triggers.service.js';
+import { recordTTFB, getActiveStreams } from '../middlewares/performance-tracing.middleware.js';
+import { chatRequestQueue, CapacityError, QueueTimeoutError } from '../services/request-queue.service.js';
+import { setAnalysisStepEmitter, clearAnalysisStepEmitter } from '../services/analysis-step-emitter.store.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 /**
@@ -191,6 +196,28 @@ class RAGChatbotController {
 
     const trimmedMessage = message.trim();
 
+    // Backpressure: reject if queue is full (503 with Retry-After)
+    try {
+      await chatRequestQueue.acquire();
+    } catch (err) {
+      if (err instanceof CapacityError) {
+        res.set('Retry-After', String(err.retryAfter));
+        res.status(503).json({ error: 'Service temporarily at capacity. Please retry shortly.' });
+        return;
+      }
+      if (err instanceof QueueTimeoutError) {
+        res.status(504).json({ error: 'Request timed out waiting in queue.' });
+        return;
+      }
+      throw err;
+    }
+
+    // Ensure queue slot is released when stream ends
+    res.on('close', () => {
+      chatRequestQueue.release();
+      clearAnalysisStepEmitter(userId);
+    });
+
     // Extract callPurpose from callId if not provided directly
     let effectiveCallPurpose = callPurpose;
     if (!effectiveCallPurpose && callId) {
@@ -215,9 +242,20 @@ class RAGChatbotController {
     res.flushHeaders();
 
     try {
+      // Graceful degradation: skip non-essential work when server is under heavy load
+      const PRESSURE_THRESHOLD = parseInt(process.env['CHAT_PRESSURE_THRESHOLD'] || '80', 10);
+      const isUnderPressure = getActiveStreams() > PRESSURE_THRESHOLD;
+      if (isUnderPressure) {
+        logger.warn('[RAGChatbotController] Under pressure — skipping emotion detection & routing chip', {
+          activeStreams: getActiveStreams(),
+          threshold: PRESSURE_THRESHOLD,
+          userId,
+        });
+      }
+
       // Detect emotion from user message (async, non-blocking) — skip for short action commands
       let emotionDetected: EmotionDetection | null = null;
-      const skipEmotion = shouldSkipEmotionDetection(trimmedMessage);
+      const skipEmotion = isUnderPressure || shouldSkipEmotionDetection(trimmedMessage);
       const detectEmotionPromise = skipEmotion ? Promise.resolve() : (async () => {
         try {
           let conversationContext = undefined;
@@ -255,6 +293,10 @@ class RAGChatbotController {
         }
       })();
 
+      // Performance tracing
+      const trace = req.trace;
+      trace?.startPhase('crisis_detection');
+
       // Detect crisis keywords (async, non-blocking but higher priority)
       let crisisDetected = false;
       let emergencyTriggered = false;
@@ -264,11 +306,12 @@ class RAGChatbotController {
           if (crisisDetection.isCrisis && crisisDetection.severity !== 'low') {
             crisisDetected = true;
             if (callId) {
-              await crisisDetectionService.triggerEmergencyProtocol(callId, userId);
+              const [, resources] = await Promise.all([
+                crisisDetectionService.triggerEmergencyProtocol(callId, userId),
+                crisisDetectionService.getCrisisResources(),
+                crisisDetectionService.scheduleFollowUpCheckIn(userId, callId),
+              ]);
               emergencyTriggered = true;
-
-              const resources = await crisisDetectionService.getCrisisResources();
-              await crisisDetectionService.scheduleFollowUpCheckIn(userId, callId);
 
               // Send emergency event immediately
               res.write(`data: ${JSON.stringify({ emergency: true, resources, message: "Emergency support activated. I'm here for you." })}\n\n`);
@@ -285,6 +328,7 @@ class RAGChatbotController {
 
       // Wait for crisis detection (higher priority)
       await detectCrisisPromise;
+      trace?.endPhase('crisis_detection');
 
       // If emergency triggered, end stream early
       if (emergencyTriggered) {
@@ -293,6 +337,33 @@ class RAGChatbotController {
         res.end();
         return;
       }
+
+      trace?.startPhase('llm_stream');
+      trace?.startPhase('ttfb');
+      let firstTokenRecorded = false;
+
+      // SSE write batching — buffer tokens to reduce syscalls
+      const tokenBuffer: string[] = [];
+      let flushTimer: ReturnType<typeof setTimeout> | null = null;
+      const BATCH_SIZE = 5;
+      const BATCH_INTERVAL_MS = 50;
+
+      function flushTokenBuffer() {
+        if (tokenBuffer.length === 0) return;
+        try {
+          res.write(tokenBuffer.join(''));
+          if (typeof (res as any).flush === 'function') (res as any).flush();
+        } catch { /* stream closed */ }
+        tokenBuffer.length = 0;
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+      }
+
+      setAnalysisStepEmitter(userId, (step) => {
+        try {
+          res.write(`data: ${JSON.stringify({ type: 'analysis_step', step })}\n\n`);
+          if (typeof (res as any).flush === 'function') (res as any).flush();
+        } catch { /* stream closed */ }
+      });
 
       const result = await langGraphChatbotService.chatStream({
         userId,
@@ -303,10 +374,17 @@ class RAGChatbotController {
         imageBase64,
         onToken: (token: string) => {
           try {
-            res.write(`data: ${JSON.stringify({ token })}\n\n`);
-            // Flush to ensure immediate delivery
-            if (typeof (res as any).flush === 'function') {
-              (res as any).flush();
+            if (!firstTokenRecorded) {
+              firstTokenRecorded = true;
+              const ttfb = trace?.totalMs ?? 0;
+              recordTTFB(ttfb);
+              trace?.endPhase('ttfb');
+            }
+            tokenBuffer.push(`data: ${JSON.stringify({ token })}\n\n`);
+            if (tokenBuffer.length >= BATCH_SIZE) {
+              flushTokenBuffer();
+            } else if (!flushTimer) {
+              flushTimer = setTimeout(flushTokenBuffer, BATCH_INTERVAL_MS);
             }
           } catch (error: any) {
             logger.error('[RAGChatbotController] Error writing token to stream', {
@@ -328,7 +406,40 @@ class RAGChatbotController {
             });
           }
         },
+        onThinkingStart: (label: string) => {
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'thinking_start', label, timestamp: Date.now() })}\n\n`);
+            if (typeof (res as any).flush === 'function') (res as any).flush();
+          } catch { /* stream closed */ }
+        },
+        onThinkingEnd: (label: string, durationMs: number) => {
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'thinking_end', label, durationMs })}\n\n`);
+            if (typeof (res as any).flush === 'function') (res as any).flush();
+          } catch { /* stream closed */ }
+        },
+        onToolCall: (event: { operationId: string; toolName: string; label: string; icon?: string }) => {
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'tool_call', ...event })}\n\n`);
+            if (typeof (res as any).flush === 'function') (res as any).flush();
+          } catch { /* stream closed */ }
+        },
+        onToolResult: (event: { operationId: string; toolName: string; success: boolean; delta: string; icon?: string; undoable: boolean; label?: string }) => {
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'tool_result', ...event })}\n\n`);
+            if (typeof (res as any).flush === 'function') (res as any).flush();
+          } catch { /* stream closed */ }
+        },
+        onArtifact: (event: { artifact: any; toolName: string }) => {
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'artifact', ...event })}\n\n`);
+            if (typeof (res as any).flush === 'function') (res as any).flush();
+          } catch { /* stream closed */ }
+        },
       });
+
+      flushTokenBuffer(); // Drain any remaining buffered tokens
+      trace?.endPhase('llm_stream');
 
       // Wait for emotion detection to complete
       await detectEmotionPromise;
@@ -336,11 +447,13 @@ class RAGChatbotController {
       const resultAny = result as any;
       const finalMessage = result.response || '';
 
-      const routingChip = await routeCoachIntent({
+      trace?.startPhase('routing_chip');
+      const routingChip = isUnderPressure ? null : await routeCoachIntent({
         userId,
         userMessage: trimmedMessage,
         llm: routerLlm,
       });
+      trace?.endPhase('routing_chip');
 
       // Send completion with tool calls and actions if any
       const doneEvent: any = {
@@ -603,9 +716,9 @@ class RAGChatbotController {
 
     try {
       const openingQuestion = await wellbeingQuestionEngineService.generateOpeningQuestion(userId);
-      
+
       if (openingQuestion) {
-        ApiResponse.success(res, { 
+        ApiResponse.success(res, {
           question: openingQuestion.question,
           type: openingQuestion.type,
           priority: openingQuestion.priority,
@@ -623,6 +736,75 @@ class RAGChatbotController {
         message: 'Could not generate opening question',
       }, undefined, req);
     }
+  });
+
+  // ============================================================================
+  // User Files
+  // ============================================================================
+
+  getUserFiles = asyncHandler(async (req: any, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ApiError(401, 'Authentication required');
+
+    const { fileType, includeArchived } = req.query;
+    const files = await userFilesService.getUserFiles(userId, {
+      fileType: fileType as any,
+      includeArchived: includeArchived === 'true',
+    });
+    ApiResponse.success(res, { files }, { message: 'Files retrieved' }, undefined, req);
+  });
+
+  createUserFile = asyncHandler(async (req: any, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ApiError(401, 'Authentication required');
+
+    const { fileType, title, content, isPinned } = req.body;
+    if (!fileType || !title) throw new ApiError(400, 'fileType and title are required');
+
+    const file = await userFilesService.createFile(userId, {
+      fileType, title, content: content || {}, source: 'user', isPinned,
+    });
+    ApiResponse.success(res, { file }, { message: 'File created' }, 201 as any, req);
+  });
+
+  updateUserFile = asyncHandler(async (req: any, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ApiError(401, 'Authentication required');
+
+    const { fileId } = req.params;
+    const file = await userFilesService.updateFile(userId, fileId, req.body);
+    if (!file) throw new ApiError(404, 'File not found');
+    ApiResponse.success(res, { file }, { message: 'File updated' }, undefined, req);
+  });
+
+  archiveUserFile = asyncHandler(async (req: any, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ApiError(401, 'Authentication required');
+
+    const { fileId } = req.params;
+    const success = await userFilesService.archiveFile(userId, fileId);
+    if (!success) throw new ApiError(404, 'File not found');
+    ApiResponse.success(res, null, { message: 'File archived' }, undefined, req);
+  });
+
+  // ============================================================================
+  // Check-In Response
+  // ============================================================================
+
+  respondToCheckIn = asyncHandler(async (req: any, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ApiError(401, 'Authentication required');
+
+    const { checkInId } = req.params;
+    const { action } = req.body;
+
+    if (!action || typeof action !== 'string') {
+      throw new ApiError(400, 'action is required');
+    }
+
+    const result = await proactiveEventTriggerService.handleCheckInResponse(userId, checkInId, action);
+    if (!result.handled) throw new ApiError(404, 'Check-in not found or already handled');
+    ApiResponse.success(res, result, undefined, undefined, req);
   });
 }
 

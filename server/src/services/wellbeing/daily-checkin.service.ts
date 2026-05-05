@@ -4,7 +4,7 @@
  * Cross-logs to mood_logs, energy_logs, stress_logs for backward compatibility
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import type {
   DailyCheckin,
   CreateDailyCheckinInput,

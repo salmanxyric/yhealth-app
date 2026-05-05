@@ -46,6 +46,16 @@ jest.unstable_mockModule('../../src/services/ai-scoring.service.js', () => ({
   }),
 }));
 
+const mockSmartCompetitionService = {
+  isRecommendedForUser: jest.fn<() => Promise<boolean>>().mockResolvedValue(false),
+  getBuddiesInCompetition: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+};
+
+jest.unstable_mockModule('../../src/services/smart-competition.service.js', () => ({
+  smartCompetitionService: mockSmartCompetitionService,
+  default: mockSmartCompetitionService,
+}));
+
 jest.unstable_mockModule('../../src/services/logger.service.js', () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn(), stream: { write: jest.fn() } },
 }));
@@ -96,6 +106,8 @@ describe('Competitions API Integration Tests', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    mockSmartCompetitionService.isRecommendedForUser.mockResolvedValue(false);
+    mockSmartCompetitionService.getBuddiesInCompetition.mockResolvedValue(0);
   });
 
   // ------------------------------------------
@@ -108,7 +120,7 @@ describe('Competitions API Integration Tests', () => {
       const { accessToken, user: _user } = await createAuthenticatedUser();
       const mockComp = buildMockCompetition();
 
-      mockCompetitionService.getActiveCompetitions.mockResolvedValue([mockComp]);
+      mockCompetitionService.getActiveCompetitions.mockResolvedValue({ competitions: [mockComp], total: 1 });
       mockCompetitionService.getUserCompetitionEntries.mockResolvedValue([MOCK_COMP_ID]);
 
       const response = await request(app)
@@ -129,7 +141,7 @@ describe('Competitions API Integration Tests', () => {
       const { accessToken } = await createAuthenticatedUser();
       const mockComp = buildMockCompetition();
 
-      mockCompetitionService.getActiveCompetitions.mockResolvedValue([mockComp]);
+      mockCompetitionService.getActiveCompetitions.mockResolvedValue({ competitions: [mockComp], total: 1 });
       mockCompetitionService.getUserCompetitionEntries.mockRejectedValue(
         new Error('Database connection lost')
       );

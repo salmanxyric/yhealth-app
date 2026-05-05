@@ -57,6 +57,8 @@ async function processOnce(): Promise<void> {
             c.userId,
             buildIntroMessage(c.goalTitle, c.missCount),
             'obstacle_diagnosis',
+            undefined,
+            { obstacleId: obstacle.id },
           );
           messaged++;
         } catch (msgErr) {

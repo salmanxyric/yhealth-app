@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -23,7 +23,7 @@ import type {
 } from '../validators/assessment.validator.js';
 
 // Type definitions
-type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'custom';
+type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'nutrition' | 'fitness' | 'custom';
 type HealthPillar = 'fitness' | 'nutrition' | 'wellbeing';
 type GoalStatus = 'draft' | 'active' | 'paused' | 'completed' | 'abandoned';
 type AssessmentType = 'quick' | 'deep';
@@ -98,6 +98,8 @@ const CATEGORY_PILLAR_MAP: Record<GoalCategory, HealthPillar> = {
   health_condition: 'wellbeing',
   habit_building: 'wellbeing',
   overall_optimization: 'fitness',
+  nutrition: 'nutrition',
+  fitness: 'fitness',
   custom: 'wellbeing',
 };
 

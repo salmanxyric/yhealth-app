@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Search, X, ChevronUp, ChevronDown, Settings, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ import { adaptMessageToChatMessageItem } from '../utils/messageAdapter';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/app/context/AuthContext';
-import { subscribeToChatEvents, subscribeToUserEvents } from '@/lib/socket-client';
+import { subscribeToChatEvents, subscribeToUserEvents, getSocket } from '@/lib/socket-client';
 import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
 
 interface MessagesViewProps {
@@ -38,9 +38,17 @@ interface MessagesViewProps {
   onMenuClick?: () => void;
   onChatDeleted?: () => void;
   onChatRead?: () => void; // Callback when chat is marked as read
+  onOpenChatSettings?: (tab: 'general' | 'privacy') => void;
 }
 
-export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onChatRead }: MessagesViewProps) {
+export function MessagesView({
+  chatId,
+  onBack,
+  onMenuClick,
+  onChatDeleted,
+  onChatRead,
+  onOpenChatSettings,
+}: MessagesViewProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { assistantName } = useVoiceAssistant();
@@ -68,11 +76,24 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
     name: string;
     avatar?: string | null;
   } | null>(null);
+  const [editingMessage, setEditingMessage] = useState<{
+    id: string;
+    content: string;
+  } | null>(null);
+  const [searchMode, setSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [isDisconnected, setIsDisconnected] = useState(false);
   const [viewOnceMedia, setViewOnceMedia] = useState<{
     messageId: string;
     mediaUrl: string;
     mediaThumbnail?: string;
     mediaType: 'image' | 'video' | 'audio';
+  } | null>(null);
+  const [accountabilityBanner, setAccountabilityBanner] = useState<{
+    triggerType?: string;
   } | null>(null);
 
   // Keep toast ref up to date
@@ -103,9 +124,11 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
     if (!chatId) {
       setChat(null);
       setMessages([]);
+      setAccountabilityBanner(null);
       return;
     }
 
+    setAccountabilityBanner(null);
     let cancelled = false;
 
     const loadChatAndMessages = async () => {
@@ -169,28 +192,42 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
 
     // Subscribe to chat events
     const cleanupChat = subscribeToChatEvents(chatId, {
-      onNewMessage: async (_data) => {
-        try {
-          // Reload messages to get the latest state with all relations
-          const messagesData = await chatService.getMessages(chatId, { limit: 50 });
-          // Backend already returns messages in chronological order (oldest first)
-          const adaptedMessages = messagesData
-            .map((msg) => adaptMessageToChatMessageItem(msg, user.id, isAiChatRef.current));
-          setMessages(adaptedMessages);
-        } catch (error) {
-          console.error('Failed to reload messages after new message event:', error);
+      onNewMessage: (data) => {
+        const envelope = data as {
+          isAccountabilityMessage?: boolean;
+          triggerType?: string;
+        };
+        if (envelope.isAccountabilityMessage) {
+          setAccountabilityBanner({ triggerType: envelope.triggerType });
+          window.setTimeout(() => setAccountabilityBanner(null), 14_000);
+        }
+        // Proactive coach payloads often omit top-level senderId; use message.senderId.
+        const messagePayload = data.message as { senderId?: string } | undefined;
+        const effectiveSenderId = data.senderId ?? messagePayload?.senderId;
+        if (data.message && effectiveSenderId !== user.id) {
+          const adapted = adaptMessageToChatMessageItem(data.message, user.id, isAiChatRef.current);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === adapted.id)) return prev;
+            return [...prev, adapted];
+          });
+        } else if (data.message && effectiveSenderId === user.id) {
+          // Own message echoed back — update if temp ID differs
+          const adapted = adaptMessageToChatMessageItem(data.message, user.id, isAiChatRef.current);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === adapted.id)) return prev;
+            return [...prev, adapted];
+          });
         }
       },
-      onMessageEdited: async (_data) => {
-        try {
-          // Reload messages to get updated message
-          const messagesData = await chatService.getMessages(chatId, { limit: 50 });
-          // Backend already returns messages in chronological order (oldest first)
-          const adaptedMessages = messagesData
-            .map((msg) => adaptMessageToChatMessageItem(msg, user.id, isAiChatRef.current));
-          setMessages(adaptedMessages);
-        } catch (error) {
-          console.error('Failed to reload messages after edit event:', error);
+      onMessageEdited: (data) => {
+        if (data.messageId && data.content !== undefined) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === data.messageId
+                ? { ...msg, content: data.content, isEdited: true }
+                : msg
+            )
+          );
         }
       },
       onMessageDeleted: (data) => {
@@ -203,16 +240,26 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           )
         );
       },
-      onMessageReaction: async (_data) => {
-        try {
-          // Reload messages to get updated reactions
-          const messagesData = await chatService.getMessages(chatId, { limit: 50 });
-          // Backend already returns messages in chronological order (oldest first)
-          const adaptedMessages = messagesData
-            .map((msg) => adaptMessageToChatMessageItem(msg, user.id, isAiChatRef.current));
-          setMessages(adaptedMessages);
-        } catch (error) {
-          console.error('Failed to reload messages after reaction event:', error);
+      onMessageReaction: (data) => {
+        if (data.messageId && data.emoji) {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id !== data.messageId) return msg;
+              const reactions = [...(msg.reactions || [])];
+              const existing = reactions.find((r) => r.emoji === data.emoji);
+              if (data.action === 'remove' && existing) {
+                existing.count = Math.max(0, existing.count - 1);
+                if (existing.count === 0) {
+                  return { ...msg, reactions: reactions.filter((r) => r.emoji !== data.emoji) };
+                }
+              } else if (existing) {
+                existing.count += 1;
+              } else {
+                reactions.push({ emoji: data.emoji, count: 1, userIds: [data.userId || ''] });
+              }
+              return { ...msg, reactions };
+            })
+          );
         }
       },
       onTyping: (data) => {
@@ -277,7 +324,6 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
         }
       },
       onViewOnceOpened: (data) => {
-        // Update the message locally to show "Opened" state (sender sees this)
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === data.messageId
@@ -286,10 +332,28 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           )
         );
       },
+      onReconnect: () => {
+        setIsDisconnected(false);
+        reloadMessages();
+      },
     });
 
     return cleanupChat;
-  }, [chatId, user?.id, toast]);
+  }, [chatId, user?.id, toast, reloadMessages]);
+
+  // Track socket disconnection for reconnecting banner
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+    const handleDisconnect = () => setIsDisconnected(true);
+    const handleConnect = () => setIsDisconnected(false);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect', handleConnect);
+    return () => {
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect', handleConnect);
+    };
+  }, []);
 
   // Subscribe to user-level events (like groupLeft)
   useEffect(() => {
@@ -297,7 +361,6 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
 
     const cleanupUser = subscribeToUserEvents({
       onGroupLeft: (data) => {
-        // User has left a group - redirect to chat overview
         toast({
           title: 'Left Group',
           description: `You have left "${data.chatName}"`,
@@ -305,12 +368,24 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
         onChatDeleted?.();
         router.push('/chat');
       },
+      onUserOnline: (data) => {
+        setOnlineUsers((prev) => { const n = new Set(prev); n.add(data.userId); return n; });
+      },
+      onUserOffline: (data) => {
+        setOnlineUsers((prev) => { const n = new Set(prev); n.delete(data.userId); return n; });
+      },
     });
 
     return () => {
       if (cleanupUser) cleanupUser();
     };
   }, [user?.id, toast, onChatDeleted, router]);
+
+  const searchMatchIds = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return messages.filter((m) => !m.isDeleted && m.content.toLowerCase().includes(q)).map((m) => m.id);
+  }, [messages, searchQuery]);
 
   const getChatTitle = (chat: Chat | null): string => {
     if (!chat) return 'Chat';
@@ -578,9 +653,12 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
 
         const sentMessage = await chatService.sendMessage(messagePayload);
 
-        // Convert and add to messages
+        // Convert and add to messages (avoid duplicate if socket echoed the message first)
         const adaptedMessage = adaptMessageToChatMessageItem(sentMessage, user?.id, isAiChatRef.current);
-        setMessages((prev) => [...prev, adaptedMessage]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === adaptedMessage.id)) return prev;
+          return [...prev, adaptedMessage];
+        });
 
         setReplyTo(null);
       } catch (error) {
@@ -645,10 +723,29 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
     }
   }, [messages]);
 
-  const handleEdit = useCallback(async (messageId: string) => {
-    // TODO: Implement edit functionality
-    console.log('Edit message:', messageId);
-  }, []);
+  const handleEdit = useCallback((messageId: string) => {
+    const message = messages.find((m) => m.id === messageId);
+    if (message && message.senderId === user?.id && !message.isDeleted) {
+      setEditingMessage({ id: message.id, content: message.content });
+    }
+  }, [messages, user?.id]);
+
+  const handleEditSubmit = useCallback(async (newContent: string) => {
+    if (!editingMessage) return;
+    try {
+      await chatService.editMessage(editingMessage.id, newContent);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === editingMessage.id ? { ...msg, content: newContent, isEdited: true } : msg
+        )
+      );
+      setEditingMessage(null);
+      toast({ title: 'Message edited', variant: 'success' });
+    } catch (error) {
+      console.error('Failed to edit message:', error);
+      toast({ title: 'Error', description: 'Failed to edit message', variant: 'destructive' });
+    }
+  }, [editingMessage, toast]);
 
   const handleDelete = useCallback(async (messageId: string) => {
     try {
@@ -737,13 +834,41 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
       if (!chatId) {
         return (
           <div className="flex h-full flex-col">
-            {onBack && (
-              <div className="border-b border-border/50 bg-background/80 backdrop-blur-sm p-4">
-                <Button variant="ghost" size="icon" onClick={onBack}>
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
+            <div
+              className="flex items-center justify-between gap-3 px-4 sm:px-6 h-[72px] shrink-0 border-b border-white/[0.06]"
+              style={{
+                background: 'linear-gradient(180deg, rgba(8,10,18,0.95) 0%, rgba(6,8,14,0.92) 100%)',
+                backdropFilter: 'blur(20px)',
+              }}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {onMenuClick && (
+                  <Button variant="ghost" size="icon" className="lg:hidden shrink-0 h-9 w-9 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06]" onClick={onMenuClick} aria-label="Open chat list">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                )}
+                {onBack && (
+                  <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.06]" onClick={onBack} aria-label="Back">
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
+                )}
+                <span className="text-sm font-semibold text-white truncate">Chats</span>
               </div>
-            )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08]"
+                title="Settings"
+                aria-label="Settings"
+                onClick={() =>
+                  onOpenChatSettings
+                    ? onOpenChatSettings('general')
+                    : router.push('/settings')
+                }
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            </div>
             <ChatEmptyState />
           </div>
         );
@@ -757,6 +882,9 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           title={getChatTitle(chat)}
           subtitle={getChatSubtitle(chat)}
           onMenuClick={onMenuClick}
+          onOpenSettings={
+            onOpenChatSettings ? () => onOpenChatSettings('general') : undefined
+          }
         />
         <div className="flex-1 overflow-hidden px-4 py-6 space-y-5">
           {/* Incoming message skeleton */}
@@ -815,6 +943,9 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
         subtitle={getChatSubtitle(chat)}
         avatar={chat?.avatar || undefined}
         onMenuClick={onMenuClick}
+        onOpenSettings={
+          onOpenChatSettings ? () => onOpenChatSettings('general') : undefined
+        }
         onBack={onBack}
         showBackButton={true}
         isGroupChat={chat?.isGroupChat || false}
@@ -825,6 +956,12 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
         onLeaveGroup={chat?.isGroupChat && !isGroupAdmin ? handleLeaveGroup : undefined}
         // Only show delete option for admin/creator
         onDelete={chat?.isGroupChat && isGroupAdmin ? handleDeleteChat : !chat?.isGroupChat ? handleDeleteChat : undefined}
+        onSearch={() => {
+          setSearchMode((prev) => !prev);
+          setSearchQuery('');
+          setSearchMatchIndex(0);
+          setTimeout(() => searchInputRef.current?.focus(), 50);
+        }}
         onUserClick={(userId, userName, userAvatar) => {
           setSelectedUser({ id: userId, name: userName, avatar: userAvatar });
         }}
@@ -832,7 +969,70 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           ? chat.participants.find(p => p.user && p.user.id !== user?.id)?.user?.id
           : undefined}
         otherUserName={getChatTitle(chat) !== 'Chat' ? getChatTitle(chat) : undefined}
+        isOtherUserOnline={(() => {
+          if (!chat || chat.isGroupChat) return false;
+          const otherId = chat.participants?.find(p => p.user && p.user.id !== user?.id)?.user?.id;
+          return otherId ? onlineUsers.has(otherId) : false;
+        })()}
       />
+
+      {/* Search bar */}
+      {searchMode && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-white/[0.06] bg-slate-900/80 backdrop-blur-sm flex-shrink-0">
+          <Search className="w-4 h-4 text-slate-500 shrink-0" />
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setSearchMatchIndex(0); }}
+            placeholder="Search messages..."
+            className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-500 outline-none"
+          />
+          {searchMatchIds.length > 0 && (
+            <span className="text-xs text-slate-400 shrink-0">
+              {searchMatchIndex + 1}/{searchMatchIds.length}
+            </span>
+          )}
+          <button onClick={() => setSearchMatchIndex((i) => Math.max(0, i - 1))} disabled={searchMatchIds.length === 0}
+            className="p-1 text-slate-400 hover:text-white disabled:opacity-30">
+            <ChevronUp className="w-4 h-4" />
+          </button>
+          <button onClick={() => setSearchMatchIndex((i) => Math.min(searchMatchIds.length - 1, i + 1))} disabled={searchMatchIds.length === 0}
+            className="p-1 text-slate-400 hover:text-white disabled:opacity-30">
+            <ChevronDown className="w-4 h-4" />
+          </button>
+          <button onClick={() => { setSearchMode(false); setSearchQuery(''); }} className="p-1 text-slate-400 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Reconnecting banner */}
+      {isDisconnected && (
+        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 flex-shrink-0">
+          <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+          <span className="text-xs font-medium text-amber-400">Reconnecting...</span>
+        </div>
+      )}
+
+      {accountabilityBanner && (
+        <div className="flex items-start justify-between gap-3 px-4 py-2.5 bg-orange-500/[0.08] border-b border-orange-500/20 flex-shrink-0">
+          <p className="text-[12px] text-orange-100/95 leading-snug">
+            <span className="font-semibold text-orange-200">Accountability check-in: </span>
+            This message was sent because someone you support asked yHealth to notify you
+            {accountabilityBanner.triggerType
+              ? ` (${String(accountabilityBanner.triggerType).replace(/_/g, ' ')})`
+              : ''}
+            .
+          </p>
+          <button
+            type="button"
+            onClick={() => setAccountabilityBanner(null)}
+            className="shrink-0 text-orange-300/80 hover:text-white text-xs font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Messages List */}
       <div className="flex-1 min-h-0 overflow-hidden bg-transparent">
@@ -853,6 +1053,8 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           onUserClick={(userId, userName, userAvatar) => {
             setSelectedUser({ id: userId, name: userName, avatar: userAvatar });
           }}
+          searchQuery={searchQuery}
+          highlightedMessageId={searchMatchIds[searchMatchIndex] || undefined}
         />
       </div>
 
@@ -866,6 +1068,9 @@ export function MessagesView({ chatId, onBack, onMenuClick, onChatDeleted, onCha
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           permissionDeniedMessage={permissionDeniedMessage}
+          editingMessage={editingMessage}
+          onEditSubmit={handleEditSubmit}
+          onCancelEdit={() => setEditingMessage(null)}
         />
       </div>
 

@@ -3,7 +3,7 @@
  * Handles workout reminders and alarm scheduling
  */
 
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================
@@ -758,7 +758,8 @@ class WorkoutAlarmService {
 
     const { alarm_time, days_of_week, user_id } = alarmResult.rows[0];
     const timezone = await this.getUserTimezone(user_id);
-    const nextTriggerAt = this.calculateNextTrigger(alarm_time, days_of_week, timezone);
+    // Strict: force next trigger to be in the future — prevents rescheduling to today's already-passed time.
+    const nextTriggerAt = this.calculateNextTrigger(alarm_time, days_of_week, timezone, { strict: true });
 
     await pool.query(
       `UPDATE workout_alarms
@@ -768,7 +769,7 @@ class WorkoutAlarmService {
        WHERE id = $2`,
       [nextTriggerAt, alarmId]
     );
-    
+
     logger.info(`[WorkoutAlarm] Marked alarm as triggered`, {
       alarmId,
       nextTriggerAt,
@@ -809,7 +810,8 @@ class WorkoutAlarmService {
 
     const { alarm_time, days_of_week, user_id } = alarmResult.rows[0];
     const timezone = await this.getUserTimezone(user_id);
-    const nextTriggerAt = this.calculateNextTrigger(alarm_time, days_of_week, timezone);
+    // Strict: ensure next trigger is strictly in the future after dismissal
+    const nextTriggerAt = this.calculateNextTrigger(alarm_time, days_of_week, timezone, { strict: true });
 
     // Update alarm: set last_triggered_at to NOW() and calculate next trigger
     // This ensures the alarm won't match the trigger query again
@@ -931,10 +933,13 @@ class WorkoutAlarmService {
    * @param daysOfWeek - Array of day numbers (0=Sun, 1=Mon, ..., 6=Sat)
    * @param timezone - User's timezone (e.g., 'America/New_York', 'UTC')
    */
-  private calculateNextTrigger(alarmTime: string, daysOfWeek: number[], timezone: string = 'UTC'): string {
+  private calculateNextTrigger(alarmTime: string, daysOfWeek: number[], timezone: string = 'UTC', opts: { strict?: boolean } = {}): string {
     const [hours, minutes] = alarmTime.split(':').map(Number);
     const now = new Date();
-    
+    // When strict=true (called after an alarm just triggered), only return times strictly in the future.
+    // Otherwise allow up to 2 minutes past to tolerate job-interval/clock-skew lookbacks.
+    const pastTolerance = opts.strict ? 0 : -120000;
+
     try {
       // For UTC timezone, use simple calculation
       if (timezone === 'UTC' || timezone === 'Etc/UTC') {
@@ -943,10 +948,10 @@ class WorkoutAlarmService {
         const utcDate = now.getUTCDate();
         const today = now.getUTCDay();
         const todayAtAlarmTime = new Date(Date.UTC(utcYear, utcMonth, utcDate, hours, minutes, 0, 0));
-        
+
         if (daysOfWeek.includes(today)) {
           const timeDiff = todayAtAlarmTime.getTime() - now.getTime();
-          if (timeDiff > -120000) { // Allow up to 2 minutes past
+          if (timeDiff > pastTolerance) {
             return todayAtAlarmTime.toISOString();
           }
         }
@@ -996,7 +1001,7 @@ class WorkoutAlarmService {
       // Check if alarm should trigger today
       if (daysOfWeek.includes(today)) {
         const timeDiff = targetUtc.getTime() - now.getTime();
-        if (timeDiff > -120000) { // Allow up to 2 minutes past
+        if (timeDiff > pastTolerance) {
           return targetUtc.toISOString();
         }
       }
@@ -1052,18 +1057,18 @@ class WorkoutAlarmService {
       
       if (daysOfWeek.includes(today)) {
         const timeDiff = todayAtAlarmTime.getTime() - now.getTime();
-        if (timeDiff > -120000) {
+        if (timeDiff > pastTolerance) {
           return todayAtAlarmTime.toISOString();
         }
       }
-      
+
       for (let i = 1; i <= 7; i++) {
         const checkDay = (today + i) % 7;
         if (daysOfWeek.includes(checkDay)) {
           return new Date(Date.UTC(utcYear, utcMonth, utcDate + i, hours, minutes, 0, 0)).toISOString();
         }
       }
-      
+
       return new Date(Date.UTC(utcYear, utcMonth, utcDate + 1, hours, minutes, 0, 0)).toISOString();
     }
   }

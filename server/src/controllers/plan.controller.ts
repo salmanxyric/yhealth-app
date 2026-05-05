@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -23,7 +23,7 @@ import type {
 import { modelFactory } from '../services/model-factory.service.js';
 
 // Type definitions
-type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'custom';
+type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'nutrition' | 'fitness' | 'custom';
 type HealthPillar = 'fitness' | 'nutrition' | 'wellbeing';
 type PlanStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 type ActivityLogStatus = 'pending' | 'completed' | 'skipped' | 'partial';

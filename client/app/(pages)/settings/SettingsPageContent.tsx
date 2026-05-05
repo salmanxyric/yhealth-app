@@ -1,8 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { motion } from "framer-motion";
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import {
   Settings,
   User,
@@ -43,15 +43,41 @@ import {
   Zap,
   Focus,
   Calendar as CalendarIcon,
+  Lock,
+  CreditCard,
+  HelpCircle,
+  Crosshair,
+  ExternalLink,
+  Accessibility,
+  Send,
+  Phone,
+  Calendar,
+  BadgeCheck,
+  Copy,
+  Hash,
+  Cake,
+  ShieldCheck,
+  Crown as CrownIcon,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useVoiceAssistant } from "@/app/context/VoiceAssistantContext";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { LanguageSelector } from "@/components/common/language-selector";
 import { api, ApiError } from "@/lib/api-client";
+import { cn } from "@/lib/utils";
 import { DashboardSidebar, MobileBottomNav } from "../dashboard/components";
 import { toast } from "sonner";
 import { confirm } from "@/components/common/ConfirmDialog";
+import { dataSourceService, DataSourceType } from '@/src/shared/services/data-source.service';
+import {
+  communicationService,
+  type CommunicationPreferences,
+  type CommunicationPreferencesUpdate,
+} from "@/src/shared/services/communication.service";
+import { CoachPersonaPicker } from "@/components/coach/CoachPersonaPicker";
+import { DashboardPageSkeleton } from "@/components/loading";
+import { coachingStyleForPersona, personaFromCoachingStyle } from "@shared/types/domain/coach-persona";
 
 // ============================================
 // Google Calendar Section Component
@@ -61,34 +87,82 @@ function GoogleCalendarSection() {
   const [showForm, setShowForm] = useState(false);
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [redirectUri, setRedirectUri] = useState('');
+  const [suggestedRedirectUri, setSuggestedRedirectUri] = useState('');
   const [saving, setSaving] = useState(false);
   const [hasCredentials, setHasCredentials] = useState(false);
   const [maskedId, setMaskedId] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const searchParams = useSearchParams();
 
-  // Check if credentials exist on mount
+  // Compute a sensible default redirect URI from the public API URL.
+  // Matches server default: `${API_URL}/api/calendar/callback`.
+  const computeDefaultRedirectUri = useCallback(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    if (apiUrl) {
+      // API URL typically ends in `/api`. Normalize to get the origin-based callback.
+      return `${apiUrl.replace(/\/$/, '')}/calendar/callback`;
+    }
+    return 'http://localhost:9090/api/calendar/callback';
+  }, []);
+
+  // Check if credentials exist on mount and handle return from OAuth
   useEffect(() => {
-    api.get<{ hasCredentials: boolean; credentials: { clientId: string } | null }>('/calendar/credentials')
+    const fallback = computeDefaultRedirectUri();
+    setSuggestedRedirectUri(fallback);
+
+    api.get<{ hasCredentials: boolean; credentials: { clientId: string; redirectUri?: string } | null; suggestedRedirectUri?: string }>('/calendar/credentials')
       .then(res => {
         if (res.success && res.data) {
           setHasCredentials(res.data.hasCredentials);
-          if (res.data.credentials) setMaskedId(res.data.credentials.clientId);
+          if (res.data.suggestedRedirectUri) {
+            setSuggestedRedirectUri(res.data.suggestedRedirectUri);
+          }
+          if (res.data.credentials) {
+            setMaskedId(res.data.credentials.clientId);
+            setRedirectUri(res.data.credentials.redirectUri || fallback);
+          } else {
+            setRedirectUri(fallback);
+          }
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        setRedirectUri(fallback);
+      });
+
+    // Handle OAuth return query params
+    const status = searchParams?.get('calendar');
+    if (status === 'connected') {
+      toast.success('Google Calendar connected');
+    } else if (status === 'error') {
+      const reason = searchParams?.get('reason') || 'Unknown error';
+      toast.error(`Calendar connect failed: ${decodeURIComponent(reason)}`);
+    }
+  }, [computeDefaultRedirectUri, searchParams]);
 
   const handleSave = async () => {
     if (!clientId.trim() || !clientSecret.trim()) return;
+    const uri = (redirectUri.trim() || suggestedRedirectUri).trim();
+    if (!/^https?:\/\//i.test(uri)) {
+      toast.error('Redirect URI must start with http:// or https://');
+      return;
+    }
     setSaving(true);
     try {
-      await api.post('/calendar/credentials', { clientId: clientId.trim(), clientSecret: clientSecret.trim() });
+      await api.post('/calendar/credentials', {
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
+        redirectUri: uri,
+      });
       setHasCredentials(true);
       setShowForm(false);
       setMaskedId(clientId.substring(0, 12) + '****');
+      setRedirectUri(uri);
       toast.success('Google Calendar credentials saved');
     } catch (err) {
-      toast.error('Failed to save credentials');
+      const msg = err instanceof ApiError ? err.message : 'Failed to save credentials';
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -100,15 +174,32 @@ function GoogleCalendarSection() {
       const result = await api.get<{ url: string }>('/calendar/auth-url');
       if (result.success && result.data?.url) {
         window.location.href = result.data.url;
+      } else {
+        toast.error('Failed to get authorization URL');
+        setConnecting(false);
       }
     } catch (err) {
-      toast.error('Failed to connect. Check your credentials.');
+      const msg = err instanceof ApiError ? err.message : 'Failed to connect. Check your credentials.';
+      toast.error(msg);
       setConnecting(false);
     }
   };
 
+  const handleCopyRedirectUri = async () => {
+    const uri = redirectUri || suggestedRedirectUri;
+    try {
+      await navigator.clipboard.writeText(uri);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success('Redirect URI copied');
+    } catch {
+      toast.error('Copy failed — select and copy manually');
+    }
+  };
+
   const handleDelete = async () => {
-    if (!window.confirm('Remove Google Calendar credentials and disconnect?')) return;
+    const ok = await confirm({ description: 'Are you sure you want to remove Google Calendar credentials and disconnect?', confirmText: 'Remove', variant: 'destructive' });
+    if (!ok) return;
     try {
       await api.delete('/calendar/credentials');
       setHasCredentials(false);
@@ -162,6 +253,18 @@ function GoogleCalendarSection() {
       {/* Credentials Form */}
       {showForm && (
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-4 pt-4 border-t border-white/[0.06] space-y-3">
+          {/* Google Cloud Console setup instructions */}
+          <div className="rounded-xl bg-sky-500/[0.05] border border-sky-500/20 p-3 text-[11px] text-slate-300 leading-relaxed">
+            <p className="font-medium text-sky-300 mb-1">Setup steps in Google Cloud Console</p>
+            <ol className="list-decimal list-inside space-y-0.5 text-slate-400">
+              <li>Open <span className="text-slate-200">APIs & Services → Credentials</span></li>
+              <li>Create or edit an <span className="text-slate-200">OAuth 2.0 Client ID</span> (type: Web application)</li>
+              <li>Under <span className="text-slate-200">Authorized redirect URIs</span>, paste the URI below exactly</li>
+              <li>Enable the <span className="text-slate-200">Google Calendar API</span> for the project</li>
+              <li>Copy the Client ID + Secret back here, then Save</li>
+            </ol>
+          </div>
+
           <div>
             <label className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">Client ID</label>
             <input type="text" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="Your Google OAuth Client ID"
@@ -172,6 +275,33 @@ function GoogleCalendarSection() {
             <input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Your Google OAuth Client Secret"
               className="w-full h-10 px-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white text-sm placeholder-slate-600 focus:outline-none focus:border-sky-500/40 transition-colors" />
           </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+              Authorized Redirect URI
+            </label>
+            <div className="flex items-stretch gap-2">
+              <input
+                type="text"
+                value={redirectUri}
+                onChange={e => setRedirectUri(e.target.value)}
+                placeholder={suggestedRedirectUri}
+                className="flex-1 h-10 px-3 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white text-sm placeholder-slate-600 focus:outline-none focus:border-sky-500/40 transition-colors font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleCopyRedirectUri}
+                className="h-10 px-3 rounded-xl bg-white/[0.05] border border-white/[0.1] text-slate-300 hover:text-white hover:bg-white/[0.08] text-xs font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap"
+                title="Copy redirect URI"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <p className="mt-1.5 text-[10px] text-slate-500">
+              This exact URI must be listed under <span className="text-slate-400">Authorized redirect URIs</span> in Google Cloud Console.
+              Mismatch causes <span className="text-red-400">redirect_uri_mismatch</span>.
+            </p>
+          </div>
           <div className="flex items-center gap-3 pt-2">
             <button onClick={handleSave} disabled={saving || !clientId.trim() || !clientSecret.trim()}
               className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition-colors disabled:opacity-40 shadow-lg shadow-sky-600/20">
@@ -180,6 +310,24 @@ function GoogleCalendarSection() {
             <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
           </div>
         </motion.div>
+      )}
+
+      {/* Redirect URI display when credentials exist and form closed */}
+      {hasCredentials && !showForm && redirectUri && (
+        <div className="mt-3 pt-3 border-t border-white/[0.04]">
+          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+            <span className="uppercase tracking-wider">Redirect URI</span>
+            <code className="px-2 py-0.5 rounded bg-white/[0.03] border border-white/[0.05] text-slate-400 font-mono truncate max-w-[480px]">{redirectUri}</code>
+            <button
+              type="button"
+              onClick={handleCopyRedirectUri}
+              className="text-sky-400 hover:text-sky-300 transition-colors inline-flex items-center gap-1"
+              title="Copy"
+            >
+              {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <>Copy</>}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Edit / Delete links */}
@@ -201,6 +349,7 @@ function GoogleCalendarSection() {
 // Types - Local UI state (simpler structure for form management)
 interface UserPreferences {
   coaching: {
+    aiCoachPersona: string;
     style: string;
     intensity: string;
     preferredChannel: string;
@@ -219,6 +368,9 @@ interface UserPreferences {
     push: boolean;
     sms: boolean;
     whatsapp: boolean;
+    /** Mirrors `notifications.types` on the API (weekly check-in / goal nudges). */
+    weeklyReport: boolean;
+    aiSuggestions: boolean;
     quietHours: {
       enabled: boolean;
       start: string;
@@ -232,6 +384,8 @@ interface UserPreferences {
   privacy: {
     shareProgress: boolean;
     anonymousAnalytics: boolean;
+    healthProfileVisibility: 'disabled' | 'friends' | 'all' | 'custom';
+    healthProfileAllowedUsers: string[];
   };
 }
 
@@ -254,6 +408,7 @@ interface ApiPreferencesResponse {
   };
   coaching: {
     style: string;
+    aiCoachPersona?: string;
     intensity: string;
     preferredChannel: string;
     checkInFrequency: string;
@@ -284,6 +439,8 @@ interface ApiPreferencesResponse {
     allowAnonymousDataForResearch: boolean;
     showInLeaderboards: boolean;
     profileVisibility: string;
+    healthProfileVisibility?: "disabled" | "friends" | "all" | "custom";
+    healthProfileAllowedUsers?: string[];
   };
   integrations: {
     autoSyncEnabled: boolean;
@@ -297,12 +454,267 @@ interface ApiPreferencesResponse {
   };
 }
 
+// ============================================
+// Prayer Times Section Component
+// ============================================
+
+function PrayerTimesSection() {
+  const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [savedConfig, setSavedConfig] = useState<{ city: string; country: string } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const connections = await dataSourceService.getConnections();
+        const prayer = connections.find(c => c.sourceType === 'prayer_times' && c.status === 'active');
+        if (prayer) {
+          setConnected(true);
+          const cfg = prayer.config as { city?: string; country?: string };
+          setSavedConfig({ city: cfg.city || '', country: cfg.country || '' });
+        }
+      } catch { /* silent */ }
+      setChecking(false);
+    })();
+  }, []);
+
+  const handleConnect = async () => {
+    if (!city.trim() || !country.trim()) { toast.error('Enter both city and country'); return; }
+    setLoading(true);
+    try {
+      await dataSourceService.connect('prayer_times', { city: city.trim(), country: country.trim(), method: 2 });
+      setConnected(true);
+      setSavedConfig({ city: city.trim(), country: country.trim() });
+      toast.success('Prayer times connected! Syncing prayer schedule...');
+    } catch {
+      toast.error('Failed to connect prayer times. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const handleDisconnect = async () => {
+    setLoading(true);
+    try {
+      await dataSourceService.disconnect('prayer_times');
+      setConnected(false);
+      setSavedConfig(null);
+      setCity('');
+      setCountry('');
+      toast.success('Prayer times disconnected');
+    } catch {
+      toast.error('Failed to disconnect');
+    }
+    setLoading(false);
+  };
+
+  if (checking) {
+    return (
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
+          <span className="text-sm text-slate-400">Checking prayer times connection...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-xl border p-6 transition-colors ${connected ? 'border-emerald-500/30 bg-emerald-500/[0.04]' : 'border-slate-700/50 bg-slate-800/30'}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${connected ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-emerald-500/10 border border-emerald-500/20'}`}>
+            <span className="text-lg">🕌</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold text-white">Prayer Times</h4>
+              {connected && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                  <CheckCircle className="w-3 h-3" />
+                  Connected
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400">
+              {connected && savedConfig
+                ? `${savedConfig.city}, ${savedConfig.country}`
+                : 'Track daily prayers & spiritual routine'}
+            </p>
+          </div>
+        </div>
+        {connected && (
+          <button
+            onClick={handleDisconnect}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-colors disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlink className="w-3 h-3" />}
+            Disconnect
+          </button>
+        )}
+      </div>
+
+      {!connected && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={city}
+              onChange={e => setCity(e.target.value)}
+              placeholder="City (e.g. Nairobi)"
+              className="flex-1 px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 outline-none transition-colors"
+            />
+            <input
+              type="text"
+              value={country}
+              onChange={e => setCountry(e.target.value)}
+              placeholder="Country (e.g. Kenya)"
+              className="flex-1 px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 outline-none transition-colors"
+              onKeyDown={e => { if (e.key === 'Enter') handleConnect(); }}
+            />
+          </div>
+          <button
+            onClick={handleConnect}
+            disabled={loading || !city.trim() || !country.trim()}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Connecting...
+              </>
+            ) : (
+              'Enable Prayer Times'
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// Spending Tracker Section Component
+// ============================================
+
+function SpendingTrackerSection() {
+  const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const connections = await dataSourceService.getConnections();
+        const finance = connections.find(c => c.sourceType === 'finance' && c.status === 'active');
+        if (finance) setConnected(true);
+      } catch { /* silent */ }
+      setChecking(false);
+    })();
+  }, []);
+
+  const handleConnect = async () => {
+    setLoading(true);
+    try {
+      await dataSourceService.connect('finance', {});
+      setConnected(true);
+      toast.success('Spending tracker enabled!');
+    } catch {
+      toast.error('Failed to enable spending tracker. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const handleDisconnect = async () => {
+    setLoading(true);
+    try {
+      await dataSourceService.disconnect('finance');
+      setConnected(false);
+      toast.success('Spending tracker disabled');
+    } catch {
+      toast.error('Failed to disconnect');
+    }
+    setLoading(false);
+  };
+
+  if (checking) {
+    return (
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
+          <span className="text-sm text-slate-400">Checking spending tracker...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-xl border p-6 transition-colors ${connected ? 'border-violet-500/30 bg-violet-500/[0.04]' : 'border-slate-700/50 bg-slate-800/30'}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${connected ? 'bg-violet-500/20 border border-violet-500/30' : 'bg-violet-500/10 border border-violet-500/20'}`}>
+            <span className="text-lg">💰</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold text-white">Spending Tracker</h4>
+              {connected && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                  <CheckCircle className="w-3 h-3" />
+                  Active
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400">Track spending for financial stress analysis</p>
+          </div>
+        </div>
+        {connected && (
+          <button
+            onClick={handleDisconnect}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-colors disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlink className="w-3 h-3" />}
+            Disable
+          </button>
+        )}
+      </div>
+
+      {!connected && (
+        <button
+          onClick={handleConnect}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Enabling...
+            </>
+          ) : (
+            'Enable Spending Tracker'
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Transform API response to local UI state
 function apiToLocalPreferences(apiPrefs: ApiPreferencesResponse): UserPreferences {
   const channels = apiPrefs.notifications?.channels || {};
+  const types = (apiPrefs.notifications?.types || {}) as Record<string, boolean>;
+  const typeBool = (camel: string, snake: string, fallback: boolean) =>
+    types[camel] ?? types[snake] ?? fallback;
   return {
     coaching: {
       style: apiPrefs.coaching?.style || "supportive",
+      aiCoachPersona:
+        apiPrefs.coaching?.aiCoachPersona ||
+        personaFromCoachingStyle(apiPrefs.coaching?.style || "supportive"),
       intensity: apiPrefs.coaching?.intensity || "moderate",
       preferredChannel: apiPrefs.coaching?.preferredChannel || "push",
       checkInFrequency: apiPrefs.coaching?.checkInFrequency || "daily",
@@ -320,6 +732,8 @@ function apiToLocalPreferences(apiPrefs: ApiPreferencesResponse): UserPreference
       push: channels.push ?? true,
       sms: channels.sms ?? false,
       whatsapp: channels.whatsapp ?? false,
+      weeklyReport: typeBool("weeklyReport", "weekly_report", true),
+      aiSuggestions: typeBool("aiSuggestions", "ai_suggestions", true),
       quietHours: {
         enabled: apiPrefs.notifications?.quietHours?.enabled ?? false,
         start: apiPrefs.notifications?.quietHours?.start || "22:00",
@@ -333,6 +747,8 @@ function apiToLocalPreferences(apiPrefs: ApiPreferencesResponse): UserPreference
     privacy: {
       shareProgress: apiPrefs.privacy?.shareProgressWithCoach ?? false,
       anonymousAnalytics: apiPrefs.privacy?.allowAnonymousDataForResearch ?? true,
+      healthProfileVisibility: apiPrefs.privacy?.healthProfileVisibility || 'friends',
+      healthProfileAllowedUsers: apiPrefs.privacy?.healthProfileAllowedUsers || [],
     },
   };
 }
@@ -342,6 +758,7 @@ function localToApiPreferences(localPrefs: UserPreferences, assistantName?: stri
   return {
     coaching: {
       style: localPrefs.coaching.style,
+      aiCoachPersona: localPrefs.coaching.aiCoachPersona,
       intensity: localPrefs.coaching.intensity,
       preferredChannel: localPrefs.coaching.preferredChannel,
       checkInFrequency: localPrefs.coaching.checkInFrequency,
@@ -362,6 +779,10 @@ function localToApiPreferences(localPrefs: UserPreferences, assistantName?: stri
         sms: localPrefs.notifications.sms,
         whatsapp: localPrefs.notifications.whatsapp,
       },
+      types: {
+        weeklyReport: localPrefs.notifications.weeklyReport,
+        aiSuggestions: localPrefs.notifications.aiSuggestions,
+      },
       quietHours: {
         enabled: localPrefs.notifications.quietHours.enabled,
         start: localPrefs.notifications.quietHours.start,
@@ -374,6 +795,8 @@ function localToApiPreferences(localPrefs: UserPreferences, assistantName?: stri
     privacy: {
       shareProgressWithCoach: localPrefs.privacy.shareProgress,
       allowAnonymousDataForResearch: localPrefs.privacy.anonymousAnalytics,
+      healthProfileVisibility: localPrefs.privacy.healthProfileVisibility,
+      healthProfileAllowedUsers: localPrefs.privacy.healthProfileAllowedUsers,
     },
     voiceAssistant: assistantName ? {
       assistantName: assistantName.trim() || 'Aurea',
@@ -393,37 +816,6 @@ interface ConnectedIntegration {
   isConnected: boolean;
   lastSync?: string;
 }
-
-const coachingStyles = [
-  {
-    id: "supportive",
-    label: "Supportive",
-    description: "Warm, encouraging approach with gentle guidance",
-    icon: <Heart className="w-5 h-5" />,
-    gradient: "from-pink-500 to-rose-500",
-  },
-  {
-    id: "direct",
-    label: "Direct",
-    description: "Straightforward feedback, no sugar-coating",
-    icon: <Target className="w-5 h-5" />,
-    gradient: "from-orange-500 to-amber-500",
-  },
-  {
-    id: "analytical",
-    label: "Analytical",
-    description: "Data-driven insights and detailed analysis",
-    icon: <BarChart2 className="w-5 h-5" />,
-    gradient: "from-blue-500 to-cyan-500",
-  },
-  {
-    id: "motivational",
-    label: "Motivational",
-    description: "Energetic, inspiring push to reach your goals",
-    icon: <Flame className="w-5 h-5" />,
-    gradient: "from-yellow-500 to-orange-500",
-  },
-];
 
 const intensityLevels = [
   { id: "light", label: "Light" },
@@ -462,7 +854,7 @@ const messageStyleOptions = [
     id: "motivational",
     label: "Motivational",
     icon: <Zap className="w-5 h-5" />,
-    gradient: "from-purple-500 to-pink-500",
+    gradient: "from-sky-500 to-emerald-600",
     description: "High-energy and inspiring",
   },
 ];
@@ -495,7 +887,7 @@ function SegmentedControl({
     <div className="relative flex rounded-xl bg-white/[0.03] border border-white/[0.06] p-1">
       {/* Animated active indicator */}
       <motion.div
-        className="absolute top-1 bottom-1 rounded-lg bg-gradient-to-r from-purple-500/30 to-pink-500/30 border border-purple-500/20"
+        className="absolute top-1 bottom-1 rounded-lg bg-gradient-to-r from-sky-500/30 to-emerald-600/30 border border-sky-500/20"
         initial={false}
         animate={{
           left: `calc(${(activeIndex / options.length) * 100}% + 4px)`,
@@ -525,14 +917,14 @@ function ToggleSwitch({
   checked,
   onChange,
   disabled,
-  color = "purple",
+  color = "sky",
 }: {
   checked: boolean;
   onChange: () => void;
   disabled?: boolean;
-  color?: "purple" | "indigo";
+  color?: "sky" | "indigo";
 }) {
-  const bgColor = color === "indigo" ? "bg-indigo-500" : "bg-purple-500";
+  const bgColor = color === "indigo" ? "bg-indigo-500" : "bg-sky-500";
   return (
     <button
       onClick={onChange}
@@ -568,11 +960,357 @@ function GlassCard({
   );
 }
 
+/**
+ * Rounded hour selector with a capped-height popover list.
+ * Replaces the native <select> so we can style the open dropdown
+ * (rounded options + max-h-[10rem] scroll area).
+ */
+function HourSelect({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (popRef.current?.contains(t)) return;
+      if (triggerRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const display = value === null ? "Off" : `${value}:00`;
+  const options: Array<{ val: number | null; label: string }> = [
+    { val: null, label: "Off" },
+    ...Array.from({ length: 24 }, (_, h) => ({ val: h, label: `${h}:00` })),
+  ];
+
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="w-full px-4 py-3 rounded-xl bg-slate-950/90 border border-white/[0.08] text-slate-100 outline-none focus:border-sky-500/70 focus:ring-1 focus:ring-sky-500/30 transition-colors cursor-pointer flex items-center justify-between"
+      >
+        <span>{display}</span>
+        <svg
+          aria-hidden
+          className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            ref={popRef}
+            role="listbox"
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.12 }}
+            className="absolute left-0 right-0 z-50 mt-2 rounded-xl border border-white/[0.08] bg-slate-950/95 backdrop-blur-xl shadow-2xl p-1.5 max-h-[10rem] overflow-y-auto"
+            style={{ scrollbarWidth: "thin" }}
+          >
+            {options.map((opt) => {
+              const selected =
+                (opt.val === null && value === null) || opt.val === value;
+              return (
+                <button
+                  key={opt.val === null ? "off" : opt.val}
+                  role="option"
+                  aria-selected={selected}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.val);
+                    setOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                    selected
+                      ? "bg-sky-500/15 text-sky-300"
+                      : "text-slate-200 hover:bg-white/[0.05]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function CommunicationSettingsSection() {
+  const [prefs, setPrefs] = useState<CommunicationPreferences | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [maxCheckinsDraft, setMaxCheckinsDraft] = useState<string>("1");
+  const [missedHoursDraft, setMissedHoursDraft] = useState<string>("24");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await communicationService.getPreferences();
+      if (res.success && res.data) {
+        setPrefs(res.data);
+        setMaxCheckinsDraft(String(res.data.max_checkins_per_day));
+        setMissedHoursDraft(String(res.data.missed_followup_hours));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const patch = async (body: CommunicationPreferencesUpdate) => {
+    const res = await communicationService.updatePreferences(body);
+    if (res.success && res.data) {
+      setPrefs(res.data);
+      setMaxCheckinsDraft(String(res.data.max_checkins_per_day));
+      setMissedHoursDraft(String(res.data.missed_followup_hours));
+      toast.success("Communication preferences saved");
+    } else {
+      toast.error(res.error?.message ?? "Could not save preferences");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="w-10 h-10 animate-spin text-slate-500" />
+      </div>
+    );
+  }
+
+  if (!prefs) {
+    return (
+      <GlassCard>
+        <p className="text-slate-400 text-sm">
+          Communication preferences are unavailable. Ensure the API is running and you are signed in.
+        </p>
+      </GlassCard>
+    );
+  }
+
+  const hourField = (
+    label: string,
+    value: number | null,
+    onChange: (v: number | null) => void
+  ) => (
+    <div className="flex-1 min-w-[120px]">
+      <label className="text-sm text-slate-400 mb-2 block">{label}</label>
+      <HourSelect value={value} onChange={onChange} />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <GlassCard>
+        <SectionHeader
+          icon={<Send className="w-5 h-5" />}
+          title="Proactive check-ins"
+          gradient="from-violet-500 to-fuchsia-500"
+        />
+        <p className="text-sm text-slate-400 mb-6">
+          Scheduled voice check-ins open in the voice assistant. Timing respects your quiet hours when set below.
+        </p>
+        <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] mb-4">
+          <span className="text-slate-300">Push for check-ins</span>
+          <ToggleSwitch
+            checked={prefs.checkin_push_enabled}
+            onChange={() => patch({ checkin_push_enabled: !prefs.checkin_push_enabled })}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          {hourField("Quiet hours start", prefs.quiet_hours_start, (v) =>
+            patch({ quiet_hours_start: v })
+          )}
+          {hourField("Quiet hours end", prefs.quiet_hours_end, (v) =>
+            patch({ quiet_hours_end: v })
+          )}
+        </div>
+        <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] mb-4">
+          <span className="text-slate-300">Workdays only (Mon–Fri)</span>
+          <ToggleSwitch
+            checked={prefs.workdays_only}
+            onChange={() => patch({ workdays_only: !prefs.workdays_only })}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm text-slate-400 mb-2 block">Max check-ins per day</label>
+            <input
+              type="number"
+              min={0}
+              max={5}
+              value={maxCheckinsDraft}
+              onChange={(e) => setMaxCheckinsDraft(e.target.value)}
+              onBlur={() => {
+                const n = Math.min(5, Math.max(0, Number(maxCheckinsDraft) || 0));
+                setMaxCheckinsDraft(String(n));
+                if (n !== prefs.max_checkins_per_day) patch({ max_checkins_per_day: n });
+              }}
+              className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-sky-500 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-slate-400 mb-2 block">Missed follow-up (hours)</label>
+            <input
+              type="number"
+              min={1}
+              max={168}
+              value={missedHoursDraft}
+              onChange={(e) => setMissedHoursDraft(e.target.value)}
+              onBlur={() => {
+                const n = Math.min(168, Math.max(1, Number(missedHoursDraft) || 1));
+                setMissedHoursDraft(String(n));
+                if (n !== prefs.missed_followup_hours) patch({ missed_followup_hours: n });
+              }}
+              className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-sky-500 transition-colors"
+            />
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard>
+        <SectionHeader
+          icon={<Smartphone className="w-5 h-5" />}
+          title="Push categories"
+          gradient="from-blue-500 to-cyan-500"
+        />
+        <p className="text-sm text-slate-400 mb-6">
+          Controls which notification categories may open a device push (FCM when configured server-side).
+        </p>
+        <div className="space-y-3">
+          {[
+            { key: "push_achievements" as const, label: "Achievements & celebrations" },
+            { key: "push_streaks" as const, label: "Streaks & warnings" },
+            { key: "push_nudges" as const, label: "Nudges & coaching tips" },
+          ].map((row) => (
+            <div
+              key={row.key}
+              className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]"
+            >
+              <span className="text-slate-300">{row.label}</span>
+              <ToggleSwitch
+                checked={prefs[row.key]}
+                onChange={() => patch({ [row.key]: !prefs[row.key] })}
+              />
+            </div>
+          ))}
+        </div>
+      </GlassCard>
+
+      <GlassCard>
+        <SectionHeader
+          icon={<Mail className="w-5 h-5" />}
+          title="Email"
+          gradient="from-emerald-500 to-teal-500"
+        />
+        <div className="space-y-3 mt-2">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+            <div>
+              <p className="text-slate-300">Prefer digest-style email</p>
+              <p className="text-xs text-slate-500 mt-1">Non-urgent updates batch when digest jobs run.</p>
+            </div>
+            <ToggleSwitch
+              checked={prefs.email_digest}
+              onChange={() => patch({ email_digest: !prefs.email_digest })}
+            />
+          </div>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+            <div>
+              <p className="text-slate-300">Urgent-only immediate email</p>
+              <p className="text-xs text-slate-500 mt-1">Suppresses non-urgent sends on the high-priority path.</p>
+            </div>
+            <ToggleSwitch
+              checked={prefs.email_urgent_only}
+              onChange={() => patch({ email_urgent_only: !prefs.email_urgent_only })}
+            />
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard>
+        <SectionHeader
+          icon={<Shield className="w-5 h-5" />}
+          title="Social accountability"
+          gradient="from-orange-500 to-amber-500"
+        />
+        <p className="text-sm text-slate-400 mb-4">
+          Triggers, contacts, and group chat targets live on the Dashboard Accountability tab — single place to edit consent and message templates.
+        </p>
+        <Link
+          href="/dashboard?tab=accountability"
+          className="inline-flex items-center gap-2 text-sm font-medium text-amber-300 hover:text-amber-200 transition-colors"
+        >
+          Open Accountability
+          <ExternalLink className="w-4 h-4" />
+        </Link>
+      </GlassCard>
+    </div>
+  );
+}
+
 // Section header with gradient icon badge
+const SETTINGS_SECTION_IDS = [
+  "profile",
+  "aiCoach",
+  "voiceAssistant",
+  "goals",
+  "notifications",
+  "communication",
+  "integrations",
+  "appearance",
+  "accountability",
+  "contracts",
+  "subscription",
+  "security",
+  "privacy",
+  "helpSupport",
+  "account",
+] as const;
+
+type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
+
+function isValidSettingsSection(s: string | null): s is SettingsSectionId {
+  return !!s && (SETTINGS_SECTION_IDS as readonly string[]).includes(s);
+}
+
+const REDUCE_MOTION_STORAGE_KEY = "yhealth-reduce-motion";
+
 function SectionHeader({
   icon,
   title,
-  gradient = "from-purple-500 to-pink-500",
+  gradient = "from-sky-500 to-emerald-600",
 }: {
   icon: React.ReactNode;
   title: string;
@@ -592,6 +1330,506 @@ function SectionHeader({
   );
 }
 
+// ============================================
+// Profile Settings Section (Premium Redesign)
+// ============================================
+
+type ProfileUser = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  phone: string | null;
+  role: string;
+  isEmailVerified: boolean;
+  onboardingStatus: string;
+  createdAt: string;
+  updatedAt: string;
+} | null | undefined;
+
+function formatProfileDate(value: string | null | undefined, fallback = "—") {
+  if (!value) return fallback;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function calculateAge(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age >= 0 && age < 150 ? age : null;
+}
+
+function calculateProfileCompletion(user: NonNullable<ProfileUser>): number {
+  const fields = [
+    user.firstName,
+    user.lastName,
+    user.email,
+    user.phone,
+    user.dateOfBirth,
+    user.gender,
+    user.avatarUrl,
+  ];
+  const filled = fields.filter((v) => v && String(v).trim().length > 0).length;
+  return Math.round((filled / fields.length) * 100);
+}
+
+function ProfileInfoTile({
+  icon,
+  label,
+  value,
+  empty = false,
+  iconGradient = "from-blue-500/20 to-indigo-500/20",
+  iconColor = "text-blue-400",
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  empty?: boolean;
+  iconGradient?: string;
+  iconColor?: string;
+}) {
+  return (
+    <div className="group relative p-3.5 sm:p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.1] hover:bg-white/[0.035] transition-all">
+      <div className="flex items-start gap-3">
+        <div className={`p-2 rounded-lg bg-gradient-to-br ${iconGradient} ${iconColor} flex-shrink-0`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] uppercase tracking-wider text-slate-500 font-medium mb-1">
+            {label}
+          </p>
+          <p className={`text-sm font-medium truncate ${empty ? "text-slate-600 italic" : "text-white"}`}>
+            {value}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileSettingsSection({ user }: { user: ProfileUser }) {
+  const [copied, setCopied] = useState(false);
+
+  const fullName =
+    user?.firstName || user?.lastName
+      ? `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()
+      : "Unnamed User";
+  const initials =
+    `${(user?.firstName?.[0] ?? "").toUpperCase()}${(user?.lastName?.[0] ?? "").toUpperCase()}` ||
+    "U";
+  const completion = user ? calculateProfileCompletion(user) : 0;
+  const age = calculateAge(user?.dateOfBirth);
+  const memberSince = formatProfileDate(user?.createdAt);
+  const lastUpdated = formatProfileDate(user?.updatedAt);
+  const dobDisplay = user?.dateOfBirth
+    ? `${formatProfileDate(user.dateOfBirth)}${age !== null ? ` · ${age} yrs` : ""}`
+    : null;
+
+  const accountAgeDays = (() => {
+    if (!user?.createdAt) return null;
+    const created = new Date(user.createdAt);
+    if (Number.isNaN(created.getTime())) return null;
+    const diff = Math.floor(
+      (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return diff >= 0 ? diff : null;
+  })();
+
+  const handleCopyId = async () => {
+    if (!user?.id) return;
+    try {
+      await navigator.clipboard.writeText(user.id);
+      setCopied(true);
+      toast.success("User ID copied");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+
+  const quickLinks = [
+    {
+      label: "View Public Profile",
+      desc: "How others see you",
+      href: "/profile",
+      icon: <User className="w-4 h-4" />,
+      gradient: "from-blue-500/20 to-indigo-500/20",
+      color: "text-blue-400",
+    },
+    {
+      label: "Edit Preferences",
+      desc: "Customize your experience",
+      href: "/preferences",
+      icon: <Settings className="w-4 h-4" />,
+      gradient: "from-emerald-500/20 to-teal-500/20",
+      color: "text-emerald-400",
+    },
+    {
+      label: "Manage Goals",
+      desc: "Set and track targets",
+      href: "/goals",
+      icon: <Crosshair className="w-4 h-4" />,
+      gradient: "from-amber-500/20 to-orange-500/20",
+      color: "text-amber-400",
+    },
+    {
+      label: "Subscription",
+      desc: "Plan & billing",
+      href: "/subscription",
+      icon: <CreditCard className="w-4 h-4" />,
+      gradient: "from-violet-500/20 to-purple-500/20",
+      color: "text-violet-400",
+    },
+    {
+      label: "Security",
+      desc: "Password & privacy",
+      href: "/security",
+      icon: <Shield className="w-4 h-4" />,
+      gradient: "from-rose-500/20 to-pink-500/20",
+      color: "text-rose-400",
+    },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-5 sm:space-y-6"
+    >
+      {/* ============= Card 1: Profile Hero ============= */}
+      <GlassCard className="relative overflow-hidden !p-0">
+        {/* Decorative gradient backdrop */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.08] via-indigo-500/[0.04] to-transparent pointer-events-none" />
+        <div
+          className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-blue-500/10 blur-3xl pointer-events-none"
+          aria-hidden
+        />
+        <div
+          className="absolute -bottom-32 -left-16 w-72 h-72 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none"
+          aria-hidden
+        />
+
+        <div className="relative p-5 sm:p-7">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-6">
+            {/* Avatar */}
+            <div className="relative flex-shrink-0 mx-auto sm:mx-0">
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 blur-md opacity-60" />
+              <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-3xl sm:text-4xl font-bold ring-4 ring-slate-950/40 overflow-hidden">
+                {user?.avatarUrl ? (
+                   
+                  <img
+                    src={user.avatarUrl}
+                    alt={fullName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span>{initials || "U"}</span>
+                )}
+              </div>
+              {user?.isEmailVerified && (
+                <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center ring-2 ring-slate-950 shadow-lg">
+                  <BadgeCheck className="w-4 h-4 text-white" />
+                </div>
+              )}
+            </div>
+
+            {/* Identity */}
+            <div className="flex-1 min-w-0 text-center sm:text-left">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1.5">
+                <h2 className="text-xl sm:text-2xl font-bold text-white truncate">
+                  {fullName}
+                </h2>
+                {user?.role && user.role !== "user" && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/30">
+                    <CrownIcon className="w-3 h-3" />
+                    {user.role}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-slate-400 flex items-center justify-center sm:justify-start gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-slate-500" />
+                <span className="truncate">{user?.email || "No email set"}</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-1.5">
+                Member since {memberSince}
+              </p>
+            </div>
+
+            {/* CTA */}
+            <div className="flex sm:flex-col gap-2 justify-center sm:justify-start sm:items-end">
+              <Link
+                href="/profile/edit"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white text-sm font-semibold shadow-lg shadow-blue-500/20 transition-all hover:shadow-blue-500/40 hover:scale-[1.02]"
+              >
+                <User className="w-4 h-4" />
+                Edit Profile
+              </Link>
+              <Link
+                href="/profile"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-sm font-medium border border-white/[0.06] transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">View</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Stat strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-6 pt-6 border-t border-white/[0.06]">
+            <div className="p-3 rounded-xl bg-white/[0.025] border border-white/[0.05]">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+                Profile
+              </p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg sm:text-xl font-bold text-white">
+                  {completion}
+                </span>
+                <span className="text-xs text-slate-500">%</span>
+              </div>
+              <div className="mt-1.5 h-1 rounded-full bg-white/[0.05] overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${completion}%` }}
+                  transition={{ duration: 0.8, delay: 0.2 }}
+                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white/[0.025] border border-white/[0.05]">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+                Account Age
+              </p>
+              <p className="text-lg sm:text-xl font-bold text-white">
+                {accountAgeDays !== null ? accountAgeDays : "—"}
+                <span className="text-xs text-slate-500 font-normal ml-1">
+                  days
+                </span>
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white/[0.025] border border-white/[0.05]">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+                Email
+              </p>
+              <div className="flex items-center gap-1.5">
+                {user?.isEmailVerified ? (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-emerald-400 truncate">
+                      Verified
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-amber-400 truncate">
+                      Unverified
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white/[0.025] border border-white/[0.05]">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+                Onboarding
+              </p>
+              <p className="text-sm font-semibold text-white capitalize truncate">
+                {user?.onboardingStatus?.toLowerCase() || "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* ============= Card 2: Personal Information ============= */}
+      <GlassCard>
+        <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+          <SectionHeader
+            icon={<User className="w-5 h-5" />}
+            title="Personal Information"
+            gradient="from-blue-500 to-indigo-500"
+          />
+          <Link
+            href="/profile/edit"
+            className="text-xs sm:text-sm text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1.5 transition-colors"
+          >
+            Edit
+            <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
+        <p className="text-sm text-slate-400 -mt-3 mb-5">
+          Your personal details and account information.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <ProfileInfoTile
+            icon={<User className="w-4 h-4" />}
+            label="First Name"
+            value={user?.firstName || "Not set"}
+            empty={!user?.firstName}
+          />
+          <ProfileInfoTile
+            icon={<User className="w-4 h-4" />}
+            label="Last Name"
+            value={user?.lastName || "Not set"}
+            empty={!user?.lastName}
+          />
+          <ProfileInfoTile
+            icon={<Mail className="w-4 h-4" />}
+            label="Email Address"
+            value={
+              <span className="flex items-center gap-1.5">
+                <span className="truncate">{user?.email || "Not set"}</span>
+                {user?.isEmailVerified && (
+                  <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                )}
+              </span>
+            }
+            empty={!user?.email}
+            iconGradient="from-emerald-500/20 to-teal-500/20"
+            iconColor="text-emerald-400"
+          />
+          <ProfileInfoTile
+            icon={<Phone className="w-4 h-4" />}
+            label="Phone Number"
+            value={user?.phone || "Add phone number"}
+            empty={!user?.phone}
+            iconGradient="from-violet-500/20 to-purple-500/20"
+            iconColor="text-violet-400"
+          />
+          <ProfileInfoTile
+            icon={<Cake className="w-4 h-4" />}
+            label="Date of Birth"
+            value={dobDisplay || "Not set"}
+            empty={!user?.dateOfBirth}
+            iconGradient="from-pink-500/20 to-rose-500/20"
+            iconColor="text-pink-400"
+          />
+          <ProfileInfoTile
+            icon={<UserIcon className="w-4 h-4" />}
+            label="Gender"
+            value={user?.gender ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1).toLowerCase() : "Not set"}
+            empty={!user?.gender}
+            iconGradient="from-cyan-500/20 to-sky-500/20"
+            iconColor="text-cyan-400"
+          />
+        </div>
+      </GlassCard>
+
+      {/* ============= Card 3: Account Snapshot + Quick Links ============= */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 sm:gap-6">
+        {/* Account Snapshot */}
+        <GlassCard className="lg:col-span-2">
+          <SectionHeader
+            icon={<Hash className="w-5 h-5" />}
+            title="Account Details"
+            gradient="from-slate-500 to-slate-700"
+          />
+          <div className="space-y-3">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                <Calendar className="w-3 h-3" />
+                Member Since
+              </p>
+              <p className="text-sm font-semibold text-white">{memberSince}</p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3" />
+                Last Updated
+              </p>
+              <p className="text-sm font-semibold text-white">{lastUpdated}</p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                <CrownIcon className="w-3 h-3" />
+                Account Type
+              </p>
+              <p className="text-sm font-semibold text-white capitalize">
+                {user?.role || "Standard"}
+              </p>
+            </div>
+
+            <button
+              onClick={handleCopyId}
+              className="w-full p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.1] hover:bg-white/[0.04] transition-all text-left group"
+            >
+              <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                <Hash className="w-3 h-3" />
+                User ID
+              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-mono text-slate-300 truncate">
+                  {user?.id ? `${user.id.slice(0, 8)}...${user.id.slice(-4)}` : "—"}
+                </p>
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-colors flex-shrink-0" />
+                )}
+              </div>
+            </button>
+          </div>
+        </GlassCard>
+
+        {/* Quick Links */}
+        <GlassCard className="lg:col-span-3">
+          <SectionHeader
+            icon={<Sparkles className="w-5 h-5" />}
+            title="Quick Links"
+            gradient="from-violet-500 to-fuchsia-500"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {quickLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="group flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.12] hover:bg-white/[0.04] transition-all"
+              >
+                <div
+                  className={`p-2 rounded-lg bg-gradient-to-br ${link.gradient} ${link.color} flex-shrink-0 group-hover:scale-110 transition-transform`}
+                >
+                  {link.icon}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-white truncate">
+                    {link.label}
+                  </p>
+                  <p className="text-[11px] text-slate-500 truncate">
+                    {link.desc}
+                  </p>
+                </div>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-300 flex-shrink-0 transition-colors" />
+              </Link>
+            ))}
+          </div>
+        </GlassCard>
+      </div>
+    </motion.div>
+  );
+}
+
+// Alias to keep ProfileInfoTile gender icon explicit (lucide doesn't have a gender icon)
+const UserIcon = User;
+
 function SettingsPageInner() {
   const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
   const {
@@ -607,7 +1845,11 @@ function SettingsPageInner() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState("aiCoach");
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>(() => {
+    const s = searchParams.get("section");
+    return isValidSettingsSection(s) ? s : "aiCoach";
+  });
+  const [reduceMotionPref, setReduceMotionPref] = useState(false);
   const [integrations, setIntegrations] = useState<ConnectedIntegration[]>([]);
   const [whoopStatus, setWhoopStatus] = useState<{
     isConnected: boolean;
@@ -671,6 +1913,7 @@ function SettingsPageInner() {
 
   const [preferences, setPreferences] = useState<UserPreferences>({
     coaching: {
+      aiCoachPersona: "gentle_friend",
       style: "supportive",
       intensity: "moderate",
       preferredChannel: "push",
@@ -689,6 +1932,8 @@ function SettingsPageInner() {
       push: true,
       sms: false,
       whatsapp: false,
+      weeklyReport: true,
+      aiSuggestions: true,
       quietHours: {
         enabled: false,
         start: "22:00",
@@ -702,6 +1947,8 @@ function SettingsPageInner() {
     privacy: {
       shareProgress: false,
       anonymousAnalytics: true,
+      healthProfileVisibility: 'friends',
+      healthProfileAllowedUsers: [],
     },
   });
 
@@ -744,7 +1991,7 @@ function SettingsPageInner() {
       (async () => {
         try {
           setIsSpotifyConnecting(true);
-          setActiveSection('integrations');
+          setActiveSection("integrations");
           const response = await api.post<{
             isConnected: boolean;
             displayName?: string;
@@ -783,6 +2030,78 @@ function SettingsPageInner() {
       })();
     }
   }, [searchParams, router]);
+
+  // Handle post-exchange redirect from /api/integrations/oauth/callback/spotify.
+  // That route already exchanged the code server-side and redirected here with
+  // ?spotify=connected (success) or ?spotify=error&spotifyError=<msg> (failure).
+  useEffect(() => {
+    const spotify = searchParams.get('spotify');
+    if (!spotify) return;
+
+    (async () => {
+      setActiveSection('integrations');
+
+      if (spotify === 'connected') {
+        toast.success('Spotify connected successfully');
+        await fetchPreferences();
+      } else if (spotify === 'error') {
+        const detail = searchParams.get('spotifyError') || '';
+        const msg = detail
+          ? `Spotify connection failed: ${detail.replace(/_/g, ' ')}`
+          : 'Spotify connection failed. Please try again.';
+        toast.error(msg);
+      }
+
+      // Clean URL params
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('spotify');
+      params.delete('spotifyError');
+      const cleanUrl = params.toString() ? `/settings?${params.toString()}` : '/settings';
+      router.replace(cleanUrl);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, router]);
+
+  // Deep link + browser history: ?section=privacy (and all other tabs)
+  useEffect(() => {
+    const s = searchParams.get("section");
+    if (isValidSettingsSection(s)) {
+      setActiveSection(s);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    try {
+      setReduceMotionPref(localStorage.getItem(REDUCE_MOTION_STORAGE_KEY) === "1");
+    } catch {
+      setReduceMotionPref(false);
+    }
+  }, []);
+
+  const setReduceMotion = useCallback((enabled: boolean) => {
+    setReduceMotionPref(enabled);
+    try {
+      if (enabled) {
+        localStorage.setItem(REDUCE_MOTION_STORAGE_KEY, "1");
+        document.documentElement.classList.add("reduce-motion");
+      } else {
+        localStorage.removeItem(REDUCE_MOTION_STORAGE_KEY);
+        document.documentElement.classList.remove("reduce-motion");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const goToSettingsSection = useCallback(
+    (id: SettingsSectionId) => {
+      setActiveSection(id);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("section", id);
+      router.replace(`/settings?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
 
   // Fetch preferences
   const fetchPreferences = useCallback(async () => {
@@ -972,33 +2291,20 @@ function SettingsPageInner() {
   };
 
   const sections = [
-    { id: "aiCoach", label: "AI Coach", icon: <Brain className="w-5 h-5" />, gradient: "from-purple-500 to-pink-500" },
-    {
-      id: "notifications",
-      label: "Notifications",
-      icon: <Bell className="w-5 h-5" />,
-      gradient: "from-blue-500 to-cyan-500",
-    },
-    {
-      id: "integrations",
-      label: "Integrations",
-      icon: <LinkIcon className="w-5 h-5" />,
-      gradient: "from-green-500 to-emerald-500",
-    },
-    {
-      id: "appearance",
-      label: "Appearance",
-      icon: <Palette className="w-5 h-5" />,
-      gradient: "from-orange-500 to-amber-500",
-    },
-    {
-      id: "voiceAssistant",
-      label: "Voice Assistant",
-      icon: <MessageSquare className="w-5 h-5" />,
-      gradient: "from-indigo-500 to-violet-500",
-    },
+    { id: "profile", label: "Profile", icon: <User className="w-5 h-5" />, gradient: "from-blue-500 to-indigo-500" },
+    { id: "aiCoach", label: "AI Coach", icon: <Brain className="w-5 h-5" />, gradient: "from-sky-500 to-emerald-600" },
+    { id: "voiceAssistant", label: "Voice Assistant", icon: <MessageSquare className="w-5 h-5" />, gradient: "from-indigo-500 to-violet-500" },
+    { id: "goals", label: "Goals & Plans", icon: <Crosshair className="w-5 h-5" />, gradient: "from-teal-500 to-cyan-500" },
+    { id: "notifications", label: "Notifications", icon: <Bell className="w-5 h-5" />, gradient: "from-blue-500 to-cyan-500" },
+    { id: "communication", label: "Communication", icon: <Send className="w-5 h-5" />, gradient: "from-violet-500 to-fuchsia-500" },
+    { id: "integrations", label: "Integrations", icon: <LinkIcon className="w-5 h-5" />, gradient: "from-green-500 to-emerald-500" },
+    { id: "appearance", label: "Appearance", icon: <Palette className="w-5 h-5" />, gradient: "from-orange-500 to-amber-500" },
+    { id: "accountability", label: "Accountability", icon: <Shield className="w-5 h-5" />, gradient: "from-orange-500 to-amber-500" },
     { id: "contracts", label: "Contracts", icon: <Target className="w-5 h-5" />, gradient: "from-cyan-500 to-emerald-500" },
-    { id: "privacy", label: "Privacy", icon: <Shield className="w-5 h-5" />, gradient: "from-rose-500 to-pink-500" },
+    { id: "subscription", label: "Subscription", icon: <CreditCard className="w-5 h-5" />, gradient: "from-amber-500 to-yellow-500" },
+    { id: "security", label: "Security", icon: <Lock className="w-5 h-5" />, gradient: "from-red-500 to-rose-500" },
+    { id: "privacy", label: "Privacy", icon: <Shield className="w-5 h-5" />, gradient: "from-rose-500 to-emerald-600" },
+    { id: "helpSupport", label: "Help & Support", icon: <HelpCircle className="w-5 h-5" />, gradient: "from-sky-500 to-blue-500" },
     { id: "account", label: "Account", icon: <User className="w-5 h-5" />, gradient: "from-slate-400 to-slate-500" },
   ];
 
@@ -1014,7 +2320,7 @@ function SettingsPageInner() {
         <div className="md:ml-64 min-h-screen pb-20 md:pb-0 overflow-x-hidden">
           {/* Background blurs */}
           <div className="fixed inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+            <div className="absolute -top-40 -right-40 w-80 h-80 bg-sky-500/10 rounded-full blur-3xl" />
             <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
           </div>
 
@@ -1106,9 +2412,9 @@ function SettingsPageInner() {
       <div className="md:ml-64 min-h-screen pb-20 md:pb-0 overflow-x-hidden">
         {/* Animated Background */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-sky-500/10 rounded-full blur-3xl" />
           <div className="absolute top-1/2 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-pink-500/8 rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-emerald-600/8 rounded-full blur-3xl" />
         </div>
 
         <div className="relative max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -1121,7 +2427,7 @@ function SettingsPageInner() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-white">
-                  <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  <span className="bg-gradient-to-r from-sky-400 to-emerald-400 bg-clip-text text-transparent">
                     Settings
                   </span>
                 </h1>
@@ -1133,7 +2439,7 @@ function SettingsPageInner() {
               <button
                 onClick={savePreferences}
                 disabled={isSaving}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg shadow-purple-500/20"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-sky-500 to-emerald-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 shadow-lg shadow-sky-500/20"
               >
                 {isSaving ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -1182,7 +2488,7 @@ function SettingsPageInner() {
                   return (
                     <button
                       key={section.id}
-                      onClick={() => setActiveSection(section.id)}
+                      onClick={() => goToSettingsSection(section.id as SettingsSectionId)}
                       className={`relative w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
                         isActive
                           ? "bg-white/[0.05] text-white"
@@ -1193,7 +2499,7 @@ function SettingsPageInner() {
                       {isActive && (
                         <motion.div
                           layoutId="settings-section-indicator"
-                          className="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-gradient-to-b from-purple-500 to-pink-500"
+                          className="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-gradient-to-b from-sky-500 to-emerald-600"
                           transition={{ type: "spring", stiffness: 300, damping: 30 }}
                         />
                       )}
@@ -1220,6 +2526,11 @@ function SettingsPageInner() {
               transition={{ delay: 0.1 }}
               className="flex-1 min-w-0"
             >
+              {/* Profile */}
+              {activeSection === "profile" && (
+                <ProfileSettingsSection user={user} />
+              )}
+
               {/* AI Coach Settings */}
               {activeSection === "aiCoach" && (
                 <div className="space-y-6">
@@ -1227,59 +2538,25 @@ function SettingsPageInner() {
                   <GlassCard>
                     <SectionHeader
                       icon={<Sparkles className="w-5 h-5" />}
-                      title="Coaching Style & Intensity"
-                      gradient="from-purple-500 to-pink-500"
+                      title="Coach personality & engagement"
+                      gradient="from-sky-500 to-emerald-600"
                     />
 
-                    {/* Coaching Style Cards */}
-                    <div className="grid sm:grid-cols-2 gap-3 mb-8">
-                      {coachingStyles.map((style) => {
-                        const isSelected = preferences.coaching.style === style.id;
-                        return (
-                          <button
-                            key={style.id}
-                            onClick={() =>
-                              updatePreference("coaching", "style", style.id)
-                            }
-                            className={`relative p-4 rounded-xl border text-left transition-all ${
-                              isSelected
-                                ? "bg-white/[0.06] border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-                                : "bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.04]"
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div
-                                className={`p-2.5 rounded-xl bg-gradient-to-br ${style.gradient} shadow-lg ${
-                                  isSelected ? "shadow-purple-500/30" : "opacity-70"
-                                }`}
-                              >
-                                <span className="text-white">{style.icon}</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <span
-                                  className={`block font-medium ${
-                                    isSelected ? "text-white" : "text-slate-300"
-                                  }`}
-                                >
-                                  {style.label}
-                                </span>
-                                <span className="block text-xs text-slate-500 mt-0.5">
-                                  {style.description}
-                                </span>
-                              </div>
-                              {isSelected && (
-                                <motion.div
-                                  initial={{ scale: 0 }}
-                                  animate={{ scale: 1 }}
-                                  className="shrink-0"
-                                >
-                                  <Check className="w-4 h-4 text-purple-400" />
-                                </motion.div>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
+                    <div className="mb-8">
+                      <CoachPersonaPicker
+                        value={preferences.coaching.aiCoachPersona}
+                        disabled={isSaving}
+                        onChange={(id) => {
+                          setPreferences((prev) => ({
+                            ...prev,
+                            coaching: {
+                              ...prev.coaching,
+                              aiCoachPersona: id,
+                              style: coachingStyleForPersona(id),
+                            },
+                          }));
+                        }}
+                      />
                     </div>
 
                     {/* Intensity Level - Segmented Pill */}
@@ -1310,7 +2587,7 @@ function SettingsPageInner() {
                               e.target.value
                             )
                           }
-                          className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-purple-500 transition-colors"
+                          className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-sky-500 transition-colors"
                         />
                       </div>
                       <div className="flex-1">
@@ -1408,7 +2685,7 @@ function SettingsPageInner() {
                               }
                               className={`relative p-4 rounded-xl border text-center transition-all ${
                                 isSelected
-                                  ? "bg-white/[0.06] border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                  ? "bg-white/[0.06] border-sky-500/40 shadow-[0_0_15px_rgba(14,165,233,0.15)]"
                                   : "bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.04]"
                               }`}
                             >
@@ -1437,7 +2714,7 @@ function SettingsPageInner() {
                                   animate={{ scale: 1 }}
                                   className="absolute top-2 right-2"
                                 >
-                                  <Check className="w-4 h-4 text-purple-400" />
+                                  <Check className="w-4 h-4 text-sky-400" />
                                 </motion.div>
                               )}
                             </button>
@@ -1470,7 +2747,7 @@ function SettingsPageInner() {
                             disabled={isDisabled}
                             className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                               isSelected
-                                ? "bg-gradient-to-r from-purple-500/30 to-pink-500/30 text-white border border-purple-500/40 ring-1 ring-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.1)]"
+                                ? "bg-gradient-to-r from-sky-500/30 to-emerald-600/30 text-white border border-sky-500/40 ring-1 ring-sky-500/20 shadow-[0_0_10px_rgba(14,165,233,0.1)]"
                                 : isDisabled
                                 ? "bg-white/[0.02] border border-white/[0.04] text-slate-600 cursor-not-allowed"
                                 : "bg-white/[0.02] border border-white/[0.08] text-slate-300 hover:border-white/[0.15] hover:bg-white/[0.04]"
@@ -1621,7 +2898,7 @@ function SettingsPageInner() {
                                 },
                               }))
                             }
-                            className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-purple-500 transition-colors"
+                            className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-sky-500 transition-colors"
                           />
                         </div>
                         <div className="flex-1">
@@ -1643,7 +2920,7 @@ function SettingsPageInner() {
                                 },
                               }))
                             }
-                            className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-purple-500 transition-colors"
+                            className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white outline-none focus:border-sky-500 transition-colors"
                           />
                         </div>
                       </div>
@@ -1651,6 +2928,8 @@ function SettingsPageInner() {
                   </GlassCard>
                 </div>
               )}
+
+              {activeSection === "communication" && <CommunicationSettingsSection />}
 
               {/* Integrations */}
               {activeSection === "integrations" && (
@@ -1780,7 +3059,7 @@ function SettingsPageInner() {
                                 </span>
                               )}
                               {whoopStatus?.webhookRegistered && (
-                                <span className="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center gap-1">
+                                <span className="px-2 py-0.5 text-xs rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1">
                                   <Wifi className="w-2.5 h-2.5" />
                                   Webhook Active
                                 </span>
@@ -1887,7 +3166,7 @@ function SettingsPageInner() {
                               // Always show modal
                               setShowTokenModal(true);
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 transition-colors text-sm font-medium flex items-center gap-2"
+                            className="px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 border border-sky-500/30 transition-colors text-sm font-medium flex items-center gap-2"
                             title="Manage Tokens (Add/Update/Delete/View)"
                           >
                             <Key className="w-4 h-4" />
@@ -1917,7 +3196,7 @@ function SettingsPageInner() {
                                 }
                               }}
                               disabled={!whoopStatus?.hasCredentials}
-                              className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 border border-sky-500/30 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {whoopStatus?.hasCredentials ? "Connect WHOOP" : "WHOOP Not Configured"}
                             </button>
@@ -2237,6 +3516,57 @@ function SettingsPageInner() {
                         </div>
                       )}
 
+                      {/* Has credentials but not connected — show Redirect URI setup helper.
+                          Spotify returns a blocking "redirect_uri: Not matching configuration"
+                          error page (never redirects back) if this URI isn't registered, so we
+                          surface it prominently here to prevent the foot-gun. */}
+                      {!spotifyStatus?.isConnected && spotifyStatus?.hasCredentials && (
+                        <div className="mt-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-slate-300 font-medium">
+                                Before connecting, register this Redirect URI in your Spotify app
+                              </p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                Open your app at{' '}
+                                <a
+                                  href="https://developer.spotify.com/dashboard"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-green-400 underline hover:text-green-300"
+                                >
+                                  developer.spotify.com/dashboard
+                                </a>
+                                {' '}→ Edit Settings → Redirect URIs → paste & save.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 pl-5">
+                            <code className="flex-1 text-[10.5px] font-mono bg-slate-900/80 text-green-300 px-2 py-1.5 rounded border border-slate-700 break-all">
+                              {typeof window !== 'undefined'
+                                ? `${window.location.origin}/api/integrations/oauth/callback/spotify`
+                                : '/api/integrations/oauth/callback/spotify'}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const uri = `${window.location.origin}/api/integrations/oauth/callback/spotify`;
+                                  await navigator.clipboard.writeText(uri);
+                                  toast.success('Redirect URI copied');
+                                } catch {
+                                  toast.error('Copy failed — select and copy manually');
+                                }
+                              }}
+                              className="shrink-0 px-2 py-1.5 text-[10.5px] rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 transition-colors font-medium"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Has credentials but not connected */}
                       {!spotifyStatus?.isConnected && spotifyStatus?.hasCredentials && spotifyStatus?.credentialSource === 'user' && (
                         <div className="mt-3 flex items-center gap-2">
@@ -2278,10 +3608,22 @@ function SettingsPageInner() {
                     </div>
 
                     {/* Google Calendar Integration — Per-User Credentials */}
-                    <GoogleCalendarSection />
+                    <div className="mt-4">
+                      <GoogleCalendarSection />
+                    </div>
+
+                    {/* Prayer Times Integration */}
+                    <div className="mt-4">
+                      <PrayerTimesSection />
+                    </div>
+
+                    {/* Spending Tracker Integration */}
+                    <div className="mt-4">
+                      <SpendingTrackerSection />
+                    </div>
 
                     {/* Other Integrations */}
-                    <div className="space-y-3">
+                    <div className="space-y-3 mt-4">
                       {integrations
                         .filter((i) => i.provider !== "whoop" && i.provider !== "spotify")
                         .map((integration) => (
@@ -2309,11 +3651,17 @@ function SettingsPageInner() {
                               </div>
                             </div>
                             {integration.isConnected ? (
-                              <button className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+                              <button
+                                onClick={() => { dataSourceService.disconnect(integration.provider as DataSourceType); toast.success('Disconnected!'); }}
+                                className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                              >
                                 <Unlink className="w-4 h-4" />
                               </button>
                             ) : (
-                              <button className="px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm font-medium">
+                              <button
+                                onClick={() => { dataSourceService.connect(integration.provider as any, {}); toast.success('Connected!'); }}
+                                className="px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 transition-colors text-sm font-medium"
+                              >
                                 Connect
                               </button>
                             )}
@@ -2352,7 +3700,7 @@ function SettingsPageInner() {
                             }
                             className={`p-4 rounded-xl border text-center transition-all ${
                               isSelected
-                                ? "bg-white/[0.06] border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                                ? "bg-white/[0.06] border-sky-500/40 shadow-[0_0_15px_rgba(14,165,233,0.15)]"
                                 : "bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12]"
                             }`}
                           >
@@ -2360,7 +3708,7 @@ function SettingsPageInner() {
                               <span
                                 className={
                                   isSelected
-                                    ? "text-purple-400"
+                                    ? "text-sky-400"
                                     : "text-slate-400"
                                 }
                               >
@@ -2447,7 +3795,7 @@ function SettingsPageInner() {
                             }
                           }}
                           placeholder="e.g. Balencia Coach"
-                          className="w-full max-w-md px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-colors"
+                          className="w-full max-w-md px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50 transition-colors"
                         />
                         <p className="text-slate-500 text-xs mt-1">
                           This name is shown in the voice assistant and the coach will call itself by this name (e.g. &quot;{assistantName} is ready. Tap to start&quot;).
@@ -2467,6 +3815,123 @@ function SettingsPageInner() {
                           The assistant will speak and listen in the selected language.
                         </p>
                       </div>
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Goals & Plans */}
+              {activeSection === "goals" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Crosshair className="w-5 h-5" />}
+                      title="Goals & Plans"
+                      gradient="from-teal-500 to-cyan-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-6">
+                      Manage your health goals, active plans, and track your progress milestones.
+                    </p>
+
+                    <div className="space-y-3">
+                      {[
+                        { label: "My Goals", desc: "View and manage your active goals", href: "/goals", icon: <Crosshair className="w-4 h-4 text-teal-400" />, color: "teal" },
+                        { label: "Active Plans", desc: "Your AI-generated workout and nutrition plans", href: "/plans", icon: <Target className="w-4 h-4 text-cyan-400" />, color: "cyan" },
+                        { label: "Life Areas", desc: "Balance across fitness, nutrition, sleep, mindfulness", href: "/life-areas", icon: <BarChart2 className="w-4 h-4 text-emerald-400" />, color: "emerald" },
+                        { label: "Progress Tracking", desc: "Detailed progress charts and analytics", href: "/progress", icon: <Flame className="w-4 h-4 text-orange-400" />, color: "orange" },
+                      ].map((item) => (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-white/[0.04] flex items-center justify-center">
+                              {item.icon}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">{item.label}</p>
+                              <p className="text-xs text-slate-500">{item.desc}</p>
+                            </div>
+                          </div>
+                          <ExternalLink className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                        </a>
+                      ))}
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-base font-semibold text-white mb-3">Goal Preferences</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div>
+                          <p className="text-white font-medium">Weekly Check-in Reminders</p>
+                          <p className="text-xs text-slate-400">Get reminded to review your weekly goal progress</p>
+                        </div>
+                        <ToggleSwitch
+                          checked={preferences.notifications?.weeklyReport ?? true}
+                          onChange={() => updatePreference("notifications", "weeklyReport", !preferences.notifications?.weeklyReport)}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div>
+                          <p className="text-white font-medium">AI Goal Suggestions</p>
+                          <p className="text-xs text-slate-400">Allow AI to suggest new goals based on your progress</p>
+                        </div>
+                        <ToggleSwitch
+                          checked={preferences.notifications?.aiSuggestions ?? true}
+                          onChange={() => updatePreference("notifications", "aiSuggestions", !preferences.notifications?.aiSuggestions)}
+                        />
+                      </div>
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Social Accountability */}
+              {activeSection === "accountability" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Shield className="w-5 h-5" />}
+                      title="Social Accountability"
+                      gradient="from-orange-500 to-amber-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-6">
+                      Enable trusted contacts to receive notifications when you fall behind on your goals. Consent-based and fully customizable.
+                    </p>
+                    <a
+                      href="/dashboard?tab=accountability"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold
+                        bg-gradient-to-r from-orange-500/15 to-amber-500/15 text-orange-400
+                        border border-orange-500/20 hover:border-orange-500/40
+                        transition-all cursor-pointer"
+                    >
+                      <Shield className="w-4 h-4" />
+                      Open Accountability Dashboard
+                    </a>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-base font-semibold text-white mb-4">Features</h3>
+                    <div className="space-y-3">
+                      {[
+                        { step: "1", title: "Consent-Based", desc: "You control who can be notified and when — privacy first" },
+                        { step: "2", title: "Trigger Rules", desc: "Set conditions like 'If I miss gym for 3 days, tell my friends'" },
+                        { step: "3", title: "Contacts & Groups", desc: "Add trusted people — friends, family, spouse, or coach" },
+                        { step: "4", title: "SOS Safety Net", desc: "Emergency contacts are notified if you're inactive for extended periods" },
+                        { step: "5", title: "AI First", desc: "AI coach tries to re-engage you before involving others" },
+                      ].map((item) => (
+                        <div key={item.step} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                          <div className="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center text-orange-400 text-sm font-bold flex-shrink-0">
+                            {item.step}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">{item.title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{item.desc}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </GlassCard>
                 </div>
@@ -2540,7 +4005,7 @@ function SettingsPageInner() {
                     <SectionHeader
                       icon={<Shield className="w-5 h-5" />}
                       title="Data & Privacy"
-                      gradient="from-rose-500 to-pink-500"
+                      gradient="from-rose-500 to-emerald-600"
                     />
 
                     <div className="space-y-3">
@@ -2589,6 +4054,90 @@ function SettingsPageInner() {
                   </GlassCard>
 
                   <GlassCard>
+                    <SectionHeader
+                      icon={<Accessibility className="w-5 h-5" />}
+                      title="Accessibility"
+                      gradient="from-violet-500 to-indigo-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-4">
+                      Adjust how motion is used across the app. This is stored on this device only.
+                    </p>
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                      <div>
+                        <p className="text-white font-medium">Reduce motion</p>
+                        <p className="text-sm text-slate-400">
+                          Minimize animations and transitions for a calmer interface
+                        </p>
+                      </div>
+                      <ToggleSwitch
+                        checked={reduceMotionPref}
+                        onChange={() => setReduceMotion(!reduceMotionPref)}
+                      />
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Heart className="w-5 h-5" />}
+                      title="Health Profile Visibility"
+                      gradient="from-emerald-500 to-teal-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-4">
+                      Control who can view your health data when they click your profile in a chat.
+                    </p>
+
+                    <div className="space-y-2">
+                      {([
+                        { id: 'disabled' as const, label: 'Nobody', desc: 'Health profile is hidden from everyone' },
+                        { id: 'friends' as const, label: 'Friends Only', desc: 'Only accepted connections can see your health data' },
+                        { id: 'all' as const, label: 'Everyone in Chat', desc: 'Anyone who shares a chat with you can view your health data' },
+                        { id: 'custom' as const, label: 'Custom List', desc: 'Only specific users you choose' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => updatePreference('privacy', 'healthProfileVisibility', opt.id)}
+                          className={cn(
+                            'w-full flex items-center gap-3 p-4 rounded-xl border transition-colors text-left',
+                            preferences.privacy.healthProfileVisibility === opt.id
+                              ? 'border-emerald-500/40 bg-emerald-500/10'
+                              : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                          )}
+                        >
+                          <div className={cn(
+                            'w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                            preferences.privacy.healthProfileVisibility === opt.id
+                              ? 'border-emerald-400'
+                              : 'border-slate-600'
+                          )}>
+                            {preferences.privacy.healthProfileVisibility === opt.id && (
+                              <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">{opt.label}</p>
+                            <p className="text-xs text-slate-400">{opt.desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {preferences.privacy.healthProfileVisibility === 'custom' && (
+                      <div className="mt-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                        <p className="text-xs text-slate-400 mb-2">
+                          Custom user list is managed from the chat profile — tap a user and grant or revoke access.
+                        </p>
+                        {preferences.privacy.healthProfileAllowedUsers.length > 0 ? (
+                          <p className="text-xs text-emerald-400">
+                            {preferences.privacy.healthProfileAllowedUsers.length} user(s) have access
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-500">No users added yet</p>
+                        )}
+                      </div>
+                    )}
+                  </GlassCard>
+
+                  <GlassCard>
                     <h2 className="text-lg font-semibold text-white mb-4">
                       Your Data
                     </h2>
@@ -2601,6 +4150,179 @@ function SettingsPageInner() {
                         <Trash2 className="w-4 h-4" />
                         Delete All Data
                       </button>
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Subscription */}
+              {activeSection === "subscription" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<CreditCard className="w-5 h-5" />}
+                      title="Subscription & Billing"
+                      gradient="from-amber-500 to-yellow-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-6">
+                      Manage your subscription plan, billing information, and payment history.
+                    </p>
+
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 mb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-white">Current Plan</p>
+                          <p className="text-xs text-amber-400 mt-0.5">Free Plan — Basic features</p>
+                        </div>
+                        <a
+                          href="/subscription"
+                          className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 text-sm font-medium transition-colors border border-amber-500/20"
+                        >
+                          Upgrade
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {[
+                        { label: "View Plans & Pricing", href: "/subscription" },
+                        { label: "Billing History", href: "/subscription?tab=billing" },
+                        { label: "Manage Payment Method", href: "/subscription?tab=payment" },
+                      ].map((link) => (
+                        <a
+                          key={link.href}
+                          href={link.href}
+                          className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors group"
+                        >
+                          <span className="text-sm text-slate-300">{link.label}</span>
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                        </a>
+                      ))}
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Security */}
+              {activeSection === "security" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<Lock className="w-5 h-5" />}
+                      title="Security"
+                      gradient="from-red-500 to-rose-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-6">
+                      Protect your account with strong authentication and monitor active sessions.
+                    </p>
+
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-medium">Password</p>
+                            <p className="text-xs text-slate-400">Last changed: unknown</p>
+                          </div>
+                          <button className="px-3 py-1.5 rounded-lg bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] text-sm font-medium transition-colors border border-white/[0.06]">
+                            Change Password
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-medium">Two-Factor Authentication</p>
+                            <p className="text-xs text-slate-400">Add an extra layer of security to your account</p>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-500/15 text-slate-400 border border-slate-500/20">
+                            Not Enabled
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-medium">Active Sessions</p>
+                            <p className="text-xs text-slate-400">Manage devices currently logged in</p>
+                          </div>
+                          <span className="text-xs text-emerald-400 font-medium">1 active</span>
+                        </div>
+                      </div>
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-base font-semibold text-white mb-3">Login Activity</h3>
+                    <p className="text-sm text-slate-400 mb-4">Recent sign-in activity on your account.</p>
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                          <Smartphone className="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-white font-medium">Current Session</p>
+                          <p className="text-xs text-slate-500">Active now</p>
+                        </div>
+                      </div>
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {/* Help & Support */}
+              {activeSection === "helpSupport" && (
+                <div className="space-y-6">
+                  <GlassCard>
+                    <SectionHeader
+                      icon={<HelpCircle className="w-5 h-5" />}
+                      title="Help & Support"
+                      gradient="from-sky-500 to-blue-500"
+                    />
+                    <p className="text-sm text-slate-400 mb-6">
+                      Get help, browse FAQs, or reach out to our support team.
+                    </p>
+
+                    <div className="space-y-3">
+                      {[
+                        { label: "FAQ", desc: "Frequently asked questions", href: "/faq", icon: <HelpCircle className="w-4 h-4 text-sky-400" /> },
+                        { label: "Help Center", desc: "Guides and tutorials", href: "/help", icon: <HelpCircle className="w-4 h-4 text-blue-400" /> },
+                        { label: "Contact Support", desc: "Reach out to our team", href: "/contact", icon: <Mail className="w-4 h-4 text-indigo-400" /> },
+                        { label: "Terms of Service", desc: "Review terms and conditions", href: "/terms", icon: <Shield className="w-4 h-4 text-slate-400" /> },
+                        { label: "Privacy Policy", desc: "How we handle your data", href: "/privacy", icon: <Lock className="w-4 h-4 text-rose-400" /> },
+                      ].map((item) => (
+                        <a
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-white/[0.04] flex items-center justify-center">
+                              {item.icon}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">{item.label}</p>
+                              <p className="text-xs text-slate-500">{item.desc}</p>
+                            </div>
+                          </div>
+                          <ExternalLink className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" />
+                        </a>
+                      ))}
+                    </div>
+                  </GlassCard>
+
+                  <GlassCard>
+                    <h3 className="text-base font-semibold text-white mb-3">App Info</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <span className="text-sm text-slate-400">Version</span>
+                        <span className="text-sm text-white font-mono">1.0.0-beta</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                        <span className="text-sm text-slate-400">Platform</span>
+                        <span className="text-sm text-white">Web</span>
+                      </div>
                     </div>
                   </GlassCard>
                 </div>
@@ -2682,7 +4404,7 @@ function SettingsPageInner() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-xl font-semibold text-white flex items-center gap-2">
-                  <Key className="w-5 h-5 text-purple-400" />
+                  <Key className="w-5 h-5 text-sky-400" />
                   Manage WHOOP Tokens
                 </h3>
                 <p className="text-sm text-slate-400 mt-1">
@@ -2704,7 +4426,7 @@ function SettingsPageInner() {
             {/* Current Token Info - View Section */}
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <Eye className="w-4 h-4 text-purple-400" />
+                <Eye className="w-4 h-4 text-sky-400" />
                 View Current Tokens
               </h4>
               {tokenInfo?.hasTokens ? (
@@ -2754,7 +4476,7 @@ function SettingsPageInner() {
             {/* Add/Update Section */}
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <Save className="w-4 h-4 text-purple-400" />
+                <Save className="w-4 h-4 text-sky-400" />
                 {tokenInfo?.hasTokens ? 'Update Tokens' : 'Add Tokens'}
               </h4>
             </div>
@@ -2838,7 +4560,7 @@ function SettingsPageInner() {
                     onChange={(e) => setTokenData({ ...tokenData, accessToken: e.target.value })}
                     placeholder="Enter access token"
                     required
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500"
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500"
                   />
                   <button
                     type="button"
@@ -2860,7 +4582,7 @@ function SettingsPageInner() {
                     value={tokenData.refreshToken}
                     onChange={(e) => setTokenData({ ...tokenData, refreshToken: e.target.value })}
                     placeholder="Enter refresh token (optional)"
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500"
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500"
                   />
                   <button
                     type="button"
@@ -2880,7 +4602,7 @@ function SettingsPageInner() {
                   type="datetime-local"
                   value={tokenData.tokenExpiry}
                   onChange={(e) => setTokenData({ ...tokenData, tokenExpiry: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500"
+                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500"
                 />
               </div>
 
@@ -2888,7 +4610,7 @@ function SettingsPageInner() {
                 <button
                   type="submit"
                   disabled={isSaving || !tokenData.accessToken.trim()}
-                  className="flex-1 px-4 py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isSaving ? (
                     <>
@@ -3010,7 +4732,7 @@ function SettingsPageInner() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-xl font-semibold text-white flex items-center gap-2">
-                  <Key className="w-5 h-5 text-purple-400" />
+                  <Key className="w-5 h-5 text-sky-400" />
                   WHOOP Credentials
                 </h3>
                 <p className="text-sm text-slate-400 mt-1">
@@ -3066,7 +4788,7 @@ function SettingsPageInner() {
                     onChange={(e) => setCredentialsData({ ...credentialsData, clientId: e.target.value })}
                     placeholder="Enter WHOOP Client ID"
                     required
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500"
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500"
                   />
                   <button
                     type="button"
@@ -3089,7 +4811,7 @@ function SettingsPageInner() {
                     onChange={(e) => setCredentialsData({ ...credentialsData, clientSecret: e.target.value })}
                     placeholder="Enter WHOOP Client Secret"
                     required
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500"
+                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500"
                   />
                   <button
                     type="button"
@@ -3105,7 +4827,7 @@ function SettingsPageInner() {
                 <button
                   type="submit"
                   disabled={isSavingCredentials}
-                  className="flex-1 px-4 py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSavingCredentials ? (
                     <>
@@ -3254,6 +4976,53 @@ function SettingsPageInner() {
                 </div>
               )}
 
+              {/* Setup guide — tells users exactly how to get the Client ID/Secret
+                  and (critically) which Redirect URI to paste into the Spotify Dev Dashboard. */}
+              <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20 space-y-2">
+                <p className="text-xs font-medium text-green-400">How to get credentials</p>
+                <ol className="text-[11px] text-slate-400 space-y-1 list-decimal list-inside">
+                  <li>
+                    Open the{' '}
+                    <a
+                      href="https://developer.spotify.com/dashboard"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-green-400 underline hover:text-green-300"
+                    >
+                      Spotify Developer Dashboard
+                    </a>
+                    {' '}and create (or open) an app.
+                  </li>
+                  <li>Copy the Client ID and Client Secret into the fields above.</li>
+                  <li>
+                    In the app&apos;s settings, add this exact Redirect URI:
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <code className="flex-1 text-[10.5px] font-mono bg-slate-900/80 text-green-300 px-2 py-1.5 rounded border border-slate-700 break-all">
+                        {typeof window !== 'undefined'
+                          ? `${window.location.origin}/api/integrations/oauth/callback/spotify`
+                          : '/api/integrations/oauth/callback/spotify'}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const uri = `${window.location.origin}/api/integrations/oauth/callback/spotify`;
+                            await navigator.clipboard.writeText(uri);
+                            toast.success('Redirect URI copied');
+                          } catch {
+                            toast.error('Copy failed — select and copy manually');
+                          }
+                        }}
+                        className="shrink-0 px-2 py-1.5 text-[10.5px] rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 transition-colors font-medium"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </li>
+                  <li>Save, then click <span className="text-white font-medium">Connect Spotify</span>.</li>
+                </ol>
+              </div>
+
               <div className="flex items-center gap-3 pt-4">
                 <button
                   type="submit"
@@ -3325,16 +5094,7 @@ export default function SettingsPageContent() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-slate-950">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center gap-4"
-          >
-            <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
-            <p className="text-slate-400">Loading settings...</p>
-          </motion.div>
-        </div>
+        <DashboardPageSkeleton activeTab="settings" variant="compact" />
       }
     >
       <SettingsPageInner />

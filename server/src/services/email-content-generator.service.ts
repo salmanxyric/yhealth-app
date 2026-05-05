@@ -4,7 +4,7 @@
  */
 
 import { aiProviderService } from './ai-provider.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================================================

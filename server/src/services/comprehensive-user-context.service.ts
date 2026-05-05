@@ -3,8 +3,9 @@
  * @description Gathers complete user data for AI assistant context
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
+import { redisCacheService } from './redis-cache.service.js';
 import { getUserHealthProfile, getRecoveryTrends, getSleepTrends, getStrainTrends } from './whoop-analytics.service.js';
 import { wellbeingContextService } from './wellbeing-context.service.js';
 import { gamificationService } from './gamification.service.js';
@@ -14,6 +15,8 @@ import { cache } from './cache.service.js';
 import { dailyAnalysisService } from './daily-analysis.service.js';
 import { motivationTierService } from './motivation-tier.service.js';
 import type { MotivationTier } from '../../../shared/types/domain/wellbeing.js';
+import { personaFromCoachingStyle } from '../../../shared/types/domain/coach-persona.js';
+import { buildPersonaDirectiveBlock } from './coach-persona-prompt.service.js';
 import type { ActivityStatusContext, StatusPattern } from '../types/activity-status.types.js';
 
 // ============================================
@@ -101,7 +104,15 @@ export interface LifestyleContext {
     hasLateNight: boolean;
     longestFreeWindowMinutes: number | null;
     backToBackCount: number;
+    holidayContext?: import('./holiday-calendar.service.js').HolidayContext;
   };
+  googleCalendarEvents?: Array<{
+    title: string;
+    startTime: string;
+    endTime: string;
+    location?: string;
+    allDay: boolean;
+  }>;
   activeHabits?: number;
   routines?: Array<{
     name: string;
@@ -111,6 +122,7 @@ export interface LifestyleContext {
     preferredWorkoutTime?: string;
     preferredCheckInTime?: string;
     coachingStyle?: string;
+    aiCoachPersona?: string;
     coachingIntensity?: string;
     useEmojis?: boolean;
     formalityLevel?: string;
@@ -299,6 +311,21 @@ export interface ProgressTrendContext {
   latestWeightUnit?: string;
 }
 
+export interface CrossDomainCorrelationContext {
+  stressScore: number;
+  energyScore: number;
+  moodScore: number;
+  availabilityScore: number;
+  calendarLoad: number;
+  musicMood: string | null;
+  prayerAdherence: number | null;
+  spendingStress: number | null;
+  correlations: string[];
+  recommendedMode: string;
+  toneAdjustment: string;
+  computedAt: string;
+}
+
 export interface ComprehensiveUserContext {
   whoop: WhoopContext;
   lifestyle: LifestyleContext;
@@ -317,6 +344,7 @@ export interface ComprehensiveUserContext {
   competitions: CompetitionContext;
   progressTrend: ProgressTrendContext;
   activityStatus: ActivityStatusContext;
+  crossDomainCorrelation?: CrossDomainCorrelationContext;
   contextState?: import('./correlation-engine.service.js').UserContextState;
 }
 
@@ -336,6 +364,8 @@ export interface CompactMessageContext {
   primaryFocusArea: string | null;
   userName: string;
   assistantName: string;
+  /** From user_preferences.ai_coach_persona (default gentle_friend). */
+  aiCoachPersona: string;
 }
 
 // ============================================
@@ -354,11 +384,27 @@ class ComprehensiveUserContextService {
    * Call invalidateCache(userId) when new data is logged.
    */
   async getComprehensiveContext(userId: string): Promise<ComprehensiveUserContext> {
-    // Check cache first
+    // L1: In-memory cache
     const cached = this.contextCache.get(userId);
     if (cached && cached.expiresAt > Date.now()) {
-      logger.debug('[ComprehensiveUserContext] Cache hit — skipping 16 queries', { userId: userId.slice(0, 8) });
+      logger.debug('[ComprehensiveUserContext] L1 cache hit — skipping 16 queries', { userId: userId.slice(0, 8) });
       return cached.data;
+    }
+
+    // L2: Redis cache (survives restarts, shared across instances)
+    const redisKey = `ctx:${userId}`;
+    try {
+      const redisData = await redisCacheService.get<ComprehensiveUserContext>(redisKey);
+      if (redisData) {
+        logger.debug('[ComprehensiveUserContext] L2 Redis cache hit', { userId: userId.slice(0, 8) });
+        this.contextCache.set(userId, {
+          data: redisData,
+          expiresAt: Date.now() + ComprehensiveUserContextService.CACHE_TTL_MS,
+        });
+        return redisData;
+      }
+    } catch {
+      // Redis down — continue to DB queries
     }
 
     try {
@@ -399,10 +445,35 @@ class ComprehensiveUserContextService {
         this.getProgressTrendContext(userId),
       ]);
 
+      // Wave 5: Cross-domain correlation (1 query, non-blocking)
+      let crossDomainCorrelation: CrossDomainCorrelationContext | undefined;
+      try {
+        const { rows } = await query<Record<string, unknown>>(
+          `SELECT * FROM user_daily_correlations WHERE user_id = $1 AND correlation_date = CURRENT_DATE LIMIT 1`,
+          [userId]
+        );
+        if (rows[0]) {
+          crossDomainCorrelation = {
+            stressScore: rows[0].stress_score as number,
+            energyScore: rows[0].energy_score as number,
+            moodScore: rows[0].mood_score as number,
+            availabilityScore: rows[0].availability_score as number,
+            calendarLoad: rows[0].calendar_load as number,
+            musicMood: (rows[0].music_mood as string) || null,
+            prayerAdherence: (rows[0].prayer_adherence as number) ?? null,
+            spendingStress: (rows[0].spending_stress as number) ?? null,
+            correlations: (rows[0].correlations as string[]) || [],
+            recommendedMode: rows[0].recommended_mode as string,
+            toneAdjustment: rows[0].tone_adjustment as string,
+            computedAt: rows[0].computed_at as string,
+          };
+        }
+      } catch { /* table may not exist yet */ }
+
       const result: ComprehensiveUserContext = {
         whoop, lifestyle, workouts, nutrition, wellbeing, chatHistory, goals, bodyStats,
         gamification, habits, mentalHealth, waterIntake, dailyScore, nutritionAnalysis,
-        competitions, progressTrend, activityStatus,
+        competitions, progressTrend, activityStatus, crossDomainCorrelation,
       };
 
       // Compute unified life state via correlation engine
@@ -413,11 +484,12 @@ class ComprehensiveUserContextService {
         // Correlation engine is non-critical
       }
 
-      // Cache the result
+      // Cache the result (L1 in-memory + L2 Redis)
       this.contextCache.set(userId, {
         data: result,
         expiresAt: Date.now() + ComprehensiveUserContextService.CACHE_TTL_MS,
       });
+      redisCacheService.set(redisKey, result, 600).catch(() => {});
 
       // Prune expired entries periodically (every 100 calls)
       if (this.contextCache.size > 100) {
@@ -460,6 +532,7 @@ class ComprehensiveUserContextService {
    */
   invalidateCache(userId: string): void {
     this.contextCache.delete(userId);
+    redisCacheService.delete(`ctx:${userId}`).catch(() => {});
     // Also bust the compact context cache
     const today = new Date().toISOString().slice(0, 10);
     cache.delete(`compact_ctx:${userId}:${today}`);
@@ -547,6 +620,7 @@ class ComprehensiveUserContextService {
           nutrition_adherence: number | null;
           user_name: string;
           assistant_name: string;
+          ai_coach_persona: string | null;
         }>(`
           WITH ${whoopCte},
           ${streakCte},
@@ -556,7 +630,8 @@ class ComprehensiveUserContextService {
           user_info AS (
             SELECT
               (u.first_name || ' ' || u.last_name) AS user_name,
-              COALESCE(up.voice_assistant_name, 'Coach') AS assistant_name
+              COALESCE(up.voice_assistant_name, 'Coach') AS assistant_name,
+              COALESCE(NULLIF(TRIM(up.ai_coach_persona), ''), 'gentle_friend') AS ai_coach_persona
             FROM users u
             LEFT JOIN user_preferences up ON up.user_id = u.id
             WHERE u.id = $1
@@ -569,7 +644,8 @@ class ComprehensiveUserContextService {
             w.water_pct,
             n.nutrition_adherence,
             ui.user_name,
-            ui.assistant_name
+            ui.assistant_name,
+            ui.ai_coach_persona
           FROM user_info ui
           LEFT JOIN whoop_latest wl ON true
           LEFT JOIN streak s ON true
@@ -615,6 +691,7 @@ class ComprehensiveUserContextService {
           primaryFocusArea,
           userName: row?.user_name || 'there',
           assistantName: row?.assistant_name || 'Coach',
+          aiCoachPersona: row?.ai_coach_persona?.trim() || 'gentle_friend',
         };
       } catch (error) {
         logger.error('[CompactMessageContext] Error building compact context', {
@@ -627,6 +704,7 @@ class ComprehensiveUserContextService {
           sleepHours: null,
           streakDays: 0,
           dailyScore: null,
+          aiCoachPersona: 'gentle_friend',
           waterPct: null,
           nutritionAdherence: null,
           topInsight: null,
@@ -867,9 +945,33 @@ class ComprehensiveUserContextService {
           hasLateNight: dayCtx.hasLateNight,
           longestFreeWindowMinutes: dayCtx.longestFreeWindow?.durationMinutes ?? null,
           backToBackCount: dayCtx.backToBackCount,
+          holidayContext: dayCtx.holidayContext,
         };
       } catch {
         // Schedule context is non-critical — don't block lifestyle context
+      }
+
+      // Get today's Google Calendar events for AI Coach awareness
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const calResult = await query<{ title: string; start_time: Date; end_time: Date; location: string | null; all_day: boolean }>(
+          `SELECT title, start_time, end_time, location, all_day FROM calendar_events
+           WHERE user_id = $1 AND start_time::date = $2::date
+             AND status = 'confirmed'
+           ORDER BY start_time ASC`,
+          [userId, today],
+        );
+        if (calResult.rows.length > 0) {
+          context.googleCalendarEvents = calResult.rows.map(e => ({
+            title: e.title,
+            startTime: new Date(e.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+            endTime: new Date(e.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+            location: e.location || undefined,
+            allDay: e.all_day,
+          }));
+        }
+      } catch {
+        // calendar_events table may not exist — non-critical
       }
 
       // Get special days (Ramadan, holidays, etc.)
@@ -896,6 +998,7 @@ class ComprehensiveUserContextService {
       const prefsResult = await query<{
         preferred_check_in_time: string | null;
         coaching_style: string | null;
+        ai_coach_persona: string | null;
         coaching_intensity: string | null;
         ai_use_emojis: boolean | null;
         ai_formality_level: string | null;
@@ -903,7 +1006,7 @@ class ComprehensiveUserContextService {
         focus_areas: string[] | null;
         ai_message_style: string | null;
       }>(
-        `SELECT preferred_check_in_time, coaching_style, coaching_intensity,
+        `SELECT preferred_check_in_time, coaching_style, ai_coach_persona, coaching_intensity,
                 ai_use_emojis, ai_formality_level, ai_encouragement_level,
                 focus_areas, ai_message_style
          FROM user_preferences
@@ -914,9 +1017,13 @@ class ComprehensiveUserContextService {
 
       if (prefsResult.rows.length > 0) {
         const prefs = prefsResult.rows[0];
+        const persona =
+          prefs.ai_coach_persona?.trim() ||
+          personaFromCoachingStyle(prefs.coaching_style ?? undefined);
         context.preferences = {
           preferredCheckInTime: prefs.preferred_check_in_time || undefined,
           coachingStyle: prefs.coaching_style || undefined,
+          aiCoachPersona: persona,
           coachingIntensity: prefs.coaching_intensity || undefined,
           useEmojis: prefs.ai_use_emojis ?? undefined,
           formalityLevel: prefs.ai_formality_level || undefined,
@@ -2154,6 +2261,20 @@ class ComprehensiveUserContextService {
       sections.push('');
     }
 
+    // Google Calendar Events
+    const gcEvents = context.lifestyle.googleCalendarEvents;
+    if (gcEvents && gcEvents.length > 0) {
+      sections.push(`Today's Google Calendar Events (${gcEvents.length}):`);
+      for (const evt of gcEvents) {
+        if (evt.allDay) {
+          sections.push(`- ${evt.title} (All Day)${evt.location ? ` — ${evt.location}` : ''}`);
+        } else {
+          sections.push(`- ${evt.title}: ${evt.startTime} - ${evt.endTime}${evt.location ? ` — ${evt.location}` : ''}`);
+        }
+      }
+      sections.push('');
+    }
+
     // Special days (Ramadan, holidays, etc.)
     const specialDays = (context.lifestyle as Record<string, unknown>).specialDays as Array<{ type: string; name: string; adjustments: { customMessage?: string; reduceWorkoutIntensity?: boolean; adjustMealTiming?: boolean } }> | undefined;
     if (specialDays && specialDays.length > 0) {
@@ -2175,7 +2296,10 @@ class ComprehensiveUserContextService {
         sections.push(`Preferred Workout Time: ${context.lifestyle.preferences.preferredWorkoutTime}`);
       }
       if (context.lifestyle.preferences.coachingStyle) {
-        sections.push(`Coaching Style: ${context.lifestyle.preferences.coachingStyle}`);
+        sections.push(`Legacy coaching style (reference): ${context.lifestyle.preferences.coachingStyle}`);
+      }
+      if (context.lifestyle.preferences.aiCoachPersona) {
+        sections.push(buildPersonaDirectiveBlock(context.lifestyle.preferences.aiCoachPersona));
       }
     }
     sections.push('');
@@ -2328,6 +2452,45 @@ class ComprehensiveUserContextService {
       sections.push(`- Weight: ${direction}${changeStr}`);
       if (context.progressTrend.latestWeight) {
         sections.push(`- Current: ${context.progressTrend.latestWeight} ${context.progressTrend.latestWeightUnit || 'kg'}`);
+      }
+      sections.push('');
+    }
+
+    // Cross-Domain Intelligence (from user_daily_correlations)
+    if (context.crossDomainCorrelation) {
+      const cd = context.crossDomainCorrelation;
+      sections.push('=== Cross-Domain Intelligence ===');
+      sections.push(`- Calendar Load: ${cd.calendarLoad} events today`);
+      sections.push(`- Stress Score: ${cd.stressScore}/100`);
+      sections.push(`- Energy Score: ${cd.energyScore}/100`);
+      sections.push(`- Mood Score: ${cd.moodScore}/100`);
+      sections.push(`- Availability: ${cd.availabilityScore}/100`);
+      sections.push(`- Music Mood: ${cd.musicMood || 'unknown'}`);
+      sections.push(`- Prayer Adherence: ${cd.prayerAdherence != null ? `${cd.prayerAdherence}%` : 'N/A'}`);
+      sections.push(`- Spending Stress: ${cd.spendingStress != null ? `${cd.spendingStress}/100` : 'N/A'}`);
+      sections.push(`- Recommended Conversation Mode: ${cd.recommendedMode}`);
+      sections.push(`- Tone: ${cd.toneAdjustment}`);
+      if (cd.correlations.length > 0) {
+        sections.push('- Active Correlations:');
+        for (const corr of cd.correlations) {
+          sections.push(`  • ${corr}`);
+        }
+      }
+
+      // Generate coaching guidance based on the correlation data
+      const guidance: string[] = [];
+      if (cd.stressScore > 70) guidance.push('User is under high stress — be empathetic and avoid pushing hard goals.');
+      if (cd.energyScore < 30) guidance.push('Energy is very low — suggest rest or light activities instead of intense workouts.');
+      if (cd.calendarLoad >= 6) guidance.push(`Packed day with ${cd.calendarLoad} events — keep check-ins brief and acknowledge their busy schedule.`);
+      if (cd.moodScore < 40) guidance.push('Mood is low — lead with encouragement and emotional support before task-oriented coaching.');
+      if (cd.prayerAdherence != null && cd.prayerAdherence > 80) guidance.push('Strong prayer adherence — faith is a pillar; weave spiritual encouragement naturally.');
+      if (cd.spendingStress != null && cd.spendingStress > 60) guidance.push('Financial stress detected — avoid suggesting expensive supplements or gym memberships.');
+      if (cd.musicMood === 'sad' || cd.musicMood === 'melancholy') guidance.push('Music listening suggests low mood — approach with warmth.');
+      if (guidance.length > 0) {
+        sections.push('- Coaching Guidance:');
+        for (const g of guidance) {
+          sections.push(`  • ${g}`);
+        }
       }
       sections.push('');
     }

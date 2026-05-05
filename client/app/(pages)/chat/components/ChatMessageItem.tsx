@@ -1,8 +1,9 @@
 'use client';
 
 import { memo } from 'react';
+import Link from 'next/link';
 import { format } from 'date-fns';
-import { Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff, MessageCircle, Compass } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageBubble, MessageStatus, MessageMedia } from '@/components/chat';
 import { AudioPlayer } from './AudioPlayer';
@@ -39,6 +40,9 @@ export interface ChatMessageItemData {
   readBy?: string[];
   /** For AI coach chats — sent messages always show as read */
   isAiChat?: boolean;
+  proactiveType?: string;
+  obstacleId?: string;
+  reconnectionId?: string;
 }
 
 interface ChatMessageItemProps {
@@ -265,6 +269,26 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 isEdited={message.isEdited}
                 markdown={!isUser}
               />
+            )}
+
+            {!isUser && message.obstacleId && (
+              <Link
+                href={`/obstacles/${message.obstacleId}`}
+                className="mt-1.5 inline-flex items-center gap-1.5 min-h-[36px] rounded-xl px-3 py-1.5 text-xs font-semibold text-orange-200 bg-orange-500/15 border border-orange-500/25 hover:bg-orange-500/25 transition-colors"
+              >
+                <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                Open obstacle diagnosis
+              </Link>
+            )}
+
+            {!isUser && !message.obstacleId && message.reconnectionId && (
+              <Link
+                href="/dashboard"
+                className="mt-1.5 inline-flex items-center gap-1.5 min-h-[36px] rounded-xl px-3 py-1.5 text-xs font-semibold text-indigo-200 bg-indigo-500/15 border border-indigo-500/25 hover:bg-indigo-500/25 transition-colors"
+              >
+                <Compass className="w-3.5 h-3.5 shrink-0" />
+                View goal check-in on dashboard
+              </Link>
             )}
 
             {/* Timestamp and status */}

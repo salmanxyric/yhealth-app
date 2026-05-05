@@ -3,7 +3,7 @@
  * Quick script to run ONLY the sync-missing-columns migration.
  * Much faster than full auto-migrate when tables already exist.
  */
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';

@@ -15,9 +15,10 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { createSemanticTools } from './langgraph-semantic-tools.service.js';
 import { toolRouterService } from './tool-router.service.js';
+import type { ToolTurnContext } from '../types/tool-turn-context.js';
 
 // ============================================
 // ESSENTIAL READ-ONLY TOOLS
@@ -493,8 +494,8 @@ function createEssentialReadTools(userId: string): DynamicStructuredTool[] {
  * - Essential read tools (20 tools)
  * Total: ~33 tools instead of 163
  */
-export function createOptimizedTools(userId: string): DynamicStructuredTool[] {
-  const semanticTools = createSemanticTools(userId);
+export function createOptimizedTools(userId: string, toolTurnContext?: ToolTurnContext): DynamicStructuredTool[] {
+  const semanticTools = createSemanticTools(userId, toolTurnContext);
   const essentialReadTools = createEssentialReadTools(userId);
 
   const allTools = [...semanticTools, ...essentialReadTools];
@@ -515,13 +516,14 @@ export function createOptimizedTools(userId: string): DynamicStructuredTool[] {
  */
 export function getToolsForMessage(
   userId: string,
-  message: string
+  message: string,
+  toolTurnContext?: ToolTurnContext
 ): DynamicStructuredTool[] {
-  // Use cached tools with intent-based filtering
   return toolRouterService.getToolsForMessage(
     userId,
     message,
-    () => createOptimizedTools(userId)
+    () => createOptimizedTools(userId, toolTurnContext),
+    toolTurnContext
   );
 }
 

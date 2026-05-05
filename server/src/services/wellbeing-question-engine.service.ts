@@ -11,7 +11,7 @@ import { stressService } from './stress.service.js';
 import { journalService } from './wellbeing/journal.service.js';
 import { energyService } from './wellbeing/energy.service.js';
 import { workoutPlanService } from './workout-plan.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { parseLlmJson } from '../helper/llm-json-parser.js';
 
 // ============================================

@@ -1,15 +1,25 @@
 /**
  * @file Buddy Suggestion Service
  * @description AI-driven buddy matching based on goal similarity, activity level,
- * streak compatibility, and competition overlap. Rule-based v1 (no embeddings).
+ * streak compatibility, and competition overlap. v2 with LLM-enriched match reasons.
  *
  * Weights: Goals 40%, Activity 25%, Streak 15%, Competitions 10%, Freshness 10%
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
+import { modelFactory } from './model-factory.service.js';
+import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 
 // ─── Types ───────────────────────────────────────────────────────────
+
+export interface SuggestedChallenge {
+  name: string;
+  description: string;
+  metric: string;
+  durationDays: number;
+}
 
 export interface BuddySuggestion {
   userId: string;
@@ -23,11 +33,25 @@ export interface BuddySuggestion {
   activityLevel: string;
   currentStreak: number;
   goalOverlap: Record<string, unknown>;
+  suggestedChallenge?: SuggestedChallenge | null;
 }
 
 // ─── Service ─────────────────────────────────────────────────────────
 
 class BuddySuggestionService {
+  private llm: BaseChatModel | null = null;
+  private _aiRateMap = new Map<string, number>();
+  private static AI_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 1 per 24h per user
+
+  private async getLLM(): Promise<BaseChatModel | null> {
+    if (this.llm) return this.llm;
+    try {
+      this.llm = modelFactory.getModel({ tier: 'default' });
+      return this.llm;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Get buddy suggestions for a user. Reads from cache first,
@@ -35,18 +59,18 @@ class BuddySuggestionService {
    */
   async getSuggestions(userId: string, limit = 10): Promise<BuddySuggestion[]> {
     try {
-      // Try cache first
       const cached = await query<{
         suggested_user_id: string;
         match_score: string;
         match_reason: string;
         goal_overlap: Record<string, unknown>;
+        suggested_challenge: SuggestedChallenge | null;
         first_name: string;
         last_name: string | null;
         avatar: string | null;
       }>(
         `SELECT bsc.suggested_user_id, bsc.match_score, bsc.match_reason, bsc.goal_overlap,
-                u.first_name, u.last_name, u.avatar
+                bsc.suggested_challenge, u.first_name, u.last_name, u.avatar
          FROM buddy_suggestions_cache bsc
          JOIN users u ON u.id = bsc.suggested_user_id AND u.is_active = true
          WHERE bsc.user_id = $1 AND bsc.dismissed = false
@@ -69,6 +93,7 @@ class BuddySuggestionService {
           activityLevel: 'active',
           currentStreak: 0,
           goalOverlap: r.goal_overlap || {},
+          suggestedChallenge: r.suggested_challenge || null,
         }));
       }
 
@@ -234,6 +259,9 @@ class BuddySuggestionService {
       scored.sort((a, b) => b._score - a._score);
       const top = scored.slice(0, limit);
 
+      // Enrich top suggestions with LLM (non-blocking, enriches in-place)
+      await this.enrichWithLLM(userId, userGoals.rows, top).catch(() => {});
+
       // Cache results (fire-and-forget)
       this.cacheResults(userId, top).catch(() => {});
 
@@ -243,6 +271,86 @@ class BuddySuggestionService {
         userId, error: error instanceof Error ? error.message : 'Unknown',
       });
       return [];
+    }
+  }
+
+  /**
+   * Enrich top suggestions with LLM-generated match reasons and challenge ideas.
+   * Rate-limited to 1 call per user per 24h. Falls back silently on failure.
+   */
+  private async enrichWithLLM(
+    userId: string,
+    userGoals: { pillar: string; category: string; target_value: string }[],
+    suggestions: (BuddySuggestion & { _score: number })[]
+  ): Promise<void> {
+    if (suggestions.length === 0) return;
+    if (!llmCircuitBreaker.isCallAllowed()) return;
+
+    const lastCall = this._aiRateMap.get(userId);
+    if (lastCall && Date.now() - lastCall < BuddySuggestionService.AI_COOLDOWN_MS) return;
+
+    const llm = await this.getLLM();
+    if (!llm) return;
+
+    try {
+      const top5 = suggestions.slice(0, 5);
+      const candidateSummaries = top5.map((s, i) =>
+        `${i + 1}. ${s.firstName} — pillar: ${s.primaryPillar || 'unknown'}, goal: ${s.primaryGoal || 'none'}, streak: ${s.currentStreak}d, activity: ${s.activityLevel}`
+      ).join('\n');
+
+      const userGoalSummary = userGoals.length > 0
+        ? userGoals.map(g => `${g.pillar}/${g.category}`).join(', ')
+        : 'no active goals';
+
+      const prompt = `You are a fitness accountability matching coach. Given a user's goals and potential buddy matches, generate personalized match reasons and a shared challenge suggestion for each pair.
+
+User goals: ${userGoalSummary}
+
+Candidates:
+${candidateSummaries}
+
+Return JSON array (no markdown, max ${top5.length} items):
+[{"index":1,"matchReason":"short personalized reason why they'd be great accountability partners","challenge":{"name":"short challenge name","description":"1-sentence description","metric":"workout|nutrition|wellbeing|steps|sleep","durationDays":7}}]
+
+Rules:
+- matchReason: 1 sentence, warm and motivating, reference specific shared/complementary goals
+- challenge: something that benefits BOTH users based on their goals
+- durationDays: 3, 7, 14, or 30`;
+
+      const response = await llm.invoke(prompt);
+      this._aiRateMap.set(userId, Date.now());
+
+      const text = typeof response.content === 'string' ? response.content : String(response.content);
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) return;
+
+      const enrichments = JSON.parse(jsonMatch[0]) as Array<{
+        index: number;
+        matchReason: string;
+        challenge?: { name: string; description: string; metric: string; durationDays: number };
+      }>;
+
+      for (const e of enrichments) {
+        const idx = e.index - 1;
+        if (idx >= 0 && idx < top5.length) {
+          if (e.matchReason) top5[idx].matchReason = e.matchReason;
+          if (e.challenge) {
+            top5[idx].suggestedChallenge = {
+              name: e.challenge.name,
+              description: e.challenge.description,
+              metric: e.challenge.metric || 'workout',
+              durationDays: e.challenge.durationDays || 7,
+            };
+          }
+        }
+      }
+
+      llmCircuitBreaker.recordSuccess();
+    } catch (error) {
+      llmCircuitBreaker.recordRateLimitError(error);
+      logger.warn('[BuddySuggestion] LLM enrichment failed, using rule-based reasons', {
+        userId, error: error instanceof Error ? error.message : 'Unknown',
+      });
     }
   }
 
@@ -262,25 +370,28 @@ class BuddySuggestionService {
   private async cacheResults(userId: string, suggestions: BuddySuggestion[]): Promise<void> {
     if (suggestions.length === 0) return;
 
-    // Clear old cache
     await query('DELETE FROM buddy_suggestions_cache WHERE user_id = $1', [userId]);
 
-    // Batch insert all suggestions in one query (avoids N+1)
-    const values: (string | number)[] = [];
+    const values: (string | number | null)[] = [];
     const placeholders: string[] = [];
     let idx = 1;
 
     for (const s of suggestions) {
-      placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`);
-      values.push(userId, s.userId, s.matchScore, s.matchReason, JSON.stringify(s.goalOverlap));
+      placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`);
+      values.push(
+        userId, s.userId, s.matchScore, s.matchReason,
+        JSON.stringify(s.goalOverlap),
+        s.suggestedChallenge ? JSON.stringify(s.suggestedChallenge) : null
+      );
     }
 
     await query(
-      `INSERT INTO buddy_suggestions_cache (user_id, suggested_user_id, match_score, match_reason, goal_overlap)
+      `INSERT INTO buddy_suggestions_cache (user_id, suggested_user_id, match_score, match_reason, goal_overlap, suggested_challenge)
        VALUES ${placeholders.join(', ')}
        ON CONFLICT (user_id, suggested_user_id) DO UPDATE SET
          match_score = EXCLUDED.match_score, match_reason = EXCLUDED.match_reason,
-         goal_overlap = EXCLUDED.goal_overlap, computed_at = NOW(), dismissed = false`,
+         goal_overlap = EXCLUDED.goal_overlap, suggested_challenge = EXCLUDED.suggested_challenge,
+         computed_at = NOW(), dismissed = false`,
       values
     );
   }

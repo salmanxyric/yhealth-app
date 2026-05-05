@@ -4,7 +4,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { generateTokens } from '../middlewares/auth.middleware.js';
 import { ApiError } from './ApiError.js';
 import { r2Service } from '../services/r2.service.js';

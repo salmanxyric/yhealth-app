@@ -5,13 +5,14 @@
  * and SOS emergency alerts. Respects consent at every step.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { accountabilityConsentService } from './accountability-consent.service.js';
 import { chatService } from './chat.service.js';
 import { messageService } from './message.service.js';
 import { socketService } from './socket.service.js';
 import { proactiveMessagingService } from './proactive-messaging.service.js';
+import { transformMessageForSocket } from '../utils/message-transform.util.js';
 
 // ============================================
 // TYPES
@@ -30,6 +31,8 @@ export interface AccountabilityTrigger {
   target_type: string;
   target_contact_id: string | null;
   target_group_id: string | null;
+  /** When target_type is app_chat: native Messages group chat id */
+  target_chat_id: string | null;
   message_type: string;
   message_template: string | null;
   cooldown_hours: number;
@@ -52,6 +55,7 @@ export interface CreateTriggerParams {
   target_type: string;
   target_contact_id?: string;
   target_group_id?: string;
+  target_chat_id?: string;
   message_type?: string;
   message_template?: string;
   cooldown_hours?: number;
@@ -69,6 +73,7 @@ export interface UpdateTriggerParams {
   target_type?: string;
   target_contact_id?: string;
   target_group_id?: string;
+  target_chat_id?: string | null;
   message_type?: string;
   message_template?: string;
   cooldown_hours?: number;
@@ -132,31 +137,49 @@ class AccountabilityTriggerService {
         throw new Error('Maximum of 50 active triggers allowed per user');
       }
 
-      // H3: Validate target ownership
-      if (trigger.target_contact_id) {
+      // H3: Validate target ownership / membership
+      if (trigger.target_type === 'contact') {
+        if (!trigger.target_contact_id) throw new Error('target_contact_id required for contact triggers');
         const own = await query<{ id: string }>(
           `SELECT id FROM accountability_contacts WHERE id = $1 AND user_id = $2 AND is_active = true`,
           [trigger.target_contact_id, userId]
         );
         if (own.rows.length === 0) throw new Error('Target contact not found or not owned by user');
-      }
-      if (trigger.target_group_id) {
+      } else if (trigger.target_type === 'group') {
+        if (!trigger.target_group_id) throw new Error('target_group_id required for accountability group triggers');
         const own = await query<{ id: string }>(
           `SELECT id FROM accountability_groups WHERE id = $1 AND user_id = $2 AND is_active = true`,
           [trigger.target_group_id, userId]
         );
         if (own.rows.length === 0) throw new Error('Target group not found or not owned by user');
+      } else if (trigger.target_type === 'app_chat') {
+        if (!trigger.target_chat_id) throw new Error('target_chat_id required for app group chat triggers');
+        const chatOk = await query<{ id: string }>(
+          `SELECT c.id FROM chats c
+           INNER JOIN chat_participants cp ON cp.chat_id = c.id AND cp.user_id = $2 AND cp.left_at IS NULL
+           WHERE c.id = $1 AND c.is_group_chat = true`,
+          [trigger.target_chat_id, userId]
+        );
+        if (chatOk.rows.length === 0) {
+          throw new Error('Group chat not found, not a group, or you are not an active member');
+        }
+      } else if (trigger.target_type !== 'emergency') {
+        throw new Error(`Invalid target_type: ${trigger.target_type}`);
       }
+
+      const targetContactId = trigger.target_type === 'contact' ? (trigger.target_contact_id || null) : null;
+      const targetGroupId = trigger.target_type === 'group' ? (trigger.target_group_id || null) : null;
+      const targetChatId = trigger.target_type === 'app_chat' ? (trigger.target_chat_id || null) : null;
 
       const result = await query(
         `INSERT INTO accountability_triggers (
            user_id, name, description,
            condition_type, condition_metric, condition_operator,
            condition_value, condition_window_days,
-           target_type, target_contact_id, target_group_id,
+           target_type, target_contact_id, target_group_id, target_chat_id,
            message_type, message_template,
            cooldown_hours, ai_intervene_first
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING *`,
         [
           userId,
@@ -168,8 +191,9 @@ class AccountabilityTriggerService {
           trigger.condition_value ?? null,
           trigger.condition_window_days ?? 3,
           trigger.target_type,
-          trigger.target_contact_id || null,
-          trigger.target_group_id || null,
+          targetContactId,
+          targetGroupId,
+          targetChatId,
           trigger.message_type || 'motivation',
           trigger.message_template || null,
           trigger.cooldown_hours ?? 48,
@@ -198,8 +222,8 @@ class AccountabilityTriggerService {
     try {
       const result = await query(
         `SELECT * FROM accountability_triggers
-         WHERE user_id = $1 AND is_active = true
-         ORDER BY created_at DESC`,
+         WHERE user_id = $1
+         ORDER BY is_active DESC, created_at DESC`,
         [userId]
       );
 
@@ -234,6 +258,7 @@ class AccountabilityTriggerService {
         'target_type',
         'target_contact_id',
         'target_group_id',
+        'target_chat_id',
         'message_type',
         'message_template',
         'cooldown_hours',
@@ -277,18 +302,27 @@ class AccountabilityTriggerService {
   }
 
   /**
-   * Soft-delete a trigger.
+   * Hard-delete a trigger.
+   *
+   * We used to soft-delete via `is_active = false`, but `getTriggers` returns
+   * all rows regardless of is_active (ordered by is_active DESC), so the
+   * "deleted" trigger reappeared on next fetch. The UI calls DELETE expecting
+   * the row to be gone — honor that. If you need an audit trail, archive to a
+   * history table here.
    */
   async deleteTrigger(userId: string, triggerId: string): Promise<void> {
     try {
-      await query(
-        `UPDATE accountability_triggers
-         SET is_active = false, updated_at = NOW()
+      const result = await query(
+        `DELETE FROM accountability_triggers
          WHERE id = $1 AND user_id = $2`,
         [triggerId, userId]
       );
 
-      logger.info(`Deleted accountability trigger ${triggerId} for user ${userId}`);
+      if ((result.rowCount ?? 0) === 0) {
+        logger.warn('Delete accountability trigger matched no rows', { userId, triggerId });
+      } else {
+        logger.info(`Deleted accountability trigger ${triggerId} for user ${userId}`);
+      }
     } catch (error) {
       logger.error('Failed to delete accountability trigger', { userId, triggerId, error });
       throw error;
@@ -674,6 +708,11 @@ class AccountabilityTriggerService {
     snapshot: Record<string, unknown>
   ): Promise<void> {
     try {
+      if (trigger.target_type === 'app_chat' && trigger.target_chat_id) {
+        await this.fireTriggerAppGroupChat(userId, trigger, snapshot);
+        return;
+      }
+
       // Resolve target contact user IDs
       const targetContacts = await this.resolveTargetContacts(
         userId,
@@ -749,13 +788,40 @@ class AccountabilityTriggerService {
           lastChatId = chat.id;
           notifiedUserIds.push(contact.contactUserId);
 
-          // Emit socket event for real-time delivery
-          socketService.emitToUser(contact.contactUserId, 'new_message', {
-            message: sentMessage,
+          const payload = {
             chatId: chat.id,
+            message: transformMessageForSocket(sentMessage),
+            senderId: userId,
             isAccountabilityMessage: true,
             triggerType: trigger.condition_type,
-          });
+          };
+          socketService.emitToChat(chat.id, 'newMessage', payload);
+          socketService.emitToUser(contact.contactUserId, 'newMessage', payload);
+          socketService.emitToUser(userId, 'newMessage', payload);
+          try {
+            const preview = messageContent.slice(0, 100);
+            const sentAt =
+              sentMessage.created_at instanceof Date
+                ? sentMessage.created_at.toISOString()
+                : new Date().toISOString();
+            socketService.emitToUser(userId, 'chatListUpdate', {
+              chatId: chat.id,
+              lastMessage: preview,
+              senderId: userId,
+              sentAt,
+            });
+            socketService.emitToUser(contact.contactUserId, 'chatListUpdate', {
+              chatId: chat.id,
+              lastMessage: preview,
+              senderId: userId,
+              sentAt,
+            });
+          } catch (e) {
+            logger.warn('[AccountabilityTrigger] chatListUpdate emit failed', {
+              userId,
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
         } catch (contactError) {
           logger.error(
             `Failed to send accountability message to contact ${contact.contactId}`,
@@ -801,6 +867,178 @@ class AccountabilityTriggerService {
   }
 
   /**
+   * Send one accountability message into a native app group chat.
+   * Every other active participant must be an accountability contact with per-type consent.
+   */
+  private async fireTriggerAppGroupChat(
+    userId: string,
+    trigger: AccountabilityTrigger,
+    snapshot: Record<string, unknown>
+  ): Promise<void> {
+    const chatId = trigger.target_chat_id;
+    if (!chatId) {
+      await this.logTriggerExecution(
+        trigger.id,
+        userId,
+        snapshot,
+        'blocked_consent',
+        false
+      );
+      return;
+    }
+
+    const others = await query<{ user_id: string }>(
+      `SELECT cp.user_id
+       FROM chat_participants cp
+       WHERE cp.chat_id = $1 AND cp.left_at IS NULL AND cp.user_id <> $2`,
+      [chatId, userId]
+    );
+
+    if (others.rows.length === 0) {
+      await this.logTriggerExecution(
+        trigger.id,
+        userId,
+        snapshot,
+        'blocked_consent',
+        false
+      );
+      return;
+    }
+
+    const contactRows: Array<{ contactId: string; contactUserId: string }> = [];
+    for (const row of others.rows) {
+      const ac = await query<{ id: string }>(
+        `SELECT id FROM accountability_contacts
+         WHERE user_id = $1 AND contact_user_id = $2 AND is_active = true`,
+        [userId, row.user_id]
+      );
+      if (ac.rows.length === 0) {
+        await this.logTriggerExecution(
+          trigger.id,
+          userId,
+          { ...snapshot, block_reason: 'participant_not_accountability_contact', missing_user_id: row.user_id },
+          'blocked_consent',
+          false
+        );
+        return;
+      }
+      const contactId = ac.rows[0]!.id;
+      const consented = await accountabilityConsentService.isConsentedForMessageType(
+        userId,
+        contactId,
+        trigger.message_type
+      );
+      if (!consented) {
+        await this.logTriggerExecution(
+          trigger.id,
+          userId,
+          { ...snapshot, block_reason: 'participant_consent_denied', contact_id: contactId },
+          'blocked_consent',
+          false
+        );
+        return;
+      }
+      contactRows.push({ contactId, contactUserId: row.user_id });
+    }
+
+    const userResult = await query(
+      `SELECT first_name, last_name FROM users WHERE id = $1`,
+      [userId]
+    );
+    const userName = userResult.rows[0]?.first_name || 'Your friend';
+
+    const messageContent = this.processTemplate(
+      trigger.message_template ||
+        DEFAULT_TEMPLATES[trigger.message_type] ||
+        DEFAULT_TEMPLATES.motivation,
+      {
+        name: userName,
+        days: trigger.condition_window_days,
+        metric: trigger.condition_metric || 'health goal',
+        value: snapshot.current_value as string | undefined,
+      }
+    );
+
+    try {
+      const sentMessage = await messageService.sendMessage({
+        chatId,
+        senderId: userId,
+        content: messageContent,
+        contentType: 'text',
+      });
+
+      const notifiedUserIds = contactRows.map((c) => c.contactUserId);
+      const payload = {
+        chatId,
+        message: transformMessageForSocket(sentMessage),
+        senderId: userId,
+        isAccountabilityMessage: true,
+        triggerType: trigger.condition_type,
+      };
+
+      socketService.emitToChat(chatId, 'newMessage', payload);
+      const allParticipants = await query<{ user_id: string }>(
+        `SELECT user_id FROM chat_participants WHERE chat_id = $1 AND left_at IS NULL`,
+        [chatId]
+      );
+      for (const p of allParticipants.rows) {
+        socketService.emitToUser(p.user_id, 'newMessage', payload);
+      }
+
+      try {
+        const preview = messageContent.slice(0, 100);
+        const sentAt =
+          sentMessage.created_at instanceof Date
+            ? sentMessage.created_at.toISOString()
+            : new Date().toISOString();
+        for (const p of allParticipants.rows) {
+          socketService.emitToUser(p.user_id, 'chatListUpdate', {
+            chatId,
+            lastMessage: preview,
+            senderId: userId,
+            sentAt,
+          });
+        }
+      } catch (e) {
+        logger.warn('[AccountabilityTrigger] group chatListUpdate failed', {
+          chatId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+
+      await this.logTriggerExecution(
+        trigger.id,
+        userId,
+        snapshot,
+        'fired',
+        true,
+        sentMessage.id,
+        chatId,
+        notifiedUserIds
+      );
+
+      await query(
+        `UPDATE accountability_triggers
+         SET last_triggered_at = NOW(),
+               trigger_count = trigger_count + 1,
+               updated_at = NOW()
+         WHERE id = $1`,
+        [trigger.id]
+      );
+
+      logger.info(
+        `Fired accountability trigger "${trigger.name}" (app group chat) for user ${userId}, chat ${chatId}`
+      );
+    } catch (err) {
+      logger.error('[AccountabilityTrigger] app group chat send failed', {
+        userId,
+        chatId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
    * Resolve the target contacts for a trigger based on target_type.
    * Returns an array of { contactId, contactUserId }.
    */
@@ -809,6 +1047,9 @@ class AccountabilityTriggerService {
     trigger: AccountabilityTrigger
   ): Promise<Array<{ contactId: string; contactUserId: string }>> {
     switch (trigger.target_type) {
+      case 'app_chat':
+        return [];
+
       case 'contact': {
         if (!trigger.target_contact_id) return [];
         const result = await query<{ id: string; contact_user_id: string }>(
@@ -989,13 +1230,16 @@ class AccountabilityTriggerService {
 
           notifiedUserIds.push(contact.contact_user_id);
 
-          // Emit socket event
-          socketService.emitToUser(contact.contact_user_id, 'new_message', {
-            message: sentMessage,
+          const sosPayload = {
             chatId: chat.id,
+            message: transformMessageForSocket(sentMessage),
+            senderId: userId,
             isAccountabilityMessage: true,
             triggerType: 'sos',
-          });
+          };
+          socketService.emitToChat(chat.id, 'newMessage', sosPayload);
+          socketService.emitToUser(contact.contact_user_id, 'newMessage', sosPayload);
+          socketService.emitToUser(userId, 'newMessage', sosPayload);
         } catch (contactError) {
           logger.error(
             `Failed to send SOS to emergency contact ${contact.id}`,

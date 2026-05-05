@@ -4,7 +4,7 @@
  * Runs weekly, processes active users in batches of 10.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { motivationTierService } from '../services/motivation-tier.service.js';
 

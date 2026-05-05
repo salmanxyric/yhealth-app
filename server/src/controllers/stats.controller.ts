@@ -3,7 +3,7 @@ import type { AuthenticatedRequest } from '../types/index.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import cache from '../services/cache.service.js';
 import type { UserPlanRow, IActivity, DayOfWeek } from './plan/plan.types.js';

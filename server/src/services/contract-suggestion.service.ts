@@ -7,8 +7,11 @@
  * No LLM needed for v1 — pure SQL analytics with template mapping.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
+import { modelFactory } from './model-factory.service.js';
+import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -215,11 +218,19 @@ const suggestCalorieContract: SuggestionRule = async (userId) => {
  */
 const suggestSleepContract: SuggestionRule = async (userId) => {
   const result = await query<{ low_sleep_days: string; total_days: string }>(
+    // `value` is JSONB — it may be a bare number ({"value":7.5} → 7.5), a
+    // wrapped object (`{"hours": 7.5}`), or a stringified number. Normalise
+    // all three to numeric so COALESCE doesn't hit the jsonb ↔ integer
+    // type mismatch Postgres was complaining about.
     `WITH sleep_data AS (
       SELECT recorded_at::date AS d,
         COALESCE(
-          (data->>'duration_hours')::numeric,
-          (data->>'sleep_hours')::numeric,
+          NULLIF(value->>'hours', '')::numeric,
+          NULLIF(value->>'value', '')::numeric,
+          CASE
+            WHEN jsonb_typeof(value) = 'number' THEN (value)::text::numeric
+            ELSE NULL
+          END,
           0
         ) AS hours
       FROM health_data_records
@@ -268,6 +279,97 @@ const SUGGESTION_RULES: SuggestionRule[] = [
 // ─── Service ─────────────────────────────────────────────────────────
 
 class ContractSuggestionService {
+  private _llm: BaseChatModel | null = null;
+  private _aiRateMap = new Map<string, number>();
+
+  private get llm(): BaseChatModel {
+    if (!this._llm) {
+      this._llm = modelFactory.getModel({ tier: 'light', temperature: 0.7, maxTokens: 512 });
+    }
+    return this._llm;
+  }
+
+  /**
+   * AI-enhanced suggestion: analyzes user behavior and generates a personalized contract.
+   * Rate-limited to 1 request per hour per user.
+   */
+  async getAISuggestion(userId: string): Promise<ContractSuggestion | null> {
+    try {
+      const lastCall = this._aiRateMap.get(userId) || 0;
+      if (Date.now() - lastCall < 3600_000) {
+        logger.info('[ContractSuggestions] AI rate limited', { userId });
+        return null;
+      }
+
+      if (!llmCircuitBreaker.isCallAllowed()) {
+        return null;
+      }
+
+      const snapshot = await query<{
+        recent_workouts: string;
+        avg_calories: string;
+        current_streak: string;
+        active_goals: string;
+        missed_last_week: string;
+      }>(
+        `SELECT
+          COALESCE((SELECT COUNT(*) FROM activity_logs WHERE user_id = $1 AND status = 'completed' AND scheduled_date >= CURRENT_DATE - 7), 0) as recent_workouts,
+          COALESCE((SELECT ROUND(AVG(calories)) FROM meal_logs WHERE user_id = $1 AND eaten_at >= CURRENT_DATE - 7), 0) as avg_calories,
+          COALESCE((SELECT current_streak FROM user_streaks WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1), 0) as current_streak,
+          COALESCE((SELECT COUNT(*) FROM user_goals WHERE user_id = $1 AND status = 'active'), 0) as active_goals,
+          COALESCE((SELECT COUNT(*) FROM activity_logs WHERE user_id = $1 AND status = 'missed' AND scheduled_date >= CURRENT_DATE - 7), 0) as missed_last_week`,
+        [userId]
+      );
+
+      const data = snapshot.rows[0];
+      if (!data) return null;
+
+      const prompt = `You are a fitness accountability coach. Based on this user's data, suggest ONE accountability contract.
+
+User stats (last 7 days):
+- Workouts completed: ${data.recent_workouts}
+- Workouts missed: ${data.missed_last_week}
+- Average daily calories: ${data.avg_calories}
+- Current streak: ${data.current_streak} days
+- Active goals: ${data.active_goals}
+
+Return JSON (no markdown):
+{"title":"...","description":"...","reason":"...","conditionType":"missed_activity|calorie_exceeded|streak_break|missed_goal|sleep_deficit","conditionMetric":"gym_sessions|calories|steps|sleep_hours|null","conditionOperator":"lt|gt|eq|null","conditionValue":number|null,"conditionWindowDays":number,"penaltyType":"donation|xp_loss|social_alert","penaltyAmount":number,"penaltyCurrency":"PKR"}`;
+
+      const response = await this.llm.invoke(prompt);
+      this._aiRateMap.set(userId, Date.now());
+
+      const text = typeof response.content === 'string' ? response.content : String(response.content);
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      return {
+        id: `ai_suggest_${Date.now()}`,
+        title: parsed.title || 'AI-Suggested Contract',
+        description: parsed.description || '',
+        reason: parsed.reason || 'Based on your recent activity patterns',
+        conditionType: parsed.conditionType || 'missed_activity',
+        conditionMetric: parsed.conditionMetric || null,
+        conditionOperator: parsed.conditionOperator || null,
+        conditionValue: parsed.conditionValue ?? null,
+        conditionWindowDays: parsed.conditionWindowDays || 1,
+        penaltyType: parsed.penaltyType || 'xp_loss',
+        penaltyAmount: parsed.penaltyAmount || 25,
+        penaltyCurrency: parsed.penaltyCurrency || 'PKR',
+        confidence: 0.85,
+      };
+    } catch (error) {
+      llmCircuitBreaker.recordRateLimitError(error);
+      logger.error('[ContractSuggestions] AI suggestion failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return null;
+    }
+  }
+
   /**
    * Get personalized contract suggestions for a user.
    * Runs all rules in parallel, filters nulls, sorts by confidence.

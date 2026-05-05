@@ -7,7 +7,7 @@
  * in the environment configuration.
  */
 
-import { query, closePool } from './pg.js';
+import { query, closePool } from '../config/database.config.js';
 
 // Fixed UUID for AI Coach - must match AI_COACH_USER_ID in .env
 const AI_COACH_USER_ID = '00000000-0000-0000-0000-000000000001';

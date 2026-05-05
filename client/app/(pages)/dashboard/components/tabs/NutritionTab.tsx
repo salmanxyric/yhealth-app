@@ -48,7 +48,7 @@ import { RecipeDetailsModal } from "./nutrition/RecipeDetailsModal";
 import { TodayTab, PlansTab, RecipesTab } from "./nutrition/tabs";
 import { MealHistoryTab } from "./nutrition/MealHistoryTab";
 import { PRESET_FOODS, FOOD_CATEGORY_ICONS, getFoodIcon } from "./nutrition/constants";
-import { MacroCircularChart } from "./nutrition/MacroCircularChart";
+
 import { DashboardUnderlineTabs } from "../DashboardUnderlineTabs";
 
 // ============================================
@@ -178,7 +178,16 @@ function transformApiMealToClient(meal: MealLog): ClientMeal {
   const time = `${hours}:${minutes}`;
 
   // Use meal-level macros first, then sum from food items as fallback
-  const foods: MealFood[] = meal.foods || [];
+  const foods: MealFood[] = (meal.foods || []).map((f: MealFood, idx: number) => ({
+    ...f,
+    id: f.id || `food-${meal.id}-${idx}`,
+    name: f.name || 'Unknown food',
+    calories: f.calories || 0,
+    protein: f.protein || 0,
+    carbs: f.carbs || 0,
+    fat: f.fat || 0,
+    portion: f.portion || '1 serving',
+  }));
   let protein = meal.proteinGrams || 0;
   let carbs = meal.carbsGrams || 0;
   let fat = meal.fatGrams || 0;
@@ -2114,7 +2123,7 @@ export function NutritionTab() {
   const parseRecipeAnalysis = useCallback((analysis: string) => {
     try {
       // Strip markdown code fences before any parsing
-      let cleaned = analysis
+      const cleaned = analysis
         .replace(/```json\s*/gi, '')
         .replace(/```\s*/g, '')
         .trim();
@@ -2286,7 +2295,7 @@ export function NutritionTab() {
           if (recipeData.name || (recipeData.ingredients && recipeData.ingredients.length > 0)) {
             return recipeData;
           }
-        } catch (jsonError) {
+        } catch (_jsonError) {
           // Attempt to repair truncated JSON before falling back
           console.warn("[RecipeAnalysis] JSON parse failed, attempting repair...");
           try {
@@ -3592,7 +3601,7 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
                                 <p className={`text-sm font-medium truncate ${muted ? 'text-slate-500 line-through' : 'text-white'}`}>
                                   {item.name}
                                 </p>
-                                {item.id.startsWith('ai-') && (
+                                {item.id?.startsWith('ai-') && (
                                   <span className="px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[9px] font-bold uppercase tracking-wider shrink-0">
                                     AI
                                   </span>

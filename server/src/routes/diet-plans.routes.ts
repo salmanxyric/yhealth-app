@@ -9,7 +9,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { ApiError } from '../utils/ApiError.js';
-import { query as dbQuery } from '../database/pg.js';
+import { query as dbQuery } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { aiProviderService } from '../services/ai-provider.service.js';
 import { reminderSchedulerService } from '../services/reminder-scheduler.service.js';

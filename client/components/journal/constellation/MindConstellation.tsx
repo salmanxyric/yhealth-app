@@ -2,22 +2,40 @@
 
 /**
  * @file MindConstellation Component
- * @description Orchestrator for the Mind Observatory — hybrid Canvas + DOM + SVG
- * constellation visualization. Manages data fetching, filter state, and composes
- * all sub-layers: background, SVG lines, mind core, star layer, and UI chrome.
+ * @description Knowledge-graph style Mind Observatory with pan + zoom canvas.
+ * Renders concentric dashed orbits, category-colored satellites with icons,
+ * and a right-side control rail (pan, recenter, fullscreen) plus bottom-right
+ * zoom indicator and mini-map.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 import { AnimatePresence } from "framer-motion";
-import { Stars, Sun } from "lucide-react";
+import {
+  Hand,
+  Loader2,
+  Maximize2,
+  Minus,
+  Plus,
+  Target as TargetIcon,
+} from "lucide-react";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { journalService } from "@/src/shared/services/wellbeing.service";
 import type { JournalEntry } from "@shared/types/domain/wellbeing";
 
 import {
+  CATEGORIES,
   computeStarVisuals,
   findConsecutivePairs,
   formatStarLabel,
+  getEntryCategory,
+  getEntryTitle,
   polarToXY,
   seededRandom,
 } from "./constellation-math";
@@ -41,9 +59,6 @@ import { ConstellationEmptyState } from "./ConstellationEmptyState";
 
 interface MindConstellationProps {
   onOpenNewEntry: () => void;
-  onStartCheckin: () => void;
-  hasCheckedInToday: boolean;
-  checkinLoading: boolean;
   onSwitchToList: () => void;
   onEditEntry?: (entry: JournalEntry) => void;
 }
@@ -52,9 +67,13 @@ interface MindConstellationProps {
 // CONSTANTS
 // ============================================
 
-const INNER_RADIUS = 0.15;
-const OUTER_RADIUS = 0.42;
-const TILT_Y = 0.52;
+// Two concentric orbit rings: inner + outer (knowledge-graph style)
+const ORBIT_FRACTIONS = [0.22, 0.36]; // fraction of min(w,h) per orbit
+const TILT_Y = 0.6;
+
+const MIN_ZOOM = 0.4;
+const MAX_ZOOM = 2.5;
+const DEFAULT_ZOOM = 1;
 
 // ============================================
 // HELPERS
@@ -68,14 +87,16 @@ function getDateRange(filter: FilterPeriod): { startDate?: string; endDate?: str
       endDate: `${filter.year}-12-31`,
     };
   }
-  // month
-  const _start = new Date(filter.year, filter.month, 1);
-  const end = new Date(filter.year, filter.month + 1, 0); // last day of month
+  const end = new Date(filter.year, filter.month + 1, 0);
   const pad = (n: number) => String(n).padStart(2, "0");
   return {
     startDate: `${filter.year}-${pad(filter.month + 1)}-01`,
     endDate: `${filter.year}-${pad(filter.month + 1)}-${pad(end.getDate())}`,
   };
+}
+
+function clampZoom(z: number) {
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
 }
 
 // ============================================
@@ -84,9 +105,6 @@ function getDateRange(filter: FilterPeriod): { startDate?: string; endDate?: str
 
 export function MindConstellation({
   onOpenNewEntry,
-  onStartCheckin,
-  hasCheckedInToday,
-  checkinLoading,
   onSwitchToList,
   onEditEntry,
 }: MindConstellationProps) {
@@ -99,7 +117,6 @@ export function MindConstellation({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
       if (rect) setSize({ width: rect.width, height: rect.height });
@@ -143,7 +160,6 @@ export function MindConstellation({
     fetchEntries();
   }, [fetchEntries]);
 
-  // Refresh on journal-logged event
   useEffect(() => {
     const handler = () => fetchEntries();
     window.addEventListener("journal-logged", handler);
@@ -156,13 +172,9 @@ export function MindConstellation({
     for (const entry of entries) {
       const dateKey = entry.loggedAt.split("T")[0];
       const existing = groups.get(dateKey);
-      if (existing) {
-        existing.push(entry);
-      } else {
-        groups.set(dateKey, [entry]);
-      }
+      if (existing) existing.push(entry);
+      else groups.set(dateKey, [entry]);
     }
-    // Sort entries within each group by time (newest first)
     for (const group of groups.values()) {
       group.sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime());
     }
@@ -172,7 +184,6 @@ export function MindConstellation({
   // --- Interaction state ---
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [clickedEntries, setClickedEntries] = useState<JournalEntry[] | null>(null);
-
   const clearClickedEntries = useCallback(() => setClickedEntries(null), []);
 
   // --- Engine ---
@@ -183,7 +194,90 @@ export function MindConstellation({
     disabled: prefersReducedMotion,
   });
 
-  // --- Sorted date keys (oldest first → innermost orbit, newest → outermost) ---
+  // --- Pan/Zoom state ---
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+
+  const resetView = useCallback(() => {
+    setZoom(DEFAULT_ZOOM);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  const zoomIn = useCallback(() => setZoom((z) => clampZoom(z + 0.15)), []);
+  const zoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.15)), []);
+
+  const handleWheel = useCallback((e: ReactWheelEvent<HTMLDivElement>) => {
+    if (!e.ctrlKey && !e.metaKey) return; // only zoom on ctrl/meta + wheel
+    e.preventDefault();
+    const delta = -e.deltaY * 0.002;
+    setZoom((z) => clampZoom(z + delta));
+  }, []);
+
+  // Start panning only on mousedown inside the canvas background
+  // (not on satellites / header / modals / controls). We intentionally listen
+  // via document for move/up so ending a drag outside the canvas still works
+  // and never captures pointer globally.
+  const handleCanvasMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      // Ignore drags that start inside anything interactive
+      if (
+        target.closest("[data-satellite]") ||
+        target.closest("button") ||
+        target.closest("a") ||
+        target.closest("[role='dialog']")
+      ) {
+        return;
+      }
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startPan = { x: pan.x, y: pan.y };
+      setIsPanning(true);
+
+      const onMove = (ev: MouseEvent) => {
+        setPan({
+          x: startPan.x + (ev.clientX - startX),
+          y: startPan.y + (ev.clientY - startY),
+        });
+      };
+      const onUp = () => {
+        setIsPanning(false);
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [pan.x, pan.y]
+  );
+
+  // --- Fullscreen ---
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const toggleFullscreen = useCallback(async () => {
+    const el = containerRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) {
+        await el.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  // --- Sorted date keys ---
   const sortedDateKeys = useMemo(
     () =>
       [...dateGroups.keys()].sort(
@@ -192,43 +286,55 @@ export function MindConstellation({
     [dateGroups]
   );
 
-  // --- Representative entries (one per date, for star visuals) ---
   const sortedRepEntries = useMemo(
     () => sortedDateKeys.map((dk) => dateGroups.get(dk)![0]),
     [sortedDateKeys, dateGroups]
   );
 
-  // --- Compute screen positions (1 star per date) ---
+  // --- Screen positions (satellites distributed on 2 concentric orbits) ---
   const cx = size.width / 2;
   const cy = size.height / 2;
   const minDim = Math.min(size.width, size.height);
 
+  const orbitRadii = useMemo(
+    () => ORBIT_FRACTIONS.map((f) => f * minDim),
+    [minDim]
+  );
+
   const screenStars: ScreenStar[] = useMemo(() => {
     if (sortedDateKeys.length === 0 || minDim === 0) return [];
 
+    // Split entries into orbit bands
+    const half = Math.ceil(sortedDateKeys.length / 2);
+
     return sortedDateKeys.map((dateKey, i) => {
       const groupEntries = dateGroups.get(dateKey)!;
-      const repEntry = groupEntries[0]; // latest entry for the day
+      const repEntry = groupEntries[0];
       const count = groupEntries.length;
 
-      const t = sortedDateKeys.length === 1 ? 0 : i / (sortedDateKeys.length - 1);
-      const radiusFrac = INNER_RADIUS + (OUTER_RADIUS - INNER_RADIUS) * t;
-      const angle = seededRandom(repEntry.id) * Math.PI * 2;
-      const radiusPx = radiusFrac * minDim;
+      const orbitIdx = i < half ? 0 : 1;
+      const radiusPx = orbitRadii[orbitIdx] ?? orbitRadii[0];
+      const onOrbitCount = orbitIdx === 0 ? half : sortedDateKeys.length - half;
+      const indexInOrbit = orbitIdx === 0 ? i : i - half;
+      const baseAngle = (indexInOrbit / Math.max(1, onOrbitCount)) * Math.PI * 2;
+      const jitter = (seededRandom(repEntry.id) - 0.5) * 0.3; // ±0.15 rad
+      const angle = baseAngle + jitter;
 
-      const { x: dx, y: dy } = polarToXY(angle + rotationAngle, radiusPx, TILT_Y);
+      const { x: dx, y: dy } = polarToXY(angle + rotationAngle * 0.42, radiusPx, TILT_Y);
       const visuals = computeStarVisuals(repEntry);
 
-      // Scale star size with entry count
-      const sizeBoost = Math.min((count - 1) * 5, 20);
+      // Category-driven overrides
+      const category = getEntryCategory(repEntry);
+      const catMeta = CATEGORIES[category];
+      const title = getEntryTitle(repEntry, category);
 
       return {
         id: repEntry.id,
         x: cx + dx + parallaxX,
         y: cy + dy + parallaxY,
-        domSize: visuals.domSize + sizeBoost,
-        color: visuals.color,
-        glowColor: visuals.glowColor,
+        domSize: visuals.domSize,
+        color: catMeta.color,
+        glowColor: `${catMeta.color}88`,
         brightness: visuals.brightness,
         twinkleSpeed: visuals.twinkleSpeed,
         twinklePhase: visuals.twinklePhase,
@@ -236,17 +342,18 @@ export function MindConstellation({
         sentimentScore: repEntry.sentimentScore,
         entryCount: count,
         dateKey,
+        category,
+        iconName: catMeta.iconName,
+        title,
       };
     });
-  }, [sortedDateKeys, dateGroups, rotationAngle, parallaxX, parallaxY, cx, cy, minDim]);
+  }, [sortedDateKeys, dateGroups, orbitRadii, rotationAngle, parallaxX, parallaxY, cx, cy, minDim]);
 
-  // --- Consecutive-day pairs ---
   const consecutivePairs = useMemo(
     () => findConsecutivePairs(sortedRepEntries),
     [sortedRepEntries]
   );
 
-  // --- Line points for SVG ---
   const linePoints = useMemo(
     () => screenStars.map((s) => ({ x: s.x, y: s.y, color: s.color })),
     [screenStars]
@@ -277,13 +384,16 @@ export function MindConstellation({
     [clearClickedEntries, fetchEntries]
   );
 
-  // --- Hovered tooltip data ---
+  // --- Tooltip position ---
   const hoveredDateKey = hoveredIndex !== null ? sortedDateKeys[hoveredIndex] : null;
   const hoveredEntries = hoveredDateKey ? dateGroups.get(hoveredDateKey) ?? null : null;
   const hoveredPosition =
     hoveredIndex !== null && screenStars[hoveredIndex]
       ? { x: screenStars[hoveredIndex].x, y: screenStars[hoveredIndex].y }
       : null;
+
+  // Zoom percentage
+  const zoomPct = Math.round(zoom * 100);
 
   // ============================================
   // RENDER
@@ -292,90 +402,151 @@ export function MindConstellation({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[calc(100dvh-5rem)] md:h-[calc(100dvh)] overflow-hidden"
-      style={{ background: "#02020a" }}
+      className="relative w-full h-[calc(100dvh-5rem)] overflow-hidden"
+      style={{
+        background: "#02020a",
+        cursor: isPanning ? "grabbing" : "default",
+      }}
+      onMouseDown={handleCanvasMouseDown}
+      onWheel={handleWheel}
     >
-      {/* Layer 0: Canvas background (nebula + micro-stars) */}
-      <ConstellationBackground width={size.width} height={size.height} />
-
-      {/* Layer 5: SVG constellation lines */}
-      <ConstellationSVGLines
+      {/* Layer 0: Canvas background */}
+      <ConstellationBackground
         width={size.width}
         height={size.height}
-        cx={cx + parallaxX}
-        cy={cy + parallaxY}
-        stars={linePoints}
-        consecutivePairs={consecutivePairs}
+        animateGalaxy={!prefersReducedMotion}
       />
 
-      {/* Layer 10: Mind Core (CSS-animated orb) */}
-      <MindCore cx={cx + parallaxX} cy={cy + parallaxY} />
+      {/* Canvas (pan + zoom transformed) */}
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: "center center",
+          transition: isPanning ? "none" : "transform 0.18s ease-out",
+        }}
+      >
+        <ConstellationSVGLines
+          width={size.width}
+          height={size.height}
+          cx={cx + parallaxX}
+          cy={cy + parallaxY}
+          stars={linePoints}
+          consecutivePairs={consecutivePairs}
+          orbitRadii={orbitRadii}
+          tiltY={TILT_Y}
+          prefersReducedMotion={prefersReducedMotion}
+        />
 
-      {/* Layer 15: DOM Stars */}
-      <ObservatoryStarLayer
-        stars={screenStars}
-        hoveredIndex={hoveredIndex}
-        onHover={setHoveredIndex}
-        onClick={handleStarClick}
-      />
+        <MindCore cx={cx + parallaxX} cy={cy + parallaxY} />
 
-      {/* Layer 30: UI chrome */}
+        <div data-satellite="true" className="contents">
+          <ObservatoryStarLayer
+            stars={screenStars}
+            hoveredIndex={hoveredIndex}
+            onHover={setHoveredIndex}
+            onClick={handleStarClick}
+          />
+        </div>
+      </div>
+
+      {/* UI chrome (fixed, outside the pan/zoom transform) */}
       <ObservatoryHeader
         entryCount={entries.length}
         onNewEntry={onOpenNewEntry}
+        filter={filter}
+        onFilterChange={setFilter}
       />
 
-      <ObservatoryFilterBar filter={filter} onFilterChange={setFilter} />
+      {/* Mobile-only filter row (shown below header on small screens) */}
+      <div className="md:hidden absolute left-0 right-0 top-[92px] flex justify-center" style={{ zIndex: 30 }}>
+        <ObservatoryFilterBar filter={filter} onFilterChange={setFilter} />
+      </div>
 
-      {/* Check-in banner */}
-      {!checkinLoading && !hasCheckedInToday && (
-        <div
-          className="absolute left-1/2 -translate-x-1/2 flex justify-center"
-          style={{ top: 112, zIndex: 30 }}
+      {/* Right-side control rail */}
+      <div
+        className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2"
+        style={{ zIndex: 30 }}
+      >
+        <CanvasToolButton label="Pan" onClick={() => { /* pan is always-on */ }} active>
+          <Hand className="w-[18px] h-[18px]" />
+        </CanvasToolButton>
+        <CanvasToolButton label="Re-center" onClick={resetView}>
+          <TargetIcon className="w-[18px] h-[18px]" />
+        </CanvasToolButton>
+        <CanvasToolButton
+          label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          onClick={toggleFullscreen}
         >
-          <button
-            onClick={onStartCheckin}
-            className="flex items-center gap-3 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 backdrop-blur-sm hover:bg-amber-500/20 transition-all observatory-font-display"
-            style={{ fontSize: 10, letterSpacing: "0.12em" }}
-          >
-            <Sun className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-amber-300">DAILY CHECK-IN</span>
-          </button>
-        </div>
-      )}
+          <Maximize2 className="w-[18px] h-[18px]" />
+        </CanvasToolButton>
+      </div>
 
-      <ObservatoryMoodLegend
-        starCount={screenStars.length}
-        onSwitchToList={onSwitchToList}
+      {/* Bottom-right zoom controls */}
+      <div
+        className="absolute right-4 bottom-[96px] flex items-center gap-1 rounded-full px-1 h-[36px]"
+        style={{
+          zIndex: 30,
+          border: "1px solid rgba(255,255,255,0.12)",
+          backgroundColor: "rgba(8,8,16,0.8)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <button
+          onClick={zoomOut}
+          aria-label="Zoom out"
+          className="w-7 h-7 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <Minus className="w-4 h-4" />
+        </button>
+        <span className="text-[12px] text-white/80 font-medium min-w-[42px] text-center">
+          {zoomPct}%
+        </span>
+        <button
+          onClick={zoomIn}
+          aria-label="Zoom in"
+          className="w-7 h-7 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Mini-map */}
+      <MiniMap
+        stars={screenStars}
+        width={size.width}
+        height={size.height}
+        pan={pan}
+        zoom={zoom}
       />
+
+      <ObservatoryMoodLegend onSwitchToList={onSwitchToList} />
 
       {/* Loading overlay */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center z-20">
-          <div className="flex flex-col items-center gap-3 text-white/40">
-            <Stars className="w-5 h-5 animate-pulse" />
-            <span
-              className="observatory-font-display"
-              style={{ fontSize: 10, letterSpacing: "0.15em" }}
-            >
-              MAPPING REFLECTIONS...
-            </span>
+          <div className="flex flex-col items-center gap-3 text-white/60">
+            <Loader2 className="w-5 h-5 animate-spin" style={{ color: "#10b981" }} />
+            <span className="text-[12px]">Mapping reflections...</span>
           </div>
         </div>
       )}
 
-      {/* Layer 40: Tooltip */}
+      {/* Tooltip */}
       <AnimatePresence>
         {hoveredEntries && hoveredPosition && (
           <StarTooltip
             entries={hoveredEntries}
-            position={hoveredPosition}
+            position={{
+              x: hoveredPosition.x * zoom + pan.x + ((1 - zoom) * size.width) / 2,
+              y: hoveredPosition.y * zoom + pan.y + ((1 - zoom) * size.height) / 2,
+            }}
             label={formatStarLabel(hoveredEntries[0].loggedAt)}
           />
         )}
       </AnimatePresence>
 
-      {/* Layer 40: Entry modal */}
+      {/* Modal */}
       <AnimatePresence>
         {clickedEntries && (
           <JournalEntryModal
@@ -391,6 +562,106 @@ export function MindConstellation({
       {!isLoading && entries.length === 0 && (
         <ConstellationEmptyState onCreateEntry={onOpenNewEntry} />
       )}
+
+      {/* Reference: suppress unused warning */}
+      <span className="hidden">{now.getFullYear()}</span>
+    </div>
+  );
+}
+
+// ============================================
+// SUBCOMPONENTS
+// ============================================
+
+function CanvasToolButton({
+  children,
+  label,
+  onClick,
+  active,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="w-10 h-10 rounded-[10px] flex items-center justify-center transition-colors"
+      style={{
+        border: "1px solid rgba(255,255,255,0.12)",
+        backgroundColor: active ? "rgba(16,185,129,0.18)" : "rgba(8,8,16,0.8)",
+        color: active ? "#10b981" : "rgba(255,255,255,0.75)",
+        backdropFilter: "blur(8px)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MiniMap({
+  stars,
+  width,
+  height,
+  pan,
+  zoom,
+}: {
+  stars: ScreenStar[];
+  width: number;
+  height: number;
+  pan: { x: number; y: number };
+  zoom: number;
+}) {
+  const MAP_W = 160;
+  const MAP_H = 100;
+  if (width === 0 || height === 0) return null;
+
+  // Scale canvas coordinates into the mini-map box
+  const scaleX = MAP_W / width;
+  const scaleY = MAP_H / height;
+
+  // Viewport rect (inverse-mapped from current pan/zoom)
+  const viewW = (width / zoom) * scaleX;
+  const viewH = (height / zoom) * scaleY;
+  const viewX = (MAP_W - viewW) / 2 - (pan.x / zoom) * scaleX;
+  const viewY = (MAP_H - viewH) / 2 - (pan.y / zoom) * scaleY;
+
+  return (
+    <div
+      className="absolute right-4 bottom-4 rounded-[10px] overflow-hidden"
+      style={{
+        zIndex: 30,
+        width: MAP_W,
+        height: MAP_H,
+        border: "1px solid rgba(16,185,129,0.35)",
+        backgroundColor: "rgba(8,8,16,0.9)",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+      }}
+    >
+      <svg width={MAP_W} height={MAP_H} className="block">
+        {stars.map((s, i) => (
+          <circle
+            key={i}
+            cx={s.x * scaleX}
+            cy={s.y * scaleY}
+            r={1.8}
+            fill={s.color}
+          />
+        ))}
+        {/* Viewport rect */}
+        <rect
+          x={Math.max(0, viewX)}
+          y={Math.max(0, viewY)}
+          width={Math.min(MAP_W, viewW)}
+          height={Math.min(MAP_H, viewH)}
+          fill="none"
+          stroke="rgba(16,185,129,0.8)"
+          strokeWidth={1}
+        />
+      </svg>
     </div>
   );
 }

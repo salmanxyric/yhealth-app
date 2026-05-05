@@ -3,7 +3,7 @@
  * @description Handles breathing test tracking and lung health analytics
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 
 // ============================================

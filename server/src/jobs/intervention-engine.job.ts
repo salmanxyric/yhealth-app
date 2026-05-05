@@ -9,7 +9,7 @@
  * (detects contradictions), user-classification (provides tier).
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { comprehensiveUserContextService } from '../services/comprehensive-user-context.service.js';
 import { crossPillarIntelligenceService } from '../services/cross-pillar-intelligence.service.js';

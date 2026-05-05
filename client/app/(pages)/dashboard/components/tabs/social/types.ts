@@ -15,6 +15,13 @@ export interface Follow {
   recipientAvatar?: string;
 }
 
+export interface SuggestedChallenge {
+  name: string;
+  description: string;
+  metric: string;
+  durationDays: number;
+}
+
 export interface BuddySuggestion {
   userId: string;
   firstName: string;
@@ -27,6 +34,20 @@ export interface BuddySuggestion {
   activityLevel: string;
   currentStreak: number;
   goalOverlap: Record<string, unknown>;
+  suggestedChallenge?: SuggestedChallenge | null;
+}
+
+export interface CompetitionInvitation {
+  id: string;
+  competitionId: string;
+  inviterId: string;
+  inviteeId: string;
+  status: string;
+  message: string | null;
+  createdAt: string;
+  respondedAt: string | null;
+  competitionName?: string;
+  inviterName?: string;
 }
 
 export interface SocialStats {

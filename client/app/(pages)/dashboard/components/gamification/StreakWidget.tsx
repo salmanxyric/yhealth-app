@@ -53,17 +53,26 @@ function getTierProgressPercent(days: number): number {
 
 // ─── Component ────────────────────────────────────────────────
 
-export function StreakWidget({ onClick }: { onClick?: () => void }) {
+export function StreakWidget({
+  onClick,
+  variant = 'default',
+}: {
+  onClick?: () => void;
+  variant?: 'default' | 'compact';
+}) {
   const { streak, isLoading } = useStreak();
+  const compact = variant === 'compact';
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl p-5" style={{
+      <div
+        className={`rounded-2xl p-5 ${compact ? 'h-full min-h-[140px] flex items-center justify-center' : ''}`}
+        style={{
         background: 'linear-gradient(145deg, rgba(18,20,35,0.95) 0%, rgba(8,10,22,1) 100%)',
         border: '1px solid rgba(249,115,22,0.1)',
         boxShadow: '0 4px 8px rgba(0,0,0,0.4), 0 12px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
       }}>
-        <div className="flex items-center justify-center py-10">
+        <div className={`flex items-center justify-center ${compact ? 'py-6' : 'py-10'}`}>
           <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
         </div>
       </div>
@@ -75,7 +84,7 @@ export function StreakWidget({ onClick }: { onClick?: () => void }) {
       <motion.div
         initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
         whileHover={{ y: -4, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-        className="rounded-2xl overflow-hidden cursor-pointer"
+        className={`rounded-2xl overflow-hidden cursor-pointer ${compact ? 'h-full min-h-[160px]' : ''}`}
         style={{
           background: 'linear-gradient(145deg, rgba(18,20,35,0.95) 0%, rgba(8,10,22,1) 100%)',
           border: '1px solid rgba(255,255,255,0.06)',
@@ -83,13 +92,13 @@ export function StreakWidget({ onClick }: { onClick?: () => void }) {
         }}
         onClick={onClick}
       >
-        <div className="flex flex-col items-center justify-center py-8 gap-3">
+        <div className={`flex flex-col items-center justify-center gap-3 ${compact ? 'py-6 px-3' : 'py-8'}`}>
           <motion.div animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
             transition={{ duration: 2.5, repeat: Infinity }}>
-            <Image src="/overview/Streak.svg" alt="Streak" width={56} height={56} className="w-14 h-14 opacity-30" />
+            <Image src="/overview/Streak.svg" alt="Streak" width={56} height={56} className={`${compact ? 'w-10 h-10' : 'w-14 h-14'} opacity-30`} />
           </motion.div>
-          <p className="text-sm font-semibold text-slate-400">Start Your Streak</p>
-          <p className="text-xs text-slate-600">Log any activity to ignite</p>
+          <p className={`font-semibold text-slate-400 ${compact ? 'text-xs' : 'text-sm'}`}>Start Your Streak</p>
+          {!compact && <p className="text-xs text-slate-600">Log any activity to ignite</p>}
         </div>
       </motion.div>
     );
@@ -103,10 +112,13 @@ export function StreakWidget({ onClick }: { onClick?: () => void }) {
   const xpInLevel = xpTotal % 500;
   const achievements = Math.min(streak.longestStreak, 26);
 
-  // Progress ring values — larger ring to avoid overlapping the flame
-  const R = 48;
+  // Progress ring — smaller in compact for overview grid
+  const R = compact ? 34 : 48;
+  const ringSize = compact ? 88 : 112;
+  const flamePx = compact ? 38 : 52;
   const C = 2 * Math.PI * R;
   const tierOffset = C - (C * progressPercent) / 100;
+  const vb = ringSize / 2;
 
   return (
     <>
@@ -114,11 +126,15 @@ export function StreakWidget({ onClick }: { onClick?: () => void }) {
       <motion.div
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         whileHover={{ y: -4, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-        className="group/streak relative overflow-hidden rounded-2xl cursor-pointer"
+        className={`group/streak relative rounded-2xl cursor-pointer ${compact ? 'h-full min-h-0 flex flex-col overflow-hidden ring-1 ring-white/[0.06]' : 'overflow-hidden'}`}
         style={{
-          background: 'linear-gradient(145deg, rgba(18,20,35,0.95) 0%, rgba(12,13,30,0.98) 50%, rgba(8,10,22,1) 100%)',
-          border: `1px solid rgba(${tier.rgb},0.18)`,
-          boxShadow: `0 4px 8px rgba(0,0,0,0.4), 0 12px 32px rgba(0,0,0,0.5), 0 24px 64px rgba(0,0,0,0.25), 0 0 40px rgba(${tier.rgb},0.06), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.3)`,
+          background: compact
+            ? `linear-gradient(165deg, rgba(28,32,52,0.92) 0%, rgba(14,16,28,0.98) 45%, rgba(8,10,20,1) 100%)`
+            : 'linear-gradient(145deg, rgba(18,20,35,0.95) 0%, rgba(12,13,30,0.98) 50%, rgba(8,10,22,1) 100%)',
+          border: `1px solid rgba(${tier.rgb},${compact ? '0.28' : '0.18'})`,
+          boxShadow: compact
+            ? `0 8px 24px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.35), 0 0 48px rgba(${tier.rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -1px 0 rgba(0,0,0,0.35)`
+            : `0 4px 8px rgba(0,0,0,0.4), 0 12px 32px rgba(0,0,0,0.5), 0 24px 64px rgba(0,0,0,0.25), 0 0 40px rgba(${tier.rgb},0.06), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.3)`,
         }}
         onClick={onClick}
       >
@@ -138,34 +154,45 @@ export function StreakWidget({ onClick }: { onClick?: () => void }) {
           </div>
         </div>
 
-        {/* Tier badge — top right */}
-        <div className="absolute top-3 right-3 z-10">
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${tier.textColor}`}
-            style={{ background: `rgba(${tier.rgb},0.1)`, border: `1px solid rgba(${tier.rgb},0.15)` }}>
+        {/* Tier badge — top right (keep inside rounded clip; compact uses tighter type) */}
+        <div className={`absolute z-10 ${compact ? 'top-2 right-2 max-w-[min(7rem,calc(100%-0.75rem))]' : 'top-3 right-3'}`}>
+          <span
+            className={`block w-fit max-w-full truncate font-bold uppercase rounded-lg ${compact ? 'px-1.5 py-0.5 text-[9px] tracking-[0.1em] shadow-[0_0_16px_rgba(0,0,0,0.4)]' : 'text-[10px] px-2 py-0.5 tracking-wider'} ${tier.textColor}`}
+            style={{
+              background: compact
+                ? `linear-gradient(135deg, rgba(${tier.rgb},0.22), rgba(${tier.rgb},0.08))`
+                : `rgba(${tier.rgb},0.1)`,
+              border: `1px solid rgba(${tier.rgb},${compact ? '0.35' : '0.15'})`,
+              textShadow: compact ? '0 1px 2px rgba(0,0,0,0.5)' : undefined,
+            }}
+          >
             {tier.name}
           </span>
         </div>
 
-        <div className="relative p-5 flex flex-col items-center text-center">
+        <div
+          className={`relative flex flex-col items-center text-center ${compact ? 'flex-1 min-h-0 justify-between gap-0 px-3 pb-2 pt-3' : 'p-5'}`}
+        >
           {/* Flame + ring combo */}
-          <div className="relative w-[112px] h-[112px] mb-3">
+          <div className={`relative shrink-0 ${compact ? 'w-[88px] h-[88px] mb-2' : 'w-[112px] h-[112px] mb-3'}`}>
             {/* Progress ring around flame */}
-            <svg width="112" height="112" viewBox="0 0 112 112" className="absolute inset-0 -rotate-90">
-              <circle cx="56" cy="56" r={R} fill="none" stroke={`rgba(${tier.rgb},0.08)`} strokeWidth="4" />
-              <motion.circle cx="56" cy="56" r={R} fill="none"
-                stroke={`rgba(${tier.rgb},0.5)`} strokeWidth="4" strokeLinecap="round"
+            <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`} className="absolute inset-0 -rotate-90">
+              <circle cx={vb} cy={vb} r={R} fill="none" stroke={`rgba(${tier.rgb},0.08)`} strokeWidth={compact ? '3' : '4'} />
+              <motion.circle cx={vb} cy={vb} r={R} fill="none"
+                stroke={`rgba(${tier.rgb},0.5)`} strokeWidth={compact ? '3' : '4'} strokeLinecap="round"
                 strokeDasharray={C} initial={{ strokeDashoffset: C }}
                 animate={{ strokeDashoffset: tierOffset }}
                 transition={{ duration: 1.4, ease: [0.4, 0, 0.2, 1], delay: 0.3 }}
                 style={{ filter: `drop-shadow(0 0 6px rgba(${tier.rgb},0.4))` }} />
-              {/* Pulsing glow ring */}
-              <circle cx="56" cy="56" r={R} fill="none" stroke={`rgba(${tier.rgb},0.15)`} strokeWidth="8"
-                style={{ animation: 'sk-ring-pulse 2.5s ease-in-out infinite' }} />
+              {!compact && (
+                <circle cx={vb} cy={vb} r={R} fill="none" stroke={`rgba(${tier.rgb},0.15)`} strokeWidth="8"
+                  style={{ animation: 'sk-ring-pulse 2.5s ease-in-out infinite' }} />
+              )}
             </svg>
 
             {/* Flame image — centered inside the ring */}
             <div className="absolute inset-0 flex items-center justify-center z-10" style={{ animation: 'sk-flame 2s ease-in-out infinite' }}>
-              <Image src="/overview/Streak.svg" alt="Streak" width={52} height={52} className="w-[52px] h-[52px]"
+              <Image src="/overview/Streak.svg" alt="Streak" width={flamePx} height={flamePx}
                 style={{ filter: `drop-shadow(0 0 12px rgba(${tier.rgb},0.5))` }} />
             </div>
           </div>
@@ -175,67 +202,131 @@ export function StreakWidget({ onClick }: { onClick?: () => void }) {
             <motion.span key={days}
               initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              className="text-4xl font-extrabold text-white tabular-nums leading-none"
+              className={`font-extrabold text-white tabular-nums leading-none ${compact ? 'text-[1.6rem] sm:text-3xl' : 'text-4xl'}`}
               style={{ textShadow: `0 0 24px rgba(${tier.rgb},0.3), 0 2px 4px rgba(0,0,0,0.8)` }}>
               {days}
             </motion.span>
           </AnimatePresence>
-          <p className="text-[11px] text-slate-500 mt-1.5 font-medium uppercase tracking-wider">Day Streak</p>
+          <p className={`font-semibold uppercase tracking-[0.14em] ${compact ? 'text-[10px] mt-1 text-slate-400' : 'text-[11px] mt-1.5 text-slate-500'}`}>Day streak</p>
 
-          {/* XP display */}
-          <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-lg"
-            style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.12)' }}>
-            <Star className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400"
-              style={{ filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.5))' }} />
-            <span className="text-sm font-bold text-emerald-400 tabular-nums"
-              style={{ textShadow: '0 0 8px rgba(16,185,129,0.3)' }}>
-              {xpTotal.toLocaleString()} XP
-            </span>
-          </div>
-
-          {/* XP progress bar */}
-          <div className="w-full mt-3">
-            <div className="h-2 rounded-full overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)' }}>
-              <motion.div initial={{ width: 0 }} animate={{ width: `${(xpInLevel / 500) * 100}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
-                className="h-full rounded-full relative overflow-hidden"
-                style={{
-                  background: 'linear-gradient(90deg, #10b981, #06b6d4)',
-                  boxShadow: '0 0 12px rgba(16,185,129,0.3)',
-                }}>
-                <div className="absolute inset-0"
-                  style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)', animation: 'sk-shimmer 2s ease-in-out infinite' }} />
-              </motion.div>
-            </div>
-            <div className="flex justify-between mt-1">
-              {nextTier && <span className="text-[9px] text-slate-600">{nextTier.name} in {nextTier.minDays - days}d</span>}
-              <span className="text-[10px] text-slate-500 tabular-nums ml-auto">{xpInLevel}/500</span>
-            </div>
-          </div>
-
-          {/* Bottom stats */}
-          <div className="flex items-center justify-between w-full mt-3 pt-3"
-            style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="w-3 h-3 text-slate-500" />
-              <span className="text-[10px] text-slate-400 font-medium">{achievements}/26</span>
-            </div>
-            <span className="text-[10px] text-emerald-400/80 font-semibold">+2% XP Bonus</span>
-          </div>
-
-          {/* Freeze indicators */}
-          <div className="flex items-center gap-1.5 mt-2">
-            {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="p-0.5 rounded" style={{
-                background: i < streak.freezesAvailable ? 'rgba(96,165,250,0.1)' : 'transparent',
-                border: `1px solid ${i < streak.freezesAvailable ? 'rgba(96,165,250,0.2)' : 'rgba(255,255,255,0.04)'}`,
-              }}>
-                <Snowflake className={`w-3 h-3 ${i < streak.freezesAvailable ? 'text-blue-400' : 'text-slate-700'}`}
-                  style={i < streak.freezesAvailable ? { filter: 'drop-shadow(0 0 4px rgba(96,165,250,0.4))' } : undefined} />
+          {compact ? (
+            <>
+              <div className="w-full mt-3">
+                <div
+                  className="h-2 rounded-full overflow-hidden ring-1 ring-white/[0.06]"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(255,255,255,0.05) 100%)',
+                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.45)',
+                  }}
+                >
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${(xpInLevel / 500) * 100}%` }}
+                    transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
+                    className="h-full rounded-full relative overflow-hidden"
+                    style={{
+                      background: 'linear-gradient(90deg, #34d399, #22d3ee)',
+                      boxShadow: '0 0 16px rgba(52,211,153,0.45), inset 0 1px 0 rgba(255,255,255,0.25)',
+                    }}>
+                    <div className="absolute inset-0"
+                      style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)', animation: 'sk-shimmer 2s ease-in-out infinite' }} />
+                  </motion.div>
+                </div>
               </div>
-            ))}
-          </div>
+              <div
+                className="mt-2.5 grid w-full min-w-0 grid-cols-3 gap-0.5 rounded-xl px-1 py-2 text-center ring-1 ring-white/[0.06] sm:gap-1 sm:px-1 sm:py-2.5"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                <div className="min-w-0 border-r border-white/[0.06] px-0.5">
+                  <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-500">XP</p>
+                  <p
+                    className="mt-0.5 break-all text-[9px] font-bold leading-tight tabular-nums text-emerald-300 sm:text-xs"
+                    style={{ textShadow: '0 0 12px rgba(52,211,153,0.35)' }}
+                  >
+                    {xpTotal.toLocaleString()}
+                  </p>
+                </div>
+                <div className="min-w-0 border-r border-white/[0.06] px-0.5">
+                  <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-500">Pool</p>
+                  <p className="mt-0.5 text-[9px] font-bold leading-tight tabular-nums text-slate-200 sm:text-xs">
+                    {xpInLevel}
+                    <span className="font-medium text-slate-500">/500</span>
+                  </p>
+                </div>
+                <div className="min-w-0 px-0.5">
+                  <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-500">Best</p>
+                  <p className="mt-0.5 text-[9px] font-bold leading-tight tabular-nums text-slate-200 sm:text-xs">
+                    {achievements}
+                    <span className="font-medium text-slate-500">/26</span>
+                  </p>
+                </div>
+              </div>
+              <p
+                className="mt-1.5 w-full text-center text-[9px] font-semibold leading-tight tracking-wide text-emerald-300/95 min-[1481px]:text-[10px] sm:mt-2"
+                style={{ textShadow: '0 0 14px rgba(52,211,153,0.35)' }}
+              >
+                +2% XP bonus
+              </p>
+            </>
+          ) : (
+            <>
+              {/* XP display */}
+              <div className="flex items-center gap-1.5 mt-3 px-3 py-1 rounded-lg"
+                style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.12)' }}>
+                <Star className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400"
+                  style={{ filter: 'drop-shadow(0 0 4px rgba(16,185,129,0.5))' }} />
+                <span className="text-sm font-bold text-emerald-400 tabular-nums"
+                  style={{ textShadow: '0 0 8px rgba(16,185,129,0.3)' }}>
+                  {xpTotal.toLocaleString()} XP
+                </span>
+              </div>
+
+              {/* XP progress bar */}
+              <div className="w-full mt-3">
+                <div className="h-2 rounded-full overflow-hidden"
+                  style={{ background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.3)' }}>
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${(xpInLevel / 500) * 100}%` }}
+                    transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
+                    className="h-full rounded-full relative overflow-hidden"
+                    style={{
+                      background: 'linear-gradient(90deg, #10b981, #06b6d4)',
+                      boxShadow: '0 0 12px rgba(16,185,129,0.3)',
+                    }}>
+                    <div className="absolute inset-0"
+                      style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)', animation: 'sk-shimmer 2s ease-in-out infinite' }} />
+                  </motion.div>
+                </div>
+                <div className="flex justify-between mt-1">
+                  {nextTier && <span className="text-[9px] text-slate-600">{nextTier.name} in {nextTier.minDays - days}d</span>}
+                  <span className="text-[10px] text-slate-500 tabular-nums ml-auto">{xpInLevel}/500</span>
+                </div>
+              </div>
+
+              {/* Bottom stats */}
+              <div className="flex items-center justify-between w-full mt-3 pt-3"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="w-3 h-3 text-slate-500" />
+                  <span className="text-[10px] text-slate-400 font-medium">{achievements}/26</span>
+                </div>
+                <span className="text-[10px] text-emerald-400/80 font-semibold">+2% XP Bonus</span>
+              </div>
+
+              {/* Freeze indicators */}
+              <div className="flex items-center gap-1.5 mt-2">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <div key={i} className="p-0.5 rounded" style={{
+                    background: i < streak.freezesAvailable ? 'rgba(96,165,250,0.1)' : 'transparent',
+                    border: `1px solid ${i < streak.freezesAvailable ? 'rgba(96,165,250,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                  }}>
+                    <Snowflake className={`w-3 h-3 ${i < streak.freezesAvailable ? 'text-blue-400' : 'text-slate-700'}`}
+                      style={i < streak.freezesAvailable ? { filter: 'drop-shadow(0 0 4px rgba(96,165,250,0.4))' } : undefined} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
     </>

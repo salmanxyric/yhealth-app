@@ -5,7 +5,7 @@
  * automatic backfill for incomplete initial syncs.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { fetchHistoricalData, isRetryableError } from '../services/whoop-data.service.js';
 import type { SyncCounts } from '../services/whoop-data.service.js';

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, isToday, isYesterday, isThisWeek, isThisMonth } from 'date-fns';
-import { Search, MessageSquare, Users, UserPlus, UserRoundPlus, MoreVertical, X, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, MessageSquare, Users, UserPlus, UserRoundPlus, MoreVertical, X, Sparkles, Settings, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -20,16 +22,18 @@ import { chatService, type Chat } from '@/src/shared/services/chat.service';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/app/context/AuthContext';
 import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
+import { subscribeToUserEvents } from '@/lib/socket-client';
 import { JoinGroupDialog } from './JoinGroupDialog';
 import { CreateGroupDialog } from './CreateGroupDialog';
 
 interface ChatListProps {
   selectedChatId: string | null;
   onSelectChat: (chatId: string) => void;
-  refreshTrigger?: number;
+  onOpenChatSettings?: (tab: 'general' | 'privacy') => void;
 }
 
-export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatListProps) {
+export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: ChatListProps) {
+  const router = useRouter();
   const { user } = useAuth();
   const { assistantName } = useVoiceAssistant();
   const { toast } = useToast();
@@ -40,6 +44,7 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const hasLoadedRef = useRef(false);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   useEffect(() => { toastRef.current = toast; }, [toast]);
 
@@ -49,7 +54,7 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
     if (isLoadingRef.current) return;
     try {
       isLoadingRef.current = true;
-      setIsLoading(true);
+      if (!hasLoadedRef.current) setIsLoading(true);
       const data = await chatService.getChats({ limit: 100 });
       setChats(data);
       hasLoadedRef.current = true;
@@ -64,10 +69,68 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
     }
   }, []);
 
+  // Initial load only — do NOT refetch on chat selection.
+  // Chat selection is a client-side concern and should not cause a network roundtrip.
   useEffect(() => {
-    if (!hasLoadedRef.current || refreshTrigger !== undefined) loadChats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger]);
+    if (!hasLoadedRef.current) loadChats();
+  }, [loadChats]);
+
+  // Optimistically zero unread count for the selected chat (WhatsApp-style).
+  // Server-side read receipt is handled separately by MessagesView via markChatAsRead.
+  useEffect(() => {
+    if (!selectedChatId || !user) return;
+    setChats((prev) => {
+      const idx = prev.findIndex((c) => c.id === selectedChatId);
+      if (idx === -1) return prev;
+      const existing = prev[idx];
+      const participants = existing.participants;
+      if (!participants) return prev;
+      const pIdx = participants.findIndex((p) => p.userId === user.id);
+      if (pIdx === -1 || (participants[pIdx].unreadCount ?? 0) === 0) return prev;
+      const nextParticipants = participants.map((p, i) =>
+        i === pIdx ? { ...p, unreadCount: 0 } : p
+      );
+      const next = [...prev];
+      next[idx] = { ...existing, participants: nextParticipants };
+      return next;
+    });
+  }, [selectedChatId, user]);
+
+  // Realtime chat list + presence updates via socket
+  useEffect(() => {
+    const cleanup = subscribeToUserEvents({
+      onChatListUpdate: (data) => {
+        setChats((prev) => {
+          const idx = prev.findIndex((c) => c.id === data.chatId);
+          if (idx === -1) {
+            loadChats();
+            return prev;
+          }
+          const updated = [...prev];
+          updated[idx] = {
+            ...updated[idx],
+            latestMessage: {
+              id: `${data.chatId}-preview`,
+              content: data.lastMessage,
+              contentType: 'text',
+              senderId: '',
+              createdAt: data.sentAt,
+            },
+          };
+          const [moved] = updated.splice(idx, 1);
+          updated.unshift(moved);
+          return updated;
+        });
+      },
+      onUserOnline: (data) => {
+        setOnlineUsers((prev) => { const n = new Set(prev); n.add(data.userId); return n; });
+      },
+      onUserOffline: (data) => {
+        setOnlineUsers((prev) => { const n = new Set(prev); n.delete(data.userId); return n; });
+      },
+    });
+    return cleanup;
+  }, [loadChats]);
 
   const getChatTitle = (chat: Chat): string => {
     if (chat.isGroupChat) return chat.chatName || 'Group Chat';
@@ -180,21 +243,55 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
           <h2 className="text-lg font-bold text-white tracking-tight">Balencia</h2>
         </motion.div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all">
-              <MoreVertical className="h-5 w-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-xl border-white/[0.08] bg-[#0f1120]/95 backdrop-blur-xl shadow-2xl shadow-black/50">
-            <DropdownMenuItem onClick={() => setShowJoinDialog(true)} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
-              <UserPlus className="mr-2 h-4 w-4" /> Join Group
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowCreateDialog(true)} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
-              <UserRoundPlus className="mr-2 h-4 w-4" /> Create Group
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            title="Settings"
+            aria-label="Open settings"
+            onClick={() =>
+              onOpenChatSettings ? onOpenChatSettings('general') : router.push('/settings')
+            }
+            className="h-9 w-9 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all"
+          >
+            <Settings className="h-5 w-5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl border-white/[0.08] bg-[#0f1120]/95 backdrop-blur-xl shadow-2xl shadow-black/50">
+              <DropdownMenuItem onClick={() => setShowJoinDialog(true)} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
+                <UserPlus className="mr-2 h-4 w-4" /> Join Group
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowCreateDialog(true)} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
+                <UserRoundPlus className="mr-2 h-4 w-4" /> Create Group
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/[0.06]" />
+              <DropdownMenuItem
+                onClick={() =>
+                  onOpenChatSettings ? onOpenChatSettings('general') : router.push('/settings')
+                }
+                className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]"
+              >
+                <Settings className="mr-2 h-4 w-4" /> Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  onOpenChatSettings
+                    ? onOpenChatSettings('privacy')
+                    : router.push('/settings?section=privacy')
+                }
+                className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]"
+              >
+                <Shield className="mr-2 h-4 w-4" /> Privacy and data
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Search */}
@@ -308,7 +405,10 @@ export function ChatList({ selectedChatId, onSelectChat, refreshTrigger }: ChatL
                               </div>
                             )}
                             {/* Online / AI indicator */}
-                            {isAI && (
+                            {(isAI || (!chat.isGroupChat && (() => {
+                              const otherId = chat.participants?.find(p => p.user && p.user.id !== user?.id)?.user?.id;
+                              return otherId ? onlineUsers.has(otherId) : false;
+                            })())) && (
                               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#080a12]"
                                 style={{ boxShadow: '0 0 4px rgba(16,185,129,0.5)' }} />
                             )}

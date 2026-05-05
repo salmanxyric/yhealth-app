@@ -29,6 +29,24 @@ export interface LifeAreaLink {
   created_at: string;
 }
 
+export interface ResolvedLifeAreaLink extends LifeAreaLink {
+  label: string;
+  subtitle: string | null;
+}
+
+export interface LifeAreaSummaryRow {
+  id: string;
+  display_name: string;
+  domain_type: string;
+  link_count: number;
+}
+
+export interface LifeAreasDashboardSummary {
+  activeAreaCount: number;
+  totalLinks: number;
+  areas: LifeAreaSummaryRow[];
+}
+
 class LifeAreasService {
   async list(
     userId: string,
@@ -163,6 +181,103 @@ class LifeAreasService {
       [lifeAreaId],
     );
     return r.rows;
+  }
+
+  /**
+   * Batch-resolve link targets for UI (avoids N+1 from the client).
+   */
+  async listLinksResolved(userId: string, lifeAreaId: string): Promise<ResolvedLifeAreaLink[]> {
+    const links = await this.listLinks(userId, lifeAreaId);
+    if (links.length === 0) return [];
+
+    const scheduleIds = [...new Set(links.filter((l) => l.entity_type === 'schedule').map((l) => l.entity_id))];
+    const goalIds = [...new Set(links.filter((l) => l.entity_type === 'goal').map((l) => l.entity_id))];
+
+    const scheduleMap = new Map<string, { name: string; subtitle: string }>();
+    if (scheduleIds.length > 0) {
+      const sr = await query<{ id: string; name: string | null; schedule_date: string }>(
+        `SELECT id, name, schedule_date::text AS schedule_date
+         FROM daily_schedules WHERE user_id = $1 AND id = ANY($2::uuid[])`,
+        [userId, scheduleIds],
+      );
+      for (const row of sr.rows) {
+        scheduleMap.set(row.id, {
+          name: row.name?.trim() || 'Schedule',
+          subtitle: row.schedule_date,
+        });
+      }
+    }
+
+    const goalTitles = new Map<string, string>();
+    if (goalIds.length > 0) {
+      const ug = await query<{ id: string; title: string }>(
+        `SELECT id, title FROM user_goals WHERE user_id = $1 AND id = ANY($2::uuid[])`,
+        [userId, goalIds],
+      );
+      for (const row of ug.rows) goalTitles.set(row.id, row.title);
+      const missing = goalIds.filter((id) => !goalTitles.has(id));
+      if (missing.length > 0) {
+        const lg = await query<{ id: string; title: string }>(
+          `SELECT id, title FROM life_goals WHERE user_id = $1 AND id = ANY($2::uuid[])`,
+          [userId, missing],
+        );
+        for (const row of lg.rows) goalTitles.set(row.id, row.title);
+      }
+    }
+
+    return links.map((link) => {
+      if (link.entity_type === 'schedule') {
+        const meta = scheduleMap.get(link.entity_id);
+        return {
+          ...link,
+          label: meta?.name ?? 'Schedule',
+          subtitle: meta?.subtitle ?? null,
+        };
+      }
+      if (link.entity_type === 'goal') {
+        const title = goalTitles.get(link.entity_id);
+        return {
+          ...link,
+          label: title ?? 'Goal',
+          subtitle: 'Linked goal',
+        };
+      }
+      if (link.entity_type === 'contract') {
+        return { ...link, label: 'Accountability contract', subtitle: null };
+      }
+      if (link.entity_type === 'reminder') {
+        return { ...link, label: 'Reminder', subtitle: null };
+      }
+      return { ...link, label: link.entity_type, subtitle: null };
+    });
+  }
+
+  async getDashboardSummary(userId: string): Promise<LifeAreasDashboardSummary> {
+    const r = await query<{
+      id: string;
+      display_name: string;
+      domain_type: string;
+      link_count: string;
+    }>(
+      `SELECT la.id, la.display_name, la.domain_type,
+              COUNT(lal.id)::text AS link_count
+       FROM life_areas la
+       LEFT JOIN life_area_links lal ON lal.life_area_id = la.id
+       WHERE la.user_id = $1 AND la.status = 'active'
+       GROUP BY la.id, la.display_name, la.domain_type
+       ORDER BY MAX(la.updated_at) DESC NULLS LAST, la.created_at DESC
+       LIMIT 24`,
+      [userId],
+    );
+    const areas: LifeAreaSummaryRow[] = r.rows.map((row) => ({
+      id: row.id,
+      display_name: row.display_name,
+      domain_type: row.domain_type,
+      link_count: parseInt(row.link_count, 10) || 0,
+    }));
+    const activeAreaCount = areas.length;
+    const totalLinks = areas.reduce((s, a) => s + a.link_count, 0);
+    return { activeAreaCount, totalLinks, areas };
   }
 }
 

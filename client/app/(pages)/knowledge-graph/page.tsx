@@ -1,4 +1,5 @@
 import KnowledgeGraphPageContent from './KnowledgeGraphPageContent';
+import { PageAccessGate } from '@/components/gates/PageAccessGate';
 
 export const metadata = {
   title: 'Knowledge Graph - Visualize Your Health Data | Balencia',
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function KnowledgeGraphPage() {
-  return <KnowledgeGraphPageContent />;
+  return (
+    <PageAccessGate pageKey="knowledge-graph" requiredPlan="Pro">
+      <KnowledgeGraphPageContent />
+    </PageAccessGate>
+  );
 }

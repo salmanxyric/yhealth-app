@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +15,9 @@ import {
   Loader2,
   Check,
   AlertCircle,
-  Image as ImageIcon,
+  Sparkles,
   VideoOff,
+  ArrowUp,
 } from "lucide-react";
 import { aiCoachService } from "@/src/shared/services/ai-coach.service";
 import toast from "react-hot-toast";
@@ -26,8 +27,8 @@ interface ImageAnalysisModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAnalysisComplete?: (analysis: string, imageUrl?: string) => void;
-  mode?: "camera" | "upload"; // Initial mode
-  conversationId?: string; // Optional conversation ID for RAG chat
+  mode?: "camera" | "upload";
+  conversationId?: string;
 }
 
 export function ImageAnalysisModal({
@@ -44,6 +45,7 @@ export function ImageAnalysisModal({
   const [error, setError] = useState<string | null>(null);
   const [currentMode, setCurrentMode] = useState<"camera" | "upload">(mode);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -51,7 +53,6 @@ export function ImageAnalysisModal({
   const streamRef = useRef<MediaStream | null>(null);
   const isInitializedRef = useRef(false);
 
-  // Cleanup stream on unmount
   useEffect(() => {
     return () => {
       if (streamRef.current) {
@@ -61,13 +62,8 @@ export function ImageAnalysisModal({
     };
   }, []);
 
-  // Handle camera mode
   const startCamera = useCallback(async () => {
-    // Prevent multiple simultaneous starts
-    if (streamRef.current || isCameraActive) {
-      return;
-    }
-
+    if (streamRef.current || isCameraActive) return;
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
@@ -75,15 +71,12 @@ export function ImageAnalysisModal({
       });
       streamRef.current = mediaStream;
       setIsCameraActive(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = mediaStream;
     } catch (err) {
       const error = err as Error;
-      console.error("[ImageAnalysisModal] Camera error:", error);
       toast.error("Could not access camera. Please check permissions.");
       setError(error.message || "Camera access denied");
-      setCurrentMode("upload"); // Fallback to upload mode
+      setCurrentMode("upload");
     }
   }, [isCameraActive]);
 
@@ -92,37 +85,25 @@ export function ImageAnalysisModal({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       setIsCameraActive(false);
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
+      if (videoRef.current) videoRef.current.srcObject = null;
     }
   }, []);
 
-  // Capture photo from camera
   const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext("2d");
-
     if (!context) return;
-
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0);
-
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
-
-        const file = new File([blob], `capture-${Date.now()}.jpg`, {
-          type: "image/jpeg",
-        });
-        const url = URL.createObjectURL(blob);
-
+        const file = new File([blob], `capture-${Date.now()}.jpg`, { type: "image/jpeg" });
         setImageFile(file);
-        setCapturedImage(url);
+        setCapturedImage(URL.createObjectURL(blob));
         stopCamera();
       },
       "image/jpeg",
@@ -130,104 +111,61 @@ export function ImageAnalysisModal({
     );
   }, [stopCamera]);
 
-  // Handle file upload
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        if (!file.type.startsWith("image/")) {
-          toast.error("Please select an image file");
-          return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-          toast.error("Image too large. Maximum size is 10MB");
-          return;
-        }
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    if (e.target) e.target.value = "";
+  }, []);
 
-        setImageFile(file);
-        const url = URL.createObjectURL(file);
-        setCapturedImage(url);
-        setError(null);
-      }
-      if (e.target) {
-        e.target.value = "";
-      }
-    },
-    []
-  );
+  const processFile = (file: File) => {
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Image too large. Maximum size is 10MB"); return; }
+    setImageFile(file);
+    setCapturedImage(URL.createObjectURL(file));
+    setError(null);
+  };
 
-  // Analyze image
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }, []);
+
   const handleAnalyze = useCallback(async () => {
     if (!imageFile) return;
-
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null);
-
     try {
-      console.log("[ImageAnalysisModal] Starting image analysis...", { 
-        fileName: imageFile.name, 
-        fileSize: imageFile.size,
-        conversationId 
-      });
-      
-      // Use AI coach service for analysis
       const result = await aiCoachService.analyzeImage(imageFile);
-      
-      console.log("[ImageAnalysisModal] Image analysis result:", result);
-      
-      // result.analysis is an ImageAnalysisResult object with an 'analysis' string property
-      // result.response is a string response
       let analysisText: string;
-      if (typeof result.analysis === 'string') {
+      if (typeof result.analysis === "string") {
         analysisText = result.analysis;
-      } else if (result.analysis && typeof result.analysis === 'object' && 'analysis' in result.analysis) {
+      } else if (result.analysis && typeof result.analysis === "object" && "analysis" in result.analysis) {
         analysisText = result.analysis.analysis || result.response || "Analysis completed";
       } else {
         analysisText = result.response || "Analysis completed";
       }
-      
       if (!analysisText || analysisText === "Analysis completed") {
-        console.warn("[ImageAnalysisModal] No analysis text found in result:", result);
         throw new Error("Analysis completed but no analysis text was returned");
       }
-      
-      console.log("[ImageAnalysisModal] Extracted analysis text:", analysisText.substring(0, 100) + "...");
       setAnalysisResult(analysisText);
-
-      if (onAnalysisComplete) {
-        onAnalysisComplete(analysisText, result.imageUrl);
-      }
+      if (onAnalysisComplete) onAnalysisComplete(analysisText, result.imageUrl);
     } catch (err: unknown) {
-      console.error("[ImageAnalysisModal] Image analysis error:", err);
-      
       let errorMessage = "Unable to analyze this image";
-      
       if (err instanceof Error) {
         const errMsg = err.message.toLowerCase();
-        
-        // Provide more specific error messages
-        if (errMsg.includes('not related to health') || 
-            errMsg.includes('not health-related') || 
-            errMsg.includes('invalid health image') ||
-            errMsg.includes('image not related') ||
-            errMsg.includes('rejected')) {
-          errorMessage = "This image doesn't appear to be health-related. Please upload:\n• Body/physique photos\n• Food/meal photos\n• Fitness progress images\n• Medical documents (lab results, etc.)";
-        } else if (errMsg.includes('human person') || errMsg.includes('does not contain a human')) {
-          errorMessage = "Please upload a photo that contains a person for body/fitness analysis, or a food photo for nutrition analysis.";
-        } else if (errMsg.includes('vision api not available') || errMsg.includes('vision api')) {
-          errorMessage = "Image analysis service is temporarily unavailable. Please try again later.";
-        } else if (errMsg.includes('file too large') || errMsg.includes('size')) {
+        if (errMsg.includes("not related to health") || errMsg.includes("not health-related") || errMsg.includes("rejected")) {
+          errorMessage = "This image doesn't appear to be health-related. Please upload:\n- Body/physique photos\n- Food/meal photos\n- Fitness progress images\n- Medical documents";
+        } else if (errMsg.includes("vision api")) {
+          errorMessage = "Image analysis service is temporarily unavailable.";
+        } else if (errMsg.includes("size")) {
           errorMessage = "Image file is too large. Maximum size is 10MB.";
-        } else if (errMsg.includes('invalid file type') || errMsg.includes('file type')) {
-          errorMessage = "Invalid file type. Please upload JPEG, PNG, WebP, or HEIC images.";
-        } else if (errMsg.includes('failed to validate') || errMsg.includes('could not classify')) {
-          errorMessage = "Could not process this image. Please try a different image or check if the image is clear and health-related.";
         } else {
-          errorMessage = err.message || "Unable to analyze this image. Please try again.";
+          errorMessage = err.message || "Unable to analyze this image.";
         }
       }
-      
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -235,41 +173,31 @@ export function ImageAnalysisModal({
     }
   }, [imageFile, conversationId, onAnalysisComplete]);
 
-  // Reset state
   const handleReset = useCallback(() => {
     setCapturedImage(null);
     setImageFile(null);
     setAnalysisResult(null);
     setError(null);
-    // Stop camera directly without dependency
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       setIsCameraActive(false);
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
+      if (videoRef.current) videoRef.current.srcObject = null;
     }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
-  // Handle close
   const handleClose = useCallback(() => {
     stopCamera();
     handleReset();
     onClose();
   }, [stopCamera, handleReset, onClose]);
 
-  // Initialize modal when opened
   useEffect(() => {
     if (isOpen && !isInitializedRef.current) {
       setCurrentMode(mode);
       isInitializedRef.current = true;
-      if (mode === "camera") {
-        startCamera();
-      }
+      if (mode === "camera") startCamera();
     } else if (!isOpen && isInitializedRef.current) {
       stopCamera();
       handleReset();
@@ -277,10 +205,8 @@ export function ImageAnalysisModal({
     }
   }, [isOpen, mode, startCamera, stopCamera, handleReset]);
 
-  // Handle mode changes when modal is already open
   useEffect(() => {
     if (!isOpen || !isInitializedRef.current) return;
-
     if (currentMode === "camera" && !isCameraActive && !streamRef.current && !capturedImage) {
       startCamera();
     } else if (currentMode === "upload" && streamRef.current) {
@@ -290,82 +216,79 @@ export function ImageAnalysisModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-white flex items-center gap-2">
-            <Camera className="w-6 h-6" />
-            Image Analysis
-          </DialogTitle>
+      <DialogContent showCloseButton={false} className="max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0a0f1f] border border-white/10 rounded-[24px] p-0 gap-0 shadow-[0_0_80px_rgba(2,132,199,0.08)]">
+        {/* Header */}
+        <DialogHeader className="px-6 pt-6 pb-0">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-xl font-semibold text-white flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[12px] bg-gradient-to-br from-cyan-500/20 to-teal-500/20 border border-cyan-500/20 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-cyan-400" />
+              </div>
+              Image Analysis
+            </DialogTitle>
+            <button
+              onClick={handleClose}
+              className="w-9 h-9 rounded-[10px] border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4 text-white/60" />
+            </button>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="px-6 pb-6 pt-5 space-y-5">
           {/* Mode Toggle */}
-          <div className="flex gap-2 p-1 bg-slate-800/50 rounded-lg">
+          <div className="flex gap-1 p-1 bg-white/[0.04] border border-white/[0.06] rounded-[14px]">
             <button
-              onClick={() => {
-                setCurrentMode("upload");
-                stopCamera();
-                handleReset();
-              }}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              onClick={() => { setCurrentMode("upload"); stopCamera(); handleReset(); }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-medium transition-all ${
                 currentMode === "upload"
-                  ? "bg-violet-500 text-white"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-[#059669] text-white shadow-[0_0_20px_rgba(5,150,105,0.2)]"
+                  : "text-white/40 hover:text-white/70"
               }`}
             >
-              <Upload className="w-4 h-4 inline mr-2" />
+              <Upload className="w-4 h-4" />
               Upload
             </button>
             <button
-              onClick={() => {
-                setCurrentMode("camera");
-                handleReset();
-                startCamera();
-              }}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              onClick={() => { setCurrentMode("camera"); handleReset(); startCamera(); }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-medium transition-all ${
                 currentMode === "camera"
-                  ? "bg-violet-500 text-white"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-[#059669] text-white shadow-[0_0_20px_rgba(5,150,105,0.2)]"
+                  : "text-white/40 hover:text-white/70"
               }`}
             >
-              <Camera className="w-4 h-4 inline mr-2" />
+              <Camera className="w-4 h-4" />
               Camera
             </button>
           </div>
 
           {/* Camera View */}
           {currentMode === "camera" && (
-            <div className="space-y-4">
+            <div>
               {!capturedImage ? (
-                <div className="relative aspect-[4/3] bg-slate-800 rounded-xl overflow-hidden">
+                <div className="relative aspect-[4/3] bg-[#02091b] border border-white/[0.08] rounded-[16px] overflow-hidden">
                   {isCameraActive ? (
                     <>
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover"
-                      />
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                       <canvas ref={canvasRef} className="hidden" />
-                      <div className="absolute inset-0 flex items-end justify-center p-6">
+                      <div className="absolute inset-0 flex items-end justify-center pb-6">
                         <button
                           onClick={capturePhoto}
                           disabled={!isCameraActive}
-                          className="w-16 h-16 rounded-full bg-white border-4 border-slate-300 shadow-lg hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-16 h-16 rounded-full bg-white/90 border-[3px] border-white shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:bg-white transition-all disabled:opacity-50 flex items-center justify-center group"
                         >
-                          <Camera className="w-8 h-8 mx-auto text-slate-800" />
+                          <div className="w-12 h-12 rounded-full border-2 border-slate-300 group-hover:border-cyan-500 transition-colors" />
                         </button>
                       </div>
                     </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="text-center">
-                        <VideoOff className="w-12 h-12 mx-auto mb-4 text-slate-500" />
-                        <p className="text-slate-400 mb-4">Camera not active</p>
+                        <VideoOff className="w-10 h-10 mx-auto mb-3 text-white/20" />
+                        <p className="text-white/30 text-sm mb-4">Camera not active</p>
                         <button
                           onClick={startCamera}
-                          className="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors"
+                          className="px-5 py-2 bg-[#059669] text-white text-sm font-medium rounded-[10px] hover:brightness-110 transition-all"
                         >
                           Start Camera
                         </button>
@@ -374,18 +297,13 @@ export function ImageAnalysisModal({
                   )}
                 </div>
               ) : (
-                <div className="relative aspect-[4/3] bg-slate-800 rounded-xl overflow-hidden">
-                  <Image
-                    src={capturedImage}
-                    alt="Captured image"
-                    fill
-                    className="object-contain"
-                  />
+                <div className="relative aspect-[4/3] bg-[#02091b] border border-white/[0.08] rounded-[16px] overflow-hidden group">
+                  <Image src={capturedImage} alt="Captured" fill className="object-contain" />
                   <button
                     onClick={handleReset}
-                    className="absolute top-4 right-4 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                    className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white/70 hover:text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
@@ -394,11 +312,18 @@ export function ImageAnalysisModal({
 
           {/* Upload View */}
           {currentMode === "upload" && (
-            <div className="space-y-4">
+            <div>
               {!capturedImage ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="relative aspect-[4/3] bg-slate-800/50 border-2 border-dashed border-slate-600 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-violet-500/50 hover:bg-slate-800 transition-colors"
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
+                  className={`relative aspect-[3/2] border-[1.5px] border-dashed rounded-[16px] flex flex-col items-center justify-center cursor-pointer transition-all ${
+                    isDragOver
+                      ? "border-cyan-400/60 bg-cyan-500/[0.06]"
+                      : "border-white/[0.12] bg-[#02091b] hover:border-white/25 hover:bg-[#030c22]"
+                  }`}
                 >
                   <input
                     ref={fileInputRef}
@@ -407,25 +332,26 @@ export function ImageAnalysisModal({
                     onChange={handleFileChange}
                     className="hidden"
                   />
-                  <Upload className="w-12 h-12 mb-4 text-slate-400" />
-                  <p className="text-slate-400 mb-1">Click to upload or drag and drop</p>
-                  <p className="text-slate-500 text-sm">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors ${
+                    isDragOver ? "bg-cyan-500/10" : "bg-white/[0.04]"
+                  }`}>
+                    <Upload className={`w-6 h-6 ${isDragOver ? "text-cyan-400" : "text-white/25"}`} />
+                  </div>
+                  <p className="text-white/50 text-sm font-medium">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-white/25 text-xs mt-1.5">
                     JPEG, PNG, WebP, or HEIC (max 10MB)
                   </p>
                 </div>
               ) : (
-                <div className="relative aspect-[4/3] bg-slate-800 rounded-xl overflow-hidden">
-                  <Image
-                    src={capturedImage}
-                    alt="Uploaded image"
-                    fill
-                    className="object-contain"
-                  />
+                <div className="relative aspect-[3/2] bg-[#02091b] border border-white/[0.08] rounded-[16px] overflow-hidden group">
+                  <Image src={capturedImage} alt="Uploaded" fill className="object-contain" />
                   <button
                     onClick={handleReset}
-                    className="absolute top-4 right-4 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                    className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white/70 hover:text-white hover:bg-red-500/80 transition-all opacity-0 group-hover:opacity-100"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
@@ -433,40 +359,52 @@ export function ImageAnalysisModal({
           )}
 
           {/* Error Display */}
-          {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-red-400 font-medium">Analysis Error</p>
-                <p className="text-red-300 text-sm mt-1 whitespace-pre-line">{error}</p>
-              </div>
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="p-4 bg-red-500/[0.06] border border-red-500/20 rounded-[12px] flex items-start gap-3"
+              >
+                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-red-400 text-sm font-medium">Analysis Error</p>
+                  <p className="text-red-300/70 text-xs mt-1 whitespace-pre-line leading-relaxed">{error}</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Analysis Result */}
-          {analysisResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg"
-            >
-              <div className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-green-400 font-medium mb-2">Analysis Complete</p>
-                  <p className="text-slate-300 text-sm whitespace-pre-wrap">
+          <AnimatePresence>
+            {analysisResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="p-4 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-[12px] flex items-start gap-3"
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <Check className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-emerald-400 text-sm font-medium mb-2">Analysis Complete</p>
+                  <p className="text-white/60 text-xs whitespace-pre-wrap leading-relaxed">
                     {analysisResult}
                   </p>
                 </div>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-1">
             <button
               onClick={handleClose}
-              className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              className="flex-1 h-[44px] rounded-[12px] bg-white/[0.04] border border-white/[0.08] text-white/60 text-sm font-medium hover:bg-white/[0.08] hover:text-white/80 transition-all"
             >
               {analysisResult ? "Close" : "Cancel"}
             </button>
@@ -474,7 +412,7 @@ export function ImageAnalysisModal({
               <button
                 onClick={handleAnalyze}
                 disabled={isAnalyzing}
-                className="flex-1 px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 h-[44px] rounded-[12px] bg-[#0099b9] text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,153,185,0.2)]"
               >
                 {isAnalyzing ? (
                   <>
@@ -483,7 +421,7 @@ export function ImageAnalysisModal({
                   </>
                 ) : (
                   <>
-                    <ImageIcon className="w-4 h-4" />
+                    <ArrowUp className="w-4 h-4" />
                     Analyze Image
                   </>
                 )}
@@ -495,4 +433,3 @@ export function ImageAnalysisModal({
     </Dialog>
   );
 }
-

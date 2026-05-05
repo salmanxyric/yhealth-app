@@ -12,12 +12,14 @@ import {
   bulkDeleteExercisesSchema,
   bulkToggleActiveSchema,
   syncExercisesSchema,
+  importExercisesSchema,
 } from '../validators/admin-exercise.validator.js';
 import {
   getAdminExercises,
   getAdminExerciseStats,
   getAdminExerciseById,
   createExercise,
+  importExercises,
   updateExercise,
   deleteExercise,
   bulkDeleteExercises,
@@ -43,6 +45,10 @@ router.get('/stats', getAdminExerciseStats);
 // Create exercise
 // POST /api/admin/exercises
 router.post('/', validate(createExerciseSchema), createExercise);
+
+// Batch import (JSON; must be before /:id)
+// POST /api/admin/exercises/import
+router.post('/import', validate(importExercisesSchema), importExercises);
 
 // Sync from external APIs
 // POST /api/admin/exercises/sync

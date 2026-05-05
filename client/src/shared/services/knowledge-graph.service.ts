@@ -35,6 +35,41 @@ export interface NodeDetailResult {
   edges: GraphEdge[];
 }
 
+export interface ReasoningOverlayNode {
+  id: string;
+  label: string;
+  category: string;
+  parentNodeId: string | null;
+  route: string;
+  description: string;
+  healthScore: number;
+  lastActivityAt: string | null;
+  activityCount7d: number;
+  status: 'active' | 'dormant' | 'never_used';
+  alerts: { type: string; message: string; severity: 'low' | 'medium' | 'high'; relatedNodeId?: string }[];
+}
+
+export interface ReasoningOverlayEdge {
+  id: string;
+  source: string;
+  target: string;
+  edgeType: string;
+  weight: number;
+  direction: 'unidirectional' | 'bidirectional';
+  label?: string;
+}
+
+export interface ReasoningOverlayData {
+  nodes: ReasoningOverlayNode[];
+  edges: ReasoningOverlayEdge[];
+  validation: {
+    orphanNodes: string[];
+    weaklyConnected: string[];
+    issues: number;
+    autoRepaired: boolean;
+  };
+}
+
 export const knowledgeGraphService = {
   async getGraph(params: GetGraphParams): Promise<ApiResponse<KnowledgeGraphData>> {
     const queryParams: Record<string, string> = {
@@ -63,6 +98,10 @@ export const knowledgeGraphService = {
       from: dateRange?.from,
       to: dateRange?.to,
     });
+  },
+
+  async getReasoningOverlay(): Promise<ApiResponse<ReasoningOverlayData>> {
+    return api.get(`${BASE}/reasoning`);
   },
 
   async exportGraph(format: 'json' | 'csv', from: string, to: string): Promise<ApiResponse<KnowledgeGraphData>> {

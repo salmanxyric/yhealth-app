@@ -7,7 +7,7 @@
  * Tiers: elite_performer | improving | plateau | declining | at_risk_dropout
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { cache } from './cache.service.js';
 import type { ComprehensiveUserContext } from './comprehensive-user-context.service.js';

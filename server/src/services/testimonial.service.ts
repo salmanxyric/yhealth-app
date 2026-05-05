@@ -3,7 +3,7 @@
  * Database query service for testimonials CRUD and public listing.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import type {
   AdminListTestimonialsQuery,
   CreateTestimonialInput,

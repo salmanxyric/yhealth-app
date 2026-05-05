@@ -8,7 +8,7 @@
  * See: docs/superpowers/specs/2026-04-07-streak-system-design.md
  */
 
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import type { PoolClient } from 'pg';
 import { logger } from './logger.service.js';
 import { gamificationService } from './gamification.service.js';

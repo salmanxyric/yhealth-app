@@ -67,6 +67,11 @@ export const syncExercisesSchema = z.object({
   limit: z.number().int().min(1).max(5000).optional(),
 });
 
+// --- Batch import (JSON) ---
+export const importExercisesSchema = z.object({
+  exercises: z.array(createExerciseSchema).min(1).max(2000),
+});
+
 // Export types
 export type AdminListExercisesQuery = z.infer<typeof adminListExercisesQuerySchema>;
 export type CreateExerciseInput = z.infer<typeof createExerciseSchema>;
@@ -74,3 +79,4 @@ export type UpdateExerciseInput = z.infer<typeof updateExerciseSchema>;
 export type BulkDeleteExercisesInput = z.infer<typeof bulkDeleteExercisesSchema>;
 export type BulkToggleActiveInput = z.infer<typeof bulkToggleActiveSchema>;
 export type SyncExercisesInput = z.infer<typeof syncExercisesSchema>;
+export type ImportExercisesInput = z.infer<typeof importExercisesSchema>;

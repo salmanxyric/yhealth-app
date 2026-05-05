@@ -8,13 +8,14 @@ import type { AuthenticatedRequest } from '../types/index.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { messageService, type MessageWithRelations } from '../services/message.service.js';
+import { messageService } from '../services/message.service.js';
 import { createUploadMiddleware } from '../middlewares/upload.middleware.js';
 import { socketService } from '../services/socket.service.js';
 import { ragChatbotService } from '../services/rag-chatbot.service.js';
 import { tenorService } from '../services/tenor.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
+import { transformMessageForSocket } from '../utils/message-transform.util.js';
 
 /** Extract [GIF:search_term] marker from AI response and return { text, gifQuery } */
 function extractGifMarker(text: string): { text: string; gifQuery: string | null } {
@@ -28,39 +29,7 @@ function extractGifMarker(text: string): { text: string; gifQuery: string | null
 
 const AI_COACH_USER_ID = process.env.AI_COACH_USER_ID || '00000000-0000-0000-0000-000000000001';
 
-/**
- * Helper to convert Date to ISO string (ensures UTC)
- * PostgreSQL TIMESTAMP without timezone should be treated as UTC
- */
-function toISOString(date: Date | null | undefined): string | null | undefined {
-  if (!date) return date === null ? null : undefined;
-  return date instanceof Date ? date.toISOString() : undefined;
-}
-
-/**
- * Transform message to API format with proper timestamp conversion
- */
-function transformMessage(message: MessageWithRelations): Record<string, unknown> {
-  const transformed: Record<string, unknown> = {
-    ...message,
-    created_at: toISOString(message.created_at),
-    updated_at: toISOString(message.updated_at),
-    edited_at: toISOString(message.edited_at),
-    deleted_at: toISOString(message.deleted_at),
-    pinned_at: toISOString(message.pinned_at),
-    view_once_opened_at: toISOString(message.view_once_opened_at),
-    replied_to: message.replied_to ? transformMessage(message.replied_to) : null,
-    forwarded_from: message.forwarded_from ? transformMessage(message.forwarded_from) : null,
-  };
-
-  // Strip media URLs from opened view-once messages (security: prevent replay)
-  if (message.is_view_once && message.view_once_opened_at) {
-    transformed.media_url = null;
-    transformed.media_thumbnail = null;
-  }
-
-  return transformed;
-}
+const transformMessage = transformMessageForSocket;
 
 /**
  * Check if a chat is with AI coach
@@ -125,6 +94,25 @@ export const sendMessage = asyncHandler(
       message: transformMessage(message),
       senderId: userId,
     });
+
+    // Emit chatListUpdate to all participants so their sidebar refreshes
+    try {
+      const participants = await query<{ user_id: string }>(
+        `SELECT user_id FROM chat_participants WHERE chat_id = $1 AND left_at IS NULL`,
+        [chatId],
+      );
+      const preview = (content || '').slice(0, 100);
+      for (const p of participants.rows) {
+        socketService.emitToUser(p.user_id, 'chatListUpdate', {
+          chatId,
+          lastMessage: preview,
+          senderId: userId,
+          sentAt: message.created_at || new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to emit chatListUpdate', { chatId, error: (err as Error).message });
+    }
 
     // If this is a text message to AI coach chat, trigger AI response via LangGraph
     // This enables: proactive message replies → AI processes with tools → auto-logs data

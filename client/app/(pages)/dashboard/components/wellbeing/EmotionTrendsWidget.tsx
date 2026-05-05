@@ -28,12 +28,15 @@ import {
 
 interface EmotionTrendsWidgetProps {
   compact?: boolean;
+  /** Dense overview grid: single-row mood + confidence/trend, no distribution/recent. */
+  minimal?: boolean;
   showPrivacyControls?: boolean;
   onViewDetails?: () => void;
 }
 
 export function EmotionTrendsWidget({
   compact = false,
+  minimal = false,
   showPrivacyControls = true,
   onViewDetails,
 }: EmotionTrendsWidgetProps) {
@@ -133,12 +136,21 @@ export function EmotionTrendsWidget({
     boxShadow: '0 4px 8px rgba(0,0,0,0.4), 0 12px 32px rgba(0,0,0,0.5), 0 24px 64px rgba(0,0,0,0.25), 0 0 40px rgba(236,72,153,0.06), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.3)',
   };
 
+  const shellStyle = minimal
+    ? {
+        background: 'linear-gradient(165deg, rgba(32,22,38,0.95) 0%, rgba(18,12,28,0.98) 45%, rgba(10,8,18,1) 100%)',
+        border: '1px solid rgba(244,114,182,0.28)',
+        boxShadow:
+          '0 8px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.35), 0 0 48px rgba(236,72,153,0.12), inset 0 1px 0 rgba(255,255,255,0.1), inset 0 -1px 0 rgba(0,0,0,0.35)',
+      }
+    : cardStyle;
+
   // ─── Loading ────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="rounded-2xl p-5" style={cardStyle}>
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 text-pink-400 animate-spin" />
+      <div className={`rounded-2xl ${minimal ? 'p-4' : 'p-5'} ${minimal ? 'h-full min-h-[120px] flex items-center justify-center' : ''}`} style={shellStyle}>
+        <div className={`flex items-center justify-center ${minimal ? 'py-4' : 'py-8'}`}>
+          <Loader2 className={`text-pink-400 animate-spin ${minimal ? 'w-5 h-5' : 'w-6 h-6'}`} />
         </div>
       </div>
     );
@@ -147,7 +159,7 @@ export function EmotionTrendsWidget({
   // ─── Disabled ───────────────────────────────────────────────
   if (preferences && !preferences.emotionLoggingEnabled) {
     return (
-      <div className="rounded-2xl p-5" style={cardStyle}>
+      <div className="rounded-2xl p-5" style={shellStyle}>
         <div className="flex items-center gap-2 mb-4">
           <Heart className="w-5 h-5 text-pink-400" style={{ filter: 'drop-shadow(0 0 4px rgba(236,72,153,0.5))' }} />
           <h3 className="font-bold text-white text-sm">Emotional Wellbeing</h3>
@@ -170,7 +182,7 @@ export function EmotionTrendsWidget({
   // ─── Error ──────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="rounded-2xl p-5" style={cardStyle}>
+      <div className="rounded-2xl p-5" style={shellStyle}>
         <div className="flex items-center gap-2 mb-4">
           <Heart className="w-5 h-5 text-pink-400" />
           <h3 className="font-bold text-white text-sm">Emotional Wellbeing</h3>
@@ -192,8 +204,8 @@ export function EmotionTrendsWidget({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4, transition: { type: 'spring', stiffness: 400, damping: 25 } }}
-      className="group/emotion relative rounded-2xl overflow-hidden"
-      style={cardStyle}
+      className={`group/emotion relative overflow-hidden rounded-2xl ${minimal ? 'h-full min-h-0 flex flex-col ring-1 ring-white/[0.06]' : ''}`}
+      style={shellStyle}
     >
       {/* Top edge light */}
       <div className="absolute top-0 left-[8%] right-[8%] h-px pointer-events-none"
@@ -204,14 +216,16 @@ export function EmotionTrendsWidget({
         style={{ background: 'radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%)' }} />
 
       {/* Header */}
-      <div className="p-4 sm:p-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg"
+      <div className={`${minimal ? 'px-3 py-2.5' : 'p-4 sm:p-5'}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className={`shrink-0 rounded-lg ${minimal ? 'p-1' : 'p-1.5'}`}
               style={{ background: 'rgba(236,72,153,0.12)', border: '1px solid rgba(236,72,153,0.18)' }}>
-              <Heart className="w-4 h-4 text-pink-400" style={{ filter: 'drop-shadow(0 0 4px rgba(236,72,153,0.5))' }} />
+              <Heart className={`text-pink-400 ${minimal ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} style={{ filter: 'drop-shadow(0 0 4px rgba(236,72,153,0.5))' }} />
             </div>
-            <h3 className="font-bold text-white text-sm tracking-tight">Emotional Wellbeing</h3>
+            <h3 className={`font-bold tracking-tight text-white ${minimal ? 'text-[11px] uppercase tracking-[0.14em] text-slate-200' : 'truncate text-sm'}`}>
+              {minimal ? 'Mood' : 'Emotional Wellbeing'}
+            </h3>
           </div>
           <div className="flex items-center gap-1.5">
             {showPrivacyControls && (
@@ -260,14 +274,63 @@ export function EmotionTrendsWidget({
       </div>
 
       {/* Content */}
-      <div className="p-4 sm:p-5">
+      <div className={`${minimal ? 'flex min-h-0 flex-1 flex-col px-3 pb-3 pt-0.5' : 'p-4 sm:p-5'}`}>
         {!trends || topEmotions.length === 0 ? (
-          <div className="text-center py-6">
-            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center"
+          <div className={`text-center ${minimal ? 'py-4' : 'py-6'}`}>
+            <div className={`mx-auto mb-2 rounded-2xl flex items-center justify-center ${minimal ? 'w-10 h-10' : 'w-14 h-14 mb-3'}`}
               style={{ background: 'rgba(236,72,153,0.06)', border: '1px solid rgba(236,72,153,0.1)' }}>
-              <span className="text-3xl">😶</span>
+              <span className={minimal ? 'text-2xl' : 'text-3xl'}>😶</span>
             </div>
-            <p className="text-sm text-slate-400">No emotion data yet. Start a voice call to track emotions.</p>
+            <p className={`text-slate-400 ${minimal ? 'text-xs leading-snug px-1' : 'text-sm'}`}>
+              No emotion data yet. Start a voice call to track emotions.
+            </p>
+          </div>
+        ) : minimal ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 px-2 py-3 text-center">
+            <motion.div
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl leading-none ring-1 ring-white/10"
+              style={{
+                background: 'linear-gradient(165deg, rgba(255,255,255,0.11) 0%, rgba(255,255,255,0.04) 45%, rgba(0,0,0,0.15) 100%)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -1px 0 rgba(0,0,0,0.35)',
+              }}
+              animate={{ scale: [1, 1.03, 1] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <span
+                className="select-none text-[2.25rem] leading-none"
+                style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.5))', lineHeight: 1 }}
+                aria-hidden
+              >
+                {getEmotionEmoji(trends.dominantEmotion)}
+              </span>
+            </motion.div>
+            <h4
+              className="max-w-full px-1 text-base font-bold leading-tight tracking-tight text-white"
+              style={{ textShadow: '0 0 14px rgba(236,72,153,0.18)' }}
+            >
+              {getEmotionLabel(trends.dominantEmotion)}
+            </h4>
+            <div className="flex w-full max-w-[11.5rem] flex-col items-stretch gap-1.5">
+              <span
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-[10px] font-semibold tabular-nums text-slate-200 ring-1 ring-white/10"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
+                }}
+              >
+                <span className="font-semibold uppercase tracking-wider text-slate-500">Conf</span>
+                <span className="text-slate-50">{trends.averageConfidence}%</span>
+              </span>
+              <span
+                className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-[10px] font-semibold ${trendStyle.text}`}
+                style={{
+                  background: trendStyle.bg,
+                  border: `1px solid ${trendStyle.border}`,
+                }}
+              >
+                {getTrendIcon(trends.trend)}
+                <span>{getTrendLabel(trends.trend)}</span>
+              </span>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">

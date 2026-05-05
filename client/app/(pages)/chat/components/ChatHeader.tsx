@@ -31,7 +31,10 @@ interface ChatHeaderProps {
   onUserClick?: (userId: string, userName: string, userAvatar?: string | null) => void;
   otherUserId?: string;
   otherUserName?: string;
+  isOtherUserOnline?: boolean;
   className?: string;
+  /** When set, Settings opens in-chat instead of navigating to /settings */
+  onOpenSettings?: () => void;
 }
 
 const HEADER_CSS = `
@@ -58,7 +61,9 @@ export function ChatHeader({
   onUserClick,
   otherUserId,
   otherUserName,
+  isOtherUserOnline,
   className,
+  onOpenSettings: _onOpenSettings,
 }: ChatHeaderProps) {
   const router = useRouter();
   const isAICoach = title === 'AI Coach' || title === 'Aurea';
@@ -70,7 +75,7 @@ export function ChatHeader({
       <style>{HEADER_CSS}</style>
       <div
         className={cn(
-          'relative flex items-center justify-between px-4 sm:px-5 py-3 flex-shrink-0 overflow-hidden',
+          'relative flex items-center justify-between px-4 sm:px-6 h-[72px] flex-shrink-0 overflow-hidden',
           className
         )}
         style={{
@@ -117,7 +122,7 @@ export function ChatHeader({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={avatar} alt={title} className="h-full w-full object-cover transition-transform group-hover:scale-110" />
               {/* Online indicator */}
-              {isAICoach && (
+              {(isAICoach || (!isGroupChat && isOtherUserOnline)) && (
                 <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#080a12]"
                   style={{ boxShadow: '0 0 6px rgba(16,185,129,0.5)' }} />
               )}
@@ -158,6 +163,16 @@ export function ChatHeader({
 
         {/* Action buttons */}
         <div className="flex items-center gap-1 shrink-0 relative z-10">
+          {/* <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => (onOpenSettings ? onOpenSettings() : router.push('/settings'))}
+            title="Settings"
+            aria-label="Settings"
+            className={iconBtnClass}
+          >
+            <Settings className="h-[18px] w-[18px]" />
+          </Button> */}
           <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} title="Dashboard" className={iconBtnClass}>
             <LayoutDashboard className="h-[18px] w-[18px]" />
           </Button>

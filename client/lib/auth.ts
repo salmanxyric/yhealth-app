@@ -36,7 +36,7 @@ export const authConfig: NextAuthConfig = {
           }
 
           if (!response.ok || !data.success) {
-            throw new Error(data.error?.message || "Invalid credentials");
+            throw new Error(data.message || data.error?.message || "Invalid credentials");
           }
 
           // Extract tokens - backend returns { user, tokens: { accessToken, refreshToken } }

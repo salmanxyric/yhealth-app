@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { Calendar, ChevronRight, TriangleAlert } from "lucide-react";
+import { Calendar, ChevronRight, TriangleAlert, Pencil, Trash2, Check } from "lucide-react";
 import type { Contract } from "./types";
 import { statusConfig, conditionConfig, penaltyConfig } from "./constants";
 
@@ -9,6 +9,11 @@ interface ContractCardProps {
   contract: Contract;
   index: number;
   onClick: (contract: Contract) => void;
+  onEdit?: (contract: Contract) => void;
+  onDelete?: (contract: Contract) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (contractId: string) => void;
 }
 
 function formatDate(d: string) {
@@ -27,7 +32,7 @@ function daysRemaining(endDate: string): number {
   );
 }
 
-export function ContractCard({ contract, index, onClick }: ContractCardProps) {
+export function ContractCard({ contract, index, onClick, onEdit, onDelete, selectable, selected, onToggleSelect }: ContractCardProps) {
   const prefersReducedMotion = useReducedMotion();
   const sc = statusConfig[contract.status];
   const StatusIcon = sc.icon;
@@ -91,28 +96,64 @@ export function ContractCard({ contract, index, onClick }: ContractCardProps) {
           }}
         />
 
-        {/* ── Top row: Status badge + days remaining ── */}
-        <div className="flex items-center justify-between mb-4">
-          <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wider ${sc.bg} ${sc.color}`}
+        {/* ── Selection checkbox ── */}
+        {selectable && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleSelect?.(contract.id); }}
+            className={`absolute top-3 left-3 z-10 w-5 h-5 rounded-md border flex items-center justify-center transition-all cursor-pointer ${
+              selected
+                ? "bg-emerald-500 border-emerald-500"
+                : "border-zinc-600 bg-white/[0.04] hover:border-zinc-400"
+            }`}
           >
-            <StatusIcon className="w-3.5 h-3.5" />
-            {sc.label}
+            {selected && <Check className="w-3 h-3 text-white" />}
+          </button>
+        )}
+
+        {/* ── Top row: Status badge + days remaining + actions ── */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wider ${sc.bg} ${sc.color}`}
+            >
+              <StatusIcon className="w-3.5 h-3.5" />
+              {sc.label}
+            </div>
+
+            {contract.status === "at_risk" && (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 text-[11px] font-medium">
+                <TriangleAlert className="w-3 h-3" />
+                At Risk
+              </div>
+            )}
           </div>
 
-          {isActive && (
-            <div className="flex items-center gap-1 text-[11px] text-zinc-500">
-              <Calendar className="w-3 h-3" />
-              <span className="tabular-nums">{days}d left</span>
-            </div>
-          )}
-
-          {contract.status === "at_risk" && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 text-[11px] font-medium">
-              <TriangleAlert className="w-3 h-3" />
-              At Risk
-            </div>
-          )}
+          <div className="flex items-center gap-1.5">
+            {isActive && (
+              <div className="flex items-center gap-1 text-[11px] text-zinc-500 mr-1">
+                <Calendar className="w-3 h-3" />
+                <span className="tabular-nums">{days}d left</span>
+              </div>
+            )}
+            {onEdit && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit(contract); }}
+                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/[0.08] transition-all cursor-pointer"
+                aria-label="Edit contract"
+              >
+                <Pencil className="w-3.5 h-3.5 text-zinc-400 hover:text-white" />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(contract); }}
+                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 transition-all cursor-pointer"
+                aria-label="Delete contract"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-zinc-400 hover:text-rose-400" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Title ── */}

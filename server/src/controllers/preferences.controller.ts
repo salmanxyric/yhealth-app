@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -16,6 +16,11 @@ import type {
   IntegrationPreferencesInput,
   UpdatePreferencesInput,
 } from '../validators/preferences.validator.js';
+import {
+  coachingStyleForPersona,
+  personaFromCoachingStyle,
+  normalizePersonaId,
+} from '../../../shared/types/domain/coach-persona.js';
 
 // Type definitions
 type CoachingStyle = 'supportive' | 'direct' | 'analytical' | 'motivational';
@@ -34,6 +39,7 @@ interface UserPreferencesRow {
   max_notifications_day: number;
   max_notifications_week: number;
   coaching_style: CoachingStyle;
+  ai_coach_persona?: string | null;
   coaching_intensity: CoachingIntensity;
   preferred_channel: NotificationChannel;
   check_in_frequency: string;
@@ -54,6 +60,8 @@ interface UserPreferencesRow {
   allow_anonymous_data_research: boolean;
   show_in_leaderboards: boolean;
   profile_visibility: string;
+  health_profile_visibility: string;
+  health_profile_allowed_users: string[];
   auto_sync_enabled: boolean;
   sync_on_wifi_only: boolean;
   background_sync_enabled: boolean;
@@ -132,6 +140,7 @@ function transformPreferencesToAPI(prefs: UserPreferencesRow) {
     },
     coaching: {
       style: prefs.coaching_style,
+      aiCoachPersona: prefs.ai_coach_persona || personaFromCoachingStyle(prefs.coaching_style),
       intensity: prefs.coaching_intensity,
       preferredChannel: prefs.preferred_channel,
       checkInFrequency: prefs.check_in_frequency,
@@ -161,6 +170,8 @@ function transformPreferencesToAPI(prefs: UserPreferencesRow) {
       allowAnonymousDataForResearch: prefs.allow_anonymous_data_research,
       showInLeaderboards: prefs.show_in_leaderboards,
       profileVisibility: prefs.profile_visibility,
+      healthProfileVisibility: prefs.health_profile_visibility || 'friends',
+      healthProfileAllowedUsers: prefs.health_profile_allowed_users || [],
     },
     integrations: {
       autoSyncEnabled: prefs.auto_sync_enabled,
@@ -267,6 +278,12 @@ export const updateNotificationPreferences = asyncHandler(
       }
     }
 
+    if (data.types && Object.keys(data.types).length > 0) {
+      const currentTypes = (prefs.notification_types || {}) as Record<string, boolean>;
+      updates.push(`notification_types = $${paramIndex++}`);
+      values.push(JSON.stringify({ ...currentTypes, ...data.types }));
+    }
+
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(userId);
 
@@ -309,7 +326,35 @@ export const getCoachingStyles = asyncHandler(async (_req: AuthenticatedRequest,
     ...value,
   }));
 
+  const personas = [
+    {
+      id: 'commander',
+      name: 'Commander',
+      description: 'Direct, high-accountability tone. Calls out gaps with respect; pushes for execution.',
+      mapsToStyle: 'direct',
+    },
+    {
+      id: 'friend',
+      name: 'Friend',
+      description: 'Warm, patient, and encouraging. Normalizes setbacks; celebrates small wins.',
+      mapsToStyle: 'supportive',
+    },
+    {
+      id: 'data_nerd',
+      name: 'Data nerd',
+      description: 'Calm, evidence-first coaching. Leads with metrics and trends, minimal hype.',
+      mapsToStyle: 'analytical',
+    },
+    {
+      id: 'guardian',
+      name: 'Guardian',
+      description: 'Prioritizes safety, self-care, and sustainable habits. Balances ambition with wellbeing.',
+      mapsToStyle: 'supportive',
+    },
+  ];
+
   ApiResponse.success(res, {
+    personas,
     styles,
     intensities,
     channels: [
@@ -355,9 +400,17 @@ export const updateCoachingPreferences = asyncHandler(
     const values: (string | number | boolean | string[])[] = [];
     let paramIndex = 1;
 
-    if (data.style) {
+    if (data.aiCoachPersona) {
+      const normalizedPersona = normalizePersonaId(data.aiCoachPersona);
+      updates.push(`ai_coach_persona = $${paramIndex++}`);
+      values.push(normalizedPersona);
+      updates.push(`coaching_style = $${paramIndex++}`);
+      values.push(coachingStyleForPersona(normalizedPersona));
+    } else if (data.style) {
       updates.push(`coaching_style = $${paramIndex++}`);
       values.push(data.style);
+      updates.push(`ai_coach_persona = $${paramIndex++}`);
+      values.push(personaFromCoachingStyle(data.style));
     }
     if (data.intensity) {
       updates.push(`coaching_intensity = $${paramIndex++}`);
@@ -425,6 +478,7 @@ export const updateCoachingPreferences = asyncHandler(
 
     // Send notification for preference update
     const updatedFields: string[] = [];
+    if (data.aiCoachPersona) updatedFields.push('aiCoachPersona');
     if (data.style) updatedFields.push('coachingStyle');
     if (data.intensity) updatedFields.push('coachingIntensity');
     if (data.preferredChannel) updatedFields.push('notificationChannels');
@@ -577,6 +631,14 @@ export const updatePrivacyPreferences = asyncHandler(
     if (data.profileVisibility) {
       updates.push(`profile_visibility = $${paramIndex++}`);
       values.push(data.profileVisibility);
+    }
+    if (data.healthProfileVisibility) {
+      updates.push(`health_profile_visibility = $${paramIndex++}`);
+      values.push(data.healthProfileVisibility);
+    }
+    if (data.healthProfileAllowedUsers) {
+      updates.push(`health_profile_allowed_users = $${paramIndex++}`);
+      values.push(data.healthProfileAllowedUsers as any);
     }
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -741,13 +803,26 @@ export const updateAllPreferences = asyncHandler(
           values.push(data.notifications.frequency.maxPerWeek);
         }
       }
+      if (data.notifications.types && Object.keys(data.notifications.types).length > 0) {
+        const currentTypes = (prefs.notification_types || {}) as Record<string, boolean>;
+        updates.push(`notification_types = $${paramIndex++}`);
+        values.push(JSON.stringify({ ...currentTypes, ...data.notifications.types }));
+      }
     }
 
     // Coaching
     if (data.coaching) {
-      if (data.coaching.style) {
+      if (data.coaching.aiCoachPersona) {
+        const normalizedPersona = normalizePersonaId(data.coaching.aiCoachPersona);
+        updates.push(`ai_coach_persona = $${paramIndex++}`);
+        values.push(normalizedPersona);
+        updates.push(`coaching_style = $${paramIndex++}`);
+        values.push(coachingStyleForPersona(normalizedPersona));
+      } else if (data.coaching.style) {
         updates.push(`coaching_style = $${paramIndex++}`);
         values.push(data.coaching.style);
+        updates.push(`ai_coach_persona = $${paramIndex++}`);
+        values.push(personaFromCoachingStyle(data.coaching.style));
       }
       if (data.coaching.intensity) {
         updates.push(`coaching_intensity = $${paramIndex++}`);
@@ -844,6 +919,14 @@ export const updateAllPreferences = asyncHandler(
       if (data.privacy.profileVisibility) {
         updates.push(`profile_visibility = $${paramIndex++}`);
         values.push(data.privacy.profileVisibility);
+      }
+      if (data.privacy.healthProfileVisibility) {
+        updates.push(`health_profile_visibility = $${paramIndex++}`);
+        values.push(data.privacy.healthProfileVisibility);
+      }
+      if (data.privacy.healthProfileAllowedUsers) {
+        updates.push(`health_profile_allowed_users = $${paramIndex++}`);
+        values.push(data.privacy.healthProfileAllowedUsers as any);
       }
     }
 

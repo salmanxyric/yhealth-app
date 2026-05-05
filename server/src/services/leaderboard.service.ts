@@ -3,7 +3,7 @@
  * @description Manages daily leaderboards with precomputed snapshots and Redis caching
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { redisCacheService } from './redis-cache.service.js';
 
@@ -198,49 +198,55 @@ class LeaderboardService {
     let ranks: LeaderboardEntry[] = [];
 
     if (cachedRanks.length > 0) {
-      // Parse Redis results
+      const userIds: string[] = [];
+      const scoreMap = new Map<string, { score: number; rank: number }>();
       for (let i = 0; i < cachedRanks.length; i += 2) {
         const userId = cachedRanks[i];
         const score = parseFloat(cachedRanks[i + 1] || '0');
         const rank = offset + Math.floor(i / 2) + 1;
+        userIds.push(userId);
+        scoreMap.set(userId, { score, rank });
+      }
 
-        // Get user details
-        const userResult = await query<{
+      if (userIds.length > 0) {
+        const placeholders = userIds.map((_, i) => `$${i + 2}`).join(',');
+        const enrichResult = await query<{
+          id: string;
           first_name: string;
           last_name: string;
           avatar: string | null;
+          component_scores: Record<string, number> | null;
         }>(
-          `SELECT first_name, last_name, avatar FROM users WHERE id = $1`,
-          [userId]
+          `SELECT u.id, u.first_name, u.last_name, u.avatar, dus.component_scores
+           FROM users u
+           LEFT JOIN daily_user_scores dus ON dus.user_id = u.id AND dus.date = $1::date
+           WHERE u.id IN (${placeholders})`,
+          [date, ...userIds]
         );
 
-        if (userResult.rows.length > 0) {
-          const user = userResult.rows[0];
-          // Get component scores
-          const scoreResult = await query<{ component_scores: Record<string, number> }>(
-            `SELECT component_scores FROM daily_user_scores WHERE user_id = $1 AND date = $2::date`,
-            [userId, date]
-          );
-
-          // Normalize old 4-key scores to 6-key format
-          const rawScores = scoreResult.rows[0]?.component_scores as Record<string, number> | undefined;
-          const normalizedScores: LeaderboardEntry['component_scores'] = rawScores ? {
-            workout: rawScores.workout ?? 0,
-            nutrition: rawScores.nutrition ?? 0,
-            wellbeing: rawScores.wellbeing ?? 0,
-            biometrics: rawScores.biometrics ?? 0,
-            engagement: rawScores.engagement ?? rawScores.participation ?? 0,
-            consistency: rawScores.consistency ?? 0,
+        const userMap = new Map(enrichResult.rows.map((r) => [r.id, r]));
+        for (const userId of userIds) {
+          const userData = userMap.get(userId);
+          const cached = scoreMap.get(userId)!;
+          if (!userData) continue;
+          const raw = userData.component_scores;
+          const cs: LeaderboardEntry['component_scores'] = raw ? {
+            workout: raw.workout ?? 0,
+            nutrition: raw.nutrition ?? 0,
+            wellbeing: raw.wellbeing ?? 0,
+            biometrics: raw.biometrics ?? 0,
+            engagement: raw.engagement ?? (raw as any).participation ?? 0,
+            consistency: raw.consistency ?? 0,
           } : { workout: 0, nutrition: 0, wellbeing: 0, biometrics: 0, engagement: 0, consistency: 0 };
 
           ranks.push({
             user_id: userId,
-            rank,
-            total_score: score,
-            component_scores: normalizedScores,
+            rank: cached.rank,
+            total_score: cached.score,
+            component_scores: cs,
             user: {
-              name: `${user.first_name} ${user.last_name}`,
-              avatar: user.avatar || undefined,
+              name: `${userData.first_name} ${userData.last_name}`,
+              avatar: userData.avatar || undefined,
             },
           });
         }
@@ -262,13 +268,22 @@ class LeaderboardService {
       }
     }
 
-    // Get total count (only onboarded users)
-    const totalResult = await query<{ count: string }>(
-      `SELECT COUNT(*) as count FROM daily_user_scores dus
+    // Get total count filtered by board type
+    let countQuery = `SELECT COUNT(*) as count FROM daily_user_scores dus
        JOIN users u ON u.id = dus.user_id
-       WHERE dus.date = $1::date AND u.onboarding_status = 'completed'`,
-      [date]
-    );
+       WHERE dus.date = $1::date AND u.onboarding_status = 'completed'`;
+    const countParams: (string | number)[] = [date];
+
+    if (type === 'global') {
+      countQuery += ` AND (u.privacy_flags->>'hide_from_global')::boolean IS NOT TRUE`;
+    } else if (type === 'competition' && options.segment) {
+      countQuery += ` AND dus.user_id IN (
+        SELECT user_id FROM competition_entries WHERE competition_id = $2 AND status = 'active'
+      )`;
+      countParams.push(options.segment);
+    }
+
+    const totalResult = await query<{ count: string }>(countQuery, countParams);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     return {

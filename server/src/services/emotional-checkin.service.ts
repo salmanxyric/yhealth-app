@@ -6,15 +6,19 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { logger } from './logger.service.js';
 import { modelFactory } from './model-factory.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { crisisDetectionService } from './crisis-detection.service.js';
+import {
+  mentalHealthGuardrailService,
+  MENTAL_HEALTH_SYSTEM_ADDENDUM,
+} from './mental-health-guardrail.service.js';
 import { moodService } from './wellbeing/mood.service.js';
 import { stressService } from './stress.service.js';
 import { energyService } from './wellbeing/energy.service.js';
 import { emotionalCheckinInsightsService } from './emotional-checkin-insights.service.js';
 import { emotionalCheckinTrendsService } from './emotional-checkin-trends.service.js';
-import { aiCoachService } from './ai-coach.service.js';
+import { aiCoachService } from './ai-coach/index.js';
 import { wellbeingAutoTrackerService } from './wellbeing-auto-tracker.service.js';
 import {
   emotionalCheckInQuestionsService,
@@ -269,7 +273,7 @@ This will take about 1-3 minutes. We'll go through a few questions about how you
       : response.text || String(response.value);
     const crisisCheck = await crisisDetectionService.detectCrisisKeywords(responseText);
 
-    if (crisisCheck.isCrisis && crisisCheck.severity !== 'low') {
+    if (crisisCheck.isCrisis) {
       // Update session with crisis flag
       await query(
         `UPDATE emotional_checkin_sessions 
@@ -284,6 +288,15 @@ This will take about 1-3 minutes. We'll go through a few questions about how you
       };
     }
 
+    const mentalHealthAssessment = await mentalHealthGuardrailService.assessUserText(responseText);
+    void mentalHealthGuardrailService
+      .logScreeningEvent(session.userId, mentalHealthAssessment.lane, 'emotional_checkin', responseText)
+      .catch(() => {});
+    const mentalHealthAddendum =
+      mentalHealthAssessment.lane === 'elevated_clinical_concern'
+        ? MENTAL_HEALTH_SYSTEM_ADDENDUM
+        : undefined;
+
     // Add response to conversation history
     const updatedHistory: ConversationMessage[] = [
       ...conversationHistory,
@@ -295,7 +308,7 @@ This will take about 1-3 minutes. We'll go through a few questions about how you
     ];
 
     // Generate next question
-    const nextQuestion = await this.generateNextQuestion(session, updatedHistory);
+    const nextQuestion = await this.generateNextQuestion(session, updatedHistory, undefined, mentalHealthAddendum);
 
     // Update question count
     await query(
@@ -398,11 +411,21 @@ This will take about 1-3 minutes. We'll go through a few questions about how you
   private async generateNextQuestion(
     session: EmotionalCheckInSession,
     conversationHistory: ConversationMessage[],
-    sessionResponses?: Array<{ questionId: string; category: QuestionCategory; value: number }>
+    sessionResponses?: Array<{ questionId: string; category: QuestionCategory; value: number }>,
+    mentalHealthSystemAddendum?: string
   ): Promise<CheckInQuestion | null> {
     try {
       // Build routing context from session responses
       const routingContext = await this.buildRoutingContext(session, sessionResponses);
+
+      if (mentalHealthSystemAddendum) {
+        return await this.generateLLMQuestion(
+          session,
+          conversationHistory,
+          routingContext,
+          mentalHealthSystemAddendum
+        );
+      }
 
       // Try template-based selection first (faster, cheaper, deterministic)
       const templateQuestion = emotionalCheckInQuestionsService.selectNextQuestion(routingContext);
@@ -423,7 +446,7 @@ This will take about 1-3 minutes. We'll go through a few questions about how you
         questionCount: session.questionCount,
       });
 
-      return await this.generateLLMQuestion(session, conversationHistory, routingContext);
+      return await this.generateLLMQuestion(session, conversationHistory, routingContext, undefined);
     } catch (error) {
       logger.error('[EmotionalCheckIn] Error generating question', {
         sessionId: session.id,
@@ -476,7 +499,8 @@ This will take about 1-3 minutes. We'll go through a few questions about how you
   private async generateLLMQuestion(
     session: EmotionalCheckInSession,
     conversationHistory: ConversationMessage[],
-    routingContext: RoutingContext
+    routingContext: RoutingContext,
+    guardrailAddendum?: string
   ): Promise<CheckInQuestion | null> {
     try {
       const historyContext = conversationHistory
@@ -490,6 +514,7 @@ This will take about 1-3 minutes. We'll go through a few questions about how you
         .join(', ');
 
       const prompt = `${EMOTIONAL_CHECKIN_SYSTEM_PROMPT}
+${guardrailAddendum ? `\n\n## Guardrail (mandatory for this turn)\n${guardrailAddendum}\n` : ''}
 
 ## Current Session Context
 - Session Type: ${session.screeningType}
@@ -1220,6 +1245,13 @@ Respond with ONLY valid JSON, no additional text.`;
       // Check for crisis keywords
       const textToCheck = responseText || (typeof responseValue === 'string' ? responseValue : '');
       const crisisCheck = await crisisDetectionService.detectCrisisKeywords(textToCheck);
+
+      if (textToCheck.trim().length > 0) {
+        const mh = await mentalHealthGuardrailService.assessUserText(textToCheck);
+        void mentalHealthGuardrailService
+          .logScreeningEvent(userId, mh.lane, 'emotional_checkin', textToCheck)
+          .catch(() => {});
+      }
 
       await query(
         `INSERT INTO emotional_checkin_responses

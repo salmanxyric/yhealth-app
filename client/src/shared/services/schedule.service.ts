@@ -19,6 +19,15 @@ export interface ScheduleTemplate {
   updatedAt: string;
 }
 
+/**
+ * Discriminator for where this item came from:
+ * - 'manual': user-created; fully editable + deletable + linkable.
+ * - 'google': synced from Google Calendar; read-only.
+ * - 'prayer': synced from the prayer_schedules table; read-only; supports
+ *    a "completed" toggle.
+ */
+export type ScheduleItemSource = 'manual' | 'google' | 'prayer';
+
 export interface ScheduleItem {
   id: string;
   scheduleId: string;
@@ -33,6 +42,12 @@ export interface ScheduleItem {
   shape?: 'square' | 'circle' | 'rounded' | 'diamond' | 'hexagon';
   position: number;
   metadata: Record<string, unknown>;
+  source: ScheduleItemSource;
+  externalSource?: string;
+  externalId?: string;
+  sourceUpdatedAt?: string;
+  completed: boolean;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -9,7 +9,6 @@ import { WelcomeStep } from "./steps/WelcomeStep";
 import { AssessmentModeStep } from "./steps/AssessmentModeStep";
 import { AssessmentStep } from "./steps/AssessmentStep";
 import { DeepAssessmentStep } from "./steps/DeepAssessmentStep";
-import { BodyImageUploadStep } from "./steps/BodyImageUploadStep";
 import { GoalSetupStep } from "./steps/GoalSetupStep";
 import { LifeGoalsStep } from "./steps/LifeGoalsStep";
 import { PreferencesStep } from "./steps/PreferencesStep";
@@ -22,7 +21,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 function OnboardingContent() {
-  const { currentStep, goToStep, assessmentMode } = useOnboarding();
+  const { currentStep, goToStep, assessmentMode, assessmentComplete } = useOnboarding();
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
@@ -32,6 +31,11 @@ function OnboardingContent() {
       router.push("/auth/signin?callbackUrl=/onboarding");
     }
   }, [isAuthenticated, isLoading, router]);
+
+  // Scroll to top on step change (must be before early returns to avoid hooks ordering violation)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [currentStep]);
 
   if (isLoading) {
     return (
@@ -81,21 +85,17 @@ function OnboardingContent() {
       case 1:
         return <AssessmentModeStep />;
       case 2:
-        // Render Deep or Quick assessment based on selected mode
+        if (assessmentComplete) return <LifeGoalsStep />;
         return assessmentMode === "deep" ? (
           <DeepAssessmentStep />
         ) : (
           <AssessmentStep />
         );
       case 3:
-        return <BodyImageUploadStep />;
-      case 4:
         return <GoalSetupStep />;
-      case 5:
-        return <LifeGoalsStep />;
-      case 6:
+      case 4:
         return <PreferencesStep />;
-      case 7:
+      case 5:
         return <PlanGenerationStep />;
       default:
         return <WelcomeStep />;
@@ -104,7 +104,7 @@ function OnboardingContent() {
 
   // Don't show progress on plan generation step or deep assessment (has its own header)
   const isDeepAssessment = currentStep === 2 && assessmentMode === "deep";
-  const showProgress = currentStep < 7 && !isDeepAssessment;
+  const showProgress = currentStep < TOTAL_STEPS - 1 && !isDeepAssessment;
 
   return (
     <div className="min-h-screen flex flex-col">

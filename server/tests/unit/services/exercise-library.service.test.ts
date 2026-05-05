@@ -16,6 +16,18 @@ const mockQuery = jest.fn<any>();
 
 const mockTransaction = jest.fn<any>();
 
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
+  query: mockQuery,
+  transaction: mockTransaction,
+  pool: { query: mockQuery, end: jest.fn() },
+  database: { healthCheck: jest.fn() },
+  getClient: jest.fn(),
+  closePool: jest.fn(),
+  testConnection: jest.fn(),
+  getPoolStats: jest.fn(),
+  default: {},
+}));
+
 jest.unstable_mockModule('../../../src/database/pg.js', () => ({
   query: mockQuery,
   transaction: mockTransaction,
@@ -44,6 +56,12 @@ jest.unstable_mockModule('../../../src/services/redis-cache.service.js', () => (
   },
 }));
 
+jest.unstable_mockModule('../../../src/services/exercise-ingestion.service.js', () => ({
+  invalidateExerciseCache: jest.fn(),
+  ingestFromExerciseDB: jest.fn(),
+  ingestFromMuscleWiki: jest.fn(),
+}));
+
 // Dynamic imports after mocks
 const {
   listExercises,
@@ -54,6 +72,7 @@ const {
   getAvailableFilters,
   getExerciseStats,
   getETag,
+  adminImportExercises,
 } = await import('../../../src/services/exercise-library.service.js');
 
 // ============================================
@@ -509,6 +528,85 @@ describe('ExerciseLibraryService', () => {
 
       const sql = mockQuery.mock.calls[0][0] as string;
       expect(sql).toContain('category = $');
+    });
+  });
+
+  // ------------------------------------------
+  // adminImportExercises
+  // ------------------------------------------
+  describe('adminImportExercises', () => {
+    const minimalInput = {
+      name: 'Push Up',
+      category: 'strength' as const,
+      difficulty_level: 'beginner' as const,
+    };
+
+    it('should insert a single exercise and return inserted=1, skipped=0, failed=0', async () => {
+      const insertedRow = makeExerciseRow({ id: 'new-uuid', name: 'Push Up', source: 'manual', is_system: false });
+      // adminInsertExerciseRow uses 1 query (INSERT RETURNING *)
+      mockQuery.mockResolvedValueOnce(qr([insertedRow]));
+
+      const result = await adminImportExercises([minimalInput]);
+
+      expect(result.inserted).toBe(1);
+      expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(0);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should count duplicate slug as skipped and record in errors[]', async () => {
+      const uniqueViolation = Object.assign(new Error('duplicate key'), {
+        code: '23505',
+        constraint: 'exercises_slug_key',
+      });
+      mockQuery.mockRejectedValueOnce(uniqueViolation);
+
+      const result = await adminImportExercises([minimalInput]);
+
+      expect(result.inserted).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(result.failed).toBe(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]!.error).toMatch(/duplicate/i);
+    });
+
+    it('should count non-unique DB errors as failed', async () => {
+      const dbError = new Error('connection refused');
+      mockQuery.mockRejectedValueOnce(dbError);
+
+      const result = await adminImportExercises([minimalInput]);
+
+      expect(result.inserted).toBe(0);
+      expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.errors[0]!.error).toBe('connection refused');
+    });
+
+    it('should process a mixed batch: 2 inserted, 1 skipped, 1 failed', async () => {
+      const row = makeExerciseRow({ id: 'x' });
+      const uniqueViolation = Object.assign(new Error('duplicate key'), { code: '23505' });
+      const dbError = new Error('timeout');
+
+      // adminInsertExerciseRow uses 1 query (INSERT RETURNING *) per item
+      mockQuery
+        .mockResolvedValueOnce(qr([row]))   // item 0: success
+        .mockResolvedValueOnce(qr([row]))   // item 1: success
+        .mockRejectedValueOnce(uniqueViolation) // item 2: dup slug
+        .mockRejectedValueOnce(dbError);    // item 3: DB error
+
+      const items = [
+        { ...minimalInput, name: 'A' },
+        { ...minimalInput, name: 'B' },
+        { ...minimalInput, name: 'C' },
+        { ...minimalInput, name: 'D' },
+      ];
+
+      const result = await adminImportExercises(items);
+
+      expect(result.inserted).toBe(2);
+      expect(result.skipped).toBe(1);
+      expect(result.failed).toBe(1);
+      expect(result.errors).toHaveLength(2);
     });
   });
 });

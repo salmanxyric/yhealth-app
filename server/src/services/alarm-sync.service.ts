@@ -3,7 +3,7 @@
  * Handles automatic alarm creation from user schedule activities
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { workoutAlarmService, type WorkoutAlarm, type CreateAlarmInput } from './workout-alarm.service.js';
 import { scheduleService, type DailySchedule } from './schedule.service.js';

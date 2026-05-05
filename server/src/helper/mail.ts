@@ -56,6 +56,7 @@ export const EMAIL_SUBJECTS = {
   'contact-admin-note': 'Update on Your Inquiry - Balencia',
   'subscription-confirmation': 'You\'re In! Your Balencia Subscription is Active',
   'subscription-invoice': 'Your Balencia Invoice is Ready',
+  'payment-failed': 'Action Required: Payment Failed - Balencia',
   // Email engine templates
   'coachingInsight': 'A Message from Your AI Coach - Balencia',
   'digestSummary': 'Your Weekly Summary - Balencia',
@@ -147,6 +148,11 @@ export interface IMailHelper {
     email: string,
     firstName: string,
     data: { amountFormatted: string; invoiceUrl: string; invoiceNumber?: string; date?: string }
+  ): Promise<boolean>;
+  sendPaymentFailedEmail(
+    email: string,
+    firstName: string,
+    data: { amountFormatted: string; invoiceUrl?: string; nextRetryDate?: string; manageSubscriptionUrl: string }
   ): Promise<boolean>;
 }
 
@@ -924,6 +930,51 @@ class MailHelper {
     return this.send({
       email,
       subject: EMAIL_SUBJECTS['subscription-invoice'],
+      html,
+      fromName: 'Balencia',
+    });
+  }
+
+  /**
+   * Send payment failed notification email
+   */
+  public async sendPaymentFailedEmail(
+    email: string,
+    firstName: string,
+    data: { amountFormatted: string; invoiceUrl?: string; nextRetryDate?: string; manageSubscriptionUrl: string }
+  ): Promise<boolean> {
+    const { amountFormatted, invoiceUrl, nextRetryDate, manageSubscriptionUrl } = data;
+    const retryLine = nextRetryDate
+      ? `<p style="margin:0 0 16px;color:#94a3b8;font-size:15px;line-height:1.6;">We'll automatically retry the payment on <strong style="color:#e2e8f0;">${nextRetryDate}</strong>. To avoid any interruption, please update your payment method before then.</p>`
+      : `<p style="margin:0 0 16px;color:#94a3b8;font-size:15px;line-height:1.6;">Please update your payment method to continue using Balencia without interruption.</p>`;
+    const invoiceLine = invoiceUrl
+      ? `<p style="margin:0 0 24px;"><a href="${invoiceUrl}" style="color:#38bdf8;text-decoration:underline;font-size:14px;">View invoice details</a></p>`
+      : '';
+    const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Payment Failed - Balencia</title></head>
+<body style="margin:0;padding:0;background-color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:40px 20px;">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#1e293b;border-radius:16px;border:1px solid rgba(148,163,184,0.1);overflow:hidden;">
+<tr><td style="padding:40px 32px 32px;text-align:center;">
+  <div style="width:56px;height:56px;margin:0 auto 24px;border-radius:14px;background:linear-gradient(135deg,#ef4444,#f97316);display:flex;align-items:center;justify-content:center;">
+    <span style="font-size:28px;">⚠️</span>
+  </div>
+  <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#f1f5f9;">Payment failed</h1>
+  <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">Hi ${firstName}, we were unable to process your payment of <strong style="color:#e2e8f0;">${amountFormatted}</strong>.</p>
+  ${retryLine}
+  ${invoiceLine}
+  <a href="${manageSubscriptionUrl}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:12px;">Update payment method</a>
+</td></tr>
+<tr><td style="padding:20px 32px;border-top:1px solid rgba(148,163,184,0.1);text-align:center;">
+  <p style="margin:0;color:#64748b;font-size:12px;">If you believe this is an error, please contact support. Your data remains safe.</p>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+    return this.send({
+      email,
+      subject: EMAIL_SUBJECTS['payment-failed'],
       html,
       fromName: 'Balencia',
     });

@@ -675,7 +675,7 @@ export function GoalsTab() {
   const toggleSelection = (goalId: string) => {
     setSelectedGoals((prev) => { const next = new Set(prev); if (next.has(goalId)) next.delete(goalId); else next.add(goalId); return next; });
   };
-  const selectAll = () => setSelectedGoals(new Set(filteredGoals.map((g) => g.id)));
+  const _selectAll = () => setSelectedGoals(new Set(filteredGoals.map((g) => g.id)));
   const clearSelection = () => { setSelectedGoals(new Set()); setIsSelectionMode(false); };
 
   // ── CRUD Handlers ──

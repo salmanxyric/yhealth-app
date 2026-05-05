@@ -961,8 +961,10 @@ class AICoachController extends BaseController {
    * POST /api/ai-coach/mcq/question
    */
   generateMCQQuestion = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { goal, phase, previousAnswers, extractedInsights, language } = req.body as {
+    const { goal, customGoalText, selectedGoalLabel, phase, previousAnswers, extractedInsights, language } = req.body as {
       goal: GoalCategory;
+      customGoalText?: string;
+      selectedGoalLabel?: string;
       phase?: ConversationPhase;
       previousAnswers?: { questionId: string; questionText?: string; selectedOptions: string[] }[];
       extractedInsights?: ExtractedInsight[];
@@ -976,7 +978,7 @@ class AICoachController extends BaseController {
     const validGoals: GoalCategory[] = [
       'weight_loss', 'muscle_building', 'sleep_improvement', 'stress_wellness',
       'energy_productivity', 'event_training', 'health_condition', 'habit_building',
-      'overall_optimization', 'custom',
+      'overall_optimization', 'nutrition', 'fitness', 'custom',
     ];
 
     if (!validGoals.includes(goal)) {
@@ -990,6 +992,8 @@ class AICoachController extends BaseController {
 
     const result = await aiCoachService.generateMCQQuestion({
       goal,
+      customGoalText,
+      selectedGoalLabel,
       phase: phase || 'opening',
       previousAnswers,
       extractedInsights,
@@ -1026,6 +1030,76 @@ class AICoachController extends BaseController {
     const insights = await aiCoachService.processMCQAnswer(questionId, selectedOptions, goal);
 
     this.success(res, { insights });
+  });
+
+  // ============================================================================
+  // Batch MCQ & Life Coach Questions (Onboarding)
+  // ============================================================================
+
+  /**
+   * Generate batch MCQ questions for quick assessment
+   * POST /api/ai-coach/mcq/batch-questions
+   */
+  generateBatchMCQQuestions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { goal, customGoalText, count, language } = req.body as {
+      goal: GoalCategory;
+      customGoalText?: string;
+      count?: number;
+      language?: SupportedLanguage;
+    };
+
+    if (!goal) {
+      throw ApiError.badRequest('Goal is required');
+    }
+
+    this.log('info', 'Generating batch MCQ questions', {
+      goal,
+      customGoalText: customGoalText?.substring(0, 50),
+      count: count || 6,
+    });
+
+    const result = await aiCoachService.generateBatchMCQQuestions({
+      goal,
+      customGoalText,
+      count,
+      language,
+    });
+
+    this.success(res, result);
+  });
+
+  /**
+   * Generate life-coach questions based on goal + assessment answers
+   * POST /api/ai-coach/life-coach-questions
+   */
+  generateLifeCoachQuestions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const { goal, customGoalText, selectedGoalLabel, assessmentResponses, language } = req.body as {
+      goal: GoalCategory;
+      customGoalText?: string;
+      selectedGoalLabel?: string;
+      assessmentResponses?: { questionText: string; value: string }[];
+      language?: SupportedLanguage;
+    };
+
+    if (!goal) {
+      throw ApiError.badRequest('Goal is required');
+    }
+
+    this.log('info', 'Generating life-coach questions', {
+      goal,
+      customGoalText: customGoalText?.substring(0, 50),
+      assessmentResponsesCount: assessmentResponses?.length || 0,
+    });
+
+    const result = await aiCoachService.generateLifeCoachQuestions({
+      goal,
+      customGoalText,
+      selectedGoalLabel,
+      assessmentResponses,
+      language,
+    });
+
+    this.success(res, result);
   });
 
   // ============================================================================

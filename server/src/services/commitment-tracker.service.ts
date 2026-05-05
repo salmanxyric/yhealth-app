@@ -7,7 +7,7 @@
  * Extracted commitments are matched against actual behavior data.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 
@@ -19,13 +19,14 @@ export interface UserCommitment {
   id: string;
   userId: string;
   commitmentText: string;
-  category: string;           // 'workout' | 'nutrition' | 'sleep' | 'hydration' | 'general'
+  category: string;           // health + life domains: career, relationships, creativity, etc.
   extractedAction: string;    // What specifically they committed to
   commitmentDate: string;
   followUpDate: string;       // When to check
   fulfilled: boolean | null;  // null = not yet checked
   followedUp: boolean;
   createdAt: string;
+  lifeAreaId?: string | null;
 }
 
 // ============================================
@@ -68,10 +69,44 @@ const COMMITMENT_PATTERNS: CommitmentPattern[] = [
     extractAction: () => 'Hit water intake target',
   },
   {
+    keywords: [
+      "i'll apply", "i will apply", "going to apply", "submit applications", "send applications",
+      "update my resume", "i'll update my resume", "reach out to", "networking", "job search",
+      "i'll interview", "prep for interview", "i'll study for", "skill i'll",
+    ],
+    category: 'career',
+    extractAction: (msg) => {
+      const m = msg.match(/(?:apply|application|resume|network|interview|job)\s*[^.!?]{0,50}/i);
+      return m ? m[0].trim().slice(0, 80) : 'Career follow-through (applications, resume, or networking)';
+    },
+  },
+  {
+    keywords: [
+      "call my mother", "call my mom", "visit my mother", "spend time with my",
+      "time with family", "call my dad", "call my friend", "see my partner",
+      "quality time", "i'll call", "i'll visit",
+    ],
+    category: 'relationships',
+    extractAction: (msg) => {
+      const m = msg.match(/(?:call|visit|spend time with)\s+[^.!?]{0,40}/i);
+      return m ? m[0].trim().slice(0, 80) : 'Relationship or family time you committed to';
+    },
+  },
+  {
+    keywords: [
+      "i'll write", "i will write", "practice guitar", "i'll draw", "i'll paint",
+      "creative time", "work on my novel", "i'll practice", "make art",
+    ],
+    category: 'creativity',
+    extractAction: (msg) => {
+      const m = msg.match(/(?:write|draw|paint|practice|novel|song|art)\s*[^.!?]{0,40}/i);
+      return m ? m[0].trim().slice(0, 80) : 'Creative practice you committed to';
+    },
+  },
+  {
     keywords: ["i'll do it", "i promise", "i commit", "i'll make sure", "tomorrow i'll", "starting tomorrow", "from now on"],
     category: 'general',
     extractAction: (msg) => {
-      // Try to extract what follows the commitment keyword
       const match = msg.match(/(?:i'll|i promise to|i commit to|i'll make sure to)\s+(.{10,60})/i);
       return match ? match[1].replace(/[.!?,]+$/, '') : 'Follow through on commitment';
     },
@@ -107,6 +142,15 @@ class CommitmentTrackerService {
           ON user_commitments(user_id, follow_up_date)
           WHERE followed_up = false
       `);
+      await query(`
+        ALTER TABLE user_commitments
+        ADD COLUMN IF NOT EXISTS life_area_id UUID REFERENCES life_areas(id) ON DELETE SET NULL
+      `).catch(() => {});
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_uc_user_life_area
+        ON user_commitments(user_id, life_area_id)
+        WHERE life_area_id IS NOT NULL
+      `).catch(() => {});
       this.tableEnsured = true;
     } catch (error) {
       logger.error('[CommitmentTracker] Error ensuring table', {
@@ -144,7 +188,8 @@ class CommitmentTrackerService {
     commitmentText: string,
     category: string,
     extractedAction: string,
-    followUpHours = 24
+    followUpHours = 24,
+    lifeAreaId?: string | null
   ): Promise<UserCommitment | null> {
     await this.ensureTable();
 
@@ -152,7 +197,8 @@ class CommitmentTrackerService {
     followUpDate.setHours(followUpDate.getHours() + followUpHours);
 
     try {
-      const result = await query<{
+      const followDateStr = followUpDate.toISOString().split('T')[0];
+      type CommitmentRow = {
         id: string;
         user_id: string;
         commitment_text: string;
@@ -163,13 +209,24 @@ class CommitmentTrackerService {
         fulfilled: boolean | null;
         followed_up: boolean;
         created_at: string;
-      }>(
-        `INSERT INTO user_commitments
-         (user_id, commitment_text, category, extracted_action, follow_up_date)
-         VALUES ($1, $2, $3, $4, $5::date)
-         RETURNING *`,
-        [userId, commitmentText, category, extractedAction, followUpDate.toISOString().split('T')[0]]
-      );
+        life_area_id?: string | null;
+      };
+      const result =
+        lifeAreaId != null && lifeAreaId !== ''
+          ? await query<CommitmentRow>(
+              `INSERT INTO user_commitments
+               (user_id, commitment_text, category, extracted_action, follow_up_date, life_area_id)
+               VALUES ($1, $2, $3, $4, $5::date, $6)
+               RETURNING *`,
+              [userId, commitmentText, category, extractedAction, followDateStr, lifeAreaId],
+            )
+          : await query<CommitmentRow>(
+              `INSERT INTO user_commitments
+               (user_id, commitment_text, category, extracted_action, follow_up_date)
+               VALUES ($1, $2, $3, $4, $5::date)
+               RETURNING *`,
+              [userId, commitmentText, category, extractedAction, followDateStr],
+            );
 
       if (result.rows.length === 0) return null;
       const row = result.rows[0];
@@ -192,6 +249,7 @@ class CommitmentTrackerService {
         fulfilled: row.fulfilled,
         followedUp: row.followed_up,
         createdAt: row.created_at,
+        lifeAreaId: row.life_area_id ?? null,
       };
     } catch (error) {
       logger.error('[CommitmentTracker] Error tracking commitment', {

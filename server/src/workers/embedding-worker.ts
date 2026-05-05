@@ -1,7 +1,7 @@
 import { Worker, Job, UnrecoverableError } from 'bullmq';
 import { redisConnection, QueueNames } from '../config/queue.config.js';
 import { vectorEmbeddingService, EmbeddingAuthError } from '../services/vector-embedding.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import type { EmbeddingJobData } from '../services/embedding-queue.service.js';
 

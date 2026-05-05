@@ -4,7 +4,7 @@
  */
 
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { aiProviderService } from './ai-provider.service.js';
 import type { SessionType } from '../types/voice-call.types.js';
 
@@ -281,6 +281,13 @@ class CallSummaryService {
       nutrition: 'Nutrition Consultation',
       fitness: 'Fitness Session',
       wellness: 'Wellness Check',
+      workout: 'Workout Session',
+      meal: 'Meal Planning',
+      emotion: 'Emotional Support Session',
+      sleep: 'Sleep Coaching',
+      stress: 'Stress Management Session',
+      recovery: 'Recovery Session',
+      general_health: 'General Health Consultation',
     };
 
     const prompt = depthMode === 'deep'

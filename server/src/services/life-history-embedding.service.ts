@@ -5,7 +5,7 @@
  *              Provides the AI coach with complete searchable user history across all pillars.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { vectorEmbeddingService } from './vector-embedding.service.js';
 

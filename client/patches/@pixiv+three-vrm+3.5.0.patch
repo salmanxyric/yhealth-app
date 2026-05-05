@@ -1,0 +1,26 @@
+diff --git a/node_modules/@pixiv/three-vrm/lib/three-vrm.cjs b/node_modules/@pixiv/three-vrm/lib/three-vrm.cjs
+index 0e09a18..4fc6f91 100644
+--- a/node_modules/@pixiv/three-vrm/lib/three-vrm.cjs
++++ b/node_modules/@pixiv/three-vrm/lib/three-vrm.cjs
+@@ -3367,7 +3367,7 @@ var GLTFMToonMaterialParamsAssignHelper = class {
+       const promise = (() => __async3(this, null, function* () {
+         if (texture != null) {
+           yield this._parser.assignTexture(this._materialParams, key, texture);
+-          if (isColorTexture) {
++          if (isColorTexture && this._materialParams[key]) {
+             setTextureColorSpace(this._materialParams[key], "srgb");
+           }
+         }
+diff --git a/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js b/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js
+index e54b7e7..76c2d65 100644
+--- a/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js
++++ b/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js
+@@ -3280,7 +3280,7 @@ var GLTFMToonMaterialParamsAssignHelper = class {
+       const promise = (() => __async3(this, null, function* () {
+         if (texture != null) {
+           yield this._parser.assignTexture(this._materialParams, key, texture);
+-          if (isColorTexture) {
++          if (isColorTexture && this._materialParams[key]) {
+             setTextureColorSpace(this._materialParams[key], "srgb");
+           }
+         }

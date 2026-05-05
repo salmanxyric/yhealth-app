@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  Eye, Target, Clock, Flame, Trophy, TrendingUp, TrendingDown,
+  Eye, Target, Clock, Flame, Trophy, TrendingUp,
   Loader2, BarChart3, Activity, Sparkles, Zap, CheckCircle2,
-  AlertTriangle, XCircle, ArrowUpRight, ArrowDownRight, Minus,
+  AlertTriangle, XCircle, ArrowUpRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { visionHistoryService } from "@/src/shared/services/vision.service";
 import type { VisionStats, VisionClassification } from "@shared/types/domain/vision";
 
 import {
-  LineChart, Line, AreaChart, Area,
+  AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, RadialBarChart, RadialBar,
 } from "recharts";
@@ -156,7 +156,7 @@ function HeroScoreRing({ accuracy, classification }: { accuracy: number; classif
 // ─── Premium KPI Card ───────────────────────────────────────────────
 
 function KPICard({
-  icon: Icon, label, value, subtext, accent, gradient, delay = 0,
+  icon: Icon, label, value, subtext, accent, gradient, delay: _delay = 0,
 }: {
   icon: typeof Eye; label: string; value: string | number; subtext?: string;
   accent: string; gradient: string; delay?: number;
@@ -231,12 +231,20 @@ function ChartCard({
 
 // ─── Custom Tooltip ─────────────────────────────────────────────────
 
-function PremiumTooltip({ active, payload, label }: any) {
+interface TooltipPayloadEntry {
+  dataKey: string;
+  value: number | string;
+  name?: string;
+  stroke?: string;
+  fill?: string;
+}
+
+function PremiumTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-xl bg-zinc-900/95 border border-white/10 px-4 py-3 shadow-2xl backdrop-blur-xl">
       <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full" style={{ background: p.stroke || p.fill }} />
           <span className="text-xs text-zinc-300">{p.name}:</span>
@@ -480,7 +488,7 @@ export default function VisionProgress() {
           </div>
 
           <div className="space-y-2.5">
-            {stats.suggestedExercises.map((ex, i) => (
+            {stats.suggestedExercises.map((ex, _i) => (
               <motion.div
                 key={ex}
                 whileHover={{ x: 4 }}

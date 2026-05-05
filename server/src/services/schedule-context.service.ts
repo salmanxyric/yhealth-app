@@ -7,8 +7,10 @@
  * No new DB tables — reads existing schedule_items + workout_schedule_tasks.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
+import { holidayCalendarService } from './holiday-calendar.service.js';
+import type { HolidayContext } from './holiday-calendar.service.js';
 
 // ============================================
 // TYPES
@@ -45,6 +47,7 @@ export interface DayContext {
   longestBusyStreak: number;   // minutes of consecutive booked time
   backToBackCount: number;     // items with < 15 min gap
   categories: Record<string, number>;
+  holidayContext?: HolidayContext;
 }
 
 // ============================================
@@ -300,6 +303,14 @@ class ScheduleContextService {
       // ── Stress level ──
       const stressLevel = computeStressLevel(totalItems, backToBackCount, longestBusyStreak);
 
+      // ── Holiday awareness (non-blocking) ──
+      let holidayContext: HolidayContext | undefined;
+      try {
+        holidayContext = await holidayCalendarService.getHolidayContext(userId, targetDate);
+      } catch {
+        // Non-fatal — holiday table may not exist yet
+      }
+
       return {
         date: targetDate,
         totalItems,
@@ -314,6 +325,7 @@ class ScheduleContextService {
         longestBusyStreak,
         backToBackCount,
         categories,
+        holidayContext,
       };
     } catch (error) {
       logger.error('[ScheduleContext] Failed to compute day context', {

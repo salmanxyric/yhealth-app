@@ -1,4 +1,4 @@
-import { pool } from './pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -198,6 +198,60 @@ const EXPECTED_TABLES = [
   'streak_activity_log',
   'streak_freeze_log',
   'streak_rewards',
+  // Contextual Timing
+  'user_timing_profiles',
+  // Holiday / cultural calendar
+  'holiday_calendar',
+  'user_holiday_preferences',
+  // Mental health guardrail audit
+  'mental_health_screening_events',
+  // Universal Data Source Correlation
+  'data_source_connections',
+  'data_source_signals',
+  'user_daily_correlations',
+  'spotify_listening_history',
+  'prayer_schedules',
+  'spending_transactions',
+  // Competition invitations (shared challenges)
+  'competition_invitations',
+  // Reasoning graph (Knowledge Graph AI Coaching)
+  'user_feature_state',
+  'reasoning_edges',
+  // User files & tool operations
+  'user_files',
+  'tool_operations',
+  // Accountability & social
+  'accountability_contacts',
+  'accountability_groups',
+  'accountability_group_members',
+  'accountability_consent',
+  'accountability_contact_consent',
+  'accountability_triggers',
+  'accountability_trigger_logs',
+  'accountability_consent_audit',
+  'accountability_contracts',
+  'accountability_contract_violations',
+  'accountability_contract_checks',
+  'calendar_connections',
+  'calendar_events',
+  'user_follows',
+  'buddy_discovery_consent',
+  'buddy_suggestions_cache',
+  // Life areas
+  'life_areas',
+  'life_area_links',
+  // Sleep & medications
+  'sleep_logs',
+  'user_medications',
+  // Intelligence system
+  'intelligence_memories',
+  'intelligence_artifacts',
+  'intelligence_plans',
+  'intelligence_core_profile',
+  'intelligence_log_references',
+  'intelligence_analyses',
+  'intelligence_session_context',
+  'intelligence_feedback',
 ];
 
 // List of expected enum types
@@ -440,6 +494,12 @@ async function runFullSchema(): Promise<void> {
     '70-help-articles.sql',
     '71-community-posts.sql',
     '72-webinars.sql',
+    // RBAC tables
+    '73-roles.sql',
+    '74-permissions.sql',
+    '75-role-permissions.sql',
+    '76-newsletter-subscriptions.sql',
+    '77-user-roles.sql',
     // Exercise lookup & media tables
     '80-exercise-lookup-tables.sql',
     '82-testimonials.sql',
@@ -487,10 +547,37 @@ async function runFullSchema(): Promise<void> {
     '109-streak-activity-log.sql',
     '110-streak-freeze-log.sql',
     '111-streak-rewards.sql',
-    // Obstacle diagnosis
+    // Accountability & social
+    '112-accountability-system.sql',
+    '113-accountability-contracts.sql',
+    '113-calendar-connections.sql',
+    '114-calendar-events.sql',
+    '115-user-follows.sql',
+    // Obstacle diagnosis & life areas
     '116-goal-obstacles.sql',
-    // Goal reconnection (DKA prevention)
+    '116-life-areas.sql',
+    // Goal reconnection (DKA prevention) & life area links
     '117-goal-reconnections.sql',
+    '117-life-area-links.sql',
+    // Contextual timing + holiday calendar
+    '118-user-timing-profiles.sql',
+    '119-holiday-calendar.sql',
+    // Universal Data Source Correlation
+    '120-data-source-connections.sql',
+    '121-data-source-signals.sql',
+    '122-user-daily-correlations.sql',
+    '123-spotify-listening-history.sql',
+    '124-prayer-schedules.sql',
+    '125-finance-tracking.sql',
+    // Competition invitations (shared challenges)
+    '126-competition-invitations.sql',
+    // Mental health screening audit
+    '127-mental-health-screening-events.sql',
+    // Sleep & medications
+    '128-sleep-logs.sql',
+    '129-user-medications.sql',
+    // Intelligence system (8 tables)
+    '130-intelligence.sql',
     // Triggers (must be last)
     '99-triggers.sql',
   ];
@@ -805,6 +892,50 @@ async function runMigration(migrationFile: string): Promise<void> {
 }
 
 /**
+ * Dated / additive migrations and index packs not fully covered by table-first DDL.
+ * All are written to be idempotent (IF NOT EXISTS, DO $$ duplicate guards, etc.).
+ * Runs after sync-missing-columns so columns like ai_coach_persona exist first.
+ */
+const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
+  '20260416000000_goal_obstacles.sql',
+  '20260417000000_goal_reconnections.sql',
+  '20260417140000_ai_coach_persona.sql',
+  '20260418000000_user_timing_profiles.sql',
+  '20260421000000_add_mood_rating_to_mood_logs.sql',
+  '20260422000000_schedule_items_source.sql',
+  'add-accountability-indexes.sql',
+  'add-achievement-constraints.sql',
+  'add-buddy-challenge-and-competition-invitations.sql',
+  'add-health-profile-visibility.sql',
+];
+
+async function runSupplementaryMigrations(): Promise<void> {
+  for (const migrationFile of SUPPLEMENTARY_MIGRATIONS) {
+    try {
+      await runMigration(migrationFile);
+      logger.info('Supplementary migration completed', { migrationFile });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn('Supplementary migration had issues (may already be applied)', {
+        migrationFile,
+        error: message,
+      });
+    }
+  }
+}
+
+async function runColumnSyncAndSupplementary(): Promise<void> {
+  try {
+    await runMigration('sync-missing-columns.sql');
+    logger.info('Column sync migration completed');
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('Column sync migration had issues', { error: message });
+  }
+  await runSupplementaryMigrations();
+}
+
+/**
  * Check database and auto-migrate missing tables
  */
 export async function autoMigrate(): Promise<{
@@ -839,13 +970,7 @@ export async function autoMigrate(): Promise<{
       logger.info('Database schema is up to date', {
         tableCount: existingTables.length,
       });
-      // Run column-sync migration to fix missing columns on existing tables
-      try {
-        await runMigration('sync-missing-columns.sql');
-        logger.info('Column sync migration completed');
-      } catch (err: any) {
-        logger.warn('Column sync migration had issues', { error: err?.message });
-      }
+      await runColumnSyncAndSupplementary();
       return {
         success: true,
         tablesCreated: [],
@@ -863,13 +988,7 @@ export async function autoMigrate(): Promise<{
       logger.info('Running full schema migration...');
       await runFullSchema();
 
-      // Run column-sync migration to fix missing columns after tables created
-      try {
-        await runMigration('sync-missing-columns.sql');
-        logger.info('Column sync migration completed');
-      } catch (err: any) {
-        logger.warn('Column sync migration had issues', { error: err?.message });
-      }
+      await runColumnSyncAndSupplementary();
 
       const newTables = await getExistingTables();
       return {
@@ -891,9 +1010,14 @@ export async function autoMigrate(): Promise<{
         .filter(f => f.endsWith('.sql'))
         .sort();
 
+      const migrationTableMap: Record<string, string> = {
+        'user_feature_state': '20260428000000_reasoning_graph.sql',
+        'reasoning_edges': '20260428000000_reasoning_graph.sql',
+      };
+
       for (const table of missingTables) {
         // Look for a migration file that creates this table
-        const migrationFile = migrationFiles.find(f =>
+        const migrationFile = migrationTableMap[table] || migrationFiles.find(f =>
           f.toLowerCase().includes(table.replace(/_/g, '-')) ||
           f.toLowerCase().includes(table)
         );
@@ -1010,6 +1134,17 @@ export async function autoMigrate(): Promise<{
             'streak_rewards': '111-streak-rewards.sql',
             'goal_obstacles': '116-goal-obstacles.sql',
             'goal_reconnections': '117-goal-reconnections.sql',
+            'user_timing_profiles': '118-user-timing-profiles.sql',
+            'holiday_calendar': '119-holiday-calendar.sql',
+            'user_holiday_preferences': '119-holiday-calendar.sql',
+            'mental_health_screening_events': '127-mental-health-screening-events.sql',
+            'data_source_connections': '120-data-source-connections.sql',
+            'data_source_signals': '121-data-source-signals.sql',
+            'user_daily_correlations': '122-user-daily-correlations.sql',
+            'spotify_listening_history': '123-spotify-listening-history.sql',
+            'prayer_schedules': '124-prayer-schedules.sql',
+            'spending_transactions': '125-finance-tracking.sql',
+            'competition_invitations': '126-competition-invitations.sql',
           };
           
           const tableFile = tableToFileMap[table] || tableFiles.find(f => {
@@ -1098,13 +1233,7 @@ export async function autoMigrate(): Promise<{
       tablesCreated.push(...stillMissingTables);
     }
 
-    // Run column-sync migration to fix missing columns after all tables created
-    try {
-      await runMigration('sync-missing-columns.sql');
-      logger.info('Column sync migration completed');
-    } catch (err: any) {
-      logger.warn('Column sync migration had issues', { error: err?.message });
-    }
+    await runColumnSyncAndSupplementary();
 
     const finalTables = await getExistingTables();
 

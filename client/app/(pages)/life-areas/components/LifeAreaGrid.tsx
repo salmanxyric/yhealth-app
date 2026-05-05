@@ -3,7 +3,14 @@ import { motion } from 'framer-motion';
 import { LifeAreaCard } from './LifeAreaCard';
 import type { LifeArea } from '../types';
 
-export function LifeAreaGrid({ areas, onSelect }: { areas: LifeArea[]; onSelect: (a: LifeArea) => void }) {
+interface Props {
+  areas: LifeArea[];
+  onSelect: (a: LifeArea) => void;
+  onEdit: (a: LifeArea) => void;
+  onDelete: (a: LifeArea) => void;
+}
+
+export function LifeAreaGrid({ areas, onSelect, onEdit, onDelete }: Props) {
   return (
     <motion.div
       initial="hidden"
@@ -22,7 +29,12 @@ export function LifeAreaGrid({ areas, onSelect }: { areas: LifeArea[]; onSelect:
             visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } },
           }}
         >
-          <LifeAreaCard area={a} onClick={() => onSelect(a)} />
+          <LifeAreaCard
+            area={a}
+            onClick={() => onSelect(a)}
+            onEdit={() => onEdit(a)}
+            onDelete={() => onDelete(a)}
+          />
         </motion.div>
       ))}
     </motion.div>

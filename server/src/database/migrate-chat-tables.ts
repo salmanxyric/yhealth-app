@@ -4,7 +4,7 @@
  */
 
 import 'dotenv/config';
-import { pool, query } from './pg.js';
+import { pool, query } from '../config/database.config.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';

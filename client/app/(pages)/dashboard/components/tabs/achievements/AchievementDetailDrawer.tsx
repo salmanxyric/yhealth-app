@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { X, Star, CheckCircle2, Calendar, Sparkles, Zap } from "lucide-react";
+import { X, CheckCircle2, Calendar, Sparkles, Zap } from "lucide-react";
 import type { Achievement } from "./types";
 import {
-  rarityBgColors,
-  rarityBorderColors,
+  
+  
   rarityGlowStyles,
   rarityTextColors,
   rarityHexColors,
@@ -77,7 +77,7 @@ export function AchievementDetailDrawer({
 
   if (!achievement) return null;
 
-  const [c1, c2, c3] = rarityHexColors[achievement.rarity];
+  const [c1, c2, _c3] = rarityHexColors[achievement.rarity];
 
   return (
     <AnimatePresence>

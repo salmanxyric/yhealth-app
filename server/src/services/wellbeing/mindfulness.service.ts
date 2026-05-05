@@ -3,7 +3,7 @@
  * @description Handles mindfulness practice recommendations and logging (F7.7)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type {
   MindfulnessPractice,

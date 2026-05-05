@@ -3,7 +3,7 @@
  * @description Handles self-reported stress logging with validation, idempotency, and summary rollup
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import { mentalRecoveryScoreService } from './mental-recovery-score.service.js';

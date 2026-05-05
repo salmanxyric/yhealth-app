@@ -9,7 +9,7 @@ import authenticate from '../middlewares/auth.middleware.js';
 import { workoutPlanService, type DayWorkout } from '../services/workout-plan.service.js';
 import { aiProviderService } from '../services/ai-provider.service.js';
 import { logger } from '../services/logger.service.js';
-import { query as dbQuery } from '../database/pg.js';
+import { query as dbQuery } from '../config/database.config.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { embeddingQueueService } from '../services/embedding-queue.service.js';
 import { JobPriorities } from '../config/queue.config.js';

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { voiceCallController } from '../controllers/voice-call.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -63,7 +64,14 @@ const iceCandidateSchema = z.object({
  * @desc    Initiate a new voice call
  * @access  Private
  */
-router.post('/initiate', authenticate, validate(initiateCallSchema), voiceCallController.initiate);
+router.post(
+  '/initiate',
+  authenticate,
+  validate(initiateCallSchema),
+  requireFeature('ai.voice.call'),
+  consumeCredits('ai.voice.call'),
+  voiceCallController.initiate
+);
 
 /**
  * @route   GET /api/voice-calls/:callId/status

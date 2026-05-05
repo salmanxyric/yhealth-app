@@ -4,7 +4,7 @@
  * Handles enrollment, eligibility checks, and competition-specific scoring
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { ApiError } from '../utils/ApiError.js';
 
@@ -174,17 +174,24 @@ class CompetitionService {
   /**
    * Get active competitions
    */
-  async getActiveCompetitions(statusFilter?: string): Promise<(Competition & { participantCount: number })[]> {
-    // Build WHERE clause based on status filter
+  async getActiveCompetitions(
+    statusFilter?: string,
+    limit = 10,
+    offset = 0,
+  ): Promise<{ competitions: (Competition & { participantCount: number })[]; total: number }> {
     let whereClause: string;
     if (statusFilter === 'active') {
       whereClause = `WHERE c.status = 'active' AND c.start_date <= CURRENT_TIMESTAMP AND c.end_date >= CURRENT_TIMESTAMP`;
     } else if (statusFilter === 'ended') {
       whereClause = `WHERE c.status = 'ended' OR c.end_date < CURRENT_TIMESTAMP`;
     } else {
-      // Default: return all competitions
       whereClause = `WHERE 1=1`;
     }
+
+    const countResult = await query<{ count: string }>(
+      `SELECT COUNT(DISTINCT c.id) as count FROM competitions c ${whereClause}`
+    );
+    const total = parseInt(countResult.rows[0]?.count ?? '0', 10);
 
     const result = await query<{
       id: string;
@@ -211,10 +218,14 @@ class CompetitionService {
        LEFT JOIN competition_entries ce ON c.id = ce.competition_id AND ce.status = 'active'
        ${whereClause}
        GROUP BY c.id
-       ORDER BY c.start_date DESC`
+       ORDER BY
+         CASE WHEN c.status = 'active' AND c.end_date >= CURRENT_TIMESTAMP THEN 0 ELSE 1 END,
+         c.start_date DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
 
-    return result.rows.map((row) => ({
+    const competitions = result.rows.map((row) => ({
       id: row.id,
       name: row.name,
       type: row.type,
@@ -232,6 +243,8 @@ class CompetitionService {
       updatedAt: row.updated_at,
       participantCount: parseInt(row.participant_count, 10),
     }));
+
+    return { competitions, total };
   }
 
   /**

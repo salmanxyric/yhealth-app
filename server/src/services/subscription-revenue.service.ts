@@ -3,7 +3,7 @@
  * Provides revenue analytics by different time periods
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 export interface RevenueStats {
   total: number;

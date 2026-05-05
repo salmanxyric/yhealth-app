@@ -3,7 +3,7 @@
  * @description Handles daily journaling with AI-personalized prompts (F7.2)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type { JournalEntry, WellbeingMode, JournalPromptCategory, JournalingMode } from '@shared/types/domain/wellbeing.js';
 import { calculateStreak } from './utils/pattern-detection.js';

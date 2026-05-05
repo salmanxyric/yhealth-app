@@ -10,6 +10,14 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { knowledgeGraphService } from '../services/knowledge-graph.service.js';
+import { featureStateService } from '../services/reasoning-graph/feature-state.service.js';
+import { graphValidationService } from '../services/reasoning-graph/graph-validation.service.js';
+import { nextBestActionService } from '../services/reasoning-graph/next-best-action.service.js';
+import {
+  FEATURE_NODE_REGISTRY,
+  getDefaultEdges,
+  STATIC_CROSS_EDGES,
+} from '../services/reasoning-graph/feature-node-registry.js';
 import type { GraphFilter, GraphNodeType } from '@shared/types/domain/knowledge-graph.js';
 
 class KnowledgeGraphController {
@@ -141,6 +149,71 @@ class KnowledgeGraphController {
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="knowledge-graph-${from}-${to}.json"`);
     res.json(graph);
+  });
+
+  /**
+   * @route   GET /api/v1/intelligence/graph/reasoning
+   * @desc    Get reasoning graph overlay (feature nodes + edges + states)
+   */
+  getReasoningOverlay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized('Authentication required');
+
+    const [states, validation] = await Promise.all([
+      featureStateService.getAllStates(userId),
+      graphValidationService.validate(userId, false),
+    ]);
+
+    const nodes = FEATURE_NODE_REGISTRY.map((def) => {
+      const state = states.find((s) => s.featureNodeId === def.id);
+      return {
+        id: def.id,
+        label: def.label,
+        category: def.category,
+        parentNodeId: def.parentNodeId,
+        route: def.route,
+        description: def.description,
+        healthScore: state?.healthScore ?? 0,
+        lastActivityAt: state?.lastActivityAt ?? null,
+        activityCount7d: state?.activityCount7d ?? 0,
+        status: state?.status ?? 'never_used',
+        alerts: state?.alerts ?? [],
+      };
+    });
+
+    const hierarchyEdges = getDefaultEdges().map((e) => ({
+      ...e,
+      weight: 0.5,
+      direction: 'unidirectional' as const,
+    }));
+
+    const crossEdges = STATIC_CROSS_EDGES.map((e) => ({
+      ...e,
+      direction: 'bidirectional' as const,
+    }));
+
+    ApiResponse.success(res, {
+      nodes,
+      edges: [...hierarchyEdges, ...crossEdges],
+      validation: {
+        orphanNodes: validation.orphanNodes,
+        weaklyConnected: validation.weaklyConnected,
+        issues: validation.issues.length,
+        autoRepaired: validation.autoRepaired,
+      },
+    }, 'Reasoning graph overlay retrieved', undefined, req);
+  });
+
+  /**
+   * @route   GET /api/v1/intelligence/graph/next-actions
+   * @desc    Get AI-recommended next best actions from graph traversal
+   */
+  getNextBestActions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized('Authentication required');
+
+    const actions = await nextBestActionService.getActions(userId);
+    ApiResponse.success(res, { actions }, 'Next best actions retrieved', undefined, req);
   });
 }
 

@@ -3,7 +3,7 @@
  * @description Seeds sample competitions for testing
  */
 
-import { query, closePool } from './pg.js';
+import { query, closePool } from '../config/database.config.js';
 
 interface CompetitionSeed {
   name: string;

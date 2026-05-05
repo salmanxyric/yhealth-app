@@ -103,6 +103,28 @@ export const cancelContract = asyncHandler(async (req: AuthenticatedRequest, res
   ApiResponse.success(res, { contract }, 'Contract cancelled');
 });
 
+export const deleteContract = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const deleted = await accountabilityContractService.deleteContract(userId, req.params.id);
+  if (!deleted) throw ApiError.notFound('Contract not found');
+  ApiResponse.success(res, null, 'Contract deleted');
+});
+
+export const bulkDeleteContracts = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    throw ApiError.badRequest('ids array is required');
+  }
+
+  const count = await accountabilityContractService.bulkDeleteContracts(userId, ids);
+  ApiResponse.success(res, { deletedCount: count }, `${count} contract(s) deleted`);
+});
+
 // ─── VIOLATIONS & CHECKS ────────────────────────────────────────────
 
 export const getViolations = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -156,12 +178,24 @@ export const getSuggestions = asyncHandler(async (req: AuthenticatedRequest, res
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
 
-  // Lazy-import to avoid circular dependencies and only load when needed
   const { contractSuggestionService } = await import('../services/contract-suggestion.service.js');
   const suggestions = await contractSuggestionService.getSuggestions(
     userId, Number(req.query.limit) || 5
   );
   ApiResponse.success(res, { suggestions }, 'Suggestions retrieved');
+});
+
+export const getAISuggestion = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { contractSuggestionService } = await import('../services/contract-suggestion.service.js');
+  const suggestion = await contractSuggestionService.getAISuggestion(userId);
+  if (!suggestion) {
+    ApiResponse.success(res, { suggestion: null }, 'No AI suggestion available (rate limited or no data)');
+    return;
+  }
+  ApiResponse.success(res, { suggestion }, 'AI suggestion generated');
 });
 
 export default {
@@ -173,9 +207,12 @@ export default {
   pauseContract,
   resumeContract,
   cancelContract,
+  deleteContract,
+  bulkDeleteContracts,
   getViolations,
   disputeViolation,
   getChecks,
   getContractStats,
   getSuggestions,
+  getAISuggestion,
 };

@@ -4,7 +4,7 @@
  * Reads calendar events and stores them in calendar_events table.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 // env not needed — calendar config uses process.env directly
 
@@ -69,7 +69,24 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
 
-const DEFAULT_REDIRECT_URI = process.env['GOOGLE_CALENDAR_REDIRECT_URI'] || 'http://localhost:9090/api/calendar/callback';
+/**
+ * Default redirect URI used when a user hasn't explicitly entered one.
+ * Resolution order:
+ *   1. `GOOGLE_CALENDAR_REDIRECT_URI` — explicit override (recommended for prod).
+ *   2. `${API_URL}/api/calendar/callback` — derived from the public API origin.
+ *   3. `http://localhost:9090/api/calendar/callback` — local dev fallback.
+ * Users MUST register this exact value under "Authorized redirect URIs" in
+ * Google Cloud Console for the OAuth client they configure in the UI.
+ */
+function resolveDefaultRedirectUri(): string {
+  const explicit = process.env['GOOGLE_CALENDAR_REDIRECT_URI'];
+  if (explicit) return explicit;
+  const apiUrl = process.env['API_URL'];
+  if (apiUrl) return `${apiUrl.replace(/\/$/, '')}/api/calendar/callback`;
+  return 'http://localhost:9090/api/calendar/callback';
+}
+
+const DEFAULT_REDIRECT_URI = resolveDefaultRedirectUri();
 
 /**
  * Get user's own calendar credentials from DB
@@ -100,6 +117,15 @@ class GoogleCalendarService {
   isConfigured(): boolean {
     // Always return true — users can add their own credentials
     return true;
+  }
+
+  /**
+   * The exact redirect URI the server will send to Google when no user-specific
+   * override is saved. Exposed so the UI can display it to the user for
+   * registration in Google Cloud Console.
+   */
+  getDefaultRedirectUri(): string {
+    return DEFAULT_REDIRECT_URI;
   }
 
   /**
@@ -194,7 +220,16 @@ class GoogleCalendarService {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       logger.error('[GoogleCalendar] Token exchange failed', { status: tokenResponse.status, error: errorText });
-      throw new Error('Failed to authenticate with Google Calendar');
+      // Surface Google's actual error so the user can diagnose (invalid_grant,
+      // redirect_uri_mismatch, invalid_client, etc.).
+      let message = 'Failed to authenticate with Google Calendar';
+      try {
+        const parsed = JSON.parse(errorText) as { error?: string; error_description?: string };
+        if (parsed.error_description || parsed.error) {
+          message = `Google OAuth error: ${parsed.error_description || parsed.error}`;
+        }
+      } catch { /* non-JSON response */ }
+      throw new Error(message);
     }
 
     const tokens = await tokenResponse.json() as GoogleTokenResponse;
@@ -284,15 +319,16 @@ class GoogleCalendarService {
    * Sync events from Google Calendar API into calendar_events table
    */
   async syncEvents(userId: string, connectionId: string, daysBack: number = 7, daysForward: number = 7): Promise<number> {
-    // Get access token
-    const connResult = await query<{ access_token: string; token_expires_at: Date }>(
-      'SELECT access_token, token_expires_at FROM calendar_connections WHERE id = $1 AND user_id = $2',
+    // Get access token and selected calendar IDs
+    const connResult = await query<{ access_token: string; token_expires_at: Date; calendar_ids: string[] | null }>(
+      'SELECT access_token, token_expires_at, calendar_ids FROM calendar_connections WHERE id = $1 AND user_id = $2',
       [connectionId, userId],
     );
     if (connResult.rows.length === 0) throw new Error('Connection not found');
 
     let accessToken = connResult.rows[0].access_token;
     const expiresAt = new Date(connResult.rows[0].token_expires_at);
+    const calendarIds = connResult.rows[0].calendar_ids;
 
     // Refresh if expired
     if (expiresAt <= new Date()) {
@@ -310,80 +346,124 @@ class GoogleCalendarService {
     const timeMax = new Date();
     timeMax.setDate(timeMax.getDate() + daysForward);
 
-    // Fetch events from Google Calendar API
+    // `showDeleted=true` makes Google include cancelled/deleted events in the
+    // response with `status: 'cancelled'`. Without it we'd silently keep
+    // stale rows in `calendar_events` whenever the user removes an event
+    // in Google — and those ghosts would then sync back into schedule_items.
     const params = new URLSearchParams({
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
       singleEvents: 'true',
       orderBy: 'startTime',
       maxResults: '250',
+      showDeleted: 'true',
     });
 
-    const response = await fetch(
-      `${GOOGLE_CALENDAR_API}/calendars/primary/events?${params.toString()}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
+    // Determine which calendars to sync: use selected calendar_ids, or fall back to 'primary'
+    const calendarsToSync: string[] =
+      Array.isArray(calendarIds) && calendarIds.length > 0
+        ? calendarIds
+        : ['primary'];
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    let synced = 0;
+    const errors: Array<{ calendarId: string; error: string }> = [];
+
+    for (const calId of calendarsToSync) {
+      try {
+        const response = await fetch(
+          `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.warn('[GoogleCalendar] Failed to sync calendar', { userId, connectionId, calendarId: calId, status: response.status, error: errorText });
+          errors.push({ calendarId: calId, error: `API error: ${response.status}` });
+          continue;
+        }
+
+        const data = await response.json() as { items?: GoogleCalendarEvent[] };
+        const events = data.items || [];
+
+        for (const event of events) {
+          if (!event.id) continue;
+
+          const status = event.status || 'confirmed';
+
+          // Google-deleted event — remove our cached row and move on. The
+          // schedule sync runs next and will prune the associated
+          // `schedule_items` entry via its stale-check.
+          if (status === 'cancelled') {
+            await query(
+              `DELETE FROM calendar_events
+               WHERE connection_id = $1 AND external_id = $2`,
+              [connectionId, event.id],
+            );
+            continue;
+          }
+
+          if (!event.start) continue;
+
+          const startTime = event.start.dateTime || event.start.date;
+          const endTime = event.end?.dateTime || event.end?.date || startTime;
+          const allDay = !event.start.dateTime;
+          const busyStatus = event.transparency === 'transparent' ? 'free' : 'busy';
+
+          await query(
+            `INSERT INTO calendar_events (user_id, connection_id, external_id, calendar_id, title, description, start_time, end_time, all_day, location, status, busy_status, recurrence_rule, synced_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+             ON CONFLICT (connection_id, external_id) DO UPDATE SET
+               calendar_id = EXCLUDED.calendar_id,
+               title = EXCLUDED.title,
+               description = EXCLUDED.description,
+               start_time = EXCLUDED.start_time,
+               end_time = EXCLUDED.end_time,
+               all_day = EXCLUDED.all_day,
+               location = EXCLUDED.location,
+               status = EXCLUDED.status,
+               busy_status = EXCLUDED.busy_status,
+               synced_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP`,
+            [
+              userId, connectionId, event.id, calId,
+              (event.summary || 'Untitled Event').substring(0, 500),
+              event.description?.substring(0, 2000) || null,
+              startTime || new Date().toISOString(), endTime || startTime || new Date().toISOString(), allDay,
+              event.location || null,
+              status, busyStatus,
+              event.recurrence?.join(';') || null,
+            ],
+          );
+          synced++;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('[GoogleCalendar] Exception syncing calendar', { userId, connectionId, calendarId: calId, error: message });
+        errors.push({ calendarId: calId, error: message });
+      }
+    }
+
+    // If every calendar failed, mark connection as error
+    if (errors.length === calendarsToSync.length) {
+      const combinedError = errors.map((e) => `${e.calendarId}: ${e.error}`).join('; ');
       await query(
         `UPDATE calendar_connections SET sync_status = 'error', sync_error = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-        [`API error: ${response.status}`, connectionId],
+        [combinedError.substring(0, 1000), connectionId],
       );
-      logger.error('[GoogleCalendar] Sync failed', { userId, connectionId, status: response.status, error: errorText });
-      throw new Error(`Google Calendar API error: ${response.status}`);
+      throw new Error(`All calendars failed to sync: ${combinedError}`);
     }
 
-    const data = await response.json() as { items?: GoogleCalendarEvent[] };
-    const events = data.items || [];
+    // Partial or full success
+    const syncError = errors.length > 0
+      ? errors.map((e) => `${e.calendarId}: ${e.error}`).join('; ').substring(0, 1000)
+      : null;
 
-    // Upsert events
-    let synced = 0;
-    for (const event of events) {
-      if (!event.id || !event.start) continue;
-
-      const startTime = event.start.dateTime || event.start.date;
-      const endTime = event.end?.dateTime || event.end?.date || startTime;
-      const allDay = !event.start.dateTime;
-      const busyStatus = event.transparency === 'transparent' ? 'free' : 'busy';
-      const status = event.status || 'confirmed';
-
-      if (status === 'cancelled') continue;
-
-      await query(
-        `INSERT INTO calendar_events (user_id, connection_id, external_id, calendar_id, title, description, start_time, end_time, all_day, location, status, busy_status, recurrence_rule, synced_at)
-         VALUES ($1, $2, $3, 'primary', $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
-         ON CONFLICT (connection_id, external_id) DO UPDATE SET
-           title = EXCLUDED.title,
-           description = EXCLUDED.description,
-           start_time = EXCLUDED.start_time,
-           end_time = EXCLUDED.end_time,
-           all_day = EXCLUDED.all_day,
-           location = EXCLUDED.location,
-           status = EXCLUDED.status,
-           busy_status = EXCLUDED.busy_status,
-           synced_at = CURRENT_TIMESTAMP,
-           updated_at = CURRENT_TIMESTAMP`,
-        [
-          userId, connectionId, event.id,
-          (event.summary || 'Untitled Event').substring(0, 500),
-          event.description?.substring(0, 2000) || null,
-          startTime || new Date().toISOString(), endTime || startTime || new Date().toISOString(), allDay,
-          event.location || null,
-          status, busyStatus,
-          event.recurrence?.join(';') || null,
-        ],
-      );
-      synced++;
-    }
-
-    // Update connection sync status
     await query(
-      `UPDATE calendar_connections SET last_sync_at = CURRENT_TIMESTAMP, sync_status = 'synced', sync_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [connectionId],
+      `UPDATE calendar_connections SET last_sync_at = CURRENT_TIMESTAMP, sync_status = $1, sync_error = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+      [errors.length > 0 ? 'partial' : 'synced', syncError, connectionId],
     );
 
-    logger.info('[GoogleCalendar] Sync completed', { userId, connectionId, eventsSynced: synced });
+    logger.info('[GoogleCalendar] Sync completed', { userId, connectionId, eventsSynced: synced, calendarsAttempted: calendarsToSync.length, calendarsFailed: errors.length });
     return synced;
   }
 
@@ -448,6 +528,51 @@ class GoogleCalendarService {
       status: r.status,
       busyStatus: r.busy_status,
     }));
+  }
+
+  /**
+   * List available calendars from the user's Google account.
+   * Allows users to select which calendars to sync beyond just 'primary'.
+   */
+  async listCalendars(userId: string, connectionId: string): Promise<Array<{ id: string; summary: string; primary: boolean }>> {
+    const connResult = await query<{ access_token: string; token_expires_at: Date }>(
+      'SELECT access_token, token_expires_at FROM calendar_connections WHERE id = $1 AND user_id = $2',
+      [connectionId, userId],
+    );
+    if (connResult.rows.length === 0) return [];
+
+    let accessToken = connResult.rows[0].access_token;
+    const expiresAt = new Date(connResult.rows[0].token_expires_at);
+
+    if (expiresAt <= new Date()) {
+      await this.refreshToken(connectionId);
+      const refreshed = await query<{ access_token: string }>('SELECT access_token FROM calendar_connections WHERE id = $1', [connectionId]);
+      accessToken = refreshed.rows[0]?.access_token || accessToken;
+    }
+
+    const response = await fetch(`${GOOGLE_CALENDAR_API}/users/me/calendarList`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json() as { items?: Array<{ id: string; summary: string; primary?: boolean }> };
+    return (data.items || []).map((cal) => ({
+      id: cal.id,
+      summary: cal.summary || cal.id,
+      primary: !!cal.primary,
+    }));
+  }
+
+  /**
+   * Update which calendars to sync for a connection.
+   */
+  async updateSyncCalendars(userId: string, connectionId: string, calendarIds: string[]): Promise<void> {
+    await query(
+      `UPDATE calendar_connections SET calendar_ids = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
+      [JSON.stringify(calendarIds), connectionId, userId],
+    );
+    logger.info('[GoogleCalendar] Updated sync calendars', { userId, connectionId, calendarIds });
   }
 
   /**

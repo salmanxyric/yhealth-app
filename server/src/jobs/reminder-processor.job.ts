@@ -18,7 +18,7 @@ import { workoutAlarmService } from '../services/workout-alarm.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { socketService } from '../services/socket.service.js';
 import { mailHelper } from '../helper/mail.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 
 // ============================================
@@ -26,8 +26,12 @@ import { logger } from '../services/logger.service.js';
 // ============================================
 
 const JOB_INTERVAL_MS = 60 * 1000; // Check every minute
+const CALENDAR_REMINDER_ADVANCE_MINUTES = 5;
 let isRunning = false;
 let intervalId: NodeJS.Timeout | null = null;
+
+// Track which calendar events we've already sent reminders for (eventId:date)
+const notifiedCalendarEvents = new Set<string>();
 
 // ============================================
 // JOB PROCESSOR
@@ -65,12 +69,112 @@ async function processReminders(): Promise<void> {
     if (alarmsProcessed > 0) {
       logger.info('[ReminderJob] Processed workout alarms', { count: alarmsProcessed });
     }
+
+    // Process upcoming Google Calendar event reminders (5 min before)
+    const calendarRemindersProcessed = await processCalendarEventReminders();
+
+    if (calendarRemindersProcessed > 0) {
+      logger.info('[ReminderJob] Processed calendar event reminders', { count: calendarRemindersProcessed });
+    }
   } catch (error) {
     logger.error('[ReminderJob] Failed to process reminders', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   } finally {
     isRunning = false;
+  }
+}
+
+/**
+ * Process upcoming Google Calendar events — send reminder ~5 minutes before start.
+ */
+async function processCalendarEventReminders(): Promise<number> {
+  try {
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + (CALENDAR_REMINDER_ADVANCE_MINUTES + 1) * 60_000);
+
+    const result = await query<{
+      id: string;
+      user_id: string;
+      title: string;
+      start_time: Date;
+      end_time: Date;
+      location: string | null;
+    }>(
+      `SELECT id, user_id, title, start_time, end_time, location
+       FROM calendar_events
+       WHERE status = 'confirmed' AND all_day = false
+         AND start_time > $1 AND start_time <= $2`,
+      [now.toISOString(), windowEnd.toISOString()],
+    );
+
+    let processed = 0;
+    const today = now.toISOString().split('T')[0];
+
+    for (const event of result.rows) {
+      const key = `${event.id}:${today}`;
+      if (notifiedCalendarEvents.has(key)) continue;
+
+      const startTime = new Date(event.start_time);
+      const endTime = new Date(event.end_time);
+      const minutesUntil = Math.round((startTime.getTime() - now.getTime()) / 60_000);
+      const startStr = startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const endStr = endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+      const message = minutesUntil <= 1
+        ? `Your meeting "${event.title}" is starting now (${startStr} - ${endStr}).${event.location ? ` Location: ${event.location}` : ''}`
+        : `Your meeting "${event.title}" starts in ${minutesUntil} minutes (${startStr} - ${endStr}).${event.location ? ` Location: ${event.location}` : ''} Take a moment to prepare.`;
+
+      try {
+        await notificationService.create({
+          userId: event.user_id,
+          type: 'coaching',
+          title: minutesUntil <= 1 ? 'Meeting Starting Now' : `Meeting in ${minutesUntil} minutes`,
+          message,
+          icon: '📅',
+          actionUrl: '/wellbeing/schedule',
+          actionLabel: 'View Schedule',
+          category: 'calendar',
+          priority: 'high',
+          metadata: { calendarEventId: event.id, eventTitle: event.title },
+        });
+
+        socketService.emitToUser(event.user_id, 'notification:new', {
+          type: 'coaching',
+          title: `Meeting in ${minutesUntil} minutes`,
+          message,
+          icon: '📅',
+        });
+
+        notifiedCalendarEvents.add(key);
+        processed++;
+
+        logger.info('[ReminderJob] Sent calendar event reminder', {
+          eventId: event.id,
+          userId: event.user_id,
+          title: event.title,
+          minutesUntil,
+        });
+      } catch (err) {
+        logger.error('[ReminderJob] Failed to send calendar event reminder', {
+          eventId: event.id,
+          userId: event.user_id,
+          error: err instanceof Error ? err.message : 'Unknown',
+        });
+      }
+    }
+
+    // Periodically clean up old entries (keep set from growing)
+    if (notifiedCalendarEvents.size > 500) {
+      notifiedCalendarEvents.clear();
+    }
+
+    return processed;
+  } catch (error) {
+    logger.error('[ReminderJob] Fatal error in processCalendarEventReminders', {
+      error: error instanceof Error ? error.message : 'Unknown',
+    });
+    return 0;
   }
 }
 

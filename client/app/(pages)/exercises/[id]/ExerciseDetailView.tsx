@@ -191,7 +191,7 @@ export function ExerciseDetailView() {
   const hasTabContent = instructions.length > 0 || tips.length > 0 || commonMistakes.length > 0;
 
   return (
-    <div className="max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-8 relative">
+    <div className="max-w-8xl mx-auto px-3 sm:px-5 lg:px-8 py-4 sm:py-6 space-y-6 sm:space-y-8 relative">
       {/* Background mesh gradient */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div className="absolute top-20 left-1/4 w-96 h-96 bg-emerald-500/[0.03] rounded-full blur-3xl" />
@@ -202,27 +202,28 @@ export function ExerciseDetailView() {
       <motion.div
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
-        className="flex items-center gap-2 text-sm"
+        className="flex items-center gap-2 text-sm min-w-0"
       >
         <Link
           href="/exercises"
-          className="flex items-center gap-1.5 text-slate-500 hover:text-emerald-400 transition-colors duration-300"
+          className="flex items-center gap-1.5 text-slate-500 hover:text-emerald-400 transition-colors duration-300 shrink-0"
         >
           <ArrowLeft className="w-4 h-4" />
-          Exercise Library
+          <span className="hidden sm:inline">Exercise Library</span>
+          <span className="sm:hidden">Back</span>
         </Link>
-        <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
-        <span className="text-slate-400 truncate max-w-[200px]">{exercise.name}</span>
+        <ChevronRight className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+        <span className="text-slate-400 truncate">{exercise.name}</span>
       </motion.div>
 
       {/* Hero Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-5 sm:gap-6 items-start">
         {/* Image / Animation */}
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative lg:aspect-[4/3] rounded-3xl overflow-hidden bg-slate-800 border border-white/[0.06] group"
+          className="relative aspect-[4/3] sm:aspect-[16/11] lg:aspect-[4/3] rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-800 border border-white/[0.06] group"
         >
           {hasImage ? (
             <>
@@ -309,7 +310,7 @@ export function ExerciseDetailView() {
                 </span>
               )}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white capitalize leading-tight tracking-tight">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white capitalize leading-tight tracking-tight break-words">
               {exercise.name}
             </h1>
             {exercise.description && (
@@ -318,7 +319,7 @@ export function ExerciseDetailView() {
           </div>
 
           {/* AI Performance Stats */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
             <AIStatCard
               icon={Dumbbell}
               label="Sets"
@@ -416,7 +417,7 @@ export function ExerciseDetailView() {
           className="rounded-3xl bg-slate-900/60 backdrop-blur-sm border border-white/[0.06] overflow-hidden"
         >
           {/* Tab header */}
-          <div className="flex items-center border-b border-white/[0.06] bg-slate-900/40">
+          <div className="flex items-center border-b border-white/[0.06] bg-slate-900/40 overflow-x-auto no-scrollbar">
             {instructions.length > 0 && (
               <button
                 onClick={() => setActiveTab("instructions")}

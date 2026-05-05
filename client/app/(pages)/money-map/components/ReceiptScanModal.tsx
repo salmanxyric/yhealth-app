@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Camera, Upload, X, Loader2, CheckCircle2, AlertCircle,
-  FileText, Sparkles, Receipt, ImageIcon, RotateCcw,
+  Sparkles, Receipt, RotateCcw,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import {
@@ -12,7 +12,7 @@ import {
   FINANCE_CATEGORY_LABELS,
 } from "@shared/types/domain/finance";
 import type { FinanceCategory } from "@shared/types/domain/finance";
-import { spring } from "../lib/motion";
+
 
 interface ExtractedReceipt {
   vendor: string;
@@ -225,6 +225,7 @@ export function ReceiptScanModal({ isOpen, onClose, onAddTransaction }: ReceiptS
               >
                 {imagePreview && (
                   <div className="w-40 h-48 rounded-xl overflow-hidden border border-white/[0.06] relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 preview data URL */}
                     <img src={imagePreview} alt="Receipt" className="w-full h-full object-cover" />
                     {/* Scan line animation */}
                     <motion.div
@@ -360,7 +361,7 @@ export function ReceiptScanModal({ isOpen, onClose, onAddTransaction }: ReceiptS
                   <AlertCircle className="w-7 h-7 text-rose-400" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-white">Couldn't read receipt</p>
+                  <p className="text-sm font-medium text-white">Couldn&apos;t read receipt</p>
                   <p className="text-xs text-slate-500 mt-1 max-w-xs">{errorMessage}</p>
                 </div>
                 <button

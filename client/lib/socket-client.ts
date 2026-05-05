@@ -23,17 +23,9 @@ function getSocketUrl(): string {
  * Initialize Socket.IO connection
  */
 export function initSocket(): Socket | null {
-  // Return existing instance if already connected
-  if (socketInstance?.connected) {
-    console.log('[Socket] Already connected, reusing instance', socketInstance.id);
+  // Return existing instance if it exists (connected or still attempting)
+  if (socketInstance) {
     return socketInstance;
-  }
-
-  // Clean up existing instance if disconnected
-  if (socketInstance && !socketInstance.connected) {
-    console.log('[Socket] Cleaning up disconnected instance');
-    socketInstance.removeAllListeners();
-    socketInstance = null;
   }
 
   // Get token from API client
@@ -75,29 +67,21 @@ export function initSocket(): Socket | null {
     });
 
     socketInstance.on('connect_error', (error: Error & { type?: string; description?: unknown }) => {
-      const errorInfo: Record<string, unknown> = {
-        message: error.message || 'Unknown error',
-      };
-      
-      // Safely extract error properties (Socket.IO errors have type and description)
-      if (error.type) {
-        errorInfo.type = error.type;
+      const description =
+        error.description !== undefined
+          ? error.description instanceof Error
+            ? error.description.message
+            : String(error.description)
+          : '';
+      const typePart = error.type ? ` type=${error.type}` : '';
+      const descPart = description ? ` description=${description}` : '';
+      // Single warn line avoids Next.js error overlay noise; details as strings (objects often render as {} in the overlay)
+      console.warn(
+        `[Socket] connect_error: ${error.message || 'Unknown error'}${typePart}${descPart} | url=${socketUrl} | api=${env.NEXT_PUBLIC_API_URL} | hasToken=${!!token}`,
+      );
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[Socket] connect_error (full):', error);
       }
-      
-      if (error.description !== undefined) {
-        errorInfo.description = error.description instanceof Error 
-          ? error.description.message 
-          : String(error.description);
-      }
-      
-      console.error('[Socket] ⚠️ Connection error:', errorInfo);
-      console.error('[Socket] Connection details:', {
-        socketUrl,
-        apiUrl: env.NEXT_PUBLIC_API_URL,
-        hasToken: !!token,
-      });
-      console.error('[Socket] Full error:', error);
-      
       // Socket.IO will automatically attempt reconnection based on configured settings
     });
 
@@ -149,6 +133,7 @@ export function getSocket(): Socket | null {
  */
 export function disconnectSocket(): void {
   if (socketInstance) {
+    socketInstance.removeAllListeners();
     socketInstance.disconnect();
     socketInstance = null;
   }
@@ -180,16 +165,17 @@ export function leaveChat(chatId: string): void {
 export function subscribeToChatEvents(
   chatId: string,
   handlers: {
-    onNewMessage?: (data: { chatId: string; message: unknown; senderId?: string }) => void;
-    onMessageEdited?: (data: { chatId: string; messageId: string; message: unknown }) => void;
+    onNewMessage?: (data: { chatId: string; message: any; senderId?: string }) => void;
+    onMessageEdited?: (data: { chatId: string; messageId: string; content: string; message?: any }) => void;
     onMessageDeleted?: (data: { chatId: string; messageId: string }) => void;
-    onMessageReaction?: (data: { chatId: string; messageId: string; reaction: unknown; userId?: string }) => void;
+    onMessageReaction?: (data: { chatId: string; messageId: string; emoji: string; action?: string; userId?: string; reaction?: unknown }) => void;
     onTyping?: (data: { userId: string; chatId: string }) => void;
     onStopTyping?: (data: { userId: string; chatId: string }) => void;
     onUserLeftGroup?: (data: { chatId: string; userId: string; leftAt: string }) => void;
     onUserJoinedGroup?: (data: { chatId: string; userId: string; userName: string; joinedAt: string }) => void;
     onViewOnceOpened?: (data: { messageId: string; openedBy: string; openedAt: string }) => void;
     onMessagesRead?: (data: { chatId: string; userId: string }) => void;
+    onReconnect?: () => void;
   }
 ): () => void {
   const socket = getSocket();
@@ -232,7 +218,12 @@ export function subscribeToChatEvents(
     socket.on('messagesRead', handlers.onMessagesRead);
   }
 
-  // Return cleanup function
+  const reconnectHandler = () => {
+    joinChat(chatId);
+    handlers.onReconnect?.();
+  };
+  socket.on('reconnect', reconnectHandler);
+
   return () => {
     if (socket) {
       if (handlers.onNewMessage) socket.off('newMessage', handlers.onNewMessage);
@@ -245,6 +236,7 @@ export function subscribeToChatEvents(
       if (handlers.onUserLeftGroup) socket.off('userLeftGroup', handlers.onUserLeftGroup);
       if (handlers.onUserJoinedGroup) socket.off('userJoinedGroup', handlers.onUserJoinedGroup);
       if (handlers.onViewOnceOpened) socket.off('viewOnceOpened', handlers.onViewOnceOpened);
+      socket.off('reconnect', reconnectHandler);
       leaveChat(chatId);
     }
   };
@@ -256,22 +248,35 @@ export function subscribeToChatEvents(
 export function subscribeToUserEvents(
   handlers: {
     onGroupLeft?: (data: { chatId: string; chatName: string }) => void;
+    onChatListUpdate?: (data: { chatId: string; lastMessage: string; senderId: string; sentAt: string }) => void;
+    onUserOnline?: (data: { userId: string }) => void;
+    onUserOffline?: (data: { userId: string }) => void;
   }
 ): () => void {
   const socket = getSocket();
   if (!socket) {
-    return () => {}; // Return no-op cleanup function
+    return () => {};
   }
 
-  // Set up event listeners
   if (handlers.onGroupLeft) {
     socket.on('groupLeft', handlers.onGroupLeft);
   }
+  if (handlers.onChatListUpdate) {
+    socket.on('chatListUpdate', handlers.onChatListUpdate);
+  }
+  if (handlers.onUserOnline) {
+    socket.on('userOnline', handlers.onUserOnline);
+  }
+  if (handlers.onUserOffline) {
+    socket.on('userOffline', handlers.onUserOffline);
+  }
 
-  // Return cleanup function
   return () => {
     if (socket) {
       if (handlers.onGroupLeft) socket.off('groupLeft', handlers.onGroupLeft);
+      if (handlers.onChatListUpdate) socket.off('chatListUpdate', handlers.onChatListUpdate);
+      if (handlers.onUserOnline) socket.off('userOnline', handlers.onUserOnline);
+      if (handlers.onUserOffline) socket.off('userOffline', handlers.onUserOffline);
     }
   };
 }

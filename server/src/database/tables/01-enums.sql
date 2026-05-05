@@ -57,7 +57,7 @@ CREATE TYPE consent_type AS ENUM ('terms_of_service', 'privacy_policy', 'email_m
 CREATE TYPE notification_channel AS ENUM ('push', 'email', 'whatsapp', 'sms');
 CREATE TYPE coaching_style AS ENUM ('supportive', 'direct', 'analytical', 'motivational');
 CREATE TYPE coaching_intensity AS ENUM ('light', 'moderate', 'intensive');
-CREATE TYPE goal_category AS ENUM ('weight_loss', 'muscle_building', 'sleep_improvement', 'stress_wellness', 'energy_productivity', 'event_training', 'health_condition', 'habit_building', 'overall_optimization', 'custom');
+CREATE TYPE goal_category AS ENUM ('weight_loss', 'muscle_building', 'sleep_improvement', 'stress_wellness', 'energy_productivity', 'event_training', 'health_condition', 'habit_building', 'overall_optimization', 'nutrition', 'fitness', 'custom');
 CREATE TYPE health_pillar AS ENUM ('fitness', 'nutrition', 'wellbeing');
 CREATE TYPE goal_status AS ENUM ('draft', 'active', 'in_progress', 'paused', 'completed', 'abandoned');
 CREATE TYPE assessment_type AS ENUM ('quick', 'deep');
@@ -82,7 +82,8 @@ CREATE TYPE notification_type AS ENUM (
     'coaching',
     'celebration',
     'warning',
-    'tip'
+    'tip',
+    'ai_check_in'
 );
 CREATE TYPE notification_priority AS ENUM ('low', 'normal', 'high', 'urgent');
 CREATE TYPE ai_session_status AS ENUM ('active', 'completed', 'abandoned');

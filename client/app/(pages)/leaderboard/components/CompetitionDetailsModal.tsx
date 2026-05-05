@@ -301,6 +301,10 @@ export function CompetitionDetailsModal({
                   startRank={1}
                   total={leaderboardData.pagination.total}
                   currentUserId={currentUserId}
+                  currentPage={1}
+                  totalPages={1}
+                  pageSize={10}
+                  onPageChange={() => {}}
                 />
               ) : (
                 <Button onClick={loadLeaderboard} variant="outline" className="w-full">

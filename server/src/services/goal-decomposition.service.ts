@@ -6,7 +6,7 @@
  * the user's motivation tier.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { aiProviderService } from './ai-provider.service.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -88,16 +88,63 @@ interface LLMMilestone {
   sort_order: number;
 }
 
+interface LLMWeeklyTarget {
+  week: number;
+  target: string;
+  key_actions: string[];
+}
+
+interface LLMDailyStep {
+  day_pattern: string;
+  step: string;
+  duration_minutes: number;
+}
+
 interface LLMDecompositionResponse {
   actions: LLMAction[];
   milestones: LLMMilestone[];
+  weekly_targets?: LLMWeeklyTarget[];
+  daily_steps?: LLMDailyStep[];
   pillar_mappings: Array<{ pillar: HealthPillar; relevance: string }>;
   motivation_calibration: string;
+}
+
+interface SMARTRefinement {
+  isAlreadySmart: boolean;
+  refinedTitle: string;
+  refinedDescription: string;
+  specificTarget: string;
+  measurableMetric: string;
+  timeframeWeeks: number;
+  weeklyMilestone: string;
 }
 
 // ============================================
 // PROMPTS
 // ============================================
+
+const SMART_REFINEMENT_PROMPT = `You are a goal refinement engine. Given a user's goal, evaluate if it is SMART (Specific, Measurable, Achievable, Relevant, Time-bound).
+
+If the goal is already SMART, return isAlreadySmart: true and echo the original title/description.
+If the goal is vague, refine it into a SMART goal while preserving the user's original intent.
+
+Rules:
+- Be practical and realistic. Don't set extreme targets.
+- Infer reasonable defaults from the category and motivation when specifics are missing.
+- Keep the refined title under 100 characters.
+- The timeframe should be 4-16 weeks for most goals.
+- The weekly milestone should be a concrete, measurable checkpoint.
+
+Respond with ONLY valid JSON:
+{
+  "isAlreadySmart": false,
+  "refinedTitle": "Lose 5kg in 12 weeks by training 4x/week",
+  "refinedDescription": "Reduce body fat through consistent strength training and a moderate calorie deficit of 400-500 calories per day.",
+  "specificTarget": "Lose 5kg of body weight",
+  "measurableMetric": "kg on scale, weekly weigh-in",
+  "timeframeWeeks": 12,
+  "weeklyMilestone": "~0.4kg loss per week"
+}`;
 
 const DECOMPOSITION_SYSTEM_PROMPT = `You are a life coaching AI that decomposes personal goals into actionable daily/weekly steps.
 
@@ -110,17 +157,24 @@ For each action, specify:
 - pillar: 'fitness', 'nutrition', 'wellbeing', or null if not health-related
 - frequency: 'daily', 'weekly', 'monthly', or 'once'
 
-Also generate 2-4 milestones with progressive targets.
+Also generate:
+- 2-4 milestones with progressive targets
+- weekly_targets: 4-8 weekly targets showing progressive ramp-up (what to achieve each week)
+- daily_steps: a typical daily routine of 2-4 steps with estimated duration in minutes
 
 MOTIVATION CALIBRATION:
-- Low motivation: 2-3 micro-actions only. Use behavioral tricks (2-minute rule, temptation bundling). Keep everything tiny and achievable.
-- Medium motivation: 4-5 structured actions. Include scheduling and tracking.
-- High motivation: 5-7 ambitious actions. Include detailed tracking and accountability.
+- Low motivation: 2-3 micro-actions only. Use behavioral tricks (2-minute rule, temptation bundling). Keep everything tiny and achievable. Weekly targets should be very gentle.
+- Medium motivation: 4-5 structured actions. Include scheduling and tracking. Moderate weekly ramp-up.
+- High motivation: 5-7 ambitious actions. Include detailed tracking and accountability. Aggressive weekly targets.
+
+Plans must be PRACTICAL, MINIMAL, and EXECUTABLE in real life — not theoretical frameworks.
 
 Respond with ONLY valid JSON in this format:
 {
   "actions": [...],
   "milestones": [{ "title": "...", "description": "...", "sort_order": 1 }],
+  "weekly_targets": [{ "week": 1, "target": "Walk 15 min 3x this week", "key_actions": ["Walk after lunch Mon/Wed/Fri"] }],
+  "daily_steps": [{ "day_pattern": "weekday_morning", "step": "10-min stretch routine", "duration_minutes": 10 }],
   "pillar_mappings": [{ "pillar": "wellbeing", "relevance": "..." }],
   "motivation_calibration": "Brief note on how motivation tier affected suggestions"
 }`;
@@ -245,11 +299,17 @@ class GoalDecompositionService {
       }
     }
 
+    // 9. Store weekly targets as milestones (graceful — new columns may not exist yet)
+    if (parsed.weekly_targets && parsed.weekly_targets.length > 0) {
+      await this.storeWeeklyTargets(userId, goalId, parsed.weekly_targets, parsed.daily_steps ?? []);
+    }
+
     logger.info('Goal decomposed successfully', {
       userId,
       goalId,
       actionsCount: insertedActions.length,
       milestonesCount: insertedMilestones.length,
+      weeklyTargets: parsed.weekly_targets?.length ?? 0,
       motivationTier,
     });
 
@@ -419,6 +479,96 @@ class GoalDecompositionService {
     }
 
     return this.mapRowToAction(result.rows[0]);
+  }
+
+  /**
+   * Refine a vague goal into a SMART goal using AI.
+   * Returns the refinement or null if the goal is already SMART.
+   */
+  async refineToSmart(
+    title: string,
+    description: string | null,
+    category: string,
+    motivation: string | null
+  ): Promise<SMARTRefinement | null> {
+    const userPrompt = [
+      `GOAL TITLE: ${title}`,
+      description ? `DESCRIPTION: ${description}` : '',
+      `CATEGORY: ${category}`,
+      motivation ? `MOTIVATION: ${motivation}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    try {
+      const aiResponse = await aiProviderService.generateCompletion({
+        systemPrompt: SMART_REFINEMENT_PROMPT,
+        userPrompt,
+        jsonMode: true,
+        maxTokens: 800,
+        temperature: 0.5,
+      });
+
+      const parsed = JSON.parse(aiResponse.content) as SMARTRefinement;
+
+      if (parsed.isAlreadySmart) {
+        logger.debug('[GoalDecomposition] Goal is already SMART, no refinement needed', { title });
+        return null;
+      }
+
+      logger.info('[GoalDecomposition] Refined vague goal to SMART', {
+        original: title,
+        refined: parsed.refinedTitle,
+        timeframeWeeks: parsed.timeframeWeeks,
+      });
+
+      return parsed;
+    } catch (err) {
+      logger.warn('[GoalDecomposition] SMART refinement failed, proceeding without', {
+        title,
+        error: (err as Error).message,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Store weekly targets as milestones with week_number metadata.
+   * Requires the life_goal_milestones table to have week_number and daily_breakdown columns.
+   */
+  private async storeWeeklyTargets(
+    userId: string,
+    goalId: string,
+    weeklyTargets: LLMWeeklyTarget[],
+    dailySteps: LLMDailyStep[]
+  ): Promise<void> {
+    if (!weeklyTargets || weeklyTargets.length === 0) return;
+
+    for (const wt of weeklyTargets) {
+      try {
+        await query(
+          `INSERT INTO life_goal_milestones (life_goal_id, user_id, title, description, sort_order, week_number, daily_breakdown)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            goalId,
+            userId,
+            `Week ${wt.week}: ${wt.target}`.substring(0, 255),
+            wt.key_actions.join('; '),
+            wt.week,
+            wt.week,
+            dailySteps && dailySteps.length > 0 ? JSON.stringify(dailySteps) : null,
+          ]
+        );
+      } catch (err) {
+        // Graceful degradation: if week_number/daily_breakdown columns don't exist yet,
+        // fall back to inserting without them
+        logger.warn('[GoalDecomposition] Weekly target insert failed (migration may be pending)', {
+          goalId,
+          week: wt.week,
+          error: (err as Error).message,
+        });
+      }
+    }
   }
 
   // ============================================

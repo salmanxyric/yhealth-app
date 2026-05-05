@@ -61,6 +61,8 @@ interface ScheduleWorkflowProps {
   onEdgeCreate: (sourceId: string, targetId: string) => Promise<void>;
   onEdgeDelete: (linkId: string) => Promise<void>;
   onAutoConnect?: () => Promise<void>;
+  /** Fires with the prayer's externalId when the user taps "Mark Done". */
+  onPrayerDone?: (externalId: string) => void;
 }
 
 const nodeTypes = {
@@ -82,6 +84,7 @@ function ScheduleWorkflowContent({
   onEdgeCreate,
   onEdgeDelete,
   onAutoConnect,
+  onPrayerDone,
 }: ScheduleWorkflowProps) {
   const calculateTimeBasedPosition = useCallback(
     (item: ScheduleItem): { x: number; y: number } => {
@@ -169,25 +172,70 @@ function ScheduleWorkflowContent({
     targetPosition: Position.Left,
   };
 
-  // Convert items to nodes
+  /**
+   * Pick the canvas column for an item by source so manual / Google / prayer
+   * sit in separate vertical lanes. Y is derived from the item's start time
+   * to preserve the timeline feel even without drag-saved positions.
+   */
+  const positionForSourceItem = useCallback(
+    (item: ScheduleItem): { x: number; y: number } => {
+      const startMin = timeToMinutes(item.startTime);
+      const y = Math.max(40, (startMin - 4 * 60) * 0.6 + 40);
+      if (item.source === "google") return { x: 620, y };
+      if (item.source === "prayer") return { x: 940, y };
+      // Manual falls through to the normal time-based layout.
+      return calculateTimeBasedPosition(item);
+    },
+    [calculateTimeBasedPosition]
+  );
+
+  // Convert items to nodes. All items are draggable + linkable now — the
+  // server accepts position-only updates on external items and link
+  // endpoints can be any UUID in the schedule. Content editing still
+  // respects the manual-only guard inside WorkflowNode itself.
   const initialNodes = useMemo(() => {
     return schedule.items.map((item) => {
-      const position = calculateTimeBasedPosition(item);
+      // For manual items: respect drag-saved metadata position (if any).
+      // For external items: respect drag-saved metadata position too, else
+      // fall back to the source-column layout.
+      const metadata = item.metadata as { x?: number; y?: number } | undefined;
+      const saved =
+        metadata &&
+        typeof metadata.x === "number" &&
+        typeof metadata.y === "number" &&
+        isFinite(metadata.x) &&
+        isFinite(metadata.y)
+          ? { x: metadata.x, y: metadata.y }
+          : null;
+      const position = saved || positionForSourceItem(item);
       const connectionCount = schedule.links.filter(
         (link) =>
           link.sourceItemId === item.id || link.targetItemId === item.id
       ).length;
+      const isExternal = item.source !== "manual";
 
       return {
         id: item.id,
         type: "workflow",
         position,
+        draggable: true,
+        // External items are still delete-gated server-side; keep the canvas
+        // delete path off so the Delete key doesn't show a confusing 400.
+        deletable: !isExternal,
+        connectable: true,
+        selectable: true,
         ...nodeDefaults,
         data: {
           item,
           onEdit: onNodeEdit,
           onDelete: () => onNodeDelete(item),
           connectionCount,
+          source: item.source,
+          done: item.completed,
+          onMarkDone:
+            item.source === "prayer" && !item.completed && item.externalId
+              ? () => onPrayerDone?.(item.externalId!)
+              : undefined,
         },
       } as Node;
     });
@@ -195,9 +243,10 @@ function ScheduleWorkflowContent({
   }, [
     schedule.items,
     schedule.links,
-    calculateTimeBasedPosition,
+    positionForSourceItem,
     onNodeEdit,
     onNodeDelete,
+    onPrayerDone,
   ]);
 
   // Convert links to edges
@@ -230,24 +279,46 @@ function ScheduleWorkflowContent({
 
       return schedule.items.map((item) => {
         const existingNode = nodesToKeep.find((n) => n.id === item.id);
-        const savedPosition = calculateTimeBasedPosition(item);
+        // Prefer drag-saved position from metadata, then any live node
+        // position still in state, then fall back to the deterministic
+        // source-column layout.
+        const metadata = item.metadata as { x?: number; y?: number } | undefined;
+        const saved =
+          metadata &&
+          typeof metadata.x === "number" &&
+          typeof metadata.y === "number" &&
+          isFinite(metadata.x) &&
+          isFinite(metadata.y)
+            ? { x: metadata.x, y: metadata.y }
+            : null;
         const position =
-          savedPosition || existingNode?.position || { x: 100, y: 100 };
+          saved || existingNode?.position || positionForSourceItem(item);
         const connectionCount = schedule.links.filter(
           (link) =>
             link.sourceItemId === item.id || link.targetItemId === item.id
         ).length;
+        const isExternal = item.source !== "manual";
 
         return {
           id: item.id,
           type: "workflow",
           position,
+          draggable: true,
+          deletable: !isExternal,
+          connectable: true,
+          selectable: true,
           ...nodeDefaults,
           data: {
             item,
             onEdit: onNodeEdit,
             onDelete: () => onNodeDelete(item),
             connectionCount,
+            source: item.source,
+            done: item.completed,
+            onMarkDone:
+              item.source === "prayer" && !item.completed && item.externalId
+                ? () => onPrayerDone?.(item.externalId!)
+                : undefined,
           },
         } as Node;
       });
@@ -256,10 +327,11 @@ function ScheduleWorkflowContent({
   }, [
     schedule.items,
     schedule.links,
-    calculateTimeBasedPosition,
+    positionForSourceItem,
     onNodeEdit,
     onNodeDelete,
     setNodes,
+    onPrayerDone,
   ]);
 
   // Sync edges with schedule
@@ -302,6 +374,10 @@ function ScheduleWorkflowContent({
   const onConnect = useCallback(
     async (params: Connection) => {
       if (!params.source || !params.target) return;
+      // Link endpoints must be real rows in this schedule; all three sources
+      // (manual / google / prayer) are valid now.
+      const exists = (id: string) => schedule.items.some((i) => i.id === id);
+      if (!exists(params.source) || !exists(params.target)) return;
       const edgeExists = edges.some(
         (e) => e.source === params.source && e.target === params.target
       );
@@ -309,7 +385,7 @@ function ScheduleWorkflowContent({
       setEdges((eds) => addEdge(params, eds));
       await onEdgeCreate(params.source, params.target);
     },
-    [edges, setEdges, onEdgeCreate]
+    [edges, setEdges, onEdgeCreate, schedule.items]
   );
 
   const onNodesDelete = useCallback(async (deletedNodes: Node[]) => {

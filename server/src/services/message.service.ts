@@ -3,7 +3,7 @@
  * @description Handles message CRUD, reactions, pin/star, forwarding, read receipts, and media handling
  */
 
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { chatCacheService } from './chat-cache.service.js';
 import { chatService } from './chat.service.js';

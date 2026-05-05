@@ -1,22 +1,49 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, Square, Circle, Diamond, Shapes } from "lucide-react";
+import {
+  X,
+  Loader2,
+  Square,
+  Circle,
+  Diamond,
+  Shapes,
+  Clock,
+  AlignLeft,
+  Tag,
+  Palette,
+  Smile,
+  Timer,
+  AlertCircle,
+  Briefcase,
+  Dumbbell,
+  UtensilsCrossed,
+  Coffee,
+  User,
+  BookOpen,
+  Users,
+  Heart,
+  MoreHorizontal,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { scheduleService, type ScheduleItem, type UpdateScheduleItemRequest } from "@/src/shared/services/schedule.service";
+import {
+  scheduleService,
+  type ScheduleItem,
+  type UpdateScheduleItemRequest,
+} from "@/src/shared/services/schedule.service";
 import { IconPicker } from "./IconPicker";
+import {
+  detectConflict,
+  findNextOpenSlot,
+  type ExistingSlot,
+  type ConflictHit,
+} from "@/lib/schedule/time-conflict";
 
 interface ActivityFormModalProps {
   isOpen: boolean;
@@ -24,6 +51,8 @@ interface ActivityFormModalProps {
   activity: ScheduleItem | null;
   onSave: (item?: ScheduleItem) => void;
   scheduleId?: string;
+  /** Existing slots (manual + google + prayer) to check conflicts against. */
+  existingSlots?: ExistingSlot[];
 }
 
 const SHAPES = [
@@ -44,28 +73,50 @@ const COLORS = [
   { value: "#14b8a6", label: "Teal" },
 ];
 
-const CATEGORIES = [
-  "Work",
-  "Exercise",
-  "Meal",
-  "Break",
-  "Personal",
-  "Study",
-  "Social",
-  "Health",
-  "Other",
+const CATEGORIES: { value: string; label: string; icon: LucideIcon; color: string }[] = [
+  { value: "Work", label: "Work", icon: Briefcase, color: "#3b82f6" },
+  { value: "Exercise", label: "Exercise", icon: Dumbbell, color: "#f97316" },
+  { value: "Meal", label: "Meal", icon: UtensilsCrossed, color: "#10b981" },
+  { value: "Break", label: "Break", icon: Coffee, color: "#f59e0b" },
+  { value: "Personal", label: "Personal", icon: User, color: "#8b5cf6" },
+  { value: "Study", label: "Study", icon: BookOpen, color: "#06b6d4" },
+  { value: "Social", label: "Social", icon: Users, color: "#ec4899" },
+  { value: "Health", label: "Health", icon: Heart, color: "#ef4444" },
+  { value: "Other", label: "Other", icon: MoreHorizontal, color: "#a1a1aa" },
 ];
 
-export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleId }: ActivityFormModalProps) {
+function calcDuration(start: string, end: string): number | null {
+  if (!start || !end) return null;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const diff = eh * 60 + em - (sh * 60 + sm);
+  return diff > 0 ? diff : null;
+}
+
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+export function ActivityFormModal({
+  isOpen,
+  onClose,
+  activity,
+  onSave,
+  scheduleId,
+  existingSlots = [],
+}: ActivityFormModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [overrideConflict, setOverrideConflict] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     start_time: "",
     end_time: "",
-    duration_minutes: "",
     color: "#10b981",
     icon: "",
     category: "",
@@ -74,25 +125,33 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
 
   useEffect(() => {
     if (activity) {
-      const shape = activity.shape || (activity.metadata as { shape?: string })?.shape || "square";
+      const shape =
+        activity.shape ||
+        (activity.metadata as { shape?: string })?.shape ||
+        "square";
       setFormData({
         title: activity.title,
         description: activity.description || "",
         start_time: activity.startTime,
         end_time: activity.endTime || "",
-        duration_minutes: activity.durationMinutes?.toString() || "",
         color: activity.color || "#10b981",
         icon: activity.icon || "",
         category: activity.category || "",
         shape: shape as "square" | "circle" | "rounded" | "diamond",
       });
     } else {
+      // New activity — pick the next free 30-min slot from "now". If the
+      // naive "now" already conflicts with an existing slot, shift forward
+      // to the next open window.
+      const now = new Date();
+      const roundedMin = Math.floor(now.getMinutes() / 30) * 30;
+      const baseStart = `${String(now.getHours()).padStart(2, "0")}:${String(roundedMin).padStart(2, "0")}`;
+      const open = findNextOpenSlot(baseStart, 30, existingSlots);
       setFormData({
         title: "",
         description: "",
-        start_time: "",
-        end_time: "",
-        duration_minutes: "",
+        start_time: open?.start || baseStart,
+        end_time: open?.end || "",
         color: "#10b981",
         icon: "",
         category: "",
@@ -100,32 +159,89 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
       });
     }
     setError(null);
+    setOverrideConflict(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity, isOpen]);
+
+  const duration = useMemo(
+    () => calcDuration(formData.start_time, formData.end_time),
+    [formData.start_time, formData.end_time]
+  );
+
+  const timeError = useMemo(() => {
+    if (!formData.start_time || !formData.end_time) return null;
+    const [sh, sm] = formData.start_time.split(":").map(Number);
+    const [eh, em] = formData.end_time.split(":").map(Number);
+    const startMins = sh * 60 + sm;
+    const endMins = eh * 60 + em;
+    if (endMins <= startMins) return "End time must be after start time";
+    return null;
+  }, [formData.start_time, formData.end_time]);
+
+  // Detect overlaps with manual items, Google events, and prayers. Exclude the
+  // activity being edited from the check so updating doesn't conflict with itself.
+  const conflict = useMemo(() => {
+    if (!formData.start_time || !formData.end_time || timeError) return null;
+    const slotsToCheck = activity
+      ? existingSlots.filter((s) => s.id !== activity.id)
+      : existingSlots;
+    const result = detectConflict(formData.start_time, formData.end_time, slotsToCheck);
+    if (result.conflicts.length === 0) return null;
+    return result;
+  }, [formData.start_time, formData.end_time, existingSlots, activity, timeError]);
+
+  // Reset override whenever time fields change — the user has to re-confirm
+  // on a new conflict.
+  useEffect(() => {
+    setOverrideConflict(false);
+  }, [formData.start_time, formData.end_time]);
+
+  const applySuggestedTime = () => {
+    if (!conflict?.suggestedStart || !conflict?.suggestedEnd) return;
+    setFormData((prev) => ({
+      ...prev,
+      start_time: conflict.suggestedStart!,
+      end_time: conflict.suggestedEnd!,
+    }));
+    setOverrideConflict(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (timeError) return;
+    // Block submission on active conflict unless the user has explicitly opted
+    // in to override — the banner provides both "Use suggested time" and
+    // "Save anyway" affordances.
+    if (conflict && !overrideConflict) {
+      setError(
+        "This time conflicts with another activity. Choose the suggested time or confirm 'Save anyway'.",
+      );
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
 
     try {
+      const durationMinutes = duration || undefined;
+
       if (activity) {
-        // Update existing activity
         const updateData: UpdateScheduleItemRequest = {
           title: formData.title,
           description: formData.description || undefined,
           start_time: formData.start_time,
           end_time: formData.end_time || undefined,
-          duration_minutes: formData.duration_minutes ? parseInt(formData.duration_minutes) : undefined,
+          duration_minutes: durationMinutes,
           color: formData.color,
           icon: formData.icon || undefined,
           category: formData.category || undefined,
           shape: formData.shape,
-          metadata: {
-            shape: formData.shape,
-          },
+          metadata: { shape: formData.shape },
         };
 
-        const result = await scheduleService.updateScheduleItem(activity.id, updateData);
+        const result = await scheduleService.updateScheduleItem(
+          activity.id,
+          updateData
+        );
         if (result.success) {
           onSave(result.data?.item);
           onClose();
@@ -133,26 +249,24 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
           setError("Failed to update activity");
         }
       } else if (scheduleId) {
-        // Create new activity
         const createData = {
           title: formData.title,
           description: formData.description || undefined,
           start_time: formData.start_time,
           end_time: formData.end_time || undefined,
-          duration_minutes: formData.duration_minutes ? parseInt(formData.duration_minutes) : undefined,
+          duration_minutes: durationMinutes,
           color: formData.color,
           icon: formData.icon || undefined,
           category: formData.category || undefined,
           shape: formData.shape,
           position: 0,
-          metadata: {
-            shape: formData.shape,
-            x: 100,
-            y: 100,
-          },
+          metadata: { shape: formData.shape, x: 100, y: 100 },
         };
 
-        const result = await scheduleService.addScheduleItem(scheduleId, createData);
+        const result = await scheduleService.addScheduleItem(
+          scheduleId,
+          createData
+        );
         if (result.success) {
           onSave(result.data?.item);
           onClose();
@@ -162,7 +276,11 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
       }
     } catch (err) {
       console.error("Error saving activity:", err);
-      setError(activity ? "Failed to update activity. Please try again." : "Failed to create activity. Please try again.");
+      setError(
+        activity
+          ? "Failed to update activity. Please try again."
+          : "Failed to create activity. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -179,182 +297,320 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999]"
+            className="fixed inset-0 bg-black/70 backdrop-blur-md z-[9999]"
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            initial={{ opacity: 0, scale: 0.95, y: 24 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            exit={{ opacity: 0, scale: 0.95, y: 24 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-emerald-500/20 rounded-2xl shadow-2xl z-[10000] p-6"
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[90vh] overflow-y-auto z-[10000]
+              bg-zinc-900 border border-white/[0.08] rounded-2xl shadow-[0_32px_64px_rgba(0,0,0,0.5)]"
           >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-                {activity ? "Edit Activity" : "Create Activity"}
-              </h2>
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm border-b border-white/[0.06] px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center border border-white/[0.08]"
+                  style={{ background: `${formData.color}20` }}
+                >
+                  {formData.icon ? (
+                    <span className="text-lg">{formData.icon}</span>
+                  ) : (
+                    <Clock
+                      className="w-4.5 h-4.5"
+                      style={{ color: formData.color }}
+                    />
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-[15px] font-semibold text-white">
+                    {activity ? "Edit Activity" : "New Activity"}
+                  </h2>
+                  {duration && (
+                    <p className="text-[11px] text-zinc-500 tabular-nums">
+                      {formatDuration(duration)} duration
+                    </p>
+                  )}
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-slate-700/50 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5 text-slate-400" />
+                <X className="w-4.5 h-4.5 text-zinc-500" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
               {error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/15 text-rose-400 text-[13px]">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   {error}
                 </div>
               )}
 
+              {/* Title */}
               <div>
-                <Label htmlFor="title" className="text-slate-300 mb-2 block">
-                  Title *
+                <Label
+                  htmlFor="title"
+                  className="text-[13px] font-medium text-zinc-400 mb-1.5 flex items-center gap-1.5"
+                >
+                  <AlignLeft className="w-3.5 h-3.5" /> Title{" "}
+                  <span className="text-rose-400">*</span>
                 </Label>
                 <Input
                   id="title"
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
                   required
-                  className="bg-slate-800/50 border-slate-700 text-white"
-                  placeholder="Activity title"
+                  className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-emerald-500/20 h-11 rounded-xl"
+                  placeholder="What are you planning?"
                 />
               </div>
 
+              {/* Description */}
               <div>
-                <Label htmlFor="description" className="text-slate-300 mb-2 block">
-                  Description
+                <Label
+                  htmlFor="description"
+                  className="text-[13px] font-medium text-zinc-400 mb-1.5 flex items-center gap-1.5"
+                >
+                  <AlignLeft className="w-3.5 h-3.5" /> Description
                 </Label>
                 <Textarea
                   id="description"
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="bg-slate-800/50 border-slate-700 text-white"
-                  placeholder="Activity description"
-                  rows={3}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-emerald-500/20 rounded-xl resize-none"
+                  placeholder="Add notes or details..."
+                  rows={2}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="start_time" className="text-slate-300 mb-2 block">
-                    Start Time *
-                  </Label>
-                  <Input
-                    id="start_time"
-                    type="time"
-                    value={formData.start_time}
-                    onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                    required
-                    className="bg-slate-800/50 border-slate-700 text-white"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="end_time" className="text-slate-300 mb-2 block">
-                    End Time
-                  </Label>
-                  <Input
-                    id="end_time"
-                    type="time"
-                    value={formData.end_time}
-                    onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                    className="bg-slate-800/50 border-slate-700 text-white"
-                  />
-                </div>
-              </div>
-
+              {/* Time Row */}
               <div>
-                <Label htmlFor="duration_minutes" className="text-slate-300 mb-2 block">
-                  Duration (minutes)
+                <Label className="text-[13px] font-medium text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" /> Time{" "}
+                  <span className="text-rose-400">*</span>
                 </Label>
-                <Input
-                  id="duration_minutes"
-                  type="number"
-                  value={formData.duration_minutes}
-                  onChange={(e) => setFormData({ ...formData, duration_minutes: e.target.value })}
-                  className="bg-slate-800/50 border-slate-700 text-white"
-                  placeholder="30"
-                  min="1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="category" className="text-slate-300 mb-2 block">
-                  Category
-                </Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
-                >
-                  <SelectTrigger className="bg-slate-800/50 border-slate-700 text-white w-full">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700 z-[10001] w-full">
-                    {CATEGORIES.map((cat) => (
-                      <SelectItem
-                        key={cat}
-                        value={cat}
-                        className="cursor-pointer text-white hover:bg-slate-700"
-                      >
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="color" className="text-slate-300 mb-2 block">
-                  Color
-                </Label>
-                <div className="flex gap-2 flex-wrap">
-                  {COLORS.map((color) => (
-                    <button
-                      key={color.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, color: color.value })}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                        formData.color === color.value
-                          ? "border-white scale-110"
-                          : "border-slate-600 hover:border-slate-400"
-                      }`}
-                      style={{ backgroundColor: color.value }}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium mb-1 block">
+                      Start
+                    </span>
+                    <Input
+                      id="start_time"
+                      type="time"
+                      value={formData.start_time}
+                      onChange={(e) =>
+                        setFormData({ ...formData, start_time: e.target.value })
+                      }
+                      required
+                      className="bg-white/[0.04] border-white/[0.08] text-white focus:border-emerald-500/50 focus:ring-emerald-500/20 h-11 rounded-xl"
                     />
-                  ))}
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-zinc-600 uppercase tracking-wider font-medium mb-1 block">
+                      End
+                    </span>
+                    <Input
+                      id="end_time"
+                      type="time"
+                      value={formData.end_time}
+                      onChange={(e) =>
+                        setFormData({ ...formData, end_time: e.target.value })
+                      }
+                      className={`bg-white/[0.04] border-white/[0.08] text-white focus:ring-emerald-500/20 h-11 rounded-xl ${
+                        timeError
+                          ? "border-rose-500/50 focus:border-rose-500/50"
+                          : "focus:border-emerald-500/50"
+                      }`}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <Label htmlFor="shape" className="text-slate-300 mb-2 block flex items-center gap-2">
-                  <Shapes className="w-4 h-4" />
-                  Shape
-                </Label>
-                <div className="grid grid-cols-5 gap-3">
-                  {SHAPES.map((shape) => {
-                    const IconComponent = shape.icon;
-                    return (
+                {/* Duration badge + time error */}
+                <div className="mt-2 flex items-center justify-between">
+                  {duration ? (
+                    <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+                      <Timer className="w-3 h-3" />
+                      {formatDuration(duration)}
+                    </span>
+                  ) : (
+                    <span />
+                  )}
+                  {timeError && (
+                    <span className="flex items-center gap-1 text-[12px] text-rose-400">
+                      <AlertCircle className="w-3 h-3" />
+                      {timeError}
+                    </span>
+                  )}
+                </div>
+
+                {/* Conflict banner */}
+                {conflict && (
+                  <div className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3">
+                    <div className="flex items-start gap-2 mb-2">
+                      <AlertCircle className="w-4 h-4 text-rose-400 mt-0.5 flex-shrink-0" />
+                      <div className="text-[12px] text-rose-100 leading-relaxed">
+                        <span className="font-semibold">Time conflict.</span>{" "}
+                        Overlaps with{" "}
+                        {conflict.conflicts.map((c: ConflictHit, idx: number) => (
+                          <span key={c.id}>
+                            <span className="font-semibold">{c.title}</span>
+                            <span className="text-rose-300/80">
+                              {" "}
+                              ({c.startHHmm}–{c.endHHmm}
+                              {c.source === "google"
+                                ? ", Google"
+                                : c.source === "prayer"
+                                  ? ", Prayer"
+                                  : ""}
+                              )
+                            </span>
+                            {idx < conflict.conflicts.length - 1 && ", "}
+                          </span>
+                        ))}
+                        .
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {conflict.suggestedStart && conflict.suggestedEnd ? (
+                        <button
+                          type="button"
+                          onClick={applySuggestedTime}
+                          className="h-8 px-3 rounded-lg text-[12px] font-semibold bg-emerald-500 hover:bg-emerald-400 text-emerald-950 transition-colors"
+                        >
+                          Use suggested time ({conflict.suggestedStart}–
+                          {conflict.suggestedEnd})
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-rose-200/70 italic">
+                          No free slot found today.
+                        </span>
+                      )}
                       <button
-                        key={shape.value}
                         type="button"
-                        onClick={() => setFormData({ ...formData, shape: shape.value as "square" | "circle" | "rounded" | "diamond" })}
-                        className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
-                          formData.shape === shape.value
-                            ? "border-emerald-500 bg-emerald-500/20 scale-105"
-                            : "border-slate-600 hover:border-slate-400 bg-slate-800/50"
+                        onClick={() => setOverrideConflict((v) => !v)}
+                        className={`h-8 px-3 rounded-lg text-[12px] font-medium transition-colors ${
+                          overrideConflict
+                            ? "bg-amber-500/20 border border-amber-500/40 text-amber-200"
+                            : "bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 hover:text-white"
                         }`}
                       >
-                        <IconComponent className="w-6 h-6 text-slate-300" />
-                        <span className="text-xs text-slate-400">{shape.label}</span>
+                        {overrideConflict ? "✓ Save anyway" : "Save anyway"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Category */}
+              <div>
+                <Label className="text-[13px] font-medium text-zinc-400 mb-2 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5" /> Category
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {CATEGORIES.map((cat) => {
+                    const Icon = cat.icon;
+                    const isSelected = formData.category === cat.value;
+                    return (
+                      <button
+                        key={cat.value}
+                        type="button"
+                        onClick={() =>
+                          setFormData({ ...formData, category: cat.value })
+                        }
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                          isSelected
+                            ? "border-white/20 bg-white/10 text-white shadow-sm"
+                            : "border-white/[0.06] bg-white/[0.03] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
+                        }`}
+                      >
+                        <Icon
+                          className="w-4 h-4 shrink-0"
+                          style={{ color: isSelected ? cat.color : undefined }}
+                        />
+                        <span className="truncate">{cat.label}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
+              {/* Color */}
+              <div>
+                <Label className="text-[13px] font-medium text-zinc-400 mb-2 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5" /> Color
+                </Label>
+                <div className="flex gap-2 flex-wrap">
+                  {COLORS.map((color) => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() =>
+                        setFormData({ ...formData, color: color.value })
+                      }
+                      className={`w-9 h-9 rounded-xl transition-all cursor-pointer ${
+                        formData.color === color.value
+                          ? "ring-2 ring-white ring-offset-2 ring-offset-zinc-900 scale-110"
+                          : "hover:scale-105 opacity-70 hover:opacity-100"
+                      }`}
+                      style={{ backgroundColor: color.value }}
+                      title={color.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Shape */}
+              <div>
+                <Label className="text-[13px] font-medium text-zinc-400 mb-2 flex items-center gap-1.5">
+                  <Shapes className="w-3.5 h-3.5" /> Shape
+                </Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {SHAPES.map((shape) => {
+                    const IconComponent = shape.icon;
+                    return (
+                      <button
+                        key={shape.value}
+                        type="button"
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            shape: shape.value as
+                              | "square"
+                              | "circle"
+                              | "rounded"
+                              | "diamond",
+                          })
+                        }
+                        className={`py-2.5 rounded-xl border transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
+                          formData.shape === shape.value
+                            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                            : "border-white/[0.06] bg-white/[0.02] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
+                        }`}
+                      >
+                        <IconComponent className="w-5 h-5" />
+                        <span className="text-[11px] font-medium">
+                          {shape.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Icon */}
               <div className="relative">
-                <Label htmlFor="icon" className="text-slate-300 mb-2 block">
-                  Icon
+                <Label className="text-[13px] font-medium text-zinc-400 mb-2 flex items-center gap-1.5">
+                  <Smile className="w-3.5 h-3.5" /> Icon
                 </Label>
                 <div className="flex gap-2">
                   <div className="relative">
@@ -365,7 +621,11 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
                         e.stopPropagation();
                         setShowIconPicker(!showIconPicker);
                       }}
-                      className="w-12 h-12 rounded-lg border-2 border-slate-600 bg-slate-800/50 hover:bg-slate-700/50 flex items-center justify-center text-2xl transition-all"
+                      className={`w-11 h-11 rounded-xl border flex items-center justify-center text-xl transition-all cursor-pointer ${
+                        formData.icon
+                          ? "border-emerald-500/30 bg-emerald-500/10"
+                          : "border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.06]"
+                      }`}
                     >
                       {formData.icon || "😀"}
                     </button>
@@ -385,8 +645,10 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
                   <Input
                     id="icon"
                     value={formData.icon}
-                    onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                    className="flex-1 bg-slate-800/50 border-slate-700 text-white"
+                    onChange={(e) =>
+                      setFormData({ ...formData, icon: e.target.value })
+                    }
+                    className="flex-1 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-emerald-500/20 h-11 rounded-xl"
                     placeholder="Or type emoji"
                     maxLength={2}
                     onClick={() => setShowIconPicker(false)}
@@ -395,7 +657,7 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, icon: "" })}
-                      className="px-3 rounded-lg border border-slate-600 bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 hover:text-white transition-all"
+                      className="px-3 h-11 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.06] text-zinc-500 hover:text-white text-[12px] font-medium transition-all cursor-pointer"
                     >
                       Clear
                     </button>
@@ -403,27 +665,30 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              {/* Actions */}
+              <div className="flex gap-3 pt-2 border-t border-white/[0.06]">
                 <Button
                   type="button"
                   onClick={onClose}
                   variant="outline"
-                  className="flex-1 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700/50"
+                  className="flex-1 h-11 rounded-xl bg-white/[0.04] border-white/[0.08] text-zinc-400 hover:bg-white/[0.06] hover:text-white"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+                  disabled={isSubmitting || !!timeError || (!!conflict && !overrideConflict)}
+                  className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Saving...
                     </>
+                  ) : activity ? (
+                    "Update Activity"
                   ) : (
-                    "Save Changes"
+                    "Create Activity"
                   )}
                 </Button>
               </div>
@@ -435,4 +700,3 @@ export function ActivityFormModal({ isOpen, onClose, activity, onSave, scheduleI
     document.body
   );
 }
-

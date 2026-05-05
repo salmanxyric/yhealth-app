@@ -9,6 +9,7 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { competitionService } from '../services/competition.service.js';
 import { aiScoringService } from '../services/ai-scoring.service.js';
+import { smartCompetitionService } from '../services/smart-competition.service.js';
 import { logger } from '../services/logger.service.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
@@ -19,7 +20,9 @@ export const getActiveCompetitions = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.userId;
     const statusFilter = req.query.status as string | undefined;
-    const competitions = await competitionService.getActiveCompetitions(statusFilter);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
+    const { competitions, total } = await competitionService.getActiveCompetitions(statusFilter, limit, offset);
 
     // Get user's competition entries if user is authenticated
     let userCompetitionIds: string[] = [];
@@ -36,28 +39,49 @@ export const getActiveCompetitions = asyncHandler(
       }
     }
 
-    // Map to frontend format (snake_case)
-    const mappedCompetitions = competitions.map((comp) => ({
-      id: comp.id,
-      name: comp.name,
-      type: comp.type,
-      description: comp.description,
-      start_date: comp.startDate.toISOString(),
-      end_date: comp.endDate.toISOString(),
-      status: comp.status,
-      rules: comp.rules,
-      eligibility: comp.eligibility,
-      scoring_weights: comp.scoringWeights,
-      anti_cheat_policy: comp.antiCheatPolicy,
-      prize_metadata: comp.prizeMetadata,
-      created_by: comp.createdBy,
-      created_at: comp.createdAt.toISOString(),
-      updated_at: comp.updatedAt.toISOString(),
-      participant_count: (comp as any).participantCount || 0,
-      is_joined: userId ? userCompetitionIds.includes(comp.id) : false,
+    // Map to frontend format with recommendation data
+    const mappedCompetitions = await Promise.all(competitions.map(async (comp) => {
+      let isRecommended = false;
+      let buddiesJoined = 0;
+
+      if (userId) {
+        try {
+          [isRecommended, buddiesJoined] = await Promise.all([
+            Promise.resolve(smartCompetitionService.isRecommendedForUser(userId, comp.id)).catch(() => false),
+            Promise.resolve(smartCompetitionService.getBuddiesInCompetition(userId, comp.id)).catch(() => 0),
+          ]);
+        } catch {
+          // Fail open — don't crash listing if recommendation service is unavailable
+        }
+      }
+
+      return {
+        id: comp.id,
+        name: comp.name,
+        type: comp.type,
+        description: comp.description,
+        start_date: comp.startDate.toISOString(),
+        end_date: comp.endDate.toISOString(),
+        status: comp.status,
+        rules: comp.rules,
+        eligibility: comp.eligibility,
+        scoring_weights: comp.scoringWeights,
+        anti_cheat_policy: comp.antiCheatPolicy,
+        prize_metadata: comp.prizeMetadata,
+        created_by: comp.createdBy,
+        created_at: comp.createdAt.toISOString(),
+        updated_at: comp.updatedAt.toISOString(),
+        participant_count: (comp as any).participantCount || 0,
+        is_joined: userId ? userCompetitionIds.includes(comp.id) : false,
+        is_recommended: isRecommended,
+        buddies_joined: buddiesJoined,
+      };
     }));
 
-    ApiResponse.success(res, { competitions: mappedCompetitions }, 'Competitions retrieved successfully');
+    ApiResponse.success(res, {
+      competitions: mappedCompetitions,
+      pagination: { total, limit, offset },
+    }, 'Competitions retrieved successfully');
   }
 );
 

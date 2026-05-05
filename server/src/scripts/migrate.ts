@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Database Migration Script
- * Run this to check and create any missing database tables
+ * Database Migration Script — `autoMigrate()` from auto-migrate.ts
  *
  * Usage:
- *   npm run db:migrate        # Check and create missing tables
- *   npm run db:migrate:verify   # Verify schema without making changes
- *   npm run db:migrate:full     # Force full schema rebuild (DANGER: drops data)
+ *   npm run db:migrate:auto   # Missing tables + sync-missing-columns.sql + supplementary migrations (personas, obstacles, indexes, …)
+ *   npm run db:migrate:verify # Verify EXPECTED_TABLES / types (no writes)
+ *
+ * Note: `npm run db:migrate` points at run-migrations.ts (older workout-reschedule bundle), not this file.
  */
 
 import { autoMigrate, verifySchema } from '../database/auto-migrate.js';

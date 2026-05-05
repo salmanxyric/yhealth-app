@@ -10,7 +10,7 @@
  * Uses pattern data to provide personalized recommendations.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { DeviationClassification } from './nutrition-analysis.service.js';
 

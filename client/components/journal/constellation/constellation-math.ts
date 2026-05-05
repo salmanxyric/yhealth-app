@@ -393,3 +393,93 @@ export function getMoodLabel(sentimentScore?: number | null): string {
   if (sentimentScore > -0.6) return "Reflective";
   return "Stressed";
 }
+
+// ============================================
+// CATEGORY SYSTEM (knowledge-graph style)
+// ============================================
+
+/** Category IDs used across legend + satellite rendering */
+export type ReflectionCategory =
+  | "mindset"
+  | "emotion"
+  | "energy"
+  | "growth"
+  | "gratitude"
+  | "goals";
+
+export interface CategoryMeta {
+  id: ReflectionCategory;
+  label: string;
+  color: string;        // stroke/accent
+  iconName:
+    | "heart"
+    | "leaf"
+    | "star"
+    | "target"
+    | "zap"
+    | "smile"
+    | "book"
+    | "brain";
+  defaultTitle: string; // used as satellite label when no title is available
+}
+
+export const CATEGORIES: Record<ReflectionCategory, CategoryMeta> = {
+  mindset:   { id: "mindset",   label: "Mindset",   color: "#a855f7", iconName: "book",   defaultTitle: "Learning"   },
+  emotion:   { id: "emotion",   label: "Emotion",   color: "#fb7185", iconName: "heart",  defaultTitle: "Self Love"  },
+  energy:    { id: "energy",    label: "Energy",    color: "#3b82f6", iconName: "zap",    defaultTitle: "Energy"     },
+  growth:    { id: "growth",    label: "Growth",    color: "#10b981", iconName: "leaf",   defaultTitle: "Clarity"    },
+  gratitude: { id: "gratitude", label: "Gratitude", color: "#facc15", iconName: "star",   defaultTitle: "Gratitude"  },
+  goals:     { id: "goals",     label: "Goals",     color: "#22d3ee", iconName: "target", defaultTitle: "Goals"      },
+};
+
+/**
+ * Derive a category for a reflection.
+ * Rules:
+ *  1. journaling_mode maps directly when recognized
+ *  2. fallback to sentiment score
+ *  3. fallback to "mindset"
+ *
+ * Accepts a minimal shape so this can be called with a representative
+ * entry and stays testable without importing the domain type.
+ */
+export function getEntryCategory(entry: {
+  journalingMode?: string | null;
+  sentimentScore?: number | null;
+}): ReflectionCategory {
+  const mode = entry.journalingMode ?? null;
+  if (mode === "gratitude") return "gratitude";
+  if (mode === "deep_dive") return "mindset";
+  if (mode === "life_perspective") return "growth";
+  if (mode === "quick_reflection") return "emotion";
+  if (mode === "free_write") return "mindset";
+  if (mode === "voice_conversation") return "energy";
+
+  const s = entry.sentimentScore;
+  if (s == null) return "mindset";
+  if (s > 0.5) return "gratitude";
+  if (s > 0.2) return "growth";
+  if (s > -0.2) return "emotion";
+  if (s > -0.5) return "energy";
+  return "goals";
+}
+
+/**
+ * Short human-readable title for the satellite. We don't have a title on the
+ * entry, so we derive from journaling_mode or fallback to category default.
+ */
+export function getEntryTitle(
+  entry: { journalingMode?: string | null },
+  category: ReflectionCategory
+): string {
+  const mode = entry.journalingMode ?? null;
+  const titles: Record<string, string> = {
+    gratitude: "Gratitude",
+    deep_dive: "Learning",
+    life_perspective: "Clarity",
+    quick_reflection: "Mood Boost",
+    free_write: "Free Reflection",
+    voice_conversation: "Voice Note",
+  };
+  if (mode && titles[mode]) return titles[mode];
+  return CATEGORIES[category].defaultTitle;
+}

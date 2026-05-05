@@ -6,7 +6,7 @@
 
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { modelFactory } from './model-factory.service.js';
 import { normalizeComponentScores, type ComponentScores } from './ai-scoring.service.js';

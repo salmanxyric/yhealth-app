@@ -14,8 +14,10 @@ import { NodeTooltip } from './components/NodeTooltip';
 import { NodeDetailModal } from './components/NodeDetailModal';
 import { EmptyGraph } from './components/EmptyGraph';
 import { GraphLoadingSkeleton } from './components/GraphLoadingSkeleton';
-import { buildD3Graph, type D3Node } from './utils/graph-builder';
+import { buildD3Graph, buildReasoningGraph, type D3Node, type D3GraphData } from './utils/graph-builder';
+import { knowledgeGraphService } from '@/src/shared/services/knowledge-graph.service';
 import type { GraphNode } from '@shared/types/domain/knowledge-graph';
+import type { GraphMode } from './components/D3ForceGraph';
 
 const D3ForceGraph = dynamic(
   () => import('./components/D3ForceGraph').then((m) => m.D3ForceGraph),
@@ -47,12 +49,41 @@ export function KnowledgeGraphTab() {
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const graphContainerRef = useRef<HTMLDivElement>(null);
+  const [graphMode, setGraphMode] = useState<GraphMode>('data');
+  const [reasoningGraphData, setReasoningGraphData] = useState<D3GraphData | null>(null);
+  const [reasoningLoading, setReasoningLoading] = useState(false);
+  const [reasoningError, setReasoningError] = useState<Error | null>(null);
 
   // Default to collapsed on mobile
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setLeftPanelOpen(false);
     }
+  }, []);
+
+  // Fetch reasoning overlay when switching to architecture mode
+  useEffect(() => {
+    if (graphMode !== 'architecture') return;
+    if (reasoningGraphData) return;
+    let cancelled = false;
+    setReasoningLoading(true);
+    setReasoningError(null);
+    knowledgeGraphService.getReasoningOverlay().then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setReasoningGraphData(buildReasoningGraph(res.data));
+      }
+    }).catch((err) => {
+      if (!cancelled) setReasoningError(err instanceof Error ? err : new Error('Failed to load architecture view'));
+    }).finally(() => {
+      if (!cancelled) setReasoningLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [graphMode, reasoningGraphData]);
+
+  const handleGraphModeChange = useCallback((mode: GraphMode) => {
+    setGraphMode(mode);
+    if (mode === 'architecture') setViewMode('graph');
   }, []);
 
   // Build D3 graph for node lookups (navigation)
@@ -142,9 +173,12 @@ export function KnowledgeGraphTab() {
   );
 
   const hasData = graphData && graphData.nodes.length > 0;
+  const canShowGraph = graphMode === 'architecture'
+    ? (reasoningGraphData && reasoningGraphData.nodes.length > 0)
+    : hasData;
 
   // Build the graph area (used both normal and fullscreen)
-  const graphArea = hasData ? (
+  const graphArea = canShowGraph ? (
     <D3ForceGraph
       data={graphData!}
       selectedNodeId={selectedNodeId}
@@ -152,6 +186,8 @@ export function KnowledgeGraphTab() {
       onNodeHover={handleNodeHover}
       isFullscreen={isFullscreen}
       onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+      mode={graphMode}
+      reasoningGraphData={reasoningGraphData}
     />
   ) : null;
 
@@ -206,32 +242,45 @@ export function KnowledgeGraphTab() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header bar */}
         <GraphHeader
-          totalNodes={graphData?.meta?.stats?.totalNodes || 0}
-          totalEdges={graphData?.meta?.stats?.totalEdges || 0}
+          totalNodes={graphMode === 'architecture'
+            ? (reasoningGraphData?.nodes.length || 0)
+            : (graphData?.meta?.stats?.totalNodes || 0)}
+          totalEdges={graphMode === 'architecture'
+            ? (reasoningGraphData?.links.length || 0)
+            : (graphData?.meta?.stats?.totalEdges || 0)}
           dateRange={{ from: filters.from, to: filters.to }}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          onRefresh={refetch}
-          isLoading={isLoading}
+          onRefresh={() => {
+            if (graphMode === 'architecture') {
+              setReasoningGraphData(null);
+              setReasoningError(null);
+            } else {
+              refetch();
+            }
+          }}
+          isLoading={graphMode === 'architecture' ? reasoningLoading : isLoading}
+          graphMode={graphMode}
+          onGraphModeChange={handleGraphModeChange}
         />
 
         {/* Error */}
-        {error && (
+        {(error || reasoningError) && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             className="mx-4 mt-3 flex items-center gap-2.5 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-300"
           >
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>Failed to load graph: {error.message}</span>
+            <span>Failed to load graph: {(graphMode === 'architecture' ? reasoningError : error)?.message}</span>
           </motion.div>
         )}
 
         {/* View content */}
         <div className="flex-1 relative overflow-hidden" ref={graphContainerRef}>
-          {isLoading ? (
+          {(graphMode === 'architecture' ? reasoningLoading : isLoading) ? (
             <GraphLoadingSkeleton />
-          ) : !hasData ? (
+          ) : !canShowGraph ? (
             <EmptyGraph />
           ) : (
             <>

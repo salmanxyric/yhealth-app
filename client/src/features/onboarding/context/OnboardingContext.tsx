@@ -26,6 +26,8 @@ import type {
   BodyImage,
   BodyImagesState,
   DietPreferences,
+  GeneratedQuestion,
+  GeneratedLifeCoachQuestion,
 } from '../types';
 
 // LocalStorage key for persisting onboarding state
@@ -70,6 +72,10 @@ const initialState: OnboardingState = {
   assessmentResponses: [],
   bodyStats: {},
   assessmentComplete: false,
+  generatedAssessmentQuestions: null,
+  assessmentQuestionsGoalKey: null,
+  generatedLifeCoachQuestions: null,
+  lifeCoachQuestionsGoalKey: null,
   bodyImages: DEFAULT_BODY_IMAGES,
   suggestedGoals: [],
   confirmedGoals: [],
@@ -227,9 +233,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     return ((state.currentStep + 1) / state.totalSteps) * 100;
   }, [state.currentStep, state.totalSteps]);
 
-  // Step 0: Goal
+  // Step 0: Goal (invalidates cached questions when goal changes)
   const setSelectedGoal = useCallback((goal: GoalCategory) => {
-    setState((prev) => ({ ...prev, selectedGoal: goal }));
+    setState((prev) => {
+      const goalChanged = prev.selectedGoal !== goal;
+      return {
+        ...prev,
+        selectedGoal: goal,
+        ...(goalChanged ? {
+          generatedAssessmentQuestions: null,
+          assessmentQuestionsGoalKey: null,
+          generatedLifeCoachQuestions: null,
+          lifeCoachQuestionsGoalKey: null,
+        } : {}),
+      };
+    });
   }, []);
 
   const setCustomGoalText = useCallback((text: string) => {
@@ -398,6 +416,29 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // AI-generated question cache
+  const setGeneratedAssessmentQuestions = useCallback(
+    (questions: GeneratedQuestion[], goalKey: string) => {
+      setState((prev) => ({
+        ...prev,
+        generatedAssessmentQuestions: questions,
+        assessmentQuestionsGoalKey: goalKey,
+      }));
+    },
+    []
+  );
+
+  const setGeneratedLifeCoachQuestions = useCallback(
+    (questions: GeneratedLifeCoachQuestion[], goalKey: string) => {
+      setState((prev) => ({
+        ...prev,
+        generatedLifeCoachQuestions: questions,
+        lifeCoachQuestionsGoalKey: goalKey,
+      }));
+    },
+    []
+  );
+
   // Reset
   const resetOnboarding = useCallback(() => {
     setState(initialState);
@@ -436,6 +477,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       updateDietPreferences,
       setGeneratedPlan,
       acceptPlan,
+      setGeneratedAssessmentQuestions,
+      setGeneratedLifeCoachQuestions,
       resetOnboarding,
     }),
     [
@@ -464,6 +507,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       updateDietPreferences,
       setGeneratedPlan,
       acceptPlan,
+      setGeneratedAssessmentQuestions,
+      setGeneratedLifeCoachQuestions,
       resetOnboarding,
     ]
   );

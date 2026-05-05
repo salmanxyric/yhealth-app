@@ -4,7 +4,7 @@
  * for the Social Accountability system. All social messaging is opt-in (default OFF).
  */
 
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================
@@ -90,22 +90,37 @@ export interface ConsentAuditEntry {
 
 class AccountabilityConsentService {
 
+  private _consentCache = new Map<string, { data: ConsentSettings; expiresAt: number }>();
+  private static CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  private invalidateCache(userId: string): void {
+    this._consentCache.delete(userId);
+  }
+
   // ------------------------------------------
   // Consent Management
   // ------------------------------------------
 
   /**
    * Get consent settings for a user. Creates default (OFF) row if none exists.
+   * Cached for 5 minutes to reduce DB load during trigger evaluation.
    */
   async getConsent(userId: string): Promise<ConsentSettings> {
     try {
+      const cached = this._consentCache.get(userId);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.data;
+      }
+
       const existing = await query(
         `SELECT * FROM accountability_consent WHERE user_id = $1`,
         [userId]
       );
 
       if (existing.rows.length > 0) {
-        return existing.rows[0] as ConsentSettings;
+        const consent = existing.rows[0] as ConsentSettings;
+        this._consentCache.set(userId, { data: consent, expiresAt: Date.now() + AccountabilityConsentService.CACHE_TTL_MS });
+        return consent;
       }
 
       // Create default consent (everything OFF)
@@ -117,8 +132,10 @@ class AccountabilityConsentService {
         [userId]
       );
 
+      const newConsent = created.rows[0] as ConsentSettings;
+      this._consentCache.set(userId, { data: newConsent, expiresAt: Date.now() + AccountabilityConsentService.CACHE_TTL_MS });
       logger.info(`Created default accountability consent for user ${userId}`);
-      return created.rows[0] as ConsentSettings;
+      return newConsent;
     } catch (error) {
       logger.error('Failed to get accountability consent', { userId, error });
       throw error;
@@ -183,6 +200,7 @@ class AccountabilityConsentService {
 
       await this.logAudit(userId, action, { changes: settings }, ipAddress);
 
+      this.invalidateCache(userId);
       logger.info(`Updated accountability consent for user ${userId}`, { action });
       return result.rows[0] as ConsentSettings;
     } catch (error) {
@@ -215,6 +233,7 @@ class AccountabilityConsentService {
       });
 
       await this.logAudit(userId, 'revoke_all', null, ipAddress);
+      this.invalidateCache(userId);
       logger.info(`Revoked all accountability consent for user ${userId}`);
     } catch (error) {
       logger.error('Failed to revoke all accountability consent', { userId, error });
@@ -350,22 +369,40 @@ class AccountabilityConsentService {
    */
   async getContacts(userId: string): Promise<ContactWithConsent[]> {
     try {
+      // Join `users` so the frontend receives the contact's real name +
+      // avatar rather than a placeholder. Nickname wins when the user has
+      // explicitly set one; otherwise we fall back to first + last name.
       const result = await query(
         `SELECT
            ac.*,
            COALESCE(acc.allow_motivation, true) AS allow_motivation,
            COALESCE(acc.allow_failure, false) AS allow_failure,
            COALESCE(acc.allow_sos, true) AS allow_sos,
-           COALESCE(acc.is_emergency_contact, false) AS is_emergency_contact
+           COALESCE(acc.is_emergency_contact, false) AS is_emergency_contact,
+           NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '') AS contact_name,
+           u.avatar AS contact_avatar,
+           u.email AS contact_email,
+           u.phone AS contact_phone
          FROM accountability_contacts ac
          LEFT JOIN accountability_contact_consent acc
            ON acc.contact_id = ac.id AND acc.user_id = ac.user_id
+         LEFT JOIN users u
+           ON u.id = ac.contact_user_id
          WHERE ac.user_id = $1 AND ac.is_active = true
          ORDER BY ac.added_at DESC`,
         [userId]
       );
 
-      return result.rows as ContactWithConsent[];
+      // Normalise snake_case → camelCase so the API shape matches the
+      // AccountabilityContact interface on the client. Prefer nickname when
+      // set, otherwise fall back to the joined full name.
+      return result.rows.map((row: Record<string, unknown>) => ({
+        ...row,
+        contactName: (row.nickname as string | null) || (row.contact_name as string | null) || null,
+        contactAvatar: (row.contact_avatar as string | null) || null,
+        contactEmail: (row.contact_email as string | null) || null,
+        contactPhone: (row.contact_phone as string | null) || null,
+      })) as unknown[] as ContactWithConsent[];
     } catch (error) {
       logger.error('Failed to get accountability contacts', { userId, error });
       throw error;

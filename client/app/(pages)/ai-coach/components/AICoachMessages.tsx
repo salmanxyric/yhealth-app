@@ -4,9 +4,14 @@ import { motion } from "framer-motion";
 import { Bot, User, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { parseActionsFromResponse, ActionExecutionResult } from "@/src/shared/services/action-handler.service";
+
 import { RoutingChip } from "@/components/ai-coach/RoutingChip";
 import { MessageActions } from "./MessageActions";
-import type { Message } from "../hooks/useAICoach";
+import { AgentTimeline } from "./AgentTimeline";
+import { CheckInCard, parseCheckInFromMessage } from "./CheckInCard";
+import { ArtifactCard, parseArtifactFromMessage } from "./ArtifactCard";
+import { DeepAnalysisTimeline } from "./DeepAnalysisTimeline";
+import type { Message, ToolTimelineEvent, AnalysisStepEvent } from "../hooks/useAICoach";
 
 interface AICoachMessagesProps {
   messages: Message[];
@@ -15,6 +20,11 @@ interface AICoachMessagesProps {
   actionResults: Map<string, ActionExecutionResult>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onRegenerateMessage: (messageId: string) => void;
+  isThinking?: boolean;
+  thinkingLabel?: string;
+  liveTimelineEvents?: ToolTimelineEvent[];
+  onUndoTimelineEvent?: (messageId: string, operationId: string) => void;
+  liveAnalysisSteps?: AnalysisStepEvent[];
 }
 
 export function AICoachMessages({
@@ -24,6 +34,11 @@ export function AICoachMessages({
   actionResults,
   messagesEndRef,
   onRegenerateMessage,
+  isThinking,
+  thinkingLabel,
+  liveTimelineEvents,
+  onUndoTimelineEvent,
+  liveAnalysisSteps,
 }: AICoachMessagesProps) {
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
@@ -48,8 +63,39 @@ export function AICoachMessages({
           >
             {message.role === "assistant" ? (
               <div className="space-y-2">
+                {message.timelineEvents && message.timelineEvents.length > 0 && (
+                  <AgentTimeline
+                    events={message.timelineEvents}
+                    thinkingLabel={message.thinkingLabel}
+                    durationMs={message.thinkingDurationMs}
+                    onUndo={onUndoTimelineEvent
+                      ? (opId) => onUndoTimelineEvent(message.id, opId)
+                      : undefined}
+                  />
+                )}
+                {(() => {
+                  const checkIn = parseCheckInFromMessage(message.content);
+                  if (checkIn) {
+                    return <CheckInCard checkIn={checkIn} messageContent={message.content} />;
+                  }
+                  return null;
+                })()}
+                {message.analysisSteps && message.analysisSteps.length > 0 && (
+                  <DeepAnalysisTimeline steps={message.analysisSteps} />
+                )}
+                {message.artifacts && message.artifacts.length > 0
+                  ? message.artifacts.map((art, i) => (
+                      <ArtifactCard key={`artifact-${i}`} artifact={art} />
+                    ))
+                  : (() => {
+                      const artifact = parseArtifactFromMessage(message.content);
+                      if (artifact) {
+                        return <ArtifactCard artifact={artifact} />;
+                      }
+                      return null;
+                    })()}
                 <div className="prose prose-invert prose-sm max-w-none">
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                  <ReactMarkdown>{message.content.replace(/<!--CHECKIN:[\s\S]*?-->/g, "").replace(/<!--ARTIFACT:[\s\S]*?-->/g, "")}</ReactMarkdown>
                 </div>
                 {/* Action execution indicators */}
                 {(() => {
@@ -124,17 +170,29 @@ export function AICoachMessages({
         </motion.div>
       ))}
 
-      {/* Typing indicator */}
+      {/* Streaming: thinking indicator + live timeline + typing dots */}
       {isSending && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center shrink-0">
             <Bot className="w-4 h-4 text-white" />
           </div>
-          <div className="bg-white/5 rounded-2xl px-4 py-3 border border-white/10">
-            <div className="flex gap-1">
-              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+          <div className="max-w-[85%] sm:max-w-[80%] space-y-2">
+            {(isThinking || (liveTimelineEvents && liveTimelineEvents.length > 0)) && (
+              <AgentTimeline
+                events={liveTimelineEvents || []}
+                thinkingLabel={thinkingLabel}
+                isThinking={isThinking}
+              />
+            )}
+            {liveAnalysisSteps && liveAnalysisSteps.length > 0 && (
+              <DeepAnalysisTimeline steps={liveAnalysisSteps} />
+            )}
+            <div className="bg-white/5 rounded-2xl px-4 py-3 border border-white/10 w-fit">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              </div>
             </div>
           </div>
         </motion.div>

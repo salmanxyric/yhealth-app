@@ -4,7 +4,7 @@
  * Runs hourly and processes users whose local midnight just passed
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { aiScoringService } from '../services/ai-scoring.service.js';
 import { leaderboardService } from '../services/leaderboard.service.js';

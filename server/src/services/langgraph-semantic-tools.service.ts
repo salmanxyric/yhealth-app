@@ -14,7 +14,7 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { lifeHistoryEmbeddingService } from './life-history-embedding.service.js';
 import { lifeGoalsService } from './wellbeing/life-goals.service.js';
 import { goalDecompositionService } from './goal-decomposition.service.js';
@@ -24,6 +24,37 @@ import { journalService } from './wellbeing/journal.service.js';
 import { voiceJournalService } from './wellbeing/voice-journal.service.js';
 import { getCuratedPlaylists, getPlaylistTracks, searchSpotify, getRecommendations } from './spotify-playlist.service.js';
 import { getJamendoTracks, getJamendoCuratedPlaylists, getJamendoPlaylistTracks, searchJamendo, getJamendoRecommendations, isJamendoConfigured } from './jamendo.service.js';
+import { lifeAreasService } from './life-areas.service.js';
+import type { ToolTurnContext } from '../types/tool-turn-context.js';
+
+export type { ToolTurnContext } from '../types/tool-turn-context.js';
+
+async function linkEntityToActiveLifeArea(
+  userId: string,
+  toolCtx: ToolTurnContext | undefined,
+  entityType: 'goal' | 'schedule',
+  entityId: string
+): Promise<void> {
+  if (!toolCtx?.activeLifeAreaId) return;
+  try {
+    await lifeAreasService.link(userId, toolCtx.activeLifeAreaId, {
+      entity_type: entityType,
+      entity_id: entityId,
+    });
+    logger.debug('[SemanticTools] Linked entity to life area', {
+      userId,
+      lifeAreaId: toolCtx.activeLifeAreaId,
+      entityType,
+      entityId,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('already linked') || msg.includes('23505')) {
+      return;
+    }
+    logger.warn('[SemanticTools] life_area link failed', { userId, entityType, entityId, error: msg });
+  }
+}
 
 // ============================================
 // COMMON SCHEMAS
@@ -40,6 +71,82 @@ const IdentifierSchema = z.object({
 // MEAL MANAGER
 // ============================================
 
+// Common food estimates for fallback when LLM sends foods without calorie data
+const COMMON_FOOD_ESTIMATES: Record<string, { calories: number; protein: number; carbs: number; fat: number; portion: string }> = {
+  'roti': { calories: 120, protein: 3, carbs: 20, fat: 3.5, portion: '1 piece' },
+  'chapati': { calories: 120, protein: 3, carbs: 20, fat: 3.5, portion: '1 piece' },
+  'naan': { calories: 260, protein: 9, carbs: 45, fat: 5, portion: '1 piece' },
+  'paratha': { calories: 260, protein: 5, carbs: 30, fat: 13, portion: '1 piece' },
+  'rice': { calories: 206, protein: 4.3, carbs: 45, fat: 0.4, portion: '1 cup cooked' },
+  'dal': { calories: 150, protein: 9, carbs: 25, fat: 1.5, portion: '1 cup' },
+  'omelette': { calories: 154, protein: 11, carbs: 1, fat: 12, portion: '2 eggs' },
+  'egg': { calories: 78, protein: 6, carbs: 0.6, fat: 5, portion: '1 large' },
+  'eggs': { calories: 156, protein: 13, carbs: 1, fat: 11, portion: '2 large' },
+  'chicken breast': { calories: 165, protein: 31, carbs: 0, fat: 3.6, portion: '100g' },
+  'chicken': { calories: 239, protein: 27, carbs: 0, fat: 14, portion: '100g' },
+  'paneer': { calories: 265, protein: 18, carbs: 1.2, fat: 21, portion: '100g' },
+  'milk': { calories: 149, protein: 8, carbs: 12, fat: 8, portion: '1 cup' },
+  'tea': { calories: 30, protein: 0, carbs: 8, fat: 0, portion: '1 cup with milk' },
+  'coffee': { calories: 5, protein: 0.3, carbs: 0, fat: 0, portion: '1 cup black' },
+  'bread': { calories: 79, protein: 3, carbs: 15, fat: 1, portion: '1 slice' },
+  'toast': { calories: 79, protein: 3, carbs: 15, fat: 1, portion: '1 slice' },
+  'banana': { calories: 105, protein: 1.3, carbs: 27, fat: 0.4, portion: '1 medium' },
+  'apple': { calories: 95, protein: 0.5, carbs: 25, fat: 0.3, portion: '1 medium' },
+  'yogurt': { calories: 100, protein: 17, carbs: 6, fat: 0.7, portion: '150g' },
+  'curd': { calories: 98, protein: 11, carbs: 3.4, fat: 4.3, portion: '100g' },
+  'dahi': { calories: 98, protein: 11, carbs: 3.4, fat: 4.3, portion: '100g' },
+  'salad': { calories: 50, protein: 2, carbs: 8, fat: 1, portion: '1 bowl' },
+  'sabzi': { calories: 120, protein: 4, carbs: 12, fat: 6, portion: '1 serving' },
+  'curry': { calories: 200, protein: 12, carbs: 15, fat: 10, portion: '1 serving' },
+  'biryani': { calories: 350, protein: 15, carbs: 45, fat: 12, portion: '1 plate' },
+  'idli': { calories: 39, protein: 2, carbs: 8, fat: 0.2, portion: '1 piece' },
+  'dosa': { calories: 133, protein: 4, carbs: 18, fat: 5, portion: '1 piece' },
+  'upma': { calories: 200, protein: 5, carbs: 30, fat: 7, portion: '1 bowl' },
+  'poha': { calories: 180, protein: 4, carbs: 32, fat: 5, portion: '1 bowl' },
+  'samosa': { calories: 262, protein: 4, carbs: 30, fat: 14, portion: '1 piece' },
+  'butter': { calories: 102, protein: 0.1, carbs: 0, fat: 12, portion: '1 tbsp' },
+  'cheese': { calories: 113, protein: 7, carbs: 0.4, fat: 9, portion: '1 slice' },
+  'sandwich': { calories: 300, protein: 12, carbs: 35, fat: 12, portion: '1 sandwich' },
+  'burger': { calories: 354, protein: 20, carbs: 29, fat: 17, portion: '1 burger' },
+  'pizza': { calories: 285, protein: 12, carbs: 36, fat: 10, portion: '1 slice' },
+  'pasta': { calories: 220, protein: 8, carbs: 43, fat: 1.3, portion: '1 cup cooked' },
+  'oats': { calories: 150, protein: 5, carbs: 27, fat: 2.5, portion: '1 cup cooked' },
+  'porridge': { calories: 150, protein: 5, carbs: 27, fat: 2.5, portion: '1 cup cooked' },
+  'smoothie': { calories: 200, protein: 5, carbs: 35, fat: 4, portion: '1 glass' },
+  'juice': { calories: 112, protein: 0.5, carbs: 26, fat: 0.3, portion: '1 glass' },
+  'protein shake': { calories: 150, protein: 25, carbs: 8, fat: 3, portion: '1 scoop' },
+  'fish': { calories: 136, protein: 20, carbs: 0, fat: 6, portion: '100g' },
+  'salmon': { calories: 208, protein: 20, carbs: 0, fat: 13, portion: '100g' },
+  'tuna': { calories: 132, protein: 28, carbs: 0, fat: 1.3, portion: '100g' },
+  'shrimp': { calories: 99, protein: 24, carbs: 0.2, fat: 0.3, portion: '100g' },
+  'steak': { calories: 271, protein: 26, carbs: 0, fat: 18, portion: '100g' },
+  'peanut butter': { calories: 94, protein: 4, carbs: 3, fat: 8, portion: '1 tbsp' },
+  'almonds': { calories: 164, protein: 6, carbs: 6, fat: 14, portion: '28g' },
+  'nuts': { calories: 170, protein: 5, carbs: 6, fat: 15, portion: '28g' },
+  'avocado': { calories: 240, protein: 3, carbs: 13, fat: 22, portion: '1 medium' },
+  'chocolate': { calories: 155, protein: 2, carbs: 17, fat: 9, portion: '30g' },
+  'ice cream': { calories: 207, protein: 4, carbs: 24, fat: 11, portion: '1/2 cup' },
+  'cookie': { calories: 68, protein: 0.8, carbs: 9, fat: 3, portion: '1 cookie' },
+};
+
+function estimateFoodNutrition(foodName: string): { calories: number; protein: number; carbs: number; fat: number } | null {
+  const lower = foodName.toLowerCase().replace(/^\d+(\.\d+)?\s*/, '').trim();
+  for (const [key, data] of Object.entries(COMMON_FOOD_ESTIMATES)) {
+    if (lower.includes(key) || key.includes(lower)) {
+      // Scale by quantity prefix if present
+      const qtyMatch = foodName.match(/^(\d+(\.\d+)?)\s/);
+      const qty = qtyMatch ? parseFloat(qtyMatch[1]) : 1;
+      return {
+        calories: Math.round(data.calories * qty),
+        protein: Math.round(data.protein * qty * 10) / 10,
+        carbs: Math.round(data.carbs * qty * 10) / 10,
+        fat: Math.round(data.fat * qty * 10) / 10,
+      };
+    }
+  }
+  return null;
+}
+
 const MealManagerSchema = z.object({
   action: ActionSchema.describe('Action: get, getById, create, update, delete'),
   identifier: IdentifierSchema.describe('ID or name to identify the record'),
@@ -51,15 +158,18 @@ const MealManagerSchema = z.object({
   data: z.object({
     name: z.string().optional(),
     mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']).optional(),
-    foods: z.array(z.object({
-      name: z.string(),
-      servingSize: z.number().optional(),
-      servingUnit: z.string().optional(),
-      calories: z.number().optional(),
-      protein: z.number().optional(),
-      carbs: z.number().optional(),
-      fat: z.number().optional(),
-    })).optional(),
+    foods: z.array(z.union([
+      z.string(),
+      z.object({
+        name: z.string(),
+        servingSize: z.number().optional(),
+        servingUnit: z.string().optional(),
+        calories: z.number().optional(),
+        protein: z.number().optional(),
+        carbs: z.number().optional(),
+        fat: z.number().optional(),
+      }),
+    ])).optional().describe('Array of food items as objects with nutrition data. ALWAYS include: [{name, calories, protein, carbs, fat}]. Estimate macros using nutrition knowledge. Avoid plain strings.'),
     totalCalories: z.number().optional(),
     notes: z.string().optional(),
     loggedAt: z.string().optional(),
@@ -125,8 +235,17 @@ async function handleMealManager(userId: string, params: z.infer<typeof MealMana
           });
         }
 
-        // Calculate macros from food items if not provided at meal level
-        const foods = data.foods || [];
+        // Normalize food items: strings become objects, estimate missing nutrition
+        const foods = (data.foods || []).map(f => {
+          const item = typeof f === 'string' ? { name: f } : f;
+          if (!item.calories || item.calories === 0) {
+            const estimated = estimateFoodNutrition(item.name);
+            if (estimated) {
+              return { ...item, ...estimated };
+            }
+          }
+          return item;
+        });
         let totalCalories = data.totalCalories || 0;
         let totalProtein = 0;
         let totalCarbs = 0;
@@ -164,7 +283,7 @@ async function handleMealManager(userId: string, params: z.infer<typeof MealMana
 
         if (data?.name) { updates.push(`meal_name = $${paramIndex++}`); values.push(data.name); }
         if (data?.mealType) { updates.push(`meal_type = $${paramIndex++}`); values.push(data.mealType); }
-        if (data?.foods) { updates.push(`foods = $${paramIndex++}`); values.push(JSON.stringify(data.foods)); }
+        if (data?.foods) { updates.push(`foods = $${paramIndex++}`); values.push(JSON.stringify(data.foods.map(f => typeof f === 'string' ? { name: f } : f))); }
         if (data?.totalCalories !== undefined) { updates.push(`calories = $${paramIndex++}`); values.push(data.totalCalories); }
         if (data?.notes) { updates.push(`notes = $${paramIndex++}`); values.push(data.notes); }
 
@@ -216,7 +335,11 @@ const GoalManagerSchema = z.object({
   }).optional(),
 });
 
-async function handleGoalManager(userId: string, params: z.infer<typeof GoalManagerSchema>): Promise<string> {
+async function handleGoalManager(
+  userId: string,
+  params: z.infer<typeof GoalManagerSchema>,
+  toolCtx?: ToolTurnContext
+): Promise<string> {
   const { action, identifier, filters, data } = params;
 
   try {
@@ -253,6 +376,10 @@ async function handleGoalManager(userId: string, params: z.infer<typeof GoalMana
           [userId, data.name, data.description || null, data.category || 'general', data.targetValue || 0,
            data.currentValue || 0, data.unit || null, data.deadline || null, data.status || 'active']
         );
+        const row = result.rows[0] as { id: string };
+        if (row?.id) {
+          await linkEntityToActiveLifeArea(userId, toolCtx, 'goal', row.id);
+        }
         return JSON.stringify({ success: true, goal: result.rows[0], message: 'Goal created' });
       }
 
@@ -971,7 +1098,7 @@ async function handleHabitManager(userId: string, params: z.infer<typeof HabitMa
 // ============================================
 
 const ScheduleManagerSchema = z.object({
-  action: z.enum(['get', 'getByDate', 'create', 'update', 'delete']).describe('REQUIRED. The action to perform.'),
+  action: z.enum(['get', 'getByDate', 'create', 'update', 'delete', 'checkConflicts']).describe('REQUIRED. The action to perform.'),
   identifier: IdentifierSchema,
   filters: z.object({
     startDate: z.string().optional(),
@@ -981,6 +1108,8 @@ const ScheduleManagerSchema = z.object({
     scheduleDate: z.string().optional().describe('Date for the schedule (YYYY-MM-DD)'),
     title: z.string().optional(),
     description: z.string().optional(),
+    startTime: z.string().optional().describe('Start time in HH:mm format (for checkConflicts action)'),
+    endTime: z.string().optional().describe('End time in HH:mm format (for checkConflicts action)'),
     items: z.array(z.object({
       title: z.string(),
       startTime: z.string(),
@@ -991,7 +1120,11 @@ const ScheduleManagerSchema = z.object({
   }).optional(),
 });
 
-async function handleScheduleManager(userId: string, params: z.infer<typeof ScheduleManagerSchema>): Promise<string> {
+async function handleScheduleManager(
+  userId: string,
+  params: z.infer<typeof ScheduleManagerSchema>,
+  toolCtx?: ToolTurnContext
+): Promise<string> {
   const { action, identifier, filters, data } = params;
 
   try {
@@ -1218,6 +1351,10 @@ async function handleScheduleManager(userId: string, params: z.infer<typeof Sche
             isUpdate,
           });
 
+          if (createdItems.length > 0 || !isUpdate) {
+            await linkEntityToActiveLifeArea(userId, toolCtx, 'schedule', schedule.id as string);
+          }
+
           // Return a clear, actionable response that the AI can understand
           const finalMessage = `${isUpdate ? 'Updated' : 'Created'} schedule for ${scheduleDate} with ${createdItems.length} items${itemErrors.length > 0 ? ` (${itemErrors.length} items failed)` : ''}. Schedule ID: ${schedule.id}. ${itemErrors.length === 0 ? 'All items saved successfully to database.' : 'Some items may need to be added manually.'}`;
           
@@ -1259,6 +1396,75 @@ async function handleScheduleManager(userId: string, params: z.infer<typeof Sche
         if (!identifier?.id) return JSON.stringify({ success: false, error: 'Schedule ID required' });
         await query('DELETE FROM daily_schedules WHERE id = $1 AND user_id = $2', [identifier.id, userId]);
         return JSON.stringify({ success: true, message: 'Schedule deleted' });
+      }
+
+      case 'checkConflicts': {
+        const date = data?.scheduleDate || identifier?.date || new Date().toISOString().split('T')[0];
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return JSON.stringify({ success: false, error: `Invalid date format: ${date}. Please use YYYY-MM-DD format.` });
+        }
+
+        if (!data?.startTime || !data?.endTime) {
+          return JSON.stringify({ success: false, error: 'startTime and endTime are required in data for checkConflicts action.' });
+        }
+
+        const normalizeTime = (time: string): string => {
+          if (!time) return time;
+          let normalized = time.trim().toUpperCase();
+          const isPM = normalized.includes('PM');
+          const isAM = normalized.includes('AM');
+          normalized = normalized.replace(/[AP]M/gi, '').trim();
+          const parts = normalized.split(':');
+          if (parts.length !== 2) return time;
+          let hours = parseInt(parts[0], 10);
+          const minutes = parts[1].padStart(2, '0');
+          if (isPM && hours !== 12) hours += 12;
+          else if (isAM && hours === 12) hours = 0;
+          return `${hours.toString().padStart(2, '0')}:${minutes}`;
+        };
+
+        const proposedStart = normalizeTime(data.startTime);
+        const proposedEnd = normalizeTime(data.endTime);
+
+        const conflictResult = await query(
+          `SELECT si.id, si.title, si.start_time, si.end_time, si.category
+           FROM schedule_items si
+           JOIN daily_schedules ds ON si.schedule_id = ds.id
+           WHERE ds.user_id = $1
+             AND ds.schedule_date = $2::date
+             AND ds.is_template = false
+             AND si.start_time < $4::time
+             AND (si.end_time > $3::time OR si.end_time IS NULL)
+           ORDER BY si.start_time`,
+          [userId, date, proposedStart, proposedEnd],
+        );
+
+        const conflicts = conflictResult.rows.map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          startTime: row.start_time,
+          endTime: row.end_time,
+          category: row.category,
+        }));
+
+        if (conflicts.length === 0) {
+          return JSON.stringify({
+            success: true,
+            hasConflicts: false,
+            conflicts: [],
+            message: `No conflicts for ${date} between ${proposedStart}-${proposedEnd}. Safe to create.`,
+          });
+        }
+
+        return JSON.stringify({
+          success: true,
+          hasConflicts: true,
+          conflictCount: conflicts.length,
+          conflicts,
+          proposedRange: { date, startTime: proposedStart, endTime: proposedEnd },
+          message: `Found ${conflicts.length} conflicting item(s). Ask the user: replace, keep both, or adjust times.`,
+        });
       }
 
       default:
@@ -2731,13 +2937,353 @@ async function handleMusicManager(userId: string, params: z.infer<typeof MusicMa
   }
 }
 
-export function createSemanticTools(userId: string): DynamicStructuredTool[] {
+// ============================================
+// SLEEP MANAGER HANDLER
+// ============================================
+
+async function handleSleepManager(userId: string, params: {
+  action: string; id?: string; date?: string; daysBack?: number;
+  bedtime?: string; wakeTime?: string; quality?: number; notes?: string; tags?: string[];
+}): Promise<string> {
+  const { action } = params;
+  try {
+    switch (action) {
+      case 'log': {
+        const sleepDate = params.date || new Date().toISOString().split('T')[0];
+        let durationHours: number | null = null;
+        if (params.bedtime && params.wakeTime) {
+          const bed = new Date(params.bedtime).getTime();
+          const wake = new Date(params.wakeTime).getTime();
+          durationHours = Math.round(((wake - bed) / 3600000) * 100) / 100;
+        }
+
+        const result = await query<{ id: string }>(
+          `INSERT INTO sleep_logs (user_id, sleep_date, bedtime, wake_time, duration_hours, quality, notes, tags)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (user_id, sleep_date) DO UPDATE SET
+             bedtime = COALESCE(EXCLUDED.bedtime, sleep_logs.bedtime),
+             wake_time = COALESCE(EXCLUDED.wake_time, sleep_logs.wake_time),
+             duration_hours = COALESCE(EXCLUDED.duration_hours, sleep_logs.duration_hours),
+             quality = COALESCE(EXCLUDED.quality, sleep_logs.quality),
+             notes = COALESCE(EXCLUDED.notes, sleep_logs.notes),
+             tags = COALESCE(EXCLUDED.tags, sleep_logs.tags),
+             updated_at = NOW()
+           RETURNING id`,
+          [userId, sleepDate, params.bedtime || null, params.wakeTime || null,
+           durationHours, params.quality || null, params.notes || null, params.tags || null]
+        );
+        return JSON.stringify({ success: true, id: result.rows[0].id, sleepDate });
+      }
+
+      case 'get': {
+        const daysBack = params.daysBack ?? 7;
+        const result = await query(
+          `SELECT * FROM sleep_logs WHERE user_id = $1 AND sleep_date >= CURRENT_DATE - $2::int
+           ORDER BY sleep_date DESC`,
+          [userId, daysBack]
+        );
+        return JSON.stringify({ success: true, count: result.rows.length, logs: result.rows });
+      }
+
+      case 'trends': {
+        const daysBack = params.daysBack ?? 30;
+        const result = await query(
+          `SELECT
+             COUNT(*) as logged_nights,
+             ROUND(AVG(duration_hours)::numeric, 1) as avg_duration,
+             ROUND(AVG(quality)::numeric, 1) as avg_quality,
+             MIN(duration_hours) as min_duration,
+             MAX(duration_hours) as max_duration
+           FROM sleep_logs WHERE user_id = $1 AND sleep_date >= CURRENT_DATE - $2::int`,
+          [userId, daysBack]
+        );
+        return JSON.stringify({ success: true, daysBack, trends: result.rows[0] });
+      }
+
+      case 'delete': {
+        if (!params.id) return JSON.stringify({ success: false, error: 'Sleep log ID is required' });
+        const result = await query(
+          `DELETE FROM sleep_logs WHERE id = $1 AND user_id = $2 RETURNING id`,
+          [params.id, userId]
+        );
+        if (result.rows.length === 0) return JSON.stringify({ success: false, error: 'Sleep log not found' });
+        return JSON.stringify({ success: true, message: 'Sleep log deleted' });
+      }
+
+      default:
+        return JSON.stringify({ success: false, error: `Unknown sleep action: ${action}` });
+    }
+  } catch (error) {
+    logger.error('[SleepManager] Error', { userId, action, error: String(error) });
+    return JSON.stringify({ success: false, error: 'Failed to manage sleep log' });
+  }
+}
+
+// ============================================
+// MEDICATION MANAGER HANDLER
+// ============================================
+
+async function handleMedicationManager(userId: string, params: {
+  action: string; id?: string; name?: string; dosage?: string; frequency?: string;
+  startDate?: string; endDate?: string; notes?: string;
+}): Promise<string> {
+  const { action } = params;
+  try {
+    switch (action) {
+      case 'get': {
+        const result = await query(
+          `SELECT * FROM user_medications WHERE user_id = $1 AND is_active = true ORDER BY name`,
+          [userId]
+        );
+        return JSON.stringify({ success: true, count: result.rows.length, medications: result.rows });
+      }
+
+      case 'getAll': {
+        const result = await query(
+          `SELECT * FROM user_medications WHERE user_id = $1 ORDER BY is_active DESC, name`,
+          [userId]
+        );
+        return JSON.stringify({ success: true, count: result.rows.length, medications: result.rows });
+      }
+
+      case 'add': {
+        if (!params.name) return JSON.stringify({ success: false, error: 'Medication name is required' });
+        const result = await query<{ id: string }>(
+          `INSERT INTO user_medications (user_id, name, dosage, frequency, start_date, end_date, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+          [userId, params.name, params.dosage || null, params.frequency || null,
+           params.startDate || null, params.endDate || null, params.notes || null]
+        );
+        return JSON.stringify({ success: true, id: result.rows[0].id, name: params.name });
+      }
+
+      case 'update': {
+        if (!params.id) return JSON.stringify({ success: false, error: 'Medication ID is required' });
+        const sets: string[] = [];
+        const values: (string | null)[] = [];
+        let idx = 1;
+
+        for (const [key, dbCol] of Object.entries({
+          name: 'name', dosage: 'dosage', frequency: 'frequency',
+          startDate: 'start_date', endDate: 'end_date', notes: 'notes',
+        })) {
+          const val = (params as any)[key];
+          if (val !== undefined) {
+            sets.push(`${dbCol} = $${idx}`);
+            values.push(val);
+            idx++;
+          }
+        }
+        if (sets.length === 0) return JSON.stringify({ success: false, error: 'No fields to update' });
+
+        sets.push('updated_at = NOW()');
+        values.push(params.id, userId);
+
+        const result = await query(
+          `UPDATE user_medications SET ${sets.join(', ')} WHERE id = $${idx} AND user_id = $${idx + 1} RETURNING id`,
+          values
+        );
+        if (result.rows.length === 0) return JSON.stringify({ success: false, error: 'Medication not found' });
+        return JSON.stringify({ success: true, message: 'Medication updated' });
+      }
+
+      case 'remove': {
+        if (!params.id) return JSON.stringify({ success: false, error: 'Medication ID is required' });
+        const result = await query(
+          `UPDATE user_medications SET is_active = false, updated_at = NOW()
+           WHERE id = $1 AND user_id = $2 RETURNING id`,
+          [params.id, userId]
+        );
+        if (result.rows.length === 0) return JSON.stringify({ success: false, error: 'Medication not found' });
+        return JSON.stringify({ success: true, message: 'Medication removed' });
+      }
+
+      default:
+        return JSON.stringify({ success: false, error: `Unknown medication action: ${action}` });
+    }
+  } catch (error) {
+    logger.error('[MedicationManager] Error', { userId, action, error: String(error) });
+    return JSON.stringify({ success: false, error: 'Failed to manage medication' });
+  }
+}
+
+// ============================================
+// ACTIVITY TIMELINE HANDLER
+// ============================================
+
+async function handleActivityTimeline(userId: string, params: {
+  action: string; daysBack?: number; domains?: string[]; limit?: number;
+}): Promise<string> {
+  const daysBack = params.daysBack ?? 7;
+  const limit = Math.min(params.limit ?? 50, 200);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - daysBack);
+  const cutoffStr = cutoff.toISOString();
+
+  try {
+    if (params.action === 'getStats') {
+      const statsResult = await query(`
+        SELECT domain, COUNT(*) as count FROM (
+          SELECT 'meal' as domain FROM meal_logs WHERE user_id = $1 AND created_at >= $2
+          UNION ALL SELECT 'workout' FROM workout_logs WHERE user_id = $1 AND created_at >= $2
+          UNION ALL SELECT 'mood' FROM mood_logs WHERE user_id = $1 AND created_at >= $2
+          UNION ALL SELECT 'journal' FROM journal_entries WHERE user_id = $1 AND created_at >= $2
+          UNION ALL SELECT 'water' FROM water_intake_logs WHERE user_id = $1 AND created_at >= $2
+          UNION ALL SELECT 'habit' FROM habit_logs WHERE user_id = $1 AND created_at >= $2
+          UNION ALL SELECT 'progress' FROM progress_records WHERE user_id = $1 AND created_at >= $2
+          UNION ALL SELECT 'ai_action' FROM tool_audit_log WHERE user_id = $1 AND created_at >= $2
+        ) combined GROUP BY domain ORDER BY count DESC
+      `, [userId, cutoffStr]);
+
+      return JSON.stringify({
+        success: true,
+        daysBack,
+        stats: statsResult.rows.map((r: any) => ({ domain: r.domain, count: parseInt(r.count, 10) })),
+      });
+    }
+
+    // Build domain filter
+    const allowedDomains = new Set(params.domains ?? ['meal', 'workout', 'mood', 'journal', 'water', 'habit', 'progress', 'ai_action']);
+
+    const unions: string[] = [];
+    if (allowedDomains.has('meal'))
+      unions.push(`SELECT 'meal' as domain, 'log' as type, COALESCE(meal_name, 'Meal') as summary, created_at as ts FROM meal_logs WHERE user_id = $1 AND created_at >= $2`);
+    if (allowedDomains.has('workout'))
+      unions.push(`SELECT 'workout', 'log', COALESCE(name, 'Workout') as summary, created_at FROM workout_logs WHERE user_id = $1 AND created_at >= $2`);
+    if (allowedDomains.has('mood'))
+      unions.push(`SELECT 'mood', 'log', COALESCE(mood_level::text, 'Mood') as summary, created_at FROM mood_logs WHERE user_id = $1 AND created_at >= $2`);
+    if (allowedDomains.has('journal'))
+      unions.push(`SELECT 'journal', 'entry', COALESCE(LEFT(content, 80), 'Journal') as summary, created_at FROM journal_entries WHERE user_id = $1 AND created_at >= $2`);
+    if (allowedDomains.has('water'))
+      unions.push(`SELECT 'water', 'log', 'Water intake' as summary, created_at FROM water_intake_logs WHERE user_id = $1 AND created_at >= $2`);
+    if (allowedDomains.has('habit'))
+      unions.push(`SELECT 'habit', 'log', 'Habit logged' as summary, created_at FROM habit_logs WHERE user_id = $1 AND created_at >= $2`);
+    if (allowedDomains.has('progress'))
+      unions.push(`SELECT 'progress', 'record', COALESCE(metric_type, 'Progress') as summary, created_at FROM progress_records WHERE user_id = $1 AND created_at >= $2`);
+    if (allowedDomains.has('ai_action'))
+      unions.push(`SELECT 'ai_action', mutation_type as type, tool_name as summary, created_at FROM tool_audit_log WHERE user_id = $1 AND created_at >= $2`);
+
+    if (unions.length === 0) {
+      return JSON.stringify({ success: true, timeline: [], count: 0 });
+    }
+
+    const result = await query(`
+      SELECT domain, type, summary, ts FROM (${unions.join(' UNION ALL ')}) combined
+      ORDER BY ts DESC LIMIT $3
+    `, [userId, cutoffStr, limit]);
+
+    return JSON.stringify({
+      success: true,
+      daysBack,
+      count: result.rows.length,
+      timeline: result.rows.map((r: any) => ({
+        domain: r.domain,
+        type: r.type,
+        summary: r.summary,
+        timestamp: r.ts,
+      })),
+    });
+  } catch (error) {
+    logger.error('[ActivityTimeline] Error', { userId, error: String(error) });
+    return JSON.stringify({ success: false, error: 'Failed to fetch activity timeline' });
+  }
+}
+
+// ============================================
+// AI DECISION HISTORY HANDLER
+// ============================================
+
+async function handleAIDecisionHistory(userId: string, params: {
+  action: string; daysBack?: number; mutationType?: string; toolName?: string; limit?: number;
+}): Promise<string> {
+  const daysBack = params.daysBack ?? 7;
+  const limit = Math.min(params.limit ?? 25, 100);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - daysBack);
+  const cutoffStr = cutoff.toISOString();
+
+  try {
+    if (params.action === 'summary') {
+      const result = await query(`
+        SELECT tool_name, mutation_type, COUNT(*) as count,
+               SUM(CASE WHEN success THEN 1 ELSE 0 END) as successes,
+               SUM(CASE WHEN NOT success THEN 1 ELSE 0 END) as failures
+        FROM tool_audit_log
+        WHERE user_id = $1 AND created_at >= $2
+        ${params.mutationType ? 'AND mutation_type = $3' : ''}
+        GROUP BY tool_name, mutation_type
+        ORDER BY count DESC
+      `, params.mutationType ? [userId, cutoffStr, params.mutationType] : [userId, cutoffStr]);
+
+      return JSON.stringify({
+        success: true,
+        daysBack,
+        summary: result.rows.map((r: any) => ({
+          toolName: r.tool_name,
+          mutationType: r.mutation_type,
+          count: parseInt(r.count, 10),
+          successes: parseInt(r.successes, 10),
+          failures: parseInt(r.failures, 10),
+        })),
+      });
+    }
+
+    // action === 'get'
+    const conditions = ['user_id = $1', 'created_at >= $2'];
+    const values: (string | number)[] = [userId, cutoffStr];
+    let idx = 3;
+
+    if (params.mutationType) {
+      conditions.push(`mutation_type = $${idx}`);
+      values.push(params.mutationType);
+      idx++;
+    }
+    if (params.toolName) {
+      conditions.push(`tool_name = $${idx}`);
+      values.push(params.toolName);
+      idx++;
+    }
+
+    values.push(limit);
+
+    const result = await query(`
+      SELECT tool_name, mutation_type, tool_args, tool_result, entity_type, entity_id,
+             success, error_message, duration_ms, created_at
+      FROM tool_audit_log
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY created_at DESC
+      LIMIT $${idx}
+    `, values);
+
+    return JSON.stringify({
+      success: true,
+      daysBack,
+      count: result.rows.length,
+      actions: result.rows.map((r: any) => ({
+        toolName: r.tool_name,
+        mutationType: r.mutation_type,
+        args: r.tool_args,
+        entityType: r.entity_type,
+        entityId: r.entity_id,
+        success: r.success,
+        error: r.error_message,
+        durationMs: r.duration_ms,
+        timestamp: r.created_at,
+      })),
+    });
+  } catch (error) {
+    logger.error('[AIDecisionHistory] Error', { userId, error: String(error) });
+    return JSON.stringify({ success: false, error: 'Failed to fetch AI decision history' });
+  }
+}
+
+export function createSemanticTools(userId: string, toolCtx?: ToolTurnContext): DynamicStructuredTool[] {
   try {
   return [
     // MEAL & NUTRITION
     new DynamicStructuredTool({
       name: 'mealManager',
-      description: 'Manage meals. Actions: get, getById, getByName, create, update, delete.',
+      description: 'Manage meal logs. To log/add a meal use action:"create". Actions: get, getById, getByName, create, update, delete. When creating, ALWAYS estimate calories and macros (protein, carbs, fat in grams) for each food item using your nutrition knowledge. Pass foods as objects: [{name: "Roti", calories: 120, protein: 3, carbs: 20, fat: 3.5}, {name: "Omelette", calories: 154, protein: 11, carbs: 1, fat: 12}].',
       schema: MealManagerSchema,
       func: async (params) => handleMealManager(userId, params),
     }),
@@ -2767,9 +3313,10 @@ export function createSemanticTools(userId: string): DynamicStructuredTool[] {
     // GOALS
     new DynamicStructuredTool({
       name: 'goalManager',
-      description: 'Manage goals. Actions: get, getById, getByName, create, update, delete.',
+      description:
+        'Manage health/fitness user_goals. Actions: get, getById, getByName, create, update, delete. New goals may auto-link to the user\'s active life area when relevant.',
       schema: GoalManagerSchema,
-      func: async (params) => handleGoalManager(userId, params),
+      func: async (params) => handleGoalManager(userId, params, toolCtx),
     }),
 
     // SCHEDULES
@@ -2803,9 +3350,13 @@ EXAMPLE for creating a daily schedule with prayers, meals, workout, and work:
   }
 }
 
-This tool saves schedules to the daily_schedules table. Actions: get, getByDate (to verify/retrieve), create, update, delete.`,
+This tool saves schedules to the daily_schedules table. Actions: get, getByDate (to verify/retrieve), create, update, delete, checkConflicts.
+
+Use action="checkConflicts" with data.scheduleDate, data.startTime, and data.endTime to check for time overlaps BEFORE creating items when the user specifies a time. ALWAYS check conflicts before create when the user mentions a specific time slot.
+
+When the user is working inside an active life area (career, relationships, etc.), schedules you create are automatically linked to that area — do not ask for UUIDs.`,
       schema: ScheduleManagerSchema,
-      func: async (params) => handleScheduleManager(userId, params),
+      func: async (params) => handleScheduleManager(userId, params, toolCtx),
     }),
 
     // WELLBEING
@@ -2940,6 +3491,41 @@ This tool saves schedules to the daily_schedules table. Actions: get, getByDate 
       func: async (params) => handleWhoopAnalyticsManager(userId, params),
     }),
 
+    // SLEEP (manual logging for users without wearables)
+    new DynamicStructuredTool({
+      name: 'sleepManager',
+      description: 'Manage manual sleep logs (for users without WHOOP/wearable). Actions: log (record sleep — upserts per date), get (recent logs), trends (averages over time), delete.',
+      schema: z.object({
+        action: z.enum(['log', 'get', 'trends', 'delete']).describe('Action to perform'),
+        id: z.string().optional().describe('Sleep log ID (for delete)'),
+        date: z.string().optional().describe('Sleep date YYYY-MM-DD (for log, defaults to today)'),
+        bedtime: z.string().optional().describe('Bedtime ISO timestamp (for log)'),
+        wakeTime: z.string().optional().describe('Wake time ISO timestamp (for log)'),
+        quality: z.number().min(1).max(10).optional().describe('Sleep quality 1-10 (for log)'),
+        notes: z.string().optional().describe('Notes about sleep (for log)'),
+        tags: z.array(z.string()).optional().describe('Tags like "restless", "nightmare", "nap" (for log)'),
+        daysBack: z.number().optional().describe('Days to look back (for get/trends, default 7/30)'),
+      }),
+      func: async (params) => handleSleepManager(userId, params),
+    }),
+
+    // MEDICATIONS
+    new DynamicStructuredTool({
+      name: 'medicationManager',
+      description: 'Manage user medications. Important for health coaching context (avoid contraindicated recommendations). Actions: get (active meds), getAll (including discontinued), add, update, remove (soft-delete).',
+      schema: z.object({
+        action: z.enum(['get', 'getAll', 'add', 'update', 'remove']).describe('Action to perform'),
+        id: z.string().optional().describe('Medication ID (for update/remove)'),
+        name: z.string().optional().describe('Medication name (for add/update)'),
+        dosage: z.string().optional().describe('Dosage e.g. "500mg" (for add/update)'),
+        frequency: z.string().optional().describe('Frequency e.g. "twice daily" (for add/update)'),
+        startDate: z.string().optional().describe('Start date YYYY-MM-DD'),
+        endDate: z.string().optional().describe('End date YYYY-MM-DD'),
+        notes: z.string().optional().describe('Additional notes'),
+      }),
+      func: async (params) => handleMedicationManager(userId, params),
+    }),
+
     // LIFE HISTORY SEARCH
     new DynamicStructuredTool({
       name: 'searchUserHistory',
@@ -2985,6 +3571,33 @@ This tool saves schedules to the daily_schedules table. Actions: get, getByDate 
           return JSON.stringify({ success: false, error: `Failed to search history: ${error}` });
         }
       },
+    }),
+
+    // ACTIVITY TIMELINE (cross-domain)
+    new DynamicStructuredTool({
+      name: 'activityTimeline',
+      description: 'Cross-domain activity timeline. Shows a chronological feed of everything the user has done across meals, workouts, mood, journals, water, habits, progress, and AI actions. Actions: get (chronological feed), getStats (per-domain counts).',
+      schema: z.object({
+        action: z.enum(['get', 'getStats']).describe('Action: get (timeline feed) or getStats (domain counts)'),
+        daysBack: z.number().optional().default(7).describe('Number of days to look back (default 7)'),
+        domains: z.array(z.string()).optional().describe('Filter by domains: meal, workout, mood, journal, water, habit, progress, ai_action'),
+        limit: z.number().optional().default(50).describe('Max results (default 50)'),
+      }),
+      func: async (params) => handleActivityTimeline(userId, params),
+    }),
+
+    // AI DECISION HISTORY
+    new DynamicStructuredTool({
+      name: 'aiDecisionHistory',
+      description: 'View what the AI assistant has done on behalf of the user — creates, updates, deletes. Useful for accountability ("what did you change?", "did you delete my goal?"). Actions: get (list AI actions), summary (aggregate counts by domain/type).',
+      schema: z.object({
+        action: z.enum(['get', 'summary']).describe('Action: get (list actions) or summary (aggregate counts)'),
+        daysBack: z.number().optional().default(7).describe('Number of days to look back (default 7)'),
+        mutationType: z.enum(['create', 'update', 'delete']).optional().describe('Filter by mutation type'),
+        toolName: z.string().optional().describe('Filter by specific tool name'),
+        limit: z.number().optional().default(25).describe('Max results (default 25)'),
+      }),
+      func: async (params) => handleAIDecisionHistory(userId, params),
     }),
 
     // MUSIC / PULSE

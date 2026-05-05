@@ -3,7 +3,7 @@
  * Handles permission listing and grouping
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 export interface PermissionRow {
   id: string;

@@ -6,7 +6,7 @@
 -- obstacles when a user repeatedly misses a goal.
 --
 -- Idempotent: safe to re-run. Uses IF NOT EXISTS on the table and
--- DO $$ ... $$ blocks on the ENUMs.
+-- dollar-quoted plpgsql blocks on the ENUMs.
 
 -- ---- ENUMs -----------------------------------------------------------
 

@@ -74,6 +74,8 @@ async function processOnce(): Promise<void> {
             c.userId,
             buildTierMessage(c.goalTitle, c.tier),
             'goal_reconnection',
+            undefined,
+            { reconnectionId: reconnection.id },
           );
           messaged++;
         } catch (msgErr) {

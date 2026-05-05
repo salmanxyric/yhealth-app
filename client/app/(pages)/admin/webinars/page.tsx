@@ -33,6 +33,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { api, ApiError } from "@/lib/api-client";
 import { AIWebinarGenerator, type GeneratedWebinarData } from "@/components/webinar/AIWebinarGenerator";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { confirm } from "@/components/common/ConfirmDialog";
 
 interface Webinar {
   id: string;
@@ -129,7 +130,8 @@ export default function AdminWebinarsPage() {
   }, [page, search, statusFilter]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this webinar?")) return;
+    const ok = await confirm({ description: "Are you sure you want to delete this webinar?", confirmText: "Delete", variant: "destructive" });
+    if (!ok) return;
     try {
       await api.delete(`/admin/webinars/${id}`);
       setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
@@ -223,7 +225,9 @@ export default function AdminWebinarsPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0 || !confirm(`Delete ${selectedIds.size} webinar(s)?`)) return;
+    if (selectedIds.size === 0) return;
+    const ok = await confirm({ description: `Are you sure you want to delete ${selectedIds.size} webinar(s)?`, confirmText: "Delete", variant: "destructive" });
+    if (!ok) return;
     try {
       await api.post("/admin/webinars/bulk-delete", { ids: Array.from(selectedIds) });
       setSelectedIds(new Set());

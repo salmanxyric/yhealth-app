@@ -7,6 +7,9 @@ import controller from '../controllers/follow.controller.js';
 const router = Router();
 router.use(authenticate);
 
+// ─── User Search ─────────────────────────────────────────────────────
+router.get('/search', controller.searchUsers);
+
 // ─── Social Stats ────────────────────────────────────────────────────
 router.get('/stats', controller.getSocialStats);
 

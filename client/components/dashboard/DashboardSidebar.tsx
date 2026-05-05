@@ -28,6 +28,12 @@ import {
   CreditCard,
   Dumbbell,
   Star,
+  Grid3X3,
+  ShieldAlert,
+  Gift,
+  AlertTriangle,
+  Activity,
+  TrendingUp,
 } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -129,12 +135,6 @@ const sidebarSections: SidebarSection[] = [
         href: "/admin/webinars",
       },
       {
-        id: "subscriptions",
-        label: "Subscriptions",
-        icon: CreditCard,
-        href: "/admin/subscriptions",
-      },
-      {
         id: "exercises",
         label: "Exercises",
         icon: Dumbbell,
@@ -145,6 +145,61 @@ const sidebarSections: SidebarSection[] = [
         label: "Reviews",
         icon: Star,
         href: "/admin/testimonials",
+      },
+    ],
+  },
+  {
+    id: "billing",
+    label: "BILLING & SUBSCRIPTIONS",
+    role: "admin",
+    items: [
+      {
+        id: "subscriptions",
+        label: "Subscriptions",
+        icon: CreditCard,
+        href: "/admin/subscriptions",
+      },
+      {
+        id: "sub-customers",
+        label: "Customer Subscriptions",
+        icon: Users,
+        href: "/admin/subscriptions/customers",
+      },
+      {
+        id: "sub-features",
+        label: "Feature Matrix",
+        icon: Grid3X3,
+        href: "/admin/subscriptions/features",
+      },
+      {
+        id: "sub-overrides",
+        label: "Overrides",
+        icon: ShieldAlert,
+        href: "/admin/subscriptions/overrides",
+      },
+      {
+        id: "sub-promotions",
+        label: "Promotions",
+        icon: Gift,
+        href: "/admin/subscriptions/promotions",
+      },
+      {
+        id: "sub-abuse",
+        label: "Abuse Detection",
+        icon: AlertTriangle,
+        href: "/admin/subscriptions/abuse",
+      },
+      {
+        id: "sub-usage",
+        label: "Usage & Audit",
+        icon: Activity,
+        href: "/admin/subscriptions/usage",
+      },
+      {
+        id: "sub-analytics",
+        label: "Billing Analytics",
+        icon: TrendingUp,
+        href: "/admin/subscriptions/analytics",
       },
     ],
   },

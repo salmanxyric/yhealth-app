@@ -3,7 +3,7 @@
  * Handles help article CRUD operations, search, categories, and feedback
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from './logger.service.js';
 import { aiProviderService } from './ai-provider.service.js';

@@ -8,7 +8,8 @@
  * always take precedence over low-value ones (water_intake, whoop_sync).
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
+import { getUserLocalHourAndSunday } from '../lib/user-timezone.js';
 import { logger } from '../services/logger.service.js';
 import { proactiveMessagingService } from '../services/proactive-messaging.service.js';
 import { comprehensiveUserContextService } from '../services/comprehensive-user-context.service.js';
@@ -42,33 +43,6 @@ let startupTimeoutId: NodeJS.Timeout | null = null;
 function hasApplicableTimeWindow(hour: number, _isSunday: boolean): boolean {
   // Message windows span 6-22 in user's local time, plus "any time" messages
   return hour >= 6 && hour < 22;
-}
-
-/**
- * Get UTC offset in minutes for an IANA timezone string.
- * Used to convert UTC time to user's local time.
- */
-function getUtcOffsetMinutes(timezone: string): number {
-  const now = new Date();
-  const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-  const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-  return (localDate.getTime() - utcDate.getTime()) / (1000 * 60);
-}
-
-/**
- * Convert current UTC time to user's local time using their IANA timezone.
- * Returns a Date adjusted so getHours()/getDay() return user-local values.
- * Falls back to UTC if timezone is invalid.
- */
-function getUserLocalTime(timezone: string): Date {
-  try {
-    const now = new Date();
-    const utcOffset = getUtcOffsetMinutes(timezone);
-    const result = new Date(now.getTime() + utcOffset * 60 * 1000);
-    return result;
-  } catch {
-    return new Date(); // Fallback to server time (UTC)
-  }
 }
 
 // ============================================
@@ -124,6 +98,7 @@ async function processProactiveMessages(): Promise<void> {
       recovery_trend_alert: 0, positive_momentum: 0,
       life_goal_checkin: 0, life_goal_stalled: 0, life_goal_milestone: 0, life_goal_encouragement: 0,
       intention_reminder: 0, intention_reflection: 0,
+      free_window_suggestion: 0, busy_day_support: 0, holiday_adjustment: 0, post_busy_day_checkin: 0,
     };
     let errors = 0;
     let skippedCapped = 0;
@@ -136,10 +111,7 @@ async function processProactiveMessages(): Promise<void> {
       await Promise.all(
         batch.map(async (user) => {
           try {
-            // Compute user's local time from their timezone
-            const userLocalTime = getUserLocalTime(user.timezone);
-            const userHour = userLocalTime.getUTCHours();
-            const userIsSunday = userLocalTime.getUTCDay() === 0;
+            const { hour: userHour, isSunday: userIsSunday } = getUserLocalHourAndSunday(user.timezone);
 
             // Per-user time window gate (replaces the old global UTC gate)
             if (!hasApplicableTimeWindow(userHour, userIsSunday)) {
@@ -174,11 +146,11 @@ async function processProactiveMessages(): Promise<void> {
                 sending: topCandidates.map(c => `${c.type}(${c.score})`),
               });
             } else {
-              // Diagnostic: log WHY no candidates were eligible
+              // Diagnostic: log WHY no candidates were eligible (debug level — expected for most users on most ticks)
               const allScored = candidates.length;
               const eligible = candidates.filter(c => c.eligible).length;
               const timeValid = candidates.filter(c => c.eligible && c.timeWindowValid).length;
-              logger.info('[ProactiveMessagingJob] No eligible candidates for user', {
+              logger.debug('[ProactiveMessagingJob] No eligible candidates for user', {
                 userId: user.id.slice(0, 8),
                 userHour,
                 timezone: user.timezone,
@@ -230,6 +202,11 @@ async function processProactiveMessages(): Promise<void> {
                 case 'life_goal_encouragement': sent = await proactiveMessagingService.checkAndSendLifeGoalEncouragement(user.id, context, cooldown); break;
                 case 'intention_reminder': sent = await proactiveMessagingService.checkAndSendIntentionReminder(user.id, context, cooldown); break;
                 case 'intention_reflection': sent = await proactiveMessagingService.checkAndSendIntentionReflection(user.id, context, cooldown); break;
+                // Schedule-aware & holiday messages
+                case 'free_window_suggestion': sent = await proactiveMessagingService.checkAndSendFreeWindowSuggestion(user.id, context, cooldown); break;
+                case 'busy_day_support': sent = await proactiveMessagingService.checkAndSendBusyDaySupport(user.id, context, cooldown); break;
+                case 'holiday_adjustment': sent = await proactiveMessagingService.checkAndSendHolidayAdjustment(user.id, context, cooldown); break;
+                case 'post_busy_day_checkin': sent = await proactiveMessagingService.checkAndSendPostBusyDayCheckin(user.id, context, cooldown); break;
                 // Data-gap collection messages
                 case 'data_gap_dinner': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_dinner', context, cooldown); break;
                 case 'data_gap_mood': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_mood', context, cooldown); break;

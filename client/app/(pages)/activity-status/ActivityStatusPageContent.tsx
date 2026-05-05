@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Calendar, List, BarChart3, Settings, Plus, Loader2 } from "lucide-react";
+import { Calendar, List, BarChart3, Settings, Plus } from "lucide-react";
 import { StatusIndicator } from "@/app/components/activity/StatusIndicator";
 import { StatusCalendar } from "./components/StatusCalendar";
 import { StatusTimeline } from "./components/StatusTimeline";
@@ -13,6 +13,7 @@ import { activityStatusService } from "@/src/shared/services/activity-status.ser
 import { Button } from "@/components/ui/button";
 import { DashboardUnderlineTabs } from "@/app/(pages)/dashboard/components/DashboardUnderlineTabs";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { DashboardPageSkeleton } from "@/components/loading";
 import { useAuth } from "@/app/context/AuthContext";
 
 type InternalTabType = "calendar" | "timeline" | "stats" | "settings";
@@ -80,25 +81,10 @@ function ActivityStatusPageInner() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-white animate-spin" />
-            </div>
-            <motion.div
-              className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 blur-xl"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
-          </div>
-          <p className="text-slate-400">Loading...</p>
-        </motion.div>
-      </div>
+      <DashboardPageSkeleton
+        activeTab="activity-status"
+        variant="heroTabsGrid"
+      />
     );
   }
 
@@ -196,27 +182,14 @@ function ActivityStatusPageInner() {
 
 export default function ActivityStatusPageContent() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-white animate-spin" />
-            </div>
-            <motion.div
-              className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 blur-xl"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
-          </div>
-          <p className="text-slate-400">Loading...</p>
-        </motion.div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <DashboardPageSkeleton
+          activeTab="activity-status"
+          variant="heroTabsGrid"
+        />
+      }
+    >
       <ActivityStatusPageInner />
     </Suspense>
   );

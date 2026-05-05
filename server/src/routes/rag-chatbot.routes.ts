@@ -3,6 +3,8 @@ import { ragChatbotController } from '../controllers/rag-chatbot.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { messagingLimiter } from '../middlewares/rateLimiter.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
+import { performanceTracingMiddleware } from '../middlewares/performance-tracing.middleware.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -58,7 +60,15 @@ const addKnowledgeSchema = z.object({
  * @access  Private
  * @body    { message: string, conversationId?: string }
  */
-router.post('/message', authenticate, messagingLimiter, validate(chatMessageSchema), ragChatbotController.chat);
+router.post(
+  '/message',
+  authenticate,
+  messagingLimiter,
+  validate(chatMessageSchema),
+  requireFeature('ai.rag.chat'),
+  consumeCredits('ai.rag.chat'),
+  ragChatbotController.chat
+);
 
 /**
  * @route   POST /api/rag-chat/message/stream
@@ -66,7 +76,16 @@ router.post('/message', authenticate, messagingLimiter, validate(chatMessageSche
  * @access  Private
  * @body    { message: string, conversationId?: string }
  */
-router.post('/message/stream', authenticate, messagingLimiter, validate(chatMessageSchema), ragChatbotController.chatStream);
+router.post(
+  '/message/stream',
+  authenticate,
+  performanceTracingMiddleware,
+  messagingLimiter,
+  validate(chatMessageSchema),
+  requireFeature('ai.rag.chat_stream'),
+  consumeCredits('ai.rag.chat_stream'),
+  ragChatbotController.chatStream
+);
 
 // ============================================================================
 // Conversation Management Routes
@@ -115,14 +134,26 @@ router.patch('/conversations/:conversationId/archive', authenticate, ragChatbotC
  * @desc    Generate title for a conversation
  * @access  Private
  */
-router.post('/conversations/:conversationId/title', authenticate, ragChatbotController.generateTitle);
+router.post(
+  '/conversations/:conversationId/title',
+  authenticate,
+  requireFeature('ai.rag.title'),
+  consumeCredits('ai.rag.title'),
+  ragChatbotController.generateTitle
+);
 
 /**
  * @route   POST /api/rag-chat/conversations/:conversationId/summary
  * @desc    Generate summary for a conversation
  * @access  Private
  */
-router.post('/conversations/:conversationId/summary', authenticate, ragChatbotController.generateSummary);
+router.post(
+  '/conversations/:conversationId/summary',
+  authenticate,
+  requireFeature('ai.rag.summary'),
+  consumeCredits('ai.rag.summary'),
+  ragChatbotController.generateSummary
+);
 
 // ============================================================================
 // Search Routes

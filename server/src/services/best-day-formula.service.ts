@@ -4,7 +4,7 @@
  * derived from their highest-rated days. Provides achievement score and streak tracking.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { healthCorrelationService } from './wellbeing/health-correlation.service.js';
 

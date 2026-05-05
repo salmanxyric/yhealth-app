@@ -23,8 +23,8 @@ export function ProgressIndicator({
   return (
     <div className="w-full">
       {/* Desktop Stepper */}
-      <div className="hidden md:block overflow-x-auto">
-        <div className="flex items-start justify-between min-w-[560px] lg:min-w-0">
+      <div className="hidden md:block">
+        <div className="flex items-start justify-between">
           {steps.map((step, index) => {
             const isCompleted = index < currentStep;
             const isCurrent = index === currentStep;
@@ -83,7 +83,7 @@ export function ProgressIndicator({
 
                 {/* Connecting line — solid */}
                 {!isLast && (
-                  <div className="flex-1 flex items-center px-1 lg:px-2 mt-[14px]">
+                  <div className="flex-1 flex items-center px-2 lg:px-3 mt-[14px]">
                     <div
                       className={`
                         w-full h-[2px] rounded-full transition-colors duration-300

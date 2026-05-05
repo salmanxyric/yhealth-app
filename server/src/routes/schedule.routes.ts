@@ -9,7 +9,9 @@ import { scheduleController } from '../controllers/schedule.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { scheduleContextService } from '../services/schedule-context.service.js';
 import { specialDaysService } from '../services/special-days.service.js';
+import { holidayCalendarService } from '../services/holiday-calendar.service.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
+import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -33,6 +35,39 @@ router.get('/context', asyncHandler(async (req: AuthenticatedRequest, res: Respo
   ]);
 
   ApiResponse.success(res, { ...dayContext, specialDays });
+}));
+
+/**
+ * @route   GET /api/v1/schedules/holidays
+ * @desc    Get upcoming holidays and user's holiday preferences
+ * @access  Private
+ */
+router.get('/holidays', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const days = parseInt(req.query.days as string) || 30;
+  const [upcoming, preferences, context] = await Promise.all([
+    holidayCalendarService.getUpcomingHolidays(userId, days),
+    holidayCalendarService.getUserPreferences(userId),
+    holidayCalendarService.getHolidayContext(userId),
+  ]);
+
+  ApiResponse.success(res, { upcoming, preferences, context });
+}));
+
+/**
+ * @route   PUT /api/v1/schedules/holidays/preferences
+ * @desc    Update user's holiday/cultural calendar preferences
+ * @access  Private
+ */
+router.put('/holidays/preferences', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { region, religiousCalendar, customHolidays } = req.body;
+  await holidayCalendarService.saveUserPreferences(userId, { region, religiousCalendar, customHolidays });
+  ApiResponse.success(res, null, 'Holiday preferences updated');
 }));
 
 /**

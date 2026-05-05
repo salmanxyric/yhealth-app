@@ -13,10 +13,18 @@ interface MonthBarChartProps {
   height?: number;
 }
 
-function CustomTooltip({ active, payload, label }: any) {
+interface TooltipPayloadEntry {
+  dataKey: string;
+  value: number;
+  name?: string;
+  stroke?: string;
+  fill?: string;
+}
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string }) {
   if (!active || !payload?.length) return null;
-  const income = payload.find((p: any) => p.dataKey === "income")?.value || 0;
-  const expense = payload.find((p: any) => p.dataKey === "expense")?.value || 0;
+  const income = payload.find((p) => p.dataKey === "income")?.value || 0;
+  const expense = payload.find((p) => p.dataKey === "expense")?.value || 0;
 
   return (
     <div className="bg-[#0f172a] border border-white/10 rounded-xl p-3 shadow-xl">

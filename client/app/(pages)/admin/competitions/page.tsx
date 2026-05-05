@@ -12,6 +12,7 @@ import { CreateCompetitionModal } from './components/CreateCompetitionModal';
 import type { Competition } from '@/src/shared/services/leaderboard.service';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { confirm } from '@/components/common/ConfirmDialog';
 
 export default function AdminCompetitionsPage() {
   const { user } = useAuth();
@@ -44,7 +45,8 @@ export default function AdminCompetitionsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this competition?')) return;
+    const ok = await confirm({ description: 'Are you sure you want to delete this competition?', confirmText: 'Delete', variant: 'destructive' });
+    if (!ok) return;
 
     try {
       await api.delete(`/admin/competitions/${id}`);

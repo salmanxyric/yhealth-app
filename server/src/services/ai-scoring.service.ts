@@ -4,7 +4,7 @@
  * Components: Workout (30%), Nutrition (20%), Wellbeing (15%), Biometrics (15%), Engagement (10%), Consistency (10%)
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================

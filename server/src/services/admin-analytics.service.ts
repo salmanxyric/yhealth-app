@@ -3,7 +3,7 @@
  * Aggregates comprehensive analytics data for admin dashboard
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import {
   generateCustomRangeData,
   generateRevenueTimeSeries,

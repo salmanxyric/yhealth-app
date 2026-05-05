@@ -3,7 +3,7 @@
  * @description Handles habit tracking with correlations and analytics (F7.3)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type {
   Habit,

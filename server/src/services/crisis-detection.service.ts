@@ -4,7 +4,7 @@
  */
 
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import type { EmotionDetection } from './emotion-detection.service.js';
 
 // ============================================
@@ -70,14 +70,6 @@ const CRISIS_KEYWORDS = {
     'can\'t cope',
     'overwhelmed',
     'breaking down',
-  ],
-  low: [
-    'really depressed',
-    'extremely sad',
-    'miserable',
-    'can\'t handle',
-    'too much',
-    'stressed out',
   ],
 };
 
@@ -152,22 +144,9 @@ class CrisisDetectionService {
         }
       }
 
-      // Check for low severity keywords (only if no higher severity found)
-      if (
-        maxSeverity !== 'critical' &&
-        maxSeverity !== 'high' &&
-        maxSeverity !== 'medium'
-      ) {
-        for (const keyword of CRISIS_KEYWORDS.low) {
-          if (lowerText.includes(keyword)) {
-            detectedKeywords.push(keyword);
-            maxSeverity = 'low';
-            severityScore = Math.max(severityScore, 25);
-          }
-        }
-      }
+      // Mood-only / stress phrases are handled by mental-health-guardrail.service (coaching lanes), not crisis escalation.
 
-      const isCrisis = detectedKeywords.length > 0 && maxSeverity !== 'low';
+      const isCrisis = detectedKeywords.length > 0;
 
       // Calculate confidence based on keyword count and severity
       let confidence = 0;

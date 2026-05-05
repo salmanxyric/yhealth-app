@@ -4,7 +4,7 @@
  */
 
 // Type definitions
-export type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'custom';
+export type GoalCategory = 'weight_loss' | 'muscle_building' | 'sleep_improvement' | 'stress_wellness' | 'energy_productivity' | 'event_training' | 'health_condition' | 'habit_building' | 'overall_optimization' | 'nutrition' | 'fitness' | 'custom';
 export type HealthPillar = 'fitness' | 'nutrition' | 'wellbeing';
 export type PlanStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 export type ActivityLogStatus = 'pending' | 'completed' | 'skipped' | 'partial';

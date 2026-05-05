@@ -9,6 +9,8 @@ const coachingStyleEnum = z.enum(['supportive', 'direct', 'analytical', 'motivat
 // Coaching intensity
 const coachingIntensityEnum = z.enum(['light', 'moderate', 'intensive']);
 
+const aiCoachPersonaEnum = z.enum(['drill_sergeant', 'gentle_friend', 'data_driven_neutral']);
+
 // S01.5.1: Engagement & Notification Preferences
 export const notificationPreferencesSchema = z.object({
   channels: z.object({
@@ -27,23 +29,30 @@ export const notificationPreferencesSchema = z.object({
     maxPerDay: z.number().int().min(1).max(50).default(10),
     maxPerWeek: z.number().int().min(1).max(200).default(50),
   }).optional(),
+  /** Stored as JSON on `user_preferences.notification_types` (e.g. weeklyReport, aiSuggestions). */
+  types: z.record(z.string(), z.boolean()).optional(),
 });
 
-// S01.5.2: Coaching Style & Channel Preferences
+// S01.5.2: Coaching Style & Channel Preferences (PATCH — all fields optional)
 export const coachingPreferencesSchema = z.object({
-  style: coachingStyleEnum.default('supportive'),
-  intensity: coachingIntensityEnum.default('moderate'),
-  preferredChannel: notificationChannelEnum.default('push'),
-  checkInFrequency: z.enum(['daily', 'twice_daily', 'every_other_day', 'weekly']).default('daily'),
-  preferredCheckInTime: z.string()
+  /** Product persona; when set, server syncs legacy `coaching_style` for backward compatibility. */
+  aiCoachPersona: aiCoachPersonaEnum.optional(),
+  style: coachingStyleEnum.optional(),
+  intensity: coachingIntensityEnum.optional(),
+  preferredChannel: notificationChannelEnum.optional(),
+  checkInFrequency: z.enum(['daily', 'twice_daily', 'every_other_day', 'weekly']).optional(),
+  preferredCheckInTime: z
+    .string()
     .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (use HH:mm)')
-    .default('09:00'),
-  timezone: z.string().default('UTC'),
-  aiPersonality: z.object({
-    useEmojis: z.boolean().default(true),
-    formalityLevel: z.enum(['casual', 'balanced', 'formal']).default('balanced'),
-    encouragementLevel: z.enum(['low', 'medium', 'high']).default('medium'),
-  }).optional(),
+    .optional(),
+  timezone: z.string().optional(),
+  aiPersonality: z
+    .object({
+      useEmojis: z.boolean().optional(),
+      formalityLevel: z.enum(['casual', 'balanced', 'formal']).optional(),
+      encouragementLevel: z.enum(['low', 'medium', 'high']).optional(),
+    })
+    .optional(),
   focusAreas: z.array(z.string()).max(5).optional(),
 });
 
@@ -67,6 +76,8 @@ export const privacyPreferencesSchema = z.object({
   allowAnonymousDataForResearch: z.boolean().default(false),
   showInLeaderboards: z.boolean().default(false),
   profileVisibility: z.enum(['private', 'friends', 'public']).default('private'),
+  healthProfileVisibility: z.enum(['disabled', 'friends', 'all', 'custom']).default('friends'),
+  healthProfileAllowedUsers: z.array(z.string().uuid()).default([]),
 });
 
 // Integration preferences

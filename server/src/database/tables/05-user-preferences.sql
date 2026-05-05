@@ -20,6 +20,8 @@ CREATE TABLE user_preferences (
 
     -- Coaching Preferences
     coaching_style coaching_style DEFAULT 'supportive',
+    ai_coach_persona VARCHAR(32) NOT NULL DEFAULT 'gentle_friend'
+      CHECK (ai_coach_persona IN ('drill_sergeant', 'gentle_friend', 'data_driven_neutral')),
     coaching_intensity coaching_intensity DEFAULT 'moderate',
     preferred_channel notification_channel DEFAULT 'push',
     check_in_frequency VARCHAR(20) DEFAULT 'daily',
@@ -46,6 +48,8 @@ CREATE TABLE user_preferences (
     allow_anonymous_data_research BOOLEAN DEFAULT false,
     show_in_leaderboards BOOLEAN DEFAULT false,
     profile_visibility VARCHAR(10) DEFAULT 'private',
+    health_profile_visibility VARCHAR(20) DEFAULT 'friends' CHECK (health_profile_visibility IN ('disabled', 'friends', 'all', 'custom')),
+    health_profile_allowed_users TEXT[] DEFAULT '{}',
 
     -- Integration Preferences
     auto_sync_enabled BOOLEAN DEFAULT true,
@@ -72,6 +76,9 @@ CREATE TABLE user_preferences (
     -- Activity Automation Preferences (for activity logs from user plans)
     activity_automation_enabled BOOLEAN DEFAULT true,  -- Enable/disable AI automation messages for activity logs
     ai_message_style VARCHAR(20) DEFAULT 'friendly' CHECK (ai_message_style IN ('friendly', 'professional', 'motivational')),  -- Style of AI messages
+
+    -- Extensible prefs (e.g. observes_ramadan, country_code for special-days.service)
+    metadata JSONB DEFAULT '{}',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

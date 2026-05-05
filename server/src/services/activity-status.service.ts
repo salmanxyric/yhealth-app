@@ -1,4 +1,4 @@
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import type {
@@ -54,7 +54,7 @@ class ActivityStatusService {
    * Uses a transaction to ensure both updates succeed or fail together
    */
   async updateCurrentStatus(userId: string, status: ActivityStatus): Promise<CurrentStatusResponse> {
-    const { transaction } = await import('../database/pg.js');
+    const { transaction } = await import('../config/database.config.js');
     
     try {
       // Use transaction to ensure both operations succeed or fail together
@@ -481,7 +481,7 @@ class ActivityStatusService {
     expectedEndDate?: string,
     reason?: string,
   ): Promise<CurrentStatusResponse> {
-    const { transaction } = await import('../database/pg.js');
+    const { transaction } = await import('../config/database.config.js');
 
     let result: CurrentStatusResponse | undefined;
     await transaction(async (client) => {

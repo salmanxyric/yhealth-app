@@ -26,6 +26,7 @@ function validateUuidParams(req: Request, res: Response, next: NextFunction): vo
 const writeRateLimiter = createRateLimiter({ windowMs: 60_000, max: 20, keyGenerator: 'user' });
 
 router.get('/domains', ctrl.listDomains);
+router.get('/summary', ctrl.getSummary);
 router.get('/', ctrl.listLifeAreas);
 router.post('/', writeRateLimiter, validate(createLifeAreaSchema), ctrl.createLifeArea);
 

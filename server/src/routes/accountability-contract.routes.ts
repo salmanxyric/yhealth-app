@@ -24,8 +24,11 @@ router.post('/', validate(createContractSchema), controller.createContract);
 router.get('/', validate(listContractsQuerySchema, 'query'), controller.getContracts);
 router.get('/stats', controller.getContractStats);
 router.get('/suggestions', controller.getSuggestions);
+router.get('/suggestions/ai', controller.getAISuggestion);
+router.post('/bulk-delete', controller.bulkDeleteContracts);
 router.get('/:id', validate(contractIdParamSchema, 'params'), controller.getContract);
 router.put('/:id', validate(contractIdParamSchema, 'params'), validate(updateContractSchema), controller.updateContract);
+router.delete('/:id', validate(contractIdParamSchema, 'params'), controller.deleteContract);
 
 // ─── LIFECYCLE ───────────────────────────────────────────────────────
 

@@ -18,5 +18,22 @@ export const GOAL_MAP: Record<string, AICoachGoalCategory> = {
   health_condition: 'health_condition',
   habit_building: 'habit_building',
   overall_optimization: 'overall_optimization',
+  nutrition: 'nutrition',
+  fitness: 'fitness',
   custom: 'custom',
+};
+
+// Map goal ID to user-facing label (matches WelcomeStep goalOptions)
+export const GOAL_LABEL_MAP: Record<string, string> = {
+  weight_loss: 'Lose Weight',
+  muscle_building: 'Build Muscle',
+  sleep_improvement: 'Sleep Better',
+  stress_wellness: 'Reduce Stress',
+  energy_productivity: 'Boost Energy',
+  event_training: 'Train for Event',
+  health_condition: 'Manage Health',
+  habit_building: 'Build Habits',
+  overall_optimization: 'Optimize Health',
+  nutrition: 'Nutrition',
+  fitness: 'Yoga Classes',
 };

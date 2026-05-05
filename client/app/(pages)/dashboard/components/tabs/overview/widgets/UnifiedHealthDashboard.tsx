@@ -578,7 +578,7 @@ export function UnifiedHealthDashboard({
 
   const [manualRefreshTime, setManualRefreshTime] = useState<Date | null>(null);
 
-  const lastRefresh = useMemo(() => {
+  const _lastRefresh = useMemo(() => {
     const whoopTime = whoopData.lastSync ? new Date(whoopData.lastSync) : null;
     if (!whoopTime) return manualRefreshTime || new Date();
     if (!manualRefreshTime) return whoopTime;
@@ -649,7 +649,7 @@ export function UnifiedHealthDashboard({
     };
   })();
 
-  const handleRefresh = () => {
+  const _handleRefresh = () => {
     refetchWhoop();
     setManualRefreshTime(new Date());
   };
@@ -657,15 +657,18 @@ export function UnifiedHealthDashboard({
   const loading = isLoading || whoopLoading;
 
   // ── Nutrition totals ──
-  const totalMacros = data.nutrition.macros.protein + data.nutrition.macros.carbs + data.nutrition.macros.fats;
-  const totalTargets = data.nutrition.targets.protein + data.nutrition.targets.carbs + data.nutrition.targets.fats;
+  const _totalMacros = data.nutrition.macros.protein + data.nutrition.macros.carbs + data.nutrition.macros.fats;
+  const _totalTargets = data.nutrition.targets.protein + data.nutrition.targets.carbs + data.nutrition.targets.fats;
 
   return (
     <div className="space-y-5">
       <style>{METRIC_CSS}</style>
 
       {/* ── Metrics Row — 5 premium 3D circles ── */}
-      <div className="flex gap-9 pl-6 sm:pl-0 mt-4 sm:mt-0 sm:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory lg:grid lg:grid-cols-5 lg:overflow-visible scrollbar-hide">
+      <div
+        className="flex gap-9 pl-6 sm:pl-0 mt-4 sm:mt-0 sm:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory lg:grid lg:grid-cols-5 lg:overflow-visible scrollbar-hide"
+        data-tour="overview-metrics"
+      >
         {loading ? (
           <>
             <SkeletonCircle />

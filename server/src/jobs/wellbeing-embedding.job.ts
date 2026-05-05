@@ -171,7 +171,7 @@ async function determineWellbeingType(
   userId: string,
   entryId: string
 ): Promise<'mood' | 'stress' | 'journal' | 'energy' | 'habits' | 'schedule' | null> {
-  const { query } = await import('../database/pg.js');
+  const { query } = await import('../config/database.config.js');
   
   try {
     // Check each wellbeing table

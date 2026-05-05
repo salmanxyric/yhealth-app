@@ -3,7 +3,7 @@
  * @description Creates 3 seed blog posts about Balencia features
  */
 
-import { query, closePool } from './pg.js';
+import { query, closePool } from '../config/database.config.js';
 
 /**
  * Calculate reading time in minutes based on content

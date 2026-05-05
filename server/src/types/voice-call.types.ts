@@ -31,6 +31,9 @@ export interface VoiceCall {
   pre_call_context?: string;
   call_purpose?: CallPurpose;
   call_summary?: string;
+  initiator_source?: string | null;
+  checkin_outcome?: string | null;
+  checkin_followup_sent_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -51,7 +54,14 @@ export type SessionType =
   | 'health_coach'
   | 'nutrition'
   | 'fitness'
-  | 'wellness';
+  | 'wellness'
+  | 'workout'
+  | 'meal'
+  | 'emotion'
+  | 'sleep'
+  | 'stress'
+  | 'recovery'
+  | 'general_health';
 
 export type CallPurpose =
   | 'workout'
@@ -65,13 +75,16 @@ export type CallPurpose =
   | 'general_health'
   | 'fitness'
   | 'wellness'
-  | 'recovery';
+  | 'recovery'
+  | 'check_in';
 
 export interface CallInitiationRequest {
   channel: CallChannel;
   pre_call_context?: string;
   session_type?: SessionType;
   call_purpose?: CallPurpose;
+  /** When set to system_checkin, outcomes and follow-up notifications apply */
+  initiator_source?: 'user' | 'system_checkin';
 }
 
 export interface CallInitiationResponse {

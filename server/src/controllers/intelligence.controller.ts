@@ -17,7 +17,7 @@ import { healthCorrelationService } from '../services/wellbeing/health-correlati
 import { weeklyReportService } from '../services/weekly-report.service.js';
 import { predictionAccuracyService } from '../services/prediction-accuracy.service.js';
 import { bestDayFormulaService } from '../services/best-day-formula.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 class IntelligenceController {
   // ============================================

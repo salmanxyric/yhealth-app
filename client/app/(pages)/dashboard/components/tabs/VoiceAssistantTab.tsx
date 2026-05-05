@@ -3,14 +3,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertCircle,
   Sparkles,
-  Clock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { useVoiceAssistant } from "@/app/context/VoiceAssistantContext";
-import { EnhancedNetworkBackground } from "@/components/common/enhanced-network-background";
 import { getFallbackLanguage } from "@/lib/language-config";
 import { ttsService } from "@/src/shared/services/tts.service";
 import { ActionCommand } from "@/src/shared/services/rag-chat.service";
@@ -20,7 +17,7 @@ import { api } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import { ImageAnalysisModal } from "../modals/ImageAnalysisModal";
 import { analyzeResponse as analyzeResponseForGestures } from "@/lib/avatar/conversationDirector";
-import { X, Loader2, MicOff, Eye, EyeOff } from "lucide-react";
+import { X, Loader2, MicOff } from "lucide-react";
 import { preferencesService } from "@/src/shared/services/preferences.service";
 import { uploadService } from "@/src/shared/services/upload.service";
 import { ragChatService } from "@/src/shared/services/rag-chat.service";
@@ -36,15 +33,22 @@ import {
 } from "@/lib/socket-client";
 import type { Preferences } from "@/src/types";
 // Import extracted components
-import { VoiceAssistantHeader } from "../voice-assistant/VoiceAssistantHeader";
-import { InlineCameraPanel } from "../voice-assistant/InlineCameraPanel";
 import { VisionCoachingOverlay } from "../voice-assistant/VisionCoachingOverlay";
 import { AvatarLayer, type AvatarLayerHandle } from "@/components/avatar/AvatarLayer";
 import { VOICE_STATE_TO_AVATAR_STATE } from "@/lib/avatar/vrmMappings";
-import { ContextPanel } from "../voice-assistant/ContextPanel";
 import { SessionTypeSelector, type SessionTypeOption, SESSION_DURATIONS } from "../voice-assistant/SessionTypeSelector";
 import { EmergencyResources } from "../voice-assistant/EmergencyResources";
 import { JarvisLoader } from "@/components/voice-assistant/JarvisLoader";
+// Figma redesign components (node 2920:3504)
+import { CiaBrandBadge } from "../voice-assistant/CiaBrandBadge";
+import { StatusPill } from "../voice-assistant/StatusPill";
+import { TopRightControls } from "../voice-assistant/TopRightControls";
+import { CameraPip } from "../voice-assistant/CameraPip";
+import { AICoachTranscript } from "../voice-assistant/AICoachTranscript";
+import { BottomControlBar } from "../voice-assistant/BottomControlBar";
+// Coach personality / mood system
+import { useCoachMood } from "@/hooks/useCoachMood";
+import type { MoodProfile } from "@/lib/avatar/coachPersonality";
 
 type VoiceState = "idle" | "listening" | "processing" | "speaking";
 
@@ -60,8 +64,20 @@ interface VoiceAssistantTabProps {
 
 export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEnd }: VoiceAssistantTabProps = {}) {
   const router = useRouter();
-  const { user, getInitials } = useAuth();
+  const { user, getInitials: _getInitials } = useAuth();
   const { setUserMood, selectedLanguage, setSelectedLanguage, assistantName, voiceGender } = useVoiceAssistant();
+
+  // Coach personality / adaptive mood — derived from streak + activity signals
+  const coachMood = useCoachMood({
+    userName: user?.firstName || "",
+    enabled: !!user,
+  });
+  const moodProfileRef = useRef<MoodProfile>(coachMood.profile);
+  const promptContextRef = useRef<string>(coachMood.promptContext);
+  useEffect(() => {
+    moodProfileRef.current = coachMood.profile;
+    promptContextRef.current = coachMood.promptContext;
+  }, [coachMood.profile, coachMood.promptContext]);
 
   // Also check URL for callId (fallback for direct navigation)
   const [urlCallId, setUrlCallId] = useState<string | null>(null);
@@ -95,9 +111,9 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [_cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [_countdown, setCountdown] = useState<number | null>(null);
   const [shouldAutoCapture, setShouldAutoCapture] = useState(false);
   const [shouldAutoAnalyze, setShouldAutoAnalyze] = useState(false);
   // Vision coaching state
@@ -120,7 +136,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   const [sessionType, setSessionType] = useState<SessionTypeOption | null>(null);
   const [showSessionSelector, setShowSessionSelector] = useState(false);
   const [_sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
-  const [sessionTimeRemaining, setSessionTimeRemaining] = useState<number | null>(null);
+  const [_sessionTimeRemaining, setSessionTimeRemaining] = useState<number | null>(null);
   const sessionTimerRef = useRef<NodeJS.Timeout | null>(null);
   const sessionCountdownRef = useRef<NodeJS.Timeout | null>(null);
   const [showEmergencyResources, setShowEmergencyResources] = useState(false);
@@ -766,8 +782,9 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       utterance.voice = selectedVoice;
     }
     utterance.lang = selectedLanguage;
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+    // Mood-adjusted pacing — rates/pitches come from coachPersonality MOOD_PROFILES
+    utterance.rate = moodProfileRef.current?.ttsRate ?? 1.0;
+    utterance.pitch = moodProfileRef.current?.ttsPitch ?? 1.0;
     utterance.volume = 1.0;
 
     utterance.onstart = () => {
@@ -1489,7 +1506,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
     }
   }, []);
 
-  const startVisionCoaching = useCallback(() => {
+  const _startVisionCoaching = useCallback(() => {
     if (isVisionActive || !isCameraActive) return;
 
     console.log('[VoiceAssistant] Starting vision coaching');
@@ -2107,7 +2124,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const requestBody: { message: string; conversationId?: string; callId?: string; sessionType?: string; callPurpose?: string; language?: string } = {
+    const requestBody: { message: string; conversationId?: string; callId?: string; sessionType?: string; callPurpose?: string; language?: string; coachMood?: string; coachPromptContext?: string } = {
       message: text.trim(),
     };
     if (conversationIdRef.current) {
@@ -2121,6 +2138,12 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
     }
     if (callPurpose) {
       requestBody.callPurpose = callPurpose;
+    }
+    // Attach current coach mood + prompt context so the backend can steer tone.
+    // Safe to ignore on servers that don't consume these fields.
+    if (moodProfileRef.current) {
+      requestBody.coachMood = moodProfileRef.current.mood;
+      requestBody.coachPromptContext = promptContextRef.current;
     }
     // Add language parameter - extract base language code (e.g., "ur" from "ur-PK")
     if (selectedLanguage) {
@@ -2568,9 +2591,22 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       isTTSActiveRef.current = false;
       currentUtteranceRef.current = null;
 
-      // Fetch greeting from backend
-      const greeting = await fetchGreeting();
+      // Fetch greeting — prefer mood-personalized greeting from coachPersonality,
+      // fall back to backend/generic greeting if mood hook is still loading.
+      const personalizedGreeting = coachMood.greeting && !coachMood.loading
+        ? coachMood.greeting
+        : null;
+      const greeting = personalizedGreeting ?? (await fetchGreeting());
       setAiResponse(greeting);
+
+      // Apply mood-driven expression + subtle wave gesture on greeting
+      try {
+        avatarRef.current?.setExpression(
+          moodProfileRef.current.expression,
+          moodProfileRef.current.expressionIntensity,
+          600,
+        );
+      } catch { /* ignore */ }
 
       if (isTTSEnabled) {
         speakResponse(greeting);
@@ -2584,7 +2620,40 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConversationActive, stopConversation, isTTSEnabled, speakResponse, fetchGreeting, sessionType, startListening]);
 
-  const getStatusText = () => {
+  // Apply mood-driven avatar expression whenever mood shifts (even outside a session)
+  useEffect(() => {
+    if (!avatarRef.current) return;
+    try {
+      avatarRef.current.setExpression(
+        coachMood.profile.expression,
+        coachMood.profile.expressionIntensity,
+        500,
+      );
+    } catch { /* avatar not ready yet */ }
+  }, [coachMood.profile.expression, coachMood.profile.expressionIntensity]);
+
+  // Proactive nudge — if the coach is idle and session is active for >25s without user
+  // input, Cia speaks a mood-flavored nudge (only when TTS is on). Uses a single timer
+  // that resets whenever voiceState changes.
+  useEffect(() => {
+    if (!isConversationActive) return;
+    if (voiceState !== "idle") return;
+    if (!isTTSEnabled) return;
+
+    const NUDGE_DELAY_MS = 25_000;
+    const timeout = setTimeout(() => {
+      if (!isConversationActiveRef.current || isTTSActiveRef.current) return;
+      if (isProcessingRef.current || isListeningActiveRef.current) return;
+      const nudge = coachMood.getNudge();
+      setAiResponse(nudge);
+      const speak = speakResponseRef.current;
+      if (speak) speak(nudge);
+    }, NUDGE_DELAY_MS);
+
+    return () => clearTimeout(timeout);
+  }, [isConversationActive, voiceState, isTTSEnabled, coachMood]);
+
+  const _getStatusText = () => {
     const userName = user?.firstName;
     if (!isConversationActive) {
       if (userName) {
@@ -2648,184 +2717,52 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   }
 
   return (
-    <div className="relative w-full h-full z-50 flex flex-col overflow-hidden" style={{ backgroundColor: "#0B0F14" }}>
-      {/* Subtle animated background */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <motion.div
-          className="absolute top-0 left-0 w-[800px] h-[800px] rounded-full blur-3xl opacity-10"
-          style={{ background: `radial-gradient(circle, #00E5FF20 0%, transparent 70%)` }}
-          animate={{ x: ["-10%", "10%", "-10%"], y: ["-10%", "20%", "-10%"], scale: [1, 1.2, 1] }}
-          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+    <div className="relative w-full h-full z-50 overflow-hidden" style={{ backgroundColor: "#02000f" }}>
+      {/* Content layer background (Figma VoiceChatFlow) */}
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "#09090e" }} />
+
+      {/* Figma background glow stack — centered horizontally, top-anchored */}
+      <div
+        className="absolute pointer-events-none"
+        style={{ left: "50%", top: 0, transform: "translateX(-50%)", width: "1920px", height: "990px" }}
+      >
+        <div
+          className="absolute rounded-full"
+          style={{
+            left: "520px",
+            top: "-182px",
+            width: "880px",
+            height: "880px",
+            background: "#5ad9f6",
+            filter: "blur(165px)",
+            opacity: 0.2,
+          }}
         />
-        <motion.div
-          className="absolute right-0 bottom-0 w-[800px] h-[800px] rounded-full blur-3xl opacity-10"
-          style={{ background: `radial-gradient(circle, #1DE9B620 0%, transparent 70%)` }}
-          animate={{ x: ["10%", "-10%", "10%"], y: ["10%", "-20%", "10%"], scale: [1, 1.3, 1] }}
-          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+        <div
+          className="absolute rounded-full"
+          style={{
+            left: "800px",
+            top: "283px",
+            width: "320px",
+            height: "320px",
+            background: "#0099b9",
+            filter: "blur(50px)",
+            opacity: 0.82,
+          }}
         />
-        {voiceState === "processing" && (
-          <motion.div
-            className="absolute top-1/2 left-1/2 w-[600px] h-[600px] rounded-full blur-3xl opacity-15"
-            style={{ background: `radial-gradient(circle, #7C4DFF30 0%, transparent 70%)` }}
-            animate={{ scale: [1, 1.5, 1], opacity: [0.15, 0.25, 0.15] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
+        <div
+          className="absolute rounded-full"
+          style={{
+            left: "836.8px",
+            top: "319.8px",
+            width: "246.4px",
+            height: "246.4px",
+            background: "rgba(12,70,83,0.35)",
+            filter: "blur(22px)",
+            opacity: 0.6,
+          }}
+        />
       </div>
-
-      {/* Modern Header */}
-      <VoiceAssistantHeader
-        user={user}
-        selectedLanguage={selectedLanguage}
-        setSelectedLanguage={setSelectedLanguage}
-        isTTSEnabled={isTTSEnabled}
-        setIsTTSEnabled={setIsTTSEnabled}
-        getInitials={getInitials}
-        isCallActive={isCallActive}
-        onEndCall={handleEndCall}
-        showCamera={showInlineCamera}
-        onToggleCamera={() => {
-          if (showInlineCamera) {
-            setShowInlineCamera(false);
-          } else {
-            setShowInlineCamera(true);
-            setInlineCameraMode("camera");
-          }
-        }}
-      />
-
-      {/* Emergency Button - Visible when not in a call */}
-      {!showEmergencyResources && !isCallActive && (
-        <motion.button
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setShowEmergencyResources(true)}
-          className="absolute top-20 right-4 z-40 p-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-full shadow-2xl border-2 border-red-400/50 hover:border-red-400 transition-all"
-        >
-          <AlertCircle className="w-6 h-6 text-white" />
-        </motion.button>
-      )}
-
-      {/* Session Type Indicator */}
-      {/* Session Timer Display */}
-      {sessionType && isConversationActive && sessionTimeRemaining !== null && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-20 right-4 z-40 bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl p-4 min-w-[160px]"
-        >
-          <div className="flex items-center gap-3">
-            <motion.div
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              className="p-2 rounded-xl bg-gradient-to-br from-teal-500/20 to-cyan-500/20"
-            >
-              <Clock className="w-4 h-4 text-teal-400" />
-            </motion.div>
-            <div className="flex-1">
-              <p className="text-xs text-white/60 mb-0.5">Session Time</p>
-              <p className="text-lg font-bold text-white tabular-nums">
-                {Math.floor(sessionTimeRemaining / 60000)}:{(Math.floor((sessionTimeRemaining % 60000) / 1000)).toString().padStart(2, '0')}
-              </p>
-            </div>
-          </div>
-          {/* Progress bar */}
-          <div className="mt-3 h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-gradient-to-r from-teal-500 to-cyan-500 rounded-full"
-              initial={{ width: '100%' }}
-              animate={{ 
-                width: `${Math.max(0, (sessionTimeRemaining / (SESSION_DURATIONS[sessionType] * 60 * 1000)) * 100)}%` 
-              }}
-              transition={{ duration: 1, ease: 'linear' }}
-            />
-          </div>
-        </motion.div>
-      )}
-
-      {sessionType && isConversationActive && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-24 left-1/2 transform -translate-x-1/2 z-30 px-4 py-2 bg-white/10 backdrop-blur-xl rounded-full border border-white/20"
-        >
-          <span className="text-xs text-white/90 font-medium capitalize">
-            {sessionType.replace(/_/g, ' ')}
-          </span>
-        </motion.div>
-      )}
-
-      {/* Vision Coaching Toggle - show when camera is active */}
-      {isCameraActive && showInlineCamera && (
-        <motion.button
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => isVisionActive ? stopVisionCoaching() : startVisionCoaching()}
-          className={`absolute top-20 left-4 z-40 p-3 rounded-full shadow-xl border transition-all ${
-            isVisionActive
-              ? 'bg-gradient-to-r from-teal-600 to-cyan-600 border-teal-400/50 hover:border-teal-400'
-              : 'bg-gradient-to-r from-slate-700 to-slate-600 border-white/20 hover:border-white/40'
-          }`}
-          title={isVisionActive ? 'Stop Vision Coaching' : 'Start Vision Coaching'}
-        >
-          {isVisionActive ? (
-            <Eye className="w-5 h-5 text-white" />
-          ) : (
-            <EyeOff className="w-5 h-5 text-white/70" />
-          )}
-        </motion.button>
-      )}
-
-      {/* Inline Camera - Top Right */}
-      <InlineCameraPanel
-        showInlineCamera={showInlineCamera}
-        setShowInlineCamera={setShowInlineCamera}
-        inlineCameraMode={inlineCameraMode}
-        setInlineCameraMode={setInlineCameraMode}
-        capturedImage={capturedImage}
-        setCapturedImage={setCapturedImage}
-        setImageFile={setImageFile}
-        imageDescription={imageDescription}
-        setImageDescription={setImageDescription}
-        analysisResult={analysisResult}
-        isAnalyzing={isAnalyzing}
-        cameraError={cameraError}
-        setCameraError={setCameraError}
-        isCameraActive={isCameraActive}
-        setIsCameraActive={setIsCameraActive}
-        countdown={countdown}
-        setShouldAutoCapture={setShouldAutoCapture}
-        setCountdown={setCountdown}
-        inlineVideoRef={inlineVideoRef}
-        inlineCanvasRef={inlineCanvasRef}
-        inlineStreamRef={inlineStreamRef}
-        inlineFileInputRef={inlineFileInputRef}
-        startInlineCamera={startInlineCamera}
-        stopInlineCamera={stopInlineCamera}
-        captureInlinePhoto={captureInlinePhoto}
-        analyzeInlineImage={analyzeInlineImage}
-        handleInlineFileChange={handleInlineFileChange}
-      />
-
-      {/* Vision Coaching Overlay */}
-      {isVisionActive && (
-        <VisionCoachingOverlay
-          visionState={visionState}
-          coaching={visionCoaching}
-          isActive={isVisionActive}
-          onStop={stopVisionCoaching}
-        />
-      )}
-
-      {/* Enhanced Network Background with geometric patterns */}
-      <EnhancedNetworkBackground
-        active={isConversationActive}
-        voiceState={voiceState}
-      />
 
       {/* Full-Screen Avatar Canvas — fills entire viewport behind UI */}
       <div className="absolute inset-0 z-[5] cursor-pointer" onClick={toggleConversation}>
@@ -2837,62 +2774,162 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         />
       </div>
 
-      {/* Overlay UI — status, loader, errors on top of avatar */}
-      <div className="flex-1 flex flex-col items-center justify-end px-3 sm:px-6 pb-16 sm:pb-20 overflow-hidden relative z-10 pointer-events-none">
-        <div className="flex flex-col items-center justify-center w-full max-w-4xl py-4 sm:py-6 relative">
-          {/* JARVIS Loader - Show when processing */}
-          {voiceState === "processing" && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <JarvisLoader
-                text="processing"
-                progress={undefined}
-                voiceState={voiceState}
-                isActive={isConversationActive}
-              />
-            </div>
-          )}
+      {/* Vision Coaching Overlay (conditional) */}
+      {isVisionActive && (
+        <VisionCoachingOverlay
+          visionState={visionState}
+          coaching={visionCoaching}
+          isActive={isVisionActive}
+          onStop={stopVisionCoaching}
+        />
+      )}
 
-          {/* Spacer to push status text below avatar center */}
-          <div className="h-[45vh] sm:h-[50vh] md:h-[48vh]" />
-
-          {/* Status Text - Minimal */}
-          {getStatusText() && voiceState !== "processing" && (
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-base sm:text-lg font-medium mt-6 text-center px-4"
-              style={{ color: "#E0E0E0" }}
-            >
-              {getStatusText()}
-            </motion.p>
-          )}
-
-          {/* Error Display */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 backdrop-blur-xl rounded-lg border p-4 pointer-events-auto"
-              style={{
-                background: "rgba(220, 38, 38, 0.1)",
-                borderColor: "rgba(220, 38, 38, 0.3)",
-              }}
-            >
-              <p className="text-sm font-medium text-center" style={{ color: "#F87171" }}>{error}</p>
-            </motion.div>
-          )}
+      {/* Processing loader — centered over avatar */}
+      {voiceState === "processing" && (
+        <div className="absolute inset-0 flex items-center justify-center z-[6] pointer-events-none">
+          <JarvisLoader
+            text="processing"
+            progress={undefined}
+            voiceState={voiceState}
+            isActive={isConversationActive}
+          />
         </div>
+      )}
+
+      {/* Error banner */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute left-1/2 z-40 rounded-lg border p-4 pointer-events-auto backdrop-blur-xl"
+          style={{
+            top: "120px",
+            transform: "translateX(-50%)",
+            background: "rgba(220, 38, 38, 0.1)",
+            borderColor: "rgba(220, 38, 38, 0.3)",
+          }}
+        >
+          <p className="text-sm font-medium text-center" style={{ color: "#F87171" }}>{error}</p>
+        </motion.div>
+      )}
+
+      {/* Top-left: Cia brand badge (Figma 2923:3734) */}
+      <div
+        className="absolute z-20"
+        style={{
+          top: "39px",
+          left: "108px",
+        }}
+      >
+        <CiaBrandBadge name={assistantName || "Cia"} />
       </div>
 
-      {/* Context Panel - Shows transcript/response at bottom */}
-      <ContextPanel
-        transcript={transcript}
-        interimTranscript={interimTranscript}
-        aiResponse={aiResponse}
-        voiceState={voiceState}
-        isVisible={!!(transcript || interimTranscript || aiResponse)}
-        onSkipSpeaking={stopSpeaking}
-      />
+      {/* Top-center: Status pill (Figma 2924:3924) */}
+      <div
+        className="absolute z-20"
+        style={{
+          top: "39px",
+          left: "50%",
+          transform: "translateX(-50%)",
+        }}
+      >
+        <StatusPill
+          name={assistantName || "Cia"}
+          voiceState={voiceState}
+          isConversationActive={isConversationActive}
+        />
+      </div>
+
+      {/* Top-right: Language + Close (Figma 2923:3754) */}
+      <div className="absolute z-30" style={{ top: "39px", right: "71px" }}>
+        <TopRightControls
+          selectedLanguage={selectedLanguage}
+          onLanguageChange={setSelectedLanguage}
+          onClose={() => router.push("/dashboard?tab=overview")}
+        />
+      </div>
+
+      {/* Camera PIP (Figma 2920:3705) — floating at right, gated by camera toggle */}
+      <div className="absolute z-20" style={{ top: "125px", right: "71px" }}>
+        <CameraPip
+          videoRef={inlineVideoRef}
+          visible={showInlineCamera}
+          isCameraActive={isCameraActive}
+        />
+        <canvas ref={inlineCanvasRef} className="hidden" />
+        <input
+          ref={inlineFileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleInlineFileChange}
+        />
+      </div>
+
+      {/* AI Coach transcript card (Figma 2920:3652) — 141px from bottom matches Figma y=756 @ 990-canvas */}
+      <div
+        className="absolute z-20 pointer-events-none"
+        style={{
+          bottom: "141px",
+          left: "50%",
+          transform: "translateX(-50%)",
+        }}
+      >
+        <AICoachTranscript
+          text={aiResponse || interimTranscript || transcript}
+          visible={!!(aiResponse || interimTranscript || transcript)}
+        />
+      </div>
+
+      {/* Bottom control bar (Figma 2920:3658) */}
+      <div className="absolute bottom-0 left-0 right-0 z-30">
+        <BottomControlBar
+          voiceState={voiceState}
+          isConversationActive={isConversationActive}
+          isTTSEnabled={isTTSEnabled}
+          onToggleTTS={() => {
+            const next = !isTTSEnabled;
+            setIsTTSEnabled(next);
+            if (!next) {
+              // Muting — silently cancel any active utterance without auto-resuming mic
+              if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                window.speechSynthesis.cancel();
+              }
+              if (currentAudioRef.current) {
+                currentAudioRef.current.pause();
+                currentAudioRef.current = null;
+              }
+              if (currentAudioUrlRef.current) {
+                ttsService.revokeAudioUrl(currentAudioUrlRef.current);
+                currentAudioUrlRef.current = null;
+              }
+              isTTSActiveRef.current = false;
+              currentUtteranceRef.current = null;
+              avatarRef.current?.stopSpeaking();
+              if (voiceState === "speaking") setVoiceState("idle");
+            }
+          }}
+          showCamera={showInlineCamera}
+          onToggleCamera={() => {
+            if (showInlineCamera) {
+              setShowInlineCamera(false);
+            } else {
+              setShowInlineCamera(true);
+              setInlineCameraMode("camera");
+            }
+          }}
+          onToggleMic={toggleConversation}
+          onOpenKeyboard={() => router.push("/ai-coach")}
+          onStop={() => {
+            if (isCallActive) {
+              handleEndCall();
+            } else {
+              stopConversation();
+            }
+          }}
+          onSkip={stopSpeaking}
+        />
+      </div>
 
       {/* Footer */}
       {/* <VoiceAssistantControls

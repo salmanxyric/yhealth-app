@@ -4,7 +4,7 @@
  * Similar to n8n workflow automation - triggers messages before, at, and after scheduled activities
  */
 
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { modelFactory } from './model-factory.service.js';
 import { logger } from './logger.service.js';
@@ -478,6 +478,7 @@ class ScheduleAutomationService {
           moodLevel: 5, // Default neutral
           stressLevel: 5,
           streakDays: ctx.streakDays,
+          userCoachPersona: ctx.aiCoachPersona,
         });
         personalityPrefix = modeResult.systemPromptPrefix + '\n\n';
       } catch {
@@ -564,6 +565,10 @@ Return ONLY the message text.`;
 
     prompt += `\n\nYou MUST weave at least one specific data point into the message naturally. Don't just list numbers — interpret what they mean for THIS specific activity.`;
 
+    if (this.isLifeCoachScheduleCategory(item.category)) {
+      prompt += `\n\nLIFE-COACH MODE: This block is about personal growth (work, relationships, creativity, etc.), not gym/nutrition. Do NOT demand wearable proof. Be a supportive accountability partner: short, warm, one concrete follow-up question (e.g. applications sent, conversation had, creative output). If recovery/sleep is weak, only mention it briefly as context for energy, not as the main guilt hook.`;
+    }
+
     return prompt;
   }
 
@@ -613,6 +618,10 @@ Return ONLY the message text.`;
     const categoryEmoji = this.getCategoryEmoji(item.category);
     const timeFormatted = this.formatTime(item.startTime);
 
+    if (this.isLifeCoachScheduleCategory(item.category)) {
+      return `${categoryEmoji} In ${minutesBefore} minutes: "${item.title}" at ${timeFormatted}.\n\nWhen you're ready, I'll check in afterward — small consistent steps beat perfect plans.`;
+    }
+
     const messages: Record<string, string> = {
       workout: `${categoryEmoji} Heads up! Your workout "${item.title}" starts in ${minutesBefore} minutes at ${timeFormatted}.\n\nGet your workout gear ready and let's crush it! 💪`,
       prayer: `${categoryEmoji} Reminder: "${item.title}" is in ${minutesBefore} minutes at ${timeFormatted}.\n\nTake a moment to prepare yourself.`,
@@ -631,6 +640,10 @@ Return ONLY the message text.`;
   private generateStartMessage(item: ScheduleItemWithUser): string {
     const categoryEmoji = this.getCategoryEmoji(item.category);
 
+    if (this.isLifeCoachScheduleCategory(item.category)) {
+      return `${categoryEmoji} Starting now: "${item.title}".\n\nGive it your attention for the window you planned — I'm here when you're done.`;
+    }
+
     const messages: Record<string, string> = {
       workout: `${categoryEmoji} It's time for "${item.title}"!\n\nLet's get moving! Remember, every workout counts toward your goals. You've got this! 🔥`,
       prayer: `${categoryEmoji} "${item.title}" is starting now.\n\nTake this time to find peace and focus.`,
@@ -648,6 +661,10 @@ Return ONLY the message text.`;
    */
   private generateFollowupMessage(item: ScheduleItemWithUser): string {
     const categoryEmoji = this.getCategoryEmoji(item.category);
+
+    if (this.isLifeCoachScheduleCategory(item.category)) {
+      return `${categoryEmoji} How did "${item.title}" go?\n\nEven partial progress counts. If the timing felt wrong, tell me — we can move this block to a better part of your day.`;
+    }
 
     const messages: Record<string, string> = {
       workout: `${categoryEmoji} Great job completing "${item.title}"!\n\nHow did your workout feel? Did you push yourself today? 💪\n\nRemember to hydrate and fuel your body!`,
@@ -693,7 +710,19 @@ Return ONLY the message text.`;
   // ============================================
 
   /**
-   * Get users with automation enabled
+   * Whether schedule item category is life-coaching (not wearable-centric).
+   */
+  private isLifeCoachScheduleCategory(category: string | null): boolean {
+    const c = (category || '').toLowerCase();
+    return (
+      ['work', 'career', 'relationships', 'social', 'creativity', 'custom'].includes(c) ||
+      c.includes('relation') ||
+      c.includes('career')
+    );
+  }
+
+  /**
+   * Get users with automation enabled who may have schedule rows soon (reduces full-table scans at scale).
    */
   private async getUsersWithAutomationEnabled(): Promise<UserPreferences[]> {
     const result = await query<{
@@ -703,12 +732,20 @@ Return ONLY the message text.`;
       schedule_reminder_minutes: number;
     }>(
       `SELECT
-         user_id,
-         COALESCE(timezone, 'UTC') as timezone,
-         COALESCE(schedule_automation_enabled, true) as schedule_automation_enabled,
-         COALESCE(schedule_reminder_minutes, 5) as schedule_reminder_minutes
-       FROM user_preferences
-       WHERE COALESCE(schedule_automation_enabled, true) = true`
+         up.user_id,
+         COALESCE(up.timezone, 'UTC') as timezone,
+         COALESCE(up.schedule_automation_enabled, true) as schedule_automation_enabled,
+         COALESCE(up.schedule_reminder_minutes, 5) as schedule_reminder_minutes
+       FROM user_preferences up
+       WHERE COALESCE(up.schedule_automation_enabled, true) = true
+         AND EXISTS (
+           SELECT 1
+           FROM daily_schedules ds
+           WHERE ds.user_id = up.user_id
+             AND ds.is_template = false
+             AND ds.schedule_date BETWEEN (CURRENT_DATE - INTERVAL '1 day')::date
+                                    AND (CURRENT_DATE + INTERVAL '1 day')::date
+         )`
     );
 
     return result.rows.map((row) => ({

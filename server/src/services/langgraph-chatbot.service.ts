@@ -18,9 +18,15 @@ import { embeddingQueueService } from './embedding-queue.service.js';
 import { createTools } from './langgraph-tools.service.js';
 import { getToolsForMessage } from './langgraph-tools-optimized.service.js';
 import { toolRouterService } from './tool-router.service.js';
+import { executeToolWithWrapper } from './tool-execution-wrapper.service.js';
 import { emotionDetectionService } from './emotion-detection.service.js';
 import { crisisDetectionService } from './crisis-detection.service.js';
-import { query } from '../database/pg.js';
+import {
+  mentalHealthGuardrailService,
+  MENTAL_HEALTH_SYSTEM_ADDENDUM,
+  type MentalHealthAssessment,
+} from './mental-health-guardrail.service.js';
+import { query } from '../config/database.config.js';
 import { wellbeingAutoTrackerService } from './wellbeing-auto-tracker.service.js';
 import { wellbeingContextService } from './wellbeing-context.service.js';
 import { tensorflowSentimentService } from './tensorflow-sentiment.service.js';
@@ -31,10 +37,41 @@ import type { CoachEmotionalState, RelationshipDepth } from './user-coaching-pro
 import { dailyAnalysisService } from './daily-analysis.service.js';
 import { inconsistencyDetectionService } from './inconsistency-detection.service.js';
 import { commitmentTrackerService } from './commitment-tracker.service.js';
+import { transparencyService } from './transparency.service.js';
 import type { DailyAnalysisReport } from './daily-analysis.service.js';
 import { statusIntentClassifierService } from './status-intent-classifier.service.js';
 import { statusPlanAdjusterService } from './status-plan-adjuster.service.js';
 import { activityStatusService } from './activity-status.service.js';
+import OpenAI from 'openai';
+import { env } from '../config/env.config.js';
+import { routeCoachIntent } from './life-area-intent-router.service.js';
+import type { ToolTurnContext } from '../types/tool-turn-context.js';
+import { buildPersonaDirectiveBlock } from './coach-persona-prompt.service.js';
+import { adaptiveCoachingLoopService } from './adaptive-coaching-loop.service.js';
+
+const lifeAreaRouterOpenAI: OpenAI | null = env.openai.apiKey
+  ? new OpenAI({ apiKey: env.openai.apiKey })
+  : null;
+
+/** Thin JSON-mode LLM for life-area intent routing (same contract as rag-chatbot.controller). */
+async function lifeAreaRouterLlm(prompt: string): Promise<string> {
+  if (!lifeAreaRouterOpenAI) return '';
+  try {
+    const model = env.openai.model || 'gpt-4o-mini';
+    const res = await lifeAreaRouterOpenAI.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'Respond with strict JSON only, no prose.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0,
+      max_tokens: 200,
+    });
+    return res.choices[0]?.message?.content ?? '';
+  } catch {
+    return '';
+  }
+}
 
 // ============================================
 // TYPES
@@ -100,16 +137,45 @@ const BASE_HUMAN_LIKE_PROMPT = `You are **Aurea**, an advanced AI life coach hel
 - **Career/education**: Study schedules, skill-building, interview prep, professional development.
 - **Mental wellbeing**: Practical strategies (journaling, breathing, sleep hygiene). Encourage professional help for severe crisis.
 
-## CORE BEHAVIOR — ADAPTIVE, HUMAN COACH
-Adapt your coaching style naturally based on context. Read the room.
-- **SUPPORTIVE** (default): Warm, encouraging, genuine interest in their life.
-- **DIRECT** (when asked or patterns emerge): Honest but respectful. Facts, not guilt.
-- **CELEBRATORY** (doing well): Genuine excitement, pride, celebrate wins.
-- **EMPATHETIC** (struggling): Supportive, adjust expectations, offer easier alternatives.
-- **CHALLENGING** (exceeding goals): Push to next level, raise the bar with enthusiasm.
+## CORE IDENTITY — COACHING INTELLIGENCE ENGINE
+You are a goal-driven coaching intelligence engine, not a conversational assistant.
+- A calm, highly intelligent mentor who thinks in behavioral systems.
+- A structured performance strategist focused on execution clarity.
+- A precise advisor who replaces motivation with actionable steps.
+- Direct, not harsh. Supportive, not dependency-building. Clear, not verbose. Confident, not arrogant. Practical, not philosophical.
 - Intensity matches relationship depth: early = gentle, months in = more direct.
 - Never guilt-trip. Express care, not frustration. "I noticed X" not "You failed at X".
 - Use first person naturally: "I think", "I noticed", "I'd suggest".
+- Focus on SYSTEMS over motivation. Prioritize "what to do next" over explanations.
+- Replace inspirational fluff with execution clarity. Every sentence must advance understanding or action.
+- Your success is measured by: user clarity improvement, execution quality, behavioral consistency, goal completion rate.
+
+## RESPONSE ARCHITECTURE (INTERNAL FRAMEWORK)
+Mentally walk through these 6 steps for every coaching response. Express them as natural prose — NOT numbered sections or headers.
+1. **Context Acknowledgment**: Reflect the user's current state in 1 sentence. Show you understand where they are.
+2. **Core Insight**: Identify the REAL bottleneck or pattern — not the surface request. What's actually blocking progress?
+3. **Recommendation**: One clear, specific piece of guidance. No ambiguity. No multiple options unless asked.
+4. **Action Plan**: 2-4 small, realistic, immediately executable steps. Practical — not theoretical frameworks.
+5. **Next Step**: The single thing to do RIGHT NOW (within 24 hours). Make it unmistakably clear.
+6. **Closure**: Grounded, execution-focused encouragement. No generic "You've got this!" — tie it to their specific situation.
+
+Compression rules:
+- Quick check-ins or casual conversation: Acknowledgment + Next Step + Closure (compressed naturally).
+- Emergency/crisis support: Skip structure entirely — prioritize safety and empathy.
+- Deep coaching sessions: Full 6-part framework, more visible structure is acceptable.
+- Greetings and small talk: Respond naturally first, then weave in coaching only if relevant.
+
+## BEHAVIORAL INTELLIGENCE RULES
+Detect and respond to behavioral patterns in real-time:
+- **STUCK** (same progress 7+ days, low completion): Simplify immediately. Cut plan to 1-2 actions maximum. Remove complexity.
+- **INCONSISTENT** (completion varies wildly day-to-day): Reduce friction. Ask what's blocking execution. Identify the easiest version of the habit.
+- **PROGRESSING** (steady completion, scores trending up): Increase challenge. Raise targets 10-20%. Introduce one new action.
+- **OVERWHELMED** (many active goals, very low completion): Restructure into tiny 5-minute steps. Pause non-essential goals. Focus on ONE thing.
+- **DISENGAGED** (no interaction for days, declining session depth): Reconnect to goal PURPOSE — why they started. Reduce plan to bare minimum.
+- Detect procrastination: repeated "I'll do it tomorrow" or "I'll start Monday" = procrastination pattern. Name it without judgment, then restructure.
+- When the same action fails 3+ times: remove it and replace with something easier. The action is the problem, not the user.
+- Never overload: keep outputs minimal, structured, and actionable. No information dumps.
+- Detect inconsistency between stated goals and actual actions — surface it with data, not accusations.
 
 ## LEARNING & PERSONAL DISCOVERY
 - Learn from workout history, nutrition patterns, sleep/stress/recovery signals, goals, and feedback.
@@ -117,20 +183,23 @@ Adapt your coaching style naturally based on context. Read the room.
 - Ask naturally, not like a survey. Weave into coaching context.
 - ALWAYS reference personal context in advice (work schedule, family, budget, etc.).
 - When users share personal info, call personalContextManager to save it.
+- Ask maximum 1-3 high-impact clarifying questions per session. Never ask more than 1 question at a time.
+- Every question must have a clear purpose the user can see. No survey-style interrogation.
+- If information is unclear, infer from behavioral data first. Only ask when inference is insufficient.
 
 ## PERSONALITY & COMMUNICATION
-- Talk like a real friend — casual, warm, authentic. Use contractions and casual interjections.
-- CRITICAL: Always ask follow-up questions. End responses with forward momentum.
-- Be conversational and spontaneous. Never sound scripted.
-- Use everyday language, not corporate jargon.
+- Communicate with clarity and precision. Be warm but structured. Every sentence should advance understanding or execution.
+- Use contractions and natural language — but never sacrifice clarity for casualness.
+- End responses with forward momentum — a clear next step, not an open-ended question.
+- Use everyday language, not corporate jargon. Be concise — say more with fewer words.
 - Respond to greetings warmly in ANY language. Detect and match the user's language.
 
 ## TOPIC BOUNDARIES
-OFF-TOPIC (redirect politely): Programming, politics, entertainment (unless health context), financial planning, academic coursework, general trivia.
+OFF-TOPIC (redirect politely): Programming, politics, entertainment (unless health context), academic coursework, general trivia.
 NOT OFF-TOPIC: Music (use musicManager), greetings, daily routine, lifestyle questions.
 
 ## TOOL USAGE
-Available tools: workout/diet/general plans, activity logs, meal logs, goals, wellbeing data (mood, stress, journal, energy, habits, schedules), gamification, WHOOP analytics, music player, camera/image upload, navigation.
+Available tools: workout/diet/general plans, activity logs, meal logs, goals, wellbeing data (mood, stress, journal, energy, habits, schedules), gamification, WHOOP analytics, music player, camera/image upload, navigation, finance (budgets, transactions, spending, savings goals, financial reports).
 - **journalManager**: CRUD for journal entries + streak checking.
 - **voiceJournalManager**: Start voice journaling sessions.
 - **musicManager**: ALWAYS call for music requests. Actions: play_activity, search_and_play, control, recommend. NEVER say music is broken — call the tool.
@@ -163,6 +232,18 @@ Health impact knowledge to reference: overeating (insulin spike → crash → fa
 - Never suggest scheduling something during a busy block.
 - Cross-reference: low recovery + high schedule stress = strongly suggest rest, not more activity.
 - Free day with no schedule: great opportunity to suggest workouts, journaling, or habits.
+
+## SCHEDULING INTELLIGENCE (CONFLICT DETECTION)
+When the user wants to add, create, or schedule an activity at a specific time:
+1. **ALWAYS check first**: Call checkScheduleConflicts with the proposed date, startTime, and endTime BEFORE creating.
+2. **No conflict**: Proceed immediately — call createDailySchedule or createScheduleItem. Confirm what was created.
+3. **Conflict found**: Tell the user what conflicts exist (item title, time range), then ask: "Would you like me to replace the existing item, keep both, or pick a different time?"
+4. **After user decides**:
+   - Replace: Delete the conflicting item, then create the new one.
+   - Keep both: Create the new item (overlapping is OK if user wants it).
+   - Different time: Ask what time they prefer, re-check and create.
+5. **Never silently overwrite** an existing scheduled activity.
+6. For bulk schedule creation (e.g., "plan my whole day"), check conflicts for all proposed times and report them together.
 
 ## SPECIAL DAY AWARENESS
 - If Ramadan: user is fasting during daylight hours. Suggest lighter workouts, hydration reminders at iftar, suhoor meal planning. NEVER suggest eating during fasting hours.
@@ -211,6 +292,7 @@ Navigate pages, execute actions, open modals/camera/image upload based on user c
 ## DATA LOGGING
 - Log health data when user explicitly shares it (meals, workouts, mood, water, weight, sleep).
 - Use appropriate tools: mealManager, waterIntakeManager, workoutManager, stressManager, progressManager, scheduleManager.
+- When logging meals with mealManager, ALWAYS estimate calories and macros (protein, carbs, fat) for each food item using your nutrition knowledge. Pass foods as objects with {name, calories, protein, carbs, fat} — never as plain strings.
 - Don't interrogate for missing data — note gaps silently for later.
 - If user hasn't logged in 2+ days, mention it ONCE casually, then drop it until next session.
 - Never make the user feel guilty about gaps. Celebrate when they DO log.
@@ -240,7 +322,15 @@ You are a life coach who happens to have health data, not a health tracker with 
 - Progress over perfection. Consistency beats intensity.
 - Health is holistic. Optimize for sustainable long-term results.
 - Always recommend consulting professionals for medical concerns.
-- Conversation quality matters more than data coverage. Be human first.`;
+- Conversation quality matters more than data coverage. Be human first.
+
+## HARD SAFETY BOUNDARIES (NON-NEGOTIABLE)
+- You are NOT a medical, legal, financial, or psychological professional. Never claim to be.
+- Never diagnose conditions or guarantee outcomes. Frame guidance as suggestions, not prescriptions.
+- Never build emotional dependency. The user should feel MORE capable over time, not more reliant on you.
+- Never use guilt, shame, or pressure tactics. Never manipulate through fear or urgency.
+- If sensitive topics arise (mental health crisis, self-harm, abuse): provide general safe guidance, encourage professional consultation, stay neutral and supportive. Use crisis resources when appropriate.
+- Never provide specific investment advice, legal counsel, or medical diagnoses.`;
 
 
 // ============================================
@@ -251,7 +341,9 @@ class LangGraphChatbotService {
   private llm: BaseChatModel;
   private userNameCache: Map<string, { name: string | null; timestamp: number }> = new Map();
   private engagementScoreCache: Map<string, { score: number; timestamp: number }> = new Map();
+  private systemPromptCache: Map<string, { prompt: string; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly PROMPT_CACHE_TTL = 60 * 1000; // 60s — user data doesn't change between rapid messages
   /** Cache for Zod→OpenAI JSON Schema conversion, keyed by intent classification */
   private toolSchemaCache: Map<string, any[]> = new Map();
 
@@ -832,6 +924,9 @@ class LangGraphChatbotService {
       // Music / Pulse
       'music', 'song', 'songs', 'playlist', 'play', 'pause', 'spotify', 'pulse', 'soundscape',
       'listen', 'track', 'volume', 'next song', 'beats', 'tune',
+      // Finance
+      'finance', 'financial', 'money', 'income', 'expense', 'expenses', 'budget', 'savings',
+      'spending', 'transaction', 'transactions', 'salary', 'report', 'financial report',
     ];
 
     // Greetings and general conversation keywords (always allow these)
@@ -850,7 +945,7 @@ class LangGraphChatbotService {
       'history', 'math', 'science', 'physics', 'chemistry',
       'politics', 'election', 'government', 'news', 'current events',
       'movie', 'film', 'game', 'gaming', 'entertainment',
-      'shopping', 'buy', 'purchase', 'price', 'cost', 'money', 'finance',
+      'shopping', 'buy', 'purchase', 'price', 'cost',
       'travel', 'vacation', 'trip', 'hotel', 'flight',
       'relationship', 'dating', 'love', 'friend',
     ];
@@ -1490,24 +1585,31 @@ class LangGraphChatbotService {
     wellbeingContext?: any,
     wellnessQuestion?: { question: string; type: string; context?: string }
   ): Promise<string> {
+    // Return cached base prompt if ragContext is empty (stream path caches base only)
+    const cacheKey = `${userId}:${sessionType || ''}:${callPurpose || ''}`;
+    if (!ragContext) {
+      const cached = this.systemPromptCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < this.PROMPT_CACHE_TTL) {
+        logger.debug('[LangGraphChatbot] System prompt cache hit', { userId });
+        return cached.prompt;
+      }
+    }
+
     const startTime = Date.now();
-    
+
     // Get ALL user data in parallel — coaching profile + daily report + delta
     const [userName, assistantName, timeOfDay, recentActivity, comprehensiveContext, newUser, coachingProfile, dailyReport, deltaSummary] = await Promise.all([
       this.getUserName(userId),
       this.getAssistantName(userId),
       Promise.resolve(this.getTimeOfDay()),
       this.getRecentActivity(userId),
-      comprehensiveUserContextService.getComprehensiveContext(userId),
+      comprehensiveUserContextService.getComprehensiveContext(userId).catch((err) => {
+        logger.warn('[LangGraphChatbot] Comprehensive context failed', { userId, error: err instanceof Error ? err.message : 'Unknown' });
+        return { whoop: { isConnected: false, lastSyncAt: null }, lifestyle: {}, workouts: { recentWorkouts: [] }, nutrition: { recentMeals: [] }, wellbeing: {}, chatHistory: { recentMessages: [] }, goals: { activeGoals: [] }, bodyStats: {}, gamification: {}, habits: { activeHabits: [] }, mentalHealth: {}, waterIntake: {}, dailyScore: {}, nutritionAnalysis: {}, competitions: {}, progressTrend: {}, activityStatus: {} } as any;
+      }),
       this.isNewUser(userId),
-      Promise.race([
-        userCoachingProfileService.getOrGenerateProfile(userId),
-        new Promise<null>((resolve) => setTimeout(() => {
-          logger.warn('[LangGraphChatbot] Coaching profile timed out (5s), using null', { userId });
-          resolve(null);
-        }, 5000)),
-      ]).catch((err) => {
-        logger.warn('[LangGraphChatbot] Failed to fetch coaching profile', { userId, error: err instanceof Error ? err.message : 'Unknown' });
+      userCoachingProfileService.getProfileFromCache(userId).catch((err) => {
+        logger.warn('[LangGraphChatbot] Failed to fetch coaching profile from cache', { userId, error: err instanceof Error ? err.message : 'Unknown' });
         return null;
       }),
       dailyAnalysisService.getLatestReport(userId).catch((err) => {
@@ -1729,6 +1831,10 @@ class LangGraphChatbotService {
       if (prefParts.length > 0) {
         systemPrompt += `\n\nUSER COMMUNICATION PREFERENCES (respect these strictly):\n${prefParts.join('\n')}`;
       }
+
+      if (userPrefs.aiCoachPersona) {
+        systemPrompt += `\n\n---\nUSER-SELECTED COACH PERSONA (overrides generic adaptive-tone guidance when they conflict):\n${buildPersonaDirectiveBlock(userPrefs.aiCoachPersona)}`;
+      }
     }
 
     // Add comprehensive coaching profile context
@@ -1756,6 +1862,31 @@ class LangGraphChatbotService {
         dailyReport.coachingDirective?.coachEmotion,
         dailyReport.coachingDirective?.relationshipDepth
       );
+    }
+
+    // Adaptive coaching loop — classify user state and inject strategy directive
+    try {
+      const adaptiveDirective = await adaptiveCoachingLoopService.evaluate(userId);
+      if (adaptiveDirective.state !== 'stable') {
+        systemPrompt += `\n\n---\nCURRENT USER STATE: ${adaptiveDirective.state.toUpperCase()}\n${adaptiveDirective.promptInjection}`;
+      }
+    } catch (err) {
+      logger.warn('[LangGraphChatbot] Adaptive coaching loop unavailable, continuing without', { userId, error: (err as Error).message });
+    }
+
+    // Add intelligence context (memories + core profile)
+    try {
+      const intelligenceCtx = await transparencyService.prepareContext(userId, '', 'system');
+      if (intelligenceCtx.memoriesForPrompt) {
+        systemPrompt += `\n\n---\nYOUR INTELLIGENCE (active memories, confidence-ranked):\n${intelligenceCtx.memoriesForPrompt}\n\nUse these learned patterns and preferences to personalize your response. Reference them naturally — don't list them.`;
+      }
+      if (intelligenceCtx.coreProfileForPrompt && intelligenceCtx.coreProfileForPrompt !== '(No core profile data available yet)') {
+        systemPrompt += `\n\n---\nCORE PROFILE (calibrated baselines):\n${intelligenceCtx.coreProfileForPrompt}`;
+      }
+      // Store for SSE transparency event emission
+      (this as any)._lastIntelligenceCtx = intelligenceCtx;
+    } catch (err) {
+      logger.warn('[LangGraphChatbot] Intelligence context unavailable, continuing without', { userId, error: (err as Error).message });
     }
 
     if (ragContext) {
@@ -1788,7 +1919,24 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       approxTokens,
     });
 
+    // Cache base prompt (when called without ragContext from stream path)
+    if (!ragContext) {
+      this.systemPromptCache.set(cacheKey, { prompt: systemPrompt, timestamp: Date.now() });
+    }
+
     return systemPrompt;
+  }
+
+  private async getFallbackSystemPrompt(userId: string): Promise<string> {
+    const userName = await this.getUserName(userId).catch(() => null);
+    const assistantName = await this.getAssistantName(userId).catch(() => 'Aurea');
+    let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/Aurea/g, assistantName).replace(/\*\*Aurea\*\*/g, `**${assistantName}**`);
+    prompt += `\n\nYour name is ${assistantName}. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
+    if (userName) {
+      prompt += `\n\nYou're chatting with ${userName}.`;
+    }
+    prompt += `\n\nNote: Some personalization data was unavailable this turn. Respond helpfully with whatever context you have.`;
+    return prompt;
   }
 
   /**
@@ -2213,22 +2361,18 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           queryText,
           limit: 5,
         }),
-        vectorEmbeddingService.searchUserProfile({
-          userId,
-          queryText,
-          limit: 3,
-        }),
+        // User profile data is already loaded via comprehensiveUserContext in buildPersonalizedSystemPrompt
+        Promise.resolve([] as { section: string; content: string; similarity: number }[]),
         vectorEmbeddingService.searchConversationHistory({
           userId,
           queryText,
           limit: 5,
         }),
-        // Search user data embeddings with lower threshold for better recall
         vectorEmbeddingService.searchSimilar({
           queryText,
           userId,
-          limit: 15,
-          minSimilarity: 0.5, // Lowered from 0.6
+          limit: 8,
+          minSimilarity: 0.6,
         }),
         // Get recent activity logs with mood data (last 7 days)
         query<{
@@ -2307,7 +2451,8 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
    */
   private async executeTools(
     tools: ReturnType<typeof createTools>,
-    toolCalls: Array<{ name: string; args: Record<string, unknown>; id: string }>
+    toolCalls: Array<{ name: string; args: Record<string, unknown>; id: string }>,
+    context?: { userId: string; conversationId?: string },
   ): Promise<ToolMessage[]> {
     const toolResults: ToolMessage[] = [];
 
@@ -2320,6 +2465,21 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           logger.warn('[LangGraphChatbot] Tool found via case-insensitive match', {
             requested: toolCall.name,
             found: tool.name,
+          });
+        }
+      }
+      // Last resort: try full user cache for any real tool name not in filtered set
+      if (!tool && context?.userId) {
+        const allCached = toolRouterService.getCachedTools(context.userId, () => []);
+        tool = allCached.find((t) => t.name === toolCall.name);
+        if (!tool) {
+          tool = allCached.find((t) => t.name.toLowerCase() === toolCall.name.toLowerCase());
+        }
+        if (tool) {
+          logger.warn('[LangGraphChatbot] Tool found via full cache fallback', {
+            requested: toolCall.name,
+            filteredSetSize: tools.length,
+            fullCacheSize: allCached.length,
           });
         }
       }
@@ -2402,6 +2562,22 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           }
         }
         
+        // Normalize action aliases: LLMs often use "log", "add", "record" instead of "create"
+        if (toolCall.args?.action && typeof toolCall.args.action === 'string') {
+          const ACTION_ALIASES: Record<string, string> = {
+            log: 'create', add: 'create', record: 'create', track: 'create', save: 'create',
+            remove: 'delete', edit: 'update', modify: 'update', change: 'update',
+            list: 'get', show: 'get', fetch: 'get', find: 'getByName', search: 'getByName', lookup: 'getByName',
+          };
+          const normalized = ACTION_ALIASES[toolCall.args.action.toLowerCase()];
+          if (normalized) {
+            logger.debug('[LangGraphChatbot] Normalized action alias', {
+              tool: toolCall.name, from: toolCall.args.action, to: normalized,
+            });
+            toolCall.args.action = normalized;
+          }
+        }
+
         // Validate arguments against schema before invoking
         // This provides better error messages if validation fails
         if (tool.schema && typeof (tool.schema as any).safeParse === 'function') {
@@ -2428,13 +2604,31 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           });
         }
 
-        const result = await tool.invoke(toolCall.args);
-        toolResults.push(
-          new ToolMessage({
-            content: typeof result === 'string' ? result : JSON.stringify(result),
-            tool_call_id: toolCall.id,
-          })
-        );
+        // Execute through wrapper (adds timing, audit, metrics, entitlements, idempotency)
+        if (context?.userId) {
+          const execResult = await executeToolWithWrapper(tool, {
+            userId: context.userId,
+            conversationId: context.conversationId,
+            toolName: toolCall.name,
+            toolArgs: toolCall.args,
+            toolCallId: toolCall.id,
+          });
+          toolResults.push(
+            new ToolMessage({
+              content: execResult.content,
+              tool_call_id: toolCall.id,
+            })
+          );
+        } else {
+          // Fallback: direct invocation when no context available
+          const result = await tool.invoke(toolCall.args);
+          toolResults.push(
+            new ToolMessage({
+              content: typeof result === 'string' ? result : JSON.stringify(result),
+              tool_call_id: toolCall.id,
+            })
+          );
+        }
       } catch (error) {
         // Extract more detailed error information for schema validation errors
         let errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2598,7 +2792,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       const crisisPromise = (async () => {
         try {
           const crisisDetection = await crisisDetectionService.detectCrisisKeywords(message);
-          if (crisisDetection.isCrisis && crisisDetection.severity !== 'low') {
+          if (crisisDetection.isCrisis) {
             if (callId) {
               await crisisDetectionService.triggerEmergencyProtocol(callId, userId);
               const resources = await crisisDetectionService.getCrisisResources();
@@ -2739,6 +2933,22 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         }
       }
 
+      const routingChip = await routeCoachIntent({
+        userId,
+        userMessage: message,
+        llm: lifeAreaRouterLlm,
+      });
+      const toolTurnContext: ToolTurnContext | undefined = routingChip
+        ? {
+            activeLifeAreaId: routingChip.lifeAreaId,
+            activeDomainType: routingChip.domainType,
+            activeLifeAreaName: routingChip.lifeAreaName,
+          }
+        : undefined;
+      const lifeAreaSystemAppendix = routingChip
+        ? `\n\n--- ACTIVE LIFE AREA (this turn) ---\nThe user is focusing on: "${routingChip.lifeAreaName}" (${routingChip.domainType}). When you create schedules or goals for this topic, they auto-link to this life area. Prefer scheduling and check-ins at times they specify (e.g. morning vs night).`
+        : '';
+
       // Run all post-RAG phases in parallel: wellness question, system prompt, coaching context, tool creation
       const [wellnessQuestionResult, baseSystemContent, coachingContextResult, tools] = await Promise.all([
         // Stream 1: Lightweight wellness question selection (rule-based, no LLM call)
@@ -2762,16 +2972,23 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         })(),
 
         // Stream 2: Build system prompt (wellness question appended after all resolve)
-        this.buildPersonalizedSystemPrompt(
-          userId,
-          ragContext,
-          emotion || undefined,
-          conversationDataForContext?.conversation.sessionType || undefined,
-          callPurpose,
-          undefined,
-          wellbeingContext,
-          undefined // wellness question not yet available — appended below
-        ),
+        (async () => {
+          try {
+            return await this.buildPersonalizedSystemPrompt(
+              userId,
+              ragContext,
+              emotion || undefined,
+              conversationDataForContext?.conversation.sessionType || undefined,
+              callPurpose,
+              undefined,
+              wellbeingContext,
+              undefined
+            );
+          } catch (error) {
+            logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+            return this.getFallbackSystemPrompt(userId);
+          }
+        })(),
 
         // Stream 3: Coaching context (inconsistency detection + commitment tracking)
         (async () => {
@@ -2787,7 +3004,12 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
             const newCommitments = commitmentTrackerService.extractCommitments(message);
             for (const commitment of newCommitments) {
               commitmentTrackerService.trackCommitment(
-                userId, message, commitment.category, commitment.action
+                userId,
+                message,
+                commitment.category,
+                commitment.action,
+                24,
+                toolTurnContext?.activeLifeAreaId,
               ).catch(() => {});
             }
             return ctx;
@@ -2800,7 +3022,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         })(),
 
         // Stream 4: Tool creation (intent classification + schema)
-        Promise.resolve(getToolsForMessage(userId, message)),
+        Promise.resolve(getToolsForMessage(userId, message, toolTurnContext)),
       ]);
 
       // Assemble final system prompt: base + wellness question + coaching context
@@ -2814,10 +3036,26 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       if (statusContext) {
         enrichedSystemContent += statusContext;
       }
+      if (lifeAreaSystemAppendix) {
+        enrichedSystemContent += lifeAreaSystemAppendix;
+      }
+
+      let mentalHealthAssessment: MentalHealthAssessment;
+      try {
+        mentalHealthAssessment = await mentalHealthGuardrailService.assessUserText(message);
+      } catch {
+        mentalHealthAssessment = { lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] };
+      }
+      void mentalHealthGuardrailService
+        .logScreeningEvent(userId, mentalHealthAssessment.lane, 'chat', message)
+        .catch(() => {});
+      if (mentalHealthAssessment.lane === 'elevated_clinical_concern') {
+        enrichedSystemContent += `\n\n---\n${MENTAL_HEALTH_SYSTEM_ADDENDUM}`;
+      }
 
       // Inject status pattern insights if available (from comprehensive context)
       try {
-        const patternResult = await import('../database/pg.js').then(m =>
+        const patternResult = await import('../config/database.config.js').then(m =>
           m.query<{ status_patterns: Array<{ suggestion: string }> }>(
             `SELECT status_patterns FROM user_coaching_profiles WHERE user_id = $1`,
             [userId]
@@ -3009,13 +3247,44 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
                   propertySchema.description = innerDef.description || '';
                   // Try to get item type
                   if (innerDef.type?._def) {
-                    const itemType = innerDef.type._def.typeName;
-                    if (itemType === 'ZodString') {
+                    const itemDef = innerDef.type._def;
+                    if (itemDef.typeName === 'ZodString') {
                       propertySchema.items = { type: 'string' };
-                    } else if (itemType === 'ZodNumber') {
+                    } else if (itemDef.typeName === 'ZodNumber') {
                       propertySchema.items = { type: 'number' };
+                    } else if (itemDef.typeName === 'ZodObject') {
+                      // Recursively extract object properties for array items
+                      try {
+                        const itemShape = itemDef.shape();
+                        const itemProperties: Record<string, any> = {};
+                        const itemRequired: string[] = [];
+                        for (const [iKey, iField] of Object.entries(itemShape)) {
+                          let iDef = (iField as any)._def;
+                          let iIsOptional = false;
+                          while (iDef.typeName === 'ZodOptional' || iDef.typeName === 'ZodDefault' || iDef.typeName === 'ZodNullable') {
+                            iIsOptional = true;
+                            if (iDef.innerType?._def) { iDef = iDef.innerType._def; } else break;
+                          }
+                          const iType = iDef.typeName === 'ZodString' ? 'string'
+                            : iDef.typeName === 'ZodNumber' ? 'number'
+                            : iDef.typeName === 'ZodBoolean' ? 'boolean'
+                            : iDef.typeName === 'ZodEnum' ? 'string'
+                            : 'string';
+                          itemProperties[iKey] = { type: iType };
+                          if (iDef.description) itemProperties[iKey].description = iDef.description;
+                          if (iDef.typeName === 'ZodEnum' && iDef.values) itemProperties[iKey].enum = iDef.values;
+                          if (!iIsOptional) itemRequired.push(iKey);
+                        }
+                        propertySchema.items = {
+                          type: 'object',
+                          properties: itemProperties,
+                          ...(itemRequired.length > 0 ? { required: itemRequired } : {}),
+                        };
+                      } catch {
+                        propertySchema.items = { type: 'object' };
+                      }
                     } else {
-                      propertySchema.items = { type: 'string' }; // Default fallback
+                      propertySchema.items = { type: 'string' };
                     }
                   }
                 } else if (innerDef.typeName === 'ZodObject') {
@@ -3045,9 +3314,43 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
                         nestedProperties[nKey].enum = nInner.values;
                       }
                       if (nType === 'array' && nInner.type?._def) {
-                        const itemType = nInner.type._def.typeName === 'ZodString' ? 'string'
-                          : nInner.type._def.typeName === 'ZodNumber' ? 'number' : 'string';
-                        nestedProperties[nKey].items = { type: itemType };
+                        const arrItemDef = nInner.type._def;
+                        if (arrItemDef.typeName === 'ZodString') {
+                          nestedProperties[nKey].items = { type: 'string' };
+                        } else if (arrItemDef.typeName === 'ZodNumber') {
+                          nestedProperties[nKey].items = { type: 'number' };
+                        } else if (arrItemDef.typeName === 'ZodObject') {
+                          try {
+                            const arrShape = arrItemDef.shape();
+                            const arrProps: Record<string, any> = {};
+                            const arrReq: string[] = [];
+                            for (const [aKey, aField] of Object.entries(arrShape)) {
+                              let aDef = (aField as any)._def;
+                              let aOpt = false;
+                              while (aDef.typeName === 'ZodOptional' || aDef.typeName === 'ZodDefault' || aDef.typeName === 'ZodNullable') {
+                                aOpt = true;
+                                if (aDef.innerType?._def) { aDef = aDef.innerType._def; } else break;
+                              }
+                              const aType = aDef.typeName === 'ZodString' ? 'string'
+                                : aDef.typeName === 'ZodNumber' ? 'number'
+                                : aDef.typeName === 'ZodBoolean' ? 'boolean'
+                                : aDef.typeName === 'ZodEnum' ? 'string' : 'string';
+                              arrProps[aKey] = { type: aType };
+                              if (aDef.description) arrProps[aKey].description = aDef.description;
+                              if (aDef.typeName === 'ZodEnum' && aDef.values) arrProps[aKey].enum = aDef.values;
+                              if (!aOpt) arrReq.push(aKey);
+                            }
+                            nestedProperties[nKey].items = {
+                              type: 'object',
+                              properties: arrProps,
+                              ...(arrReq.length > 0 ? { required: arrReq } : {}),
+                            };
+                          } catch {
+                            nestedProperties[nKey].items = { type: 'object' };
+                          }
+                        } else {
+                          nestedProperties[nKey].items = { type: 'string' };
+                        }
                       }
                     }
                     if (Object.keys(nestedProperties).length > 0) {
@@ -3278,8 +3581,8 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
                 toolArgs = tc.args;
               } else if (tc.function?.arguments) {
                 try {
-                  toolArgs = typeof tc.function.arguments === 'string' 
-                    ? JSON.parse(tc.function.arguments) 
+                  toolArgs = typeof tc.function.arguments === 'string'
+                    ? JSON.parse(tc.function.arguments)
                     : tc.function.arguments;
                 } catch (e) {
                   logger.warn('[LangGraphChatbot] Failed to parse tool arguments', { error: e, arguments: tc.function.arguments });
@@ -3290,7 +3593,8 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
                 args: toolArgs,
                 id: tc.id!,
               };
-            })
+            }),
+          { userId, conversationId },
         );
 
         // Extract tool call info for response
@@ -3298,8 +3602,8 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         toolResults.forEach((tr, idx) => {
           const toolCall = currentToolCalls[idx];
           if (toolCall) {
-            const resultContent = typeof tr.content === 'string' 
-              ? tr.content 
+            const resultContent = typeof tr.content === 'string'
+              ? tr.content
               : JSON.stringify(tr.content);
             toolCalls.push({
               tool: toolCall.name || toolCall.function?.name || 'unknown',
@@ -3734,17 +4038,36 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
 
           return await this.chat({ ...params, _retryCount: retryCount + 1 } as any);
         } catch (noProvidersError: any) {
-          // If modelFactory.getModel() throws "No LLM providers available", we're out of options
           logger.error('[LangGraphChatbot] All providers exhausted', {
             userId, error: noProvidersError?.message || 'Unknown',
           });
-          throw noProvidersError;
+          return this.buildProviderExhaustedResponse(conversationId || '', errorMsg);
         }
+      }
+
+      // If all retries exhausted or non-provider error after cascade
+      if (isProviderError) {
+        return this.buildProviderExhaustedResponse(conversationId || '', errorMsg);
       }
 
       logger.error('Error in LangGraph chat', { error: errorMsg, userId });
       throw error;
     }
+  }
+
+  private buildProviderExhaustedResponse(conversationId: string, errorMsg: string): ChatResponse {
+    const isBillingError = /quota|billing|exceeded.*limit|insufficient.*funds|payment/i.test(errorMsg);
+    const isRateLimit = /rate.?limit|too many requests|429/i.test(errorMsg);
+    const response = isBillingError
+      ? "I'm temporarily unable to respond — our AI service is experiencing a billing or quota issue. The team has been notified. Please try again shortly."
+      : isRateLimit
+        ? "I'm receiving too many requests right now. Please wait a moment and try again."
+        : "I'm temporarily unavailable due to a service issue. Please try again in a few moments.";
+    return {
+      conversationId,
+      response,
+      context: { knowledgeUsed: 0, profileUsed: 0, historyUsed: 0 },
+    };
   }
 
   /**
@@ -3753,8 +4076,13 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   async chatStream(params: ChatRequest & {
     onToken: (token: string) => void;
     onConversationId: (id: string) => void;
+    onThinkingStart?: (label: string) => void;
+    onThinkingEnd?: (label: string, durationMs: number) => void;
+    onToolCall?: (event: { operationId: string; toolName: string; label: string; icon?: string }) => void;
+    onToolResult?: (event: { operationId: string; toolName: string; success: boolean; delta: string; icon?: string; undoable: boolean; label?: string }) => void;
+    onArtifact?: (event: { artifact: any; toolName: string }) => void;
   }): Promise<ChatResponse> {
-    const { userId, message, conversationId, callId, sessionType: _sessionType, callPurpose, language, onToken, onConversationId } = params;
+    const { userId, message, conversationId, callId, sessionType: _sessionType, callPurpose, language, onToken, onConversationId, onThinkingStart, onThinkingEnd, onToolCall, onToolResult, onArtifact } = params;
     const totalStartTime = Date.now();
     let firstTokenTime: number | null = null;
 
@@ -3847,7 +4175,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       const crisisPromise = (async () => {
         try {
           const crisisDetection = await crisisDetectionService.detectCrisisKeywords(message);
-          if (crisisDetection.isCrisis && crisisDetection.severity !== 'low') {
+          if (crisisDetection.isCrisis) {
             // Trigger emergency protocol if we have a callId
             if (callId) {
               await crisisDetectionService.triggerEmergencyProtocol(callId, userId);
@@ -3950,25 +4278,46 @@ I'm listening. What's happening right now?`;
         }
       })();
 
-      // Retrieve RAG context and wellbeing context in parallel (emotion is already resolved synchronously)
+      // Run ALL independent pre-LLM work in parallel:
+      // RAG context, wellbeing context, system prompt (without RAG — appended after),
+      // intent routing (thin LLM), mental health assessment, wellness question check
+      const conversationDetails = conversationDataForContext?.conversation;
       const contextStartTime = Date.now();
-      const [ragContext, wellbeingContext] = await Promise.all([
+
+      const [
+        ragContext,
+        wellbeingContext,
+        systemPromptBase,
+        streamRoutingChip,
+        streamMentalHealth,
+        questionCheck,
+      ] = await Promise.all([
         this.retrieveContext(userId, message),
         wellbeingContextService.getWellbeingContext(userId, message).catch(() => ({})),
+        this.buildPersonalizedSystemPrompt(
+          userId,
+          '', // RAG context appended after parallel resolution
+          emotion || undefined,
+          conversationDetails?.sessionType || undefined,
+          effectiveCallPurpose,
+          language,
+        ).catch((error) => {
+          logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+          return this.getFallbackSystemPrompt(userId);
+        }),
+        routeCoachIntent({
+          userId,
+          userMessage: message,
+          llm: lifeAreaRouterLlm,
+        }).catch(() => null),
+        mentalHealthGuardrailService.assessUserText(message).catch(
+          () => ({ lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] }) as MentalHealthAssessment
+        ),
+        this.shouldAskWellnessQuestion(
+          userId, message, emotion, null, conversationDataForContext
+        ).catch(() => ({ shouldAsk: false, reason: null, priority: null })),
       ]);
       const contextTime = Date.now() - contextStartTime;
-
-      // Get conversation details for session type context
-      const conversationDetails = conversationDataForContext?.conversation;
-
-      // Check if we should ask a wellness question
-      const questionCheck = await this.shouldAskWellnessQuestion(
-        userId,
-        message,
-        emotion,
-        wellbeingContext,
-        conversationDataForContext
-      );
 
       // Generate wellness question if needed (rule-based, no LLM call)
       let wellnessQuestion: { question: string; type: string; context?: string } | null = null;
@@ -3987,17 +4336,38 @@ I'm listening. What's happening right now?`;
         }
       }
 
-      // Build personalized system prompt with emotion data, session type, call purpose, language, wellbeing context, and question
-      const finalSystemContent = await this.buildPersonalizedSystemPrompt(
-        userId,
-        ragContext,
-        emotion || undefined,
-        conversationDetails?.sessionType || undefined,
-        effectiveCallPurpose,
-        language,
-        wellbeingContext,
-        wellnessQuestion || undefined
-      );
+      // Assemble final system prompt: base + RAG context + wellbeing + wellness question + routing + mental health
+      let finalSystemContent = systemPromptBase;
+      if (ragContext) {
+        finalSystemContent += `\n\n---\nRELEVANT INFORMATION:\n${ragContext}`;
+      }
+      if (wellbeingContext && Object.keys(wellbeingContext).length > 0) {
+        const wellbeingContextStr = wellbeingContextService.formatContextForPrompt(wellbeingContext);
+        if (wellbeingContextStr) {
+          finalSystemContent += `\n\n---\nWELLBEING CONTEXT:\n${wellbeingContextStr}\n\nUse this context to ask natural, supportive questions about their wellbeing. Reference their patterns and history naturally in conversation.`;
+        }
+      }
+      if (wellnessQuestion) {
+        finalSystemContent += `\n\n---\nWELLNESS QUESTION TO ASK (weave naturally into conversation):\n"${wellnessQuestion.question}" (type: ${wellnessQuestion.type})${wellnessQuestion.context ? ` Context: ${wellnessQuestion.context}` : ''}`;
+      }
+
+      const streamToolTurnContext: ToolTurnContext | undefined = streamRoutingChip
+        ? {
+            activeLifeAreaId: streamRoutingChip.lifeAreaId,
+            activeDomainType: streamRoutingChip.domainType,
+            activeLifeAreaName: streamRoutingChip.lifeAreaName,
+          }
+        : undefined;
+      if (streamRoutingChip) {
+        finalSystemContent += `\n\n--- ACTIVE LIFE AREA (this turn) ---\nThe user is focusing on: "${streamRoutingChip.lifeAreaName}" (${streamRoutingChip.domainType}). When you create schedules or goals for this topic, they auto-link to this life area. Prefer scheduling and check-ins at times they specify (e.g. morning vs night).`;
+      }
+
+      void mentalHealthGuardrailService
+        .logScreeningEvent(userId, streamMentalHealth.lane, 'chat', message)
+        .catch(() => {});
+      if (streamMentalHealth.lane === 'elevated_clinical_concern') {
+        finalSystemContent += `\n\n---\n${MENTAL_HEALTH_SYSTEM_ADDENDUM}`;
+      }
 
       // Reuse conversation data fetched earlier (already has 10 messages)
       const historyTime = 0; // No extra DB call needed
@@ -4035,7 +4405,7 @@ I'm listening. What's happening right now?`;
 
       // Create tools for this user - USE OPTIMIZED TOOLS WITH INTENT ROUTING
       const startToolTime = Date.now();
-      const tools = getToolsForMessage(userId, message);
+      const tools = getToolsForMessage(userId, message, streamToolTurnContext);
       const toolCreationTime = Date.now() - startToolTime;
 
       // Log intent classification and tool reduction
@@ -4045,6 +4415,7 @@ I'm listening. What's happening right now?`;
         primaryIntent: intent.primary,
         toolCount: tools.length,
         toolCreationTimeMs: toolCreationTime,
+        lifeAreaContext: !!streamToolTurnContext?.activeLifeAreaId,
       });
 
       // Convert tools to OpenAI format (reuse logic from chat method)
@@ -4104,9 +4475,27 @@ I'm listening. What's happening right now?`;
                 propertyType = 'array';
                 propertySchema.description = innerDef.description || '';
                 if (innerDef.type?._def) {
-                  const itemType = innerDef.type._def.typeName === 'ZodString' ? 'string'
-                    : innerDef.type._def.typeName === 'ZodNumber' ? 'number' : 'string';
-                  propertySchema.items = { type: itemType };
+                  const arrDef = innerDef.type._def;
+                  if (arrDef.typeName === 'ZodString') {
+                    propertySchema.items = { type: 'string' };
+                  } else if (arrDef.typeName === 'ZodNumber') {
+                    propertySchema.items = { type: 'number' };
+                  } else if (arrDef.typeName === 'ZodObject') {
+                    try {
+                      const arrShape = arrDef.shape();
+                      const arrProps: Record<string, any> = {};
+                      const arrReq: string[] = [];
+                      for (const [aK, aF] of Object.entries(arrShape)) {
+                        let aD = (aF as any)._def; let aO = false;
+                        while (aD.typeName === 'ZodOptional' || aD.typeName === 'ZodDefault' || aD.typeName === 'ZodNullable') { aO = true; if (aD.innerType?._def) aD = aD.innerType._def; else break; }
+                        const aT = aD.typeName === 'ZodString' ? 'string' : aD.typeName === 'ZodNumber' ? 'number' : aD.typeName === 'ZodBoolean' ? 'boolean' : aD.typeName === 'ZodEnum' ? 'string' : 'string';
+                        arrProps[aK] = { type: aT }; if (aD.description) arrProps[aK].description = aD.description; if (aD.typeName === 'ZodEnum' && aD.values) arrProps[aK].enum = aD.values; if (!aO) arrReq.push(aK);
+                      }
+                      propertySchema.items = { type: 'object', properties: arrProps, ...(arrReq.length > 0 ? { required: arrReq } : {}) };
+                    } catch { propertySchema.items = { type: 'object' }; }
+                  } else {
+                    propertySchema.items = { type: 'string' };
+                  }
                 }
               } else if (innerDef.typeName === 'ZodObject') {
                 propertyType = 'object';
@@ -4119,19 +4508,40 @@ I'm listening. What's happening right now?`;
                     const nOpt = nDef.typeName === 'ZodOptional';
                     let nInner = nDef;
                     if (nOpt && nInner.innerType) nInner = nInner.innerType._def;
+                    if (nInner.typeName === 'ZodDefault' && nInner.innerType) nInner = nInner.innerType._def;
+                    if (nInner.typeName === 'ZodNullable' && nInner.innerType) nInner = nInner.innerType._def;
                     const nType = nInner.typeName === 'ZodString' ? 'string'
                       : nInner.typeName === 'ZodNumber' ? 'number'
                       : nInner.typeName === 'ZodBoolean' ? 'boolean'
                       : nInner.typeName === 'ZodEnum' ? 'string'
                       : nInner.typeName === 'ZodArray' ? 'array'
+                      : nInner.typeName === 'ZodObject' ? 'object'
                       : 'string';
                     nestedProps[nKey] = { type: nType };
                     if (nInner.description) nestedProps[nKey].description = nInner.description;
                     if (nInner.typeName === 'ZodEnum' && nInner.values) nestedProps[nKey].enum = nInner.values;
                     if (nType === 'array' && nInner.type?._def) {
-                      const iType = nInner.type._def.typeName === 'ZodString' ? 'string'
-                        : nInner.type._def.typeName === 'ZodNumber' ? 'number' : 'string';
-                      nestedProps[nKey].items = { type: iType };
+                      const nArrDef = nInner.type._def;
+                      if (nArrDef.typeName === 'ZodString') {
+                        nestedProps[nKey].items = { type: 'string' };
+                      } else if (nArrDef.typeName === 'ZodNumber') {
+                        nestedProps[nKey].items = { type: 'number' };
+                      } else if (nArrDef.typeName === 'ZodObject') {
+                        try {
+                          const nArrShape = nArrDef.shape();
+                          const nArrProps: Record<string, any> = {};
+                          const nArrReq: string[] = [];
+                          for (const [aK, aF] of Object.entries(nArrShape)) {
+                            let aD = (aF as any)._def; let aO = false;
+                            while (aD.typeName === 'ZodOptional' || aD.typeName === 'ZodDefault' || aD.typeName === 'ZodNullable') { aO = true; if (aD.innerType?._def) aD = aD.innerType._def; else break; }
+                            const aT = aD.typeName === 'ZodString' ? 'string' : aD.typeName === 'ZodNumber' ? 'number' : aD.typeName === 'ZodBoolean' ? 'boolean' : aD.typeName === 'ZodEnum' ? 'string' : 'string';
+                            nArrProps[aK] = { type: aT }; if (aD.description) nArrProps[aK].description = aD.description; if (aD.typeName === 'ZodEnum' && aD.values) nArrProps[aK].enum = aD.values; if (!aO) nArrReq.push(aK);
+                          }
+                          nestedProps[nKey].items = { type: 'object', properties: nArrProps, ...(nArrReq.length > 0 ? { required: nArrReq } : {}) };
+                        } catch { nestedProps[nKey].items = { type: 'object' }; }
+                      } else {
+                        nestedProps[nKey].items = { type: 'string' };
+                      }
                     }
                   }
                   if (Object.keys(nestedProps).length > 0) propertySchema.properties = nestedProps;
@@ -4344,10 +4754,23 @@ I'm listening. What's happening right now?`;
       hasToolCalls = hasToolCalls && Array.isArray(responseToolCalls) && responseToolCalls.length > 0;
 
 
+      if (hasToolCalls && onThinkingStart) {
+        const thinkingLabel = `Running ${responseToolCalls?.length || 0} tool(s)`;
+        try { onThinkingStart(thinkingLabel); } catch { /* stream closed */ }
+      }
+
       // Loop to handle multiple tool call iterations (like non-streaming version)
       while (hasToolCalls && iterations < maxIterations) {
         iterations++;
 
+        // Fire onToolCall callbacks before execution
+        if (onToolCall) {
+          for (const tc of (responseToolCalls || [])) {
+            const tcName = tc.name || tc.function?.name || 'unknown';
+            const label = tcName.replace(/_/g, ' ');
+            try { onToolCall({ operationId: tc.id, toolName: tcName, label, icon: undefined }); } catch { /* stream closed */ }
+          }
+        }
 
         // Execute tools - handle both direct tool_calls and additional_kwargs.tool_calls formats
         const toolCallsToExecute = responseToolCalls || [];
@@ -4363,8 +4786,8 @@ I'm listening. What's happening right now?`;
                 toolArgs = tc.args;
               } else if (tc.function?.arguments) {
                 try {
-                  toolArgs = typeof tc.function.arguments === 'string' 
-                    ? JSON.parse(tc.function.arguments) 
+                  toolArgs = typeof tc.function.arguments === 'string'
+                    ? JSON.parse(tc.function.arguments)
                     : tc.function.arguments;
                 } catch (e) {
                   logger.warn('[LangGraphChatbot] Failed to parse tool arguments', { error: e, arguments: tc.function.arguments });
@@ -4375,22 +4798,44 @@ I'm listening. What's happening right now?`;
                 args: toolArgs,
                 id: tc.id!,
               };
-            })
+            }),
+          { userId, conversationId },
         );
-
 
         // Extract tool call info for response
         const currentToolCalls = responseToolCalls || (response as any).tool_calls || [];
         toolResults.forEach((tr, idx) => {
           const toolCall = currentToolCalls[idx];
           if (toolCall) {
-            const resultContent = typeof tr.content === 'string' 
-              ? tr.content 
+            const resultContent = typeof tr.content === 'string'
+              ? tr.content
               : JSON.stringify(tr.content);
             toolCalls.push({
               tool: toolCall.name || toolCall.function?.name || 'unknown',
               result: resultContent,
             });
+
+            if (onToolResult) {
+              try {
+                onToolResult({
+                  operationId: toolCall.id,
+                  toolName: toolCall.name || toolCall.function?.name || 'unknown',
+                  success: true,
+                  delta: typeof resultContent === 'string' ? resultContent.substring(0, 100) : 'completed',
+                  icon: undefined,
+                  undoable: false,
+                });
+              } catch { /* stream closed */ }
+            }
+
+            if (onArtifact) {
+              try {
+                const parsed = JSON.parse(resultContent);
+                if (parsed.artifact) {
+                  onArtifact({ artifact: parsed.artifact, toolName: toolCall.name || toolCall.function?.name || 'unknown' });
+                }
+              } catch { /* not JSON or no artifact */ }
+            }
           }
         });
 
@@ -4470,6 +4915,9 @@ I'm listening. What's happening right now?`;
         responseToolCalls = nextResponseToolCalls;
       }
 
+      if (onThinkingEnd) {
+        try { onThinkingEnd('Processing complete', Date.now() - totalStartTime); } catch { /* stream closed */ }
+      }
 
       // Extract and validate response content (same logic as non-streaming version)
       let responseContent = fullResponse.trim();
@@ -4620,7 +5068,10 @@ I'm listening. What's happening right now?`;
       const llmTime = Date.now() - llmStartTime;
 
       const totalTime = Date.now() - totalStartTime;
-      logger.debug('[LangGraphChatbot] Streaming response timing', {
+      const SLOW_THRESHOLD_MS = 5000;
+
+      // Structured timing breakdown — INFO level for all requests to enable dashboarding
+      const timingBreakdown = {
         userId,
         contextTime,
         historyTime,
@@ -4629,7 +5080,13 @@ I'm listening. What's happening right now?`;
         totalTime,
         iterations,
         hasToolCalls: toolCalls.length > 0,
-      });
+      };
+
+      if (totalTime > SLOW_THRESHOLD_MS) {
+        logger.warn('[LangGraphChatbot] Slow streaming response', timingBreakdown);
+      } else {
+        logger.info('[LangGraphChatbot] Streaming response timing', timingBreakdown);
+      }
 
       // Calculate context stats
       const contextStats = {
@@ -4762,8 +5219,17 @@ I'm listening. What's happening right now?`;
           logger.error('[LangGraphChatbot] All stream providers exhausted', {
             userId, error: noProvidersError?.message || 'Unknown',
           });
-          throw noProvidersError;
+          const fallback = this.buildProviderExhaustedResponse(conversationId || '', errorMsg);
+          onToken(fallback.response);
+          return fallback;
         }
+      }
+
+      // If all retries exhausted or non-provider error after cascade
+      if (isProviderError) {
+        const fallback = this.buildProviderExhaustedResponse(conversationId || '', errorMsg);
+        onToken(fallback.response);
+        return fallback;
       }
 
       logger.error('Error in LangGraph chat stream', {

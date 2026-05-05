@@ -4,7 +4,7 @@
  * Follows the same interval + isRunning pattern as proactive-messaging.job.ts.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { emailEngine } from '../services/email-engine.service.js';
 import { emailContentGenerator } from '../services/email-content-generator.service.js';

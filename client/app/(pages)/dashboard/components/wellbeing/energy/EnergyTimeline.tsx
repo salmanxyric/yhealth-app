@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SliderInput } from "@/components/common/questions/SliderInput";
 import { Input } from "@/components/ui/input";
+import { confirm } from "@/components/common/ConfirmDialog";
 
 interface EnergyTimelineItem {
   id?: string;
@@ -145,7 +146,8 @@ export function EnergyTimeline({ days = 7, onRefresh }: EnergyTimelineProps) {
   };
 
   const handleDelete = async (logId: string) => {
-    if (!confirm("Are you sure you want to delete this energy log?")) return;
+    const ok = await confirm({ description: "Are you sure you want to delete this energy log?", confirmText: "Delete", variant: "destructive" });
+    if (!ok) return;
     
     setIsDeleting(true);
     try {

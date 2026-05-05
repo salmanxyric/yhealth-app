@@ -116,8 +116,9 @@ describe("ProductTourContext", () => {
     const lastStep = result.current.steps[result.current.steps.length - 1];
     expect(lastStep.id).toBe("completion");
 
+    // ADMIN_EXTRA_STEPS is currently empty, so second-to-last is the last main step before completion
     const secondToLast = result.current.steps[result.current.steps.length - 2];
-    expect(secondToLast.id).toBe("admin-panel");
+    expect(secondToLast.id).toBe("wellbeing");
   });
 
   // ── Tour actions ──

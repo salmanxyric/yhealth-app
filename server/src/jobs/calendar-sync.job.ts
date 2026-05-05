@@ -4,7 +4,7 @@
  * Runs every 15 minutes. Follows the existing setInterval job pattern.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { googleCalendarService } from '../services/google-calendar.service.js';
 import { logger } from '../services/logger.service.js';
 

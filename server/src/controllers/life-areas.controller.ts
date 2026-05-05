@@ -10,6 +10,13 @@ export const listDomains = asyncHandler(async (_req: AuthenticatedRequest, res: 
   ApiResponse.success(res, { domains: LIFE_AREA_DOMAINS }, 'Domains retrieved');
 });
 
+export const getSummary = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+  const summary = await lifeAreasService.getDashboardSummary(userId);
+  ApiResponse.success(res, summary, 'Life areas summary retrieved');
+});
+
 export const listLifeAreas = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
@@ -25,8 +32,11 @@ export const getLifeArea = asyncHandler(async (req: AuthenticatedRequest, res: R
   if (!userId) throw ApiError.unauthorized();
   const area = await lifeAreasService.getById(userId, req.params.id);
   if (!area) throw ApiError.notFound('Life area not found');
-  const links = await lifeAreasService.listLinks(userId, area.id);
-  ApiResponse.success(res, { area, links }, 'Life area retrieved');
+  const [links, resolvedLinks] = await Promise.all([
+    lifeAreasService.listLinks(userId, area.id),
+    lifeAreasService.listLinksResolved(userId, area.id),
+  ]);
+  ApiResponse.success(res, { area, links, resolvedLinks }, 'Life area retrieved');
 });
 
 export const createLifeArea = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

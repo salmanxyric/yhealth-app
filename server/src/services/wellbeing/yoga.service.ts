@@ -3,7 +3,7 @@
  * @description Core CRUD operations for yoga & meditation module (F7.9)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type {
   YogaPose,

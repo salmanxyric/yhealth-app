@@ -6,7 +6,7 @@ import { useRef, useEffect } from "react";
 import type { AchievementSummary, Achievement } from "./types";
 import {
   getLevelInfo,
-  rarityBgColors,
+  
   rarityBorderColors,
   rarityHexColors,
   fadeInUp,

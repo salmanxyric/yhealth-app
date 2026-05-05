@@ -34,6 +34,7 @@ async function runMigrations() {
       'add-missed-to-activity-log-status.sql',
       'add-workout-reschedule-tables.sql',
       'add-whoop-credentials.sql', // webhook_url, webhook_secret for WHOOP status
+      'add-health-profile-visibility.sql', // user_preferences health profile sharing
       'force-create-tables.sql', // Force create if tables don't exist
     ];
 

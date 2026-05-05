@@ -7,7 +7,7 @@ import { Router, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import { workoutAlarmService } from '../services/workout-alarm.service.js';
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 const router = Router();

@@ -1,6 +1,6 @@
 /**
  * @file Competitions Routes
- * @description API endpoints for competitions
+ * @description API endpoints for competitions and shared challenges
  */
 
 import { Router } from 'express';
@@ -17,6 +17,14 @@ import {
   createCompetition,
   getAllCompetitions,
 } from '../controllers/competitions.controller.js';
+import {
+  generateChallenge,
+  createSharedCompetition,
+  getPendingInvitations,
+  acceptInvitation,
+  declineInvitation,
+  inviteToCompetition,
+} from '../controllers/shared-challenge.controller.js';
 
 const router = Router();
 
@@ -46,23 +54,21 @@ router.get('/:id', optionalAuth, validate(competitionIdParamSchema, 'params'), g
  */
 router.get('/:id/leaderboard', optionalAuth, validate(competitionIdParamSchema, 'params'), getCompetitionLeaderboard);
 
+// --- Shared Challenge routes (must be before :id param routes) ---
+
+router.post('/shared-challenge/generate', authenticate, generateChallenge);
+router.post('/shared-challenge/create', authenticate, createSharedCompetition);
+router.get('/invitations', authenticate, getPendingInvitations);
+router.post('/invitations/:id/accept', authenticate, acceptInvitation);
+router.post('/invitations/:id/decline', authenticate, declineInvitation);
+
 // --- Authenticated action routes ---
 
-/**
- * POST /api/v1/competitions/:id/join
- * Join competition (requires auth)
- */
 router.post('/:id/join', authenticate, validate(competitionIdParamSchema, 'params'), joinCompetition);
-
-/**
- * DELETE /api/v1/competitions/:id/leave
- * Leave competition (requires auth)
- */
 router.delete('/:id/leave', authenticate, validate(competitionIdParamSchema, 'params'), leaveCompetition);
+router.post('/:id/invite', authenticate, inviteToCompetition);
 
-/**
- * Admin routes (require auth)
- */
+// Admin routes
 router.post('/', authenticate, createCompetition);
 router.get('/admin/all', authenticate, getAllCompetitions);
 

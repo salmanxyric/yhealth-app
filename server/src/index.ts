@@ -8,7 +8,7 @@ import os from "os";
 
 import { app } from "./app.js";
 import { env } from "./config/env.config.js";
-import { database } from "./config/database.config.js";
+import { database, query } from "./config/database.config.js";
 import { logger } from "./services/logger.service.js";
 import { socketService } from "./services/socket.service.js";
 import { reminderProcessorJob } from "./jobs/reminder-processor.job.js";
@@ -30,15 +30,26 @@ import { streakValidationJob } from "./jobs/streak-validation.job.js";
 import { statusFollowUpJob } from "./jobs/status-followup.job.js";
 import { statusPatternAnalysisJob } from "./jobs/status-pattern-analysis.job.js";
 import { accountabilityTriggerJob } from "./jobs/accountability-trigger.job.js";
+import { checkinCallJob } from "./jobs/checkin-call.job.js";
 import { contractEvaluationJob } from "./jobs/contract-evaluation.job.js";
 import { obstacleDetectorJob } from "./jobs/obstacle-detector.job.js";
 import { goalReconnectionJob } from "./jobs/goal-reconnection.job.js";
+import { timingProfileJob } from "./jobs/timing-profile.job.js";
 import { startMicroWinsJob, stopMicroWinsJob } from "./jobs/micro-wins.job.js";
+import { startAchievementCheckJob, stopAchievementCheckJob } from "./jobs/achievement-check.job.js";
 import { startBuddySuggestionJob, stopBuddySuggestionJob } from "./jobs/buddy-suggestion.job.js";
 import { calendarSyncJob } from "./jobs/calendar-sync.job.js";
+import { dataSourceSyncJob } from "./jobs/data-source-sync.job.js";
+import { correlationComputeJob } from "./jobs/correlation-compute.job.js";
+import { memoryDecayJob } from "./jobs/memory-decay.job.js";
+import { memoryExtractionJob } from "./jobs/memory-extraction.job.js";
+import { coreProfileCalibrationJob } from "./jobs/core-profile-calibration.job.js";
 import { activityEventProcessor } from "./workers/activity-event-processor.worker.js";
 import { ensureDefaultPlans } from "./services/subscription.service.js";
-import { query } from "./database/pg.js";
+import { runGraceExpirationJob } from "./jobs/graceExpirationJob.js";
+import { runDunningRetryJob } from "./jobs/dunning-retry.job.js";
+import { runStaleReservationCleanup } from "./jobs/stale-reservation-cleanup.job.js";
+import { runMonthlyCreditResetJob } from "./jobs/monthly-credit-reset.job.js";
 
 // Embedding & email workers require Redis - lazy import to avoid crash when Redis is unavailable
 let embeddingWorker: { close: () => Promise<void> } | null = null;
@@ -116,8 +127,26 @@ async function gracefulShutdown(signal: string): Promise<void> {
     accountabilityTriggerJob.stop();
     logger.info("Accountability trigger job stopped");
 
+    checkinCallJob.stop();
+    logger.info("Check-in call job stopped");
+
     calendarSyncJob.stop();
     logger.info("Calendar sync job stopped");
+
+    dataSourceSyncJob.stop();
+    logger.info("Data source sync job stopped");
+
+    correlationComputeJob.stop();
+    logger.info("Correlation compute job stopped");
+
+    memoryDecayJob.stop();
+    logger.info("Memory decay job stopped");
+
+    memoryExtractionJob.stop();
+    logger.info("Memory extraction job stopped");
+
+    coreProfileCalibrationJob.stop();
+    logger.info("Core profile calibration job stopped");
 
     contractEvaluationJob.stop();
     logger.info("Contract evaluation job stopped");
@@ -125,8 +154,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
     stopMicroWinsJob();
     logger.info("Micro-wins job stopped");
 
+    stopAchievementCheckJob();
+    logger.info("Achievement check job stopped");
+
     stopBuddySuggestionJob();
     logger.info("Buddy suggestion job stopped");
+
+    timingProfileJob.stop();
+    logger.info("Timing profile job stopped");
 
     await activityEventProcessor.stop();
     logger.info("Activity event processor stopped");
@@ -306,6 +341,11 @@ async function startServer(): Promise<void> {
         );
       }
 
+      // Warn if entitlement enforcement is in shadow mode in production
+      if (env.isProduction && env.entitlement.mode === 'shadow') {
+        logger.warn('[SECURITY] Entitlement enforcement is in shadow mode — all paywalls are bypassed. Set ENTITLEMENT_ENFORCEMENT_MODE=enforce-all for production.');
+      }
+
       // Start background jobs. Cron-style jobs run only on one worker in cluster mode to avoid N× repetition.
       // Set ENABLE_BACKGROUND_JOBS=false in .env to disable all background jobs (useful for development)
       const backgroundJobsEnabled = process.env.ENABLE_BACKGROUND_JOBS !== 'false';
@@ -408,6 +448,16 @@ async function startServer(): Promise<void> {
         }, 900_000);
 
         setTimeout(() => {
+          startAchievementCheckJob();
+          logger.info("Achievement check job started (staggered 930s)");
+        }, 930_000);
+
+        setTimeout(() => {
+          checkinCallJob.start();
+          logger.info("Check-in call job started (staggered 990s)");
+        }, 990_000);
+
+        setTimeout(() => {
           startBuddySuggestionJob();
           logger.info("Buddy suggestion job started (staggered 960s)");
         }, 960_000);
@@ -426,6 +476,90 @@ async function startServer(): Promise<void> {
           goalReconnectionJob.start();
           logger.info("Goal reconnection job started (staggered 1140s)");
         }, 1140_000);
+
+        setTimeout(() => {
+          timingProfileJob.start();
+          logger.info("Timing profile job started (staggered 1260s)");
+        }, 1260_000);
+
+        setTimeout(() => {
+          dataSourceSyncJob.start();
+          logger.info("Data source sync job started (staggered 1320s)");
+        }, 1320_000);
+
+        setTimeout(() => {
+          correlationComputeJob.start();
+          logger.info("Correlation compute job started (staggered 1380s)");
+        }, 1380_000);
+
+        setTimeout(() => {
+          memoryDecayJob.start();
+          logger.info("Memory decay job started (staggered 1440s)");
+        }, 1440_000);
+
+        setTimeout(() => {
+          memoryExtractionJob.start();
+          logger.info("Memory extraction job started (staggered 1500s)");
+        }, 1500_000);
+
+        setTimeout(() => {
+          coreProfileCalibrationJob.start();
+          logger.info("Core profile calibration job started (staggered 1560s)");
+        }, 1560_000);
+
+        // ── Subscription lifecycle jobs ──
+
+        // Grace expiration: flip grace → canceled for expired grace periods (hourly)
+        const GRACE_EXPIRATION_INTERVAL_MS = 60 * 60 * 1000;
+        const runGraceJob = async () => {
+          try { await runGraceExpirationJob(); } catch (err) {
+            logger.error('[graceExpirationJob] Failed', { error: err instanceof Error ? err.message : String(err) });
+          }
+        };
+        setTimeout(() => {
+          void runGraceJob();
+          setInterval(() => void runGraceJob(), GRACE_EXPIRATION_INTERVAL_MS);
+          logger.info("Grace expiration job started (hourly, staggered 1620s)");
+        }, 1620_000);
+
+        // Dunning retry: process scheduled payment retries (every 6 hours)
+        const DUNNING_RETRY_INTERVAL_MS = 6 * 60 * 60 * 1000;
+        const runDunning = async () => {
+          try { await runDunningRetryJob(); } catch (err) {
+            logger.error('[dunningRetryJob] Failed', { error: err instanceof Error ? err.message : String(err) });
+          }
+        };
+        setTimeout(() => {
+          void runDunning();
+          setInterval(() => void runDunning(), DUNNING_RETRY_INTERVAL_MS);
+          logger.info("Dunning retry job started (every 6h, staggered 1680s)");
+        }, 1680_000);
+
+        // Stale reservation cleanup: release stuck credit reserves (every 15 min)
+        const STALE_RESERVATION_INTERVAL_MS = 15 * 60 * 1000;
+        const runStaleCleanup = async () => {
+          try { await runStaleReservationCleanup(); } catch (err) {
+            logger.error('[staleReservationCleanup] Failed', { error: err instanceof Error ? err.message : String(err) });
+          }
+        };
+        setTimeout(() => {
+          void runStaleCleanup();
+          setInterval(() => void runStaleCleanup(), STALE_RESERVATION_INTERVAL_MS);
+          logger.info("Stale reservation cleanup job started (every 15m, staggered 1740s)");
+        }, 1740_000);
+
+        // Monthly credit reset: reset free-tier credits when next_reset_at passes (daily)
+        const CREDIT_RESET_INTERVAL_MS = 24 * 60 * 60 * 1000;
+        const runCreditReset = async () => {
+          try { await runMonthlyCreditResetJob(); } catch (err) {
+            logger.error('[monthlyCreditResetJob] Failed', { error: err instanceof Error ? err.message : String(err) });
+          }
+        };
+        setTimeout(() => {
+          void runCreditReset();
+          setInterval(() => void runCreditReset(), CREDIT_RESET_INTERVAL_MS);
+          logger.info("Monthly credit reset job started (daily, staggered 1800s)");
+        }, 1800_000);
       }
 
       if (!backgroundJobsEnabled) {

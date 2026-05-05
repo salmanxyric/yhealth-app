@@ -3,13 +3,13 @@ import jwt from 'jsonwebtoken';
 import { ApiError } from '../utils/ApiError.js';
 import { env } from '../config/env.config.js';
 import type { AuthenticatedRequest, IJwtPayload, UserRole } from '../types/index.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 /**
  * Extract token from request
  */
 function extractToken(req: Request): string | null {
-  // Check Authorization header (Bearer token)
+  
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7);

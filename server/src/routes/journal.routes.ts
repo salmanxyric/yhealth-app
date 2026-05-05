@@ -12,6 +12,7 @@ import { lifeGoalsController } from '../controllers/wellbeing/life-goals.control
 import { lessonsLearnedController } from '../controllers/wellbeing/lessons-learned.controller.js';
 import { voiceJournalController } from '../controllers/wellbeing/voice-journal.controller.js';
 import { uploadAudio } from '../middlewares/upload.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 
 const router = Router();
 
@@ -87,7 +88,12 @@ router.post('/goals', lifeGoalsController.createGoal);
  * @desc    Generate personalized goal suggestions from onboarding assessment answers
  * @access  Private
  */
-router.post('/goals/from-assessment', lifeGoalsController.generateGoalsFromAssessment);
+router.post(
+  '/goals/from-assessment',
+  requireFeature('ai.goals.from_assessment'),
+  consumeCredits('ai.goals.from_assessment'),
+  lifeGoalsController.generateGoalsFromAssessment
+);
 
 /**
  * @route   GET /api/v1/journal/goals
@@ -204,7 +210,12 @@ router.get('/goals/:goalId/checkins/streak', lifeGoalsController.getCheckinStrea
  * @desc    Decompose a life goal into actionable steps via AI
  * @access  Private
  */
-router.post('/goals/:goalId/decompose', lifeGoalsController.decomposeGoal);
+router.post(
+  '/goals/:goalId/decompose',
+  requireFeature('ai.goals.decompose'),
+  consumeCredits('ai.goals.decompose'),
+  lifeGoalsController.decomposeGoal
+);
 
 /**
  * @route   GET /api/v1/journal/goals/:goalId/actions
@@ -367,7 +378,13 @@ router.get('/voice/active', voiceJournalController.getActiveSession);
  * @desc    Submit a voice turn (multipart audio upload)
  * @access  Private
  */
-router.post('/voice/:sessionId/turn', uploadAudio, voiceJournalController.submitVoiceTurn);
+router.post(
+  '/voice/:sessionId/turn',
+  uploadAudio,
+  requireFeature('ai.voice.journal_turn'),
+  consumeCredits('ai.voice.journal_turn'),
+  voiceJournalController.submitVoiceTurn
+);
 
 /**
  * @route   POST /api/v1/journal/voice/:sessionId/text-turn
@@ -381,7 +398,12 @@ router.post('/voice/:sessionId/text-turn', voiceJournalController.submitTextTurn
  * @desc    Generate summary from conversation
  * @access  Private
  */
-router.post('/voice/:sessionId/summarize', voiceJournalController.generateSummary);
+router.post(
+  '/voice/:sessionId/summarize',
+  requireFeature('ai.voice.journal_summary'),
+  consumeCredits('ai.voice.journal_summary'),
+  voiceJournalController.generateSummary
+);
 
 /**
  * @route   POST /api/v1/journal/voice/:sessionId/approve

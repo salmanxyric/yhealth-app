@@ -1,0 +1,62 @@
+# One-shot migration & seed service for Railway
+# Runs all migrations, seeds essential data, then exits with code 0.
+#
+# Railway config:
+#   Builder: DOCKERFILE
+#   Dockerfile path: Dockerfile.db-migrate-seed
+#   No health check (one-shot)
+#   Restart policy: NEVER
+
+# -----------------------------------------------------------------------------
+# Stage 1: Build server (TypeScript)
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy shared types (server references ../../shared)
+COPY shared ./shared
+
+# Copy server package files
+COPY server/package.json server/package-lock.json* ./server/
+
+WORKDIR /app/server
+RUN npm ci --legacy-peer-deps
+
+# Copy server source
+WORKDIR /app
+COPY server ./server
+WORKDIR /app/server
+
+# TypeScript build
+RUN npm run build
+
+# -----------------------------------------------------------------------------
+# Stage 2: Run migration & seed
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nodejs
+
+# Copy production dependencies
+COPY --from=builder --chown=nodejs:nodejs /app/server/node_modules ./server/node_modules
+
+# Copy built JS
+COPY --from=builder --chown=nodejs:nodejs /app/server/dist ./server/dist
+COPY --from=builder --chown=nodejs:nodejs /app/server/package.json ./server/
+
+# Copy SQL files (schema + migrations)
+COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/tables ./server/dist/server/src/database/tables
+COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/migrations ./server/dist/server/src/database/migrations
+
+USER nodejs
+
+ENV NODE_ENV=production
+
+WORKDIR /app/server
+
+CMD ["node", "dist/server/src/scripts/db-migrate-seed.js"]

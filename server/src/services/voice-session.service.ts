@@ -4,7 +4,7 @@
  */
 
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import type { SessionType } from './session-orchestration.service.js';
 
 // ============================================
@@ -97,6 +97,13 @@ const SESSION_DURATIONS: Record<SessionType, number> = {
   nutrition: 20 * 60,
   fitness: 20 * 60,
   wellness: 20 * 60,
+  workout: 15 * 60,
+  meal: 10 * 60,
+  emotion: 15 * 60,
+  sleep: 10 * 60,
+  stress: 15 * 60,
+  recovery: 15 * 60,
+  general_health: 15 * 60,
 };
 
 // ============================================
@@ -186,6 +193,13 @@ class VoiceSessionService {
       nutrition: 'opening',
       fitness: 'opening',
       wellness: 'opening',
+      workout: 'opening',
+      meal: 'opening',
+      emotion: 'opening',
+      sleep: 'opening',
+      stress: 'opening',
+      recovery: 'opening',
+      general_health: 'opening',
     };
 
     return phaseMap[type] || 'opening';

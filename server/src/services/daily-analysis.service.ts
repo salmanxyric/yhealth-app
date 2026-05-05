@@ -9,7 +9,7 @@
 import crypto from 'crypto';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { env } from '../config/env.config.js';
 import { modelFactory } from './model-factory.service.js';
@@ -91,6 +91,8 @@ export interface DailyAnalysisReport {
   risks: RiskFlag[];
   actions: NextBestAction[];
   coachingDirective: CoachingDirective;
+  dropOffDate?: string;
+  dropOffTrigger?: string;
   generatedAt: string;
   generationModel: string;
 }
@@ -258,6 +260,9 @@ class DailyAnalysisService {
         });
       }
 
+      // ----- Step 6c: Drop-off point detection -----
+      const dropOff = this.detectDropOffPoint(historicalScores);
+
       // ----- Step 7: Assemble the report -----
       const report: DailyAnalysisReport = {
         userId,
@@ -269,6 +274,7 @@ class DailyAnalysisService {
         risks,
         actions,
         coachingDirective,
+        ...(dropOff && { dropOffDate: dropOff.date, dropOffTrigger: dropOff.trigger }),
         generatedAt: new Date().toISOString(),
         generationModel: modelName,
       };
@@ -757,6 +763,70 @@ Return ONLY valid JSON array of insights.`;
       });
       return defaults;
     }
+  }
+
+  // ============================================
+  // DROP-OFF DETECTION
+  // ============================================
+
+  /**
+   * Analyze historical scores to find the inflection point where a decline began.
+   * Returns the date and likely trigger, or null if no significant drop-off detected.
+   */
+  private detectDropOffPoint(
+    historicalScores: HistoricalScoreRow[]
+  ): { date: string; trigger: string } | null {
+    if (historicalScores.length < 5) return null;
+
+    // Find the peak score in the window
+    let peakIdx = 0;
+    let peakScore = historicalScores[0].total_score;
+    for (let i = 1; i < historicalScores.length; i++) {
+      if (historicalScores[i].total_score > peakScore) {
+        peakScore = historicalScores[i].total_score;
+        peakIdx = i;
+      }
+    }
+
+    // Check if there's been a significant decline from peak (>20% drop sustained for 3+ days)
+    const latestScore = historicalScores[historicalScores.length - 1].total_score;
+    const dropPercent = peakScore > 0 ? ((peakScore - latestScore) / peakScore) * 100 : 0;
+
+    if (dropPercent < 20) return null;
+
+    // Find the first day after peak where decline started (score dropped and didn't recover)
+    let dropStartIdx = peakIdx + 1;
+    for (let i = peakIdx + 1; i < historicalScores.length; i++) {
+      if (historicalScores[i].total_score < peakScore * 0.9) {
+        dropStartIdx = i;
+        break;
+      }
+    }
+
+    if (dropStartIdx >= historicalScores.length) return null;
+
+    const dropDate = historicalScores[dropStartIdx].date;
+
+    // Identify likely trigger from component score changes
+    const peakComponents = historicalScores[peakIdx].component_scores ?? {};
+    const dropComponents = historicalScores[dropStartIdx].component_scores ?? {};
+    let biggestDrop = '';
+    let biggestDropAmount = 0;
+
+    for (const [key, peakVal] of Object.entries(peakComponents)) {
+      const dropVal = (dropComponents as Record<string, number>)[key] ?? 0;
+      const diff = (peakVal as number) - dropVal;
+      if (diff > biggestDropAmount) {
+        biggestDropAmount = diff;
+        biggestDrop = key;
+      }
+    }
+
+    const trigger = biggestDrop
+      ? `${Math.round(dropPercent)}% overall decline since ${dropDate}, largest drop in ${biggestDrop} (${Math.round(biggestDropAmount)} points)`
+      : `${Math.round(dropPercent)}% overall decline since ${dropDate}`;
+
+    return { date: dropDate, trigger };
   }
 
   // ============================================

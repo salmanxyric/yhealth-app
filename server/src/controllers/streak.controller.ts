@@ -10,7 +10,7 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { streakService } from '../services/streak.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 // ─────────────────────────────────────────────
 // GET /api/streaks/status

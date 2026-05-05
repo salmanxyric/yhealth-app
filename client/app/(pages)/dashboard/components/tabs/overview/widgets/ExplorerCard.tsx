@@ -65,6 +65,7 @@ export function ExplorerCard({
 
       {/* Center content — streak icon + number */}
       <div className="relative z-10 flex flex-col items-center -mt-1">
+        {/* eslint-disable-next-line @next/next/no-img-element -- local SVG with dynamic sizing */}
         <img
           src="/overview/Streak.svg"
           alt="Streak flame"

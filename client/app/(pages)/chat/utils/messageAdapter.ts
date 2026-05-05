@@ -78,6 +78,9 @@ export function adaptMessageToChatMessageItem(
     viewOnceOpenedAt: message.viewOnceOpenedAt,
     readBy: message.readBy,
     isAiChat,
+    proactiveType: message.proactiveType,
+    obstacleId: message.obstacleId,
+    reconnectionId: message.reconnectionId,
   };
 }
 

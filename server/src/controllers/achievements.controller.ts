@@ -3,10 +3,11 @@ import type { AuthenticatedRequest } from '../types/index.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { getPublicProfile } from '../utils/user.helpers.js';
 import { dynamicAchievementsService } from '../services/dynamic-achievements.service.js';
 import { microWinsService } from '../services/micro-wins.service.js';
+import { achievementAIService } from '../services/achievement-ai.service.js';
 
 // Achievement definitions - these define all possible achievements
 interface AchievementDef {
@@ -442,215 +443,178 @@ const achievementDefinitions: AchievementDef[] = [
   },
 ];
 
-// Helper function to gather all user stats
+// Per-request stats cache to avoid recomputation within the same request cycle
+const statsCache = new Map<string, { stats: UserStats; expiresAt: number }>();
+const STATS_CACHE_TTL_MS = 10_000; // 10 seconds
+
+// Single CTE query replaces 10+ sequential round trips for 100K+ user scale
 async function getUserStats(userId: string): Promise<UserStats> {
-  // Get user creation date
-  const userResult = await query<{ created_at: Date }>(
-    'SELECT created_at FROM users WHERE id = $1',
-    [userId]
-  );
-  const accountCreatedAt = userResult.rows[0]?.created_at || new Date();
+  const cached = statsCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.stats;
 
-  // Get total activities from activity_logs
-  const activitiesResult = await query<{ completed_count: string; days_active: string }>(
-    `SELECT
-      COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
-      COUNT(DISTINCT scheduled_date) FILTER (WHERE status = 'completed') as days_active
-    FROM activity_logs
-    WHERE user_id = $1`,
-    [userId]
-  );
-  const totalActivitiesCompleted = parseInt(activitiesResult.rows[0]?.completed_count || '0');
-  const daysActive = parseInt(activitiesResult.rows[0]?.days_active || '0');
-
-  // Get goal stats
-  const goalsResult = await query<{ total_goals: string; completed_goals: string; active_goals: string }>(
-    `SELECT
-      COUNT(*) as total_goals,
-      COUNT(*) FILTER (WHERE status = 'completed') as completed_goals,
-      COUNT(*) FILTER (WHERE status = 'active') as active_goals
-    FROM user_goals
-    WHERE user_id = $1`,
-    [userId]
-  );
-  const totalGoals = parseInt(goalsResult.rows[0]?.total_goals || '0');
-  const completedGoals = parseInt(goalsResult.rows[0]?.completed_goals || '0');
-  const activeGoals = parseInt(goalsResult.rows[0]?.active_goals || '0');
-
-  // Get pillar activities from user_plans activities JSONB
-  const pillarActivitiesResult = await query<{ pillar: string; completed_count: string }>(
-    `SELECT
-      up.pillar,
-      COUNT(al.id) FILTER (WHERE al.status = 'completed') as completed_count
-    FROM user_plans up
-    LEFT JOIN activity_logs al ON al.plan_id = up.id
-    WHERE up.user_id = $1
-    GROUP BY up.pillar`,
-    [userId]
-  );
-
-  let fitnessActivities = 0;
-  let nutritionActivities = 0;
-  let wellbeingActivities = 0;
-
-  for (const row of pillarActivitiesResult.rows) {
-    const count = parseInt(row.completed_count || '0');
-    switch (row.pillar) {
-      case 'fitness':
-        fitnessActivities = count;
-        break;
-      case 'nutrition':
-        nutritionActivities = count;
-        break;
-      case 'wellbeing':
-        wellbeingActivities = count;
-        break;
-    }
-  }
-
-  // Get workout and meal specific counts from health_data_records
-  const workoutsResult = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM health_data_records
-     WHERE user_id = $1 AND data_type = 'workouts'`,
-    [userId]
-  );
-  const totalWorkouts = parseInt(workoutsResult.rows[0]?.count || '0');
-
-  const mealsResult = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM health_data_records
-     WHERE user_id = $1 AND data_type = 'nutrition'`,
-    [userId]
-  );
-  const totalMeals = parseInt(mealsResult.rows[0]?.count || '0');
-
-  // Calculate streaks from activity_logs
-  const streakResult = await query<{ longest_streak: string }>(
-    `WITH daily_completions AS (
-      SELECT
-        scheduled_date,
-        CASE WHEN COUNT(*) FILTER (WHERE status = 'completed') > 0 THEN 1 ELSE 0 END as had_completion
-      FROM activity_logs
-      WHERE user_id = $1
-      GROUP BY scheduled_date
-      ORDER BY scheduled_date DESC
+  const result = await query<{
+    created_at: Date;
+    completed_count: string;
+    days_active: string;
+    total_goals: string;
+    completed_goals: string;
+    active_goals: string;
+    fitness_activities: string;
+    nutrition_activities: string;
+    wellbeing_activities: string;
+    total_workouts: string;
+    total_meals: string;
+    longest_streak: string;
+    current_streak: string;
+    integrations_connected: string;
+    assessments_completed: string;
+    perfect_days: string;
+    early_morning_workouts: string;
+    weekend_workouts: string;
+  }>(
+    `WITH user_info AS (
+      SELECT created_at FROM users WHERE id = $1
     ),
-    streak_groups AS (
+    activity_stats AS (
       SELECT
-        scheduled_date,
-        had_completion,
-        scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::int AS grp
-      FROM daily_completions
-      WHERE had_completion = 1
-    )
-    SELECT
-      MAX(COUNT(*)) OVER () as longest_streak
-    FROM streak_groups
-    GROUP BY grp
-    LIMIT 1`,
-    [userId]
-  );
-  const longestStreak = parseInt(streakResult.rows[0]?.longest_streak || '0');
-
-  // Get current streak
-  const currentStreakResult = await query<{ current_streak: string }>(
-    `WITH daily_completions AS (
+        COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
+        COUNT(DISTINCT scheduled_date) FILTER (WHERE status = 'completed') as days_active
+      FROM activity_logs WHERE user_id = $1
+    ),
+    goal_stats AS (
       SELECT
-        scheduled_date,
-        CASE WHEN COUNT(*) FILTER (WHERE status = 'completed') > 0 THEN 1 ELSE 0 END as had_completion
-      FROM activity_logs
-      WHERE user_id = $1
-      GROUP BY scheduled_date
-      ORDER BY scheduled_date DESC
-    )
-    SELECT COUNT(*) as current_streak
-    FROM (
+        COUNT(*) as total_goals,
+        COUNT(*) FILTER (WHERE status = 'completed') as completed_goals,
+        COUNT(*) FILTER (WHERE status = 'active') as active_goals
+      FROM user_goals WHERE user_id = $1
+    ),
+    pillar_stats AS (
       SELECT
-        scheduled_date,
-        had_completion,
-        ROW_NUMBER() OVER (ORDER BY scheduled_date DESC) as rn
-      FROM daily_completions
-    ) sub
-    WHERE had_completion = 1
-      AND scheduled_date >= CURRENT_DATE - rn::int`,
-    [userId]
-  );
-  const currentStreak = parseInt(currentStreakResult.rows[0]?.current_streak || '0');
-
-  // Get integrations count
-  const integrationsResult = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM user_integrations
-     WHERE user_id = $1 AND status = 'active'`,
-    [userId]
-  );
-  const integrationsConnected = parseInt(integrationsResult.rows[0]?.count || '0');
-
-  // Get assessments completed
-  const assessmentsResult = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM assessment_responses
-     WHERE user_id = $1 AND is_complete = true`,
-    [userId]
-  );
-  const assessmentsCompleted = parseInt(assessmentsResult.rows[0]?.count || '0');
-
-  // Get perfect days (days where all scheduled activities were completed)
-  const perfectDaysResult = await query<{ perfect_days: string }>(
-    `WITH daily_stats AS (
+        COALESCE(SUM(CASE WHEN sub.pillar = 'fitness' THEN cnt ELSE 0 END), 0) as fitness_activities,
+        COALESCE(SUM(CASE WHEN sub.pillar = 'nutrition' THEN cnt ELSE 0 END), 0) as nutrition_activities,
+        COALESCE(SUM(CASE WHEN sub.pillar = 'wellbeing' THEN cnt ELSE 0 END), 0) as wellbeing_activities
+      FROM (
+        SELECT up.pillar, COUNT(al.id) FILTER (WHERE al.status = 'completed') as cnt
+        FROM user_plans up
+        LEFT JOIN activity_logs al ON al.plan_id = up.id
+        WHERE up.user_id = $1
+        GROUP BY up.pillar
+      ) sub
+    ),
+    health_stats AS (
+      SELECT
+        COUNT(*) FILTER (WHERE data_type = 'workouts') as total_workouts,
+        COUNT(*) FILTER (WHERE data_type = 'nutrition') as total_meals,
+        COUNT(*) FILTER (WHERE data_type = 'workouts' AND EXTRACT(HOUR FROM recorded_at) < 7) as early_morning_workouts,
+        COUNT(*) FILTER (WHERE data_type = 'workouts' AND EXTRACT(DOW FROM recorded_at) IN (0, 6)) as weekend_workouts
+      FROM health_data_records WHERE user_id = $1
+    ),
+    daily_completions AS (
       SELECT
         scheduled_date,
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'completed') as completed
-      FROM activity_logs
-      WHERE user_id = $1
+      FROM activity_logs WHERE user_id = $1
       GROUP BY scheduled_date
+    ),
+    perfect_day_stats AS (
+      SELECT COUNT(*) as perfect_days
+      FROM daily_completions WHERE total = completed AND total > 0
+    ),
+    streak_calc AS (
+      SELECT scheduled_date,
+        scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::int AS grp
+      FROM daily_completions WHERE completed > 0
+    ),
+    longest_streak_calc AS (
+      SELECT COALESCE(MAX(streak_len), 0) as longest_streak
+      FROM (SELECT COUNT(*) as streak_len FROM streak_calc GROUP BY grp) sub
+    ),
+    current_streak_calc AS (
+      SELECT COUNT(*) as current_streak
+      FROM (
+        SELECT scheduled_date, ROW_NUMBER() OVER (ORDER BY scheduled_date DESC) as rn
+        FROM daily_completions WHERE completed > 0
+      ) sub
+      WHERE scheduled_date >= CURRENT_DATE - rn::int
+    ),
+    integration_stats AS (
+      SELECT COUNT(*) as integrations_connected
+      FROM user_integrations WHERE user_id = $1 AND status = 'active'
+    ),
+    assessment_stats AS (
+      SELECT COUNT(*) as assessments_completed
+      FROM assessment_responses WHERE user_id = $1 AND is_complete = true
     )
-    SELECT COUNT(*) as perfect_days
-    FROM daily_stats
-    WHERE total = completed AND total > 0`,
+    SELECT
+      ui.created_at,
+      a.completed_count, a.days_active,
+      g.total_goals, g.completed_goals, g.active_goals,
+      p.fitness_activities::text, p.nutrition_activities::text, p.wellbeing_activities::text,
+      h.total_workouts, h.total_meals,
+      ls.longest_streak, cs.current_streak,
+      i.integrations_connected, ar.assessments_completed,
+      pd.perfect_days,
+      h.early_morning_workouts, h.weekend_workouts
+    FROM user_info ui
+    CROSS JOIN activity_stats a
+    CROSS JOIN goal_stats g
+    CROSS JOIN pillar_stats p
+    CROSS JOIN health_stats h
+    CROSS JOIN longest_streak_calc ls
+    CROSS JOIN current_streak_calc cs
+    CROSS JOIN integration_stats i
+    CROSS JOIN assessment_stats ar
+    CROSS JOIN perfect_day_stats pd`,
     [userId]
   );
-  const perfectDays = parseInt(perfectDaysResult.rows[0]?.perfect_days || '0');
 
-  // Get early morning workouts (simplified - using health_data_records)
-  const earlyMorningResult = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM health_data_records
-     WHERE user_id = $1
-     AND data_type = 'workouts'
-     AND EXTRACT(HOUR FROM recorded_at) < 7`,
-    [userId]
-  );
-  const earlyMorningWorkouts = parseInt(earlyMorningResult.rows[0]?.count || '0');
+  const row = result.rows[0];
+  if (!row) {
+    return {
+      totalActivitiesCompleted: 0, currentStreak: 0, longestStreak: 0,
+      totalGoals: 0, completedGoals: 0, activeGoals: 0,
+      fitnessActivities: 0, nutritionActivities: 0, wellbeingActivities: 0,
+      totalWorkouts: 0, totalMeals: 0, totalMindfulness: 0,
+      daysActive: 0, perfectDays: 0, earlyMorningWorkouts: 0,
+      weekendWorkouts: 0, accountCreatedAt: new Date(),
+      integrationsConnected: 0, assessmentsCompleted: 0,
+    };
+  }
 
-  // Get weekend workouts
-  const weekendResult = await query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM health_data_records
-     WHERE user_id = $1
-     AND data_type = 'workouts'
-     AND EXTRACT(DOW FROM recorded_at) IN (0, 6)`,
-    [userId]
-  );
-  const weekendWorkouts = parseInt(weekendResult.rows[0]?.count || '0');
-
-  return {
-    totalActivitiesCompleted,
-    currentStreak,
-    longestStreak,
-    totalGoals,
-    completedGoals,
-    activeGoals,
-    fitnessActivities,
-    nutritionActivities,
-    wellbeingActivities,
-    totalWorkouts,
-    totalMeals,
-    totalMindfulness: wellbeingActivities, // Using wellbeing as mindfulness proxy
-    daysActive,
-    perfectDays,
-    earlyMorningWorkouts,
-    weekendWorkouts,
-    accountCreatedAt,
-    integrationsConnected,
-    assessmentsCompleted,
+  const stats: UserStats = {
+    totalActivitiesCompleted: parseInt(row.completed_count || '0'),
+    currentStreak: parseInt(row.current_streak || '0'),
+    longestStreak: parseInt(row.longest_streak || '0'),
+    totalGoals: parseInt(row.total_goals || '0'),
+    completedGoals: parseInt(row.completed_goals || '0'),
+    activeGoals: parseInt(row.active_goals || '0'),
+    fitnessActivities: parseInt(row.fitness_activities || '0'),
+    nutritionActivities: parseInt(row.nutrition_activities || '0'),
+    wellbeingActivities: parseInt(row.wellbeing_activities || '0'),
+    totalWorkouts: parseInt(row.total_workouts || '0'),
+    totalMeals: parseInt(row.total_meals || '0'),
+    totalMindfulness: parseInt(row.wellbeing_activities || '0'),
+    daysActive: parseInt(row.days_active || '0'),
+    perfectDays: parseInt(row.perfect_days || '0'),
+    earlyMorningWorkouts: parseInt(row.early_morning_workouts || '0'),
+    weekendWorkouts: parseInt(row.weekend_workouts || '0'),
+    accountCreatedAt: row.created_at || new Date(),
+    integrationsConnected: parseInt(row.integrations_connected || '0'),
+    assessmentsCompleted: parseInt(row.assessments_completed || '0'),
   };
+
+  statsCache.set(userId, { stats, expiresAt: Date.now() + STATS_CACHE_TTL_MS });
+
+  // Prune cache if it grows too large
+  if (statsCache.size > 5000) {
+    const now = Date.now();
+    for (const [key, val] of statsCache) {
+      if (val.expiresAt < now) statsCache.delete(key);
+    }
+  }
+
+  return stats;
 }
 
 // Get all achievements with user progress
@@ -786,8 +750,8 @@ const getAchievementSummary = asyncHandler(async (req: AuthenticatedRequest, res
 
   const stats = await getUserStats(userId);
 
-  // Get recently unlocked (closest to being fully unlocked)
-  const achievements = achievementDefinitions.map((def) => {
+  // Build static achievements
+  const staticAchievements = achievementDefinitions.map((def) => {
     const result = def.checkFn(stats);
     return {
       id: def.id,
@@ -801,8 +765,30 @@ const getAchievementSummary = asyncHandler(async (req: AuthenticatedRequest, res
       progress: result.progress,
       maxProgress: def.maxProgress,
       progressPercentage: Math.round((result.progress / def.maxProgress) * 100),
+      aiGenerated: false,
+      emotionalContext: undefined as string | undefined,
     };
   });
+
+  // Merge dynamic achievements so they appear in summary
+  const dynamicAchs = await dynamicAchievementsService.getDynamicAchievements(userId);
+  const dynamicMapped = dynamicAchs.map((da) => ({
+    id: da.id,
+    title: da.title,
+    description: da.description,
+    icon: da.icon,
+    category: da.category,
+    rarity: da.rarity,
+    xpReward: da.xpReward,
+    unlocked: da.unlocked,
+    progress: da.currentProgress,
+    maxProgress: da.maxProgress,
+    progressPercentage: da.maxProgress > 0 ? Math.round((da.currentProgress / da.maxProgress) * 100) : 0,
+    aiGenerated: true,
+    emotionalContext: da.emotionalContext ?? undefined,
+  }));
+
+  const achievements = [...staticAchievements, ...dynamicMapped];
 
   const unlockedAchievements = achievements.filter((a) => a.unlocked);
   const lockedAchievements = achievements.filter((a) => !a.unlocked);
@@ -812,8 +798,14 @@ const getAchievementSummary = asyncHandler(async (req: AuthenticatedRequest, res
     .sort((a, b) => b.progressPercentage - a.progressPercentage)
     .slice(0, 3);
 
-  // Featured achievements (latest unlocked or random unlocked)
-  const featuredAchievements = unlockedAchievements.slice(0, 4);
+  // Featured: prefer AI-generated unlocked, then most recent unlocked
+  const featuredAchievements = [
+    ...unlockedAchievements.filter((a) => a.aiGenerated),
+    ...unlockedAchievements.filter((a) => !a.aiGenerated),
+  ].slice(0, 4);
+
+  // Recent unlocks (last 7 days)
+  const recentUnlocks = unlockedAchievements.slice(0, 5);
 
   // Calculate level based on XP
   const totalXP = unlockedAchievements.reduce((sum, a) => sum + a.xpReward, 0);
@@ -827,7 +819,7 @@ const getAchievementSummary = asyncHandler(async (req: AuthenticatedRequest, res
   query(
     'UPDATE users SET total_xp = $1, current_level = $2 WHERE id = $3 AND (total_xp IS DISTINCT FROM $1 OR current_level IS DISTINCT FROM $2)',
     [totalXP, level, userId]
-  ).catch(() => {}); // fire-and-forget
+  ).catch(() => {});
 
   ApiResponse.success(
     res,
@@ -841,6 +833,7 @@ const getAchievementSummary = asyncHandler(async (req: AuthenticatedRequest, res
       totalAchievements: achievements.length,
       featuredAchievements,
       nearlyUnlocked,
+      recentUnlocks,
       currentStreak: stats.currentStreak,
       longestStreak: stats.longestStreak,
     },
@@ -1066,13 +1059,13 @@ const generateGoalAchievements = asyncHandler(async (req: AuthenticatedRequest, 
   if (goalResult.rows.length === 0) throw ApiError.notFound('Goal not found');
 
   const goal = goalResult.rows[0];
-  const achievements = await dynamicAchievementsService.generateGoalAchievements(userId, {
+  const achievements = await achievementAIService.generateForGoal(userId, {
     id: goal.id,
     title: goal.title,
     description: goal.description,
     category: goal.category,
-    target_value: goal.target_value ? parseFloat(goal.target_value) : undefined,
-    target_unit: goal.target_unit,
+    targetValue: goal.target_value ? parseFloat(goal.target_value) : undefined,
+    targetUnit: goal.target_unit,
     frequency: goal.frequency,
     status: goal.status,
   });

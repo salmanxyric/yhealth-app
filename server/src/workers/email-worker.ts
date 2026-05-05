@@ -6,7 +6,7 @@
 
 import { Worker, Job } from 'bullmq';
 import { redisConnection, QueueNames } from '../config/queue.config.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { mailHelper } from '../helper/mail.js';
 import type { EmailJobData } from '../services/email-queue.service.js';

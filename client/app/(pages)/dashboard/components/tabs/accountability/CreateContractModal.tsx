@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   X,
@@ -20,12 +20,17 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { accountabilityService } from "@/src/shared/services/accountability.service";
+import type { AccountabilityContact } from "@/src/shared/services/accountability.service";
 
 interface CreateContractModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  editContract?: Contract | null;
 }
+
+import type { Contract } from "./types";
 
 const CONDITION_TYPES = [
   { id: "missed_activity", label: "Missed Activity", icon: Flame, desc: "Triggered when you miss workouts or activities", color: "#f97316" },
@@ -54,6 +59,8 @@ interface FormData {
   endDate: string;
   gracePeriodHours: string;
   autoRenew: boolean;
+  socialEnforcerIds: string[];
+  involveFriends: boolean;
 }
 
 const initialForm: FormData = {
@@ -68,20 +75,71 @@ const initialForm: FormData = {
   endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   gracePeriodHours: "0",
   autoRenew: false,
+  socialEnforcerIds: [],
+  involveFriends: false,
 };
 
 export function CreateContractModal({
   isOpen,
   onClose,
   onSuccess,
+  editContract,
 }: CreateContractModalProps) {
   const prefersReducedMotion = useReducedMotion();
+  const isEdit = !!editContract;
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<AccountabilityContact[]>([]);
 
   const totalSteps = 3;
+
+  const fetchContacts = useCallback(async () => {
+    try {
+      const res = await accountabilityService.getContacts();
+      if (res.data && Array.isArray(res.data)) {
+        setContacts(res.data);
+      }
+    } catch {
+      // Contacts not available
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) fetchContacts();
+  }, [isOpen, fetchContacts]);
+
+  useEffect(() => {
+    if (isOpen && editContract) {
+      setForm({
+        title: editContract.title,
+        description: editContract.description || "",
+        conditionType: editContract.conditionType,
+        conditionValue: editContract.conditionValue?.toString() || "",
+        conditionWindowDays: editContract.conditionWindowDays?.toString() || "1",
+        penaltyType: editContract.penaltyType,
+        penaltyAmount: editContract.penaltyAmount?.toString() || "",
+        startDate: (editContract.startDate ?? new Date().toISOString()).split("T")[0],
+        endDate: (editContract.endDate ?? new Date().toISOString()).split("T")[0],
+        gracePeriodHours: editContract.gracePeriodHours?.toString() || "0",
+        autoRenew: editContract.autoRenew,
+        socialEnforcerIds: editContract.socialEnforcerIds || [],
+        involveFriends: (editContract.socialEnforcerIds || []).length > 0,
+      });
+    } else if (isOpen && !editContract) {
+      setForm(initialForm);
+    }
+  }, [isOpen, editContract]);
+
+  const toggleEnforcer = (contactId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      socialEnforcerIds: prev.socialEnforcerIds.includes(contactId)
+        ? prev.socialEnforcerIds.filter((id) => id !== contactId)
+        : [...prev.socialEnforcerIds, contactId],
+    }));
+  };
 
   const reset = () => {
     setStep(1);
@@ -94,7 +152,7 @@ export function CreateContractModal({
     onClose();
   };
 
-  const update = (field: keyof FormData, value: string | boolean) => {
+  const update = (field: keyof FormData, value: string | boolean | string[]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setError(null);
   };
@@ -121,18 +179,26 @@ export function CreateContractModal({
         end_date: form.endDate,
         grace_period_hours: Number(form.gracePeriodHours) || 0,
         auto_renew: form.autoRenew,
+        social_enforcer_ids: form.involveFriends ? form.socialEnforcerIds : [],
       };
 
-      const res = await api.post("/contracts", body);
-      if (res.success) {
-        // Auto-sign the contract
-        const contract = (res.data as { contract: { id: string } }).contract;
-        await api.post(`/contracts/${contract.id}/sign`, { confirm: true });
-        handleClose();
-        onSuccess();
+      if (isEdit && editContract) {
+        const res = await api.put(`/contracts/${editContract.id}`, body);
+        if (res.success) {
+          handleClose();
+          onSuccess();
+        }
+      } else {
+        const res = await api.post("/contracts", body);
+        if (res.success) {
+          const contract = (res.data as { contract: { id: string } }).contract;
+          await api.post(`/contracts/${contract.id}/sign`, { confirm: true });
+          handleClose();
+          onSuccess();
+        }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create contract");
+      setError(err instanceof Error ? err.message : isEdit ? "Failed to update contract" : "Failed to create contract");
     } finally {
       setSubmitting(false);
     }
@@ -169,7 +235,7 @@ export function CreateContractModal({
                 <Shield className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-white">New Contract</h2>
+                <h2 className="text-lg font-semibold text-white">{isEdit ? "Edit Contract" : "New Contract"}</h2>
                 <p className="text-[11px] text-zinc-500 uppercase tracking-wider">
                   Step {step} of {totalSteps}
                 </p>
@@ -335,6 +401,60 @@ export function CreateContractModal({
                       />
                     </div>
                   )}
+
+                  {/* Involve Friends as Enforcers */}
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.02] border border-white/[0.05] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.involveFriends}
+                        onChange={(e) => update("involveFriends", e.target.checked)}
+                        className="w-4 h-4 rounded accent-cyan-500"
+                      />
+                      <div>
+                        <p className="text-[13px] text-white font-medium">Involve Friends as Enforcers</p>
+                        <p className="text-[11px] text-zinc-500">
+                          Your accountability contacts get notified on violations
+                        </p>
+                      </div>
+                      <Users className="w-4 h-4 text-cyan-400 ml-auto" />
+                    </label>
+
+                    {form.involveFriends && contacts.length > 0 && (
+                      <div className="space-y-1.5 max-h-[150px] overflow-y-auto">
+                        {contacts.map((contact) => {
+                          const selected = form.socialEnforcerIds.includes(contact.id);
+                          return (
+                            <button
+                              key={contact.id}
+                              onClick={() => toggleEnforcer(contact.id)}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                selected
+                                  ? "border-cyan-500/30 bg-cyan-500/[0.06]"
+                                  : "border-white/[0.05] bg-white/[0.02] hover:border-white/[0.1]"
+                              }`}
+                            >
+                              <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 text-xs font-bold flex-shrink-0">
+                                {(contact.contactName || contact.nickname || "?")[0]?.toUpperCase()}
+                              </div>
+                              <span className="text-[13px] text-white flex-1 truncate">
+                                {contact.contactName || contact.nickname || "User"}
+                              </span>
+                              {selected && (
+                                <CheckCircle2 className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {form.involveFriends && contacts.length === 0 && (
+                      <p className="text-[12px] text-zinc-500 px-4">
+                        No accountability contacts yet. Add contacts from the Social Accountability tab.
+                      </p>
+                    )}
+                  </div>
                 </motion.div>
               )}
 
@@ -486,7 +606,7 @@ export function CreateContractModal({
                 ) : (
                   <Shield className="w-4 h-4" />
                 )}
-                Sign & Activate
+                {isEdit ? "Save Changes" : "Sign & Activate"}
               </button>
             )}
           </div>

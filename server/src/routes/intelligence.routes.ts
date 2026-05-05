@@ -8,6 +8,7 @@ import { Router } from 'express';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { intelligenceController } from '../controllers/intelligence.controller.js';
 import knowledgeGraphRoutes from './knowledge-graph.routes.js';
+import intelligenceFilesRoutes from './intelligence-files.routes.js';
 
 const router = Router();
 
@@ -46,5 +47,8 @@ router.post('/insights/:id/feedback', intelligenceController.submitInsightFeedba
 
 // Knowledge Graph sub-router
 router.use('/graph', knowledgeGraphRoutes);
+
+// Intelligence Files sub-router
+router.use('/files', intelligenceFilesRoutes);
 
 export default router;

@@ -3,7 +3,7 @@
  * @description Manages color vision tests, eye exercises, streaks, and analytics
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type {
   VisionTestSession,

@@ -4,7 +4,7 @@
  * Runs every 6 hours, processes 5 users per batch
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { healthCorrelationService } from '../services/wellbeing/health-correlation.service.js';
 import { themeDetectionService } from '../services/wellbeing/theme-detection.service.js';

@@ -1,6 +1,10 @@
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
-import { env } from './env.config.js';
+import { Pool, PoolClient, QueryResult, QueryResultRow, types } from 'pg';
 import { logger } from '../services/logger.service.js';
+
+// Prevent DATE columns from being converted to JS Date objects (which causes
+// timezone shifts when .toISOString() is called). PostgreSQL DATE is timezone-free
+// "YYYY-MM-DD" — return it as-is to avoid off-by-one day bugs in non-UTC servers.
+types.setTypeParser(1082, (val: string) => val);
 
 interface ConnectionOptions {
   maxRetries?: number;
@@ -10,7 +14,6 @@ interface ConnectionOptions {
   onDisconnected?: () => void;
 }
 
-// Parse DATABASE_URL into individual connection params
 function parseConnectionString(url: string) {
   const parsed = new URL(url);
   return {
@@ -22,13 +25,16 @@ function parseConnectionString(url: string) {
   };
 }
 
-// Database configuration - prefer DATABASE_URL, fall back to individual vars
+// Pool size: 30 connections to handle concurrent context queries (16 sub-methods batched in 4 waves of 4)
+// Connection timeout: 5 seconds — fail fast to prevent cascading waits
+// Statement timeout: 15 seconds to prevent long-running queries from holding connections
 const dbConfig = process.env['DATABASE_URL']
   ? {
       ...parseConnectionString(process.env['DATABASE_URL']),
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: parseInt(process.env['DB_CONNECTION_TIMEOUT_MS'] || '10000', 10),
+      max: parseInt(process.env['DB_POOL_MAX'] || '30', 10),
+      idleTimeoutMillis: parseInt(process.env['DB_IDLE_TIMEOUT_MS'] || '30000', 10),
+      connectionTimeoutMillis: parseInt(process.env['DB_CONNECTION_TIMEOUT_MS'] || '5000', 10),
+      statement_timeout: parseInt(process.env['DB_STATEMENT_TIMEOUT_MS'] || '15000', 10),
     }
   : {
       host: process.env['DB_HOST'] || 'localhost',
@@ -36,14 +42,182 @@ const dbConfig = process.env['DATABASE_URL']
       database: process.env['DB_NAME'] || 'balencia',
       user: process.env['DB_USER'] || 'postgres',
       password: process.env['DB_PASSWORD'] || '',
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: parseInt(process.env['DB_CONNECTION_TIMEOUT_MS'] || '10000', 10),
+      max: parseInt(process.env['DB_POOL_MAX'] || '30', 10),
+      idleTimeoutMillis: parseInt(process.env['DB_IDLE_TIMEOUT_MS'] || '30000', 10),
+      connectionTimeoutMillis: parseInt(process.env['DB_CONNECTION_TIMEOUT_MS'] || '5000', 10),
+      statement_timeout: parseInt(process.env['DB_STATEMENT_TIMEOUT_MS'] || '15000', 10),
     };
+
+const pool = new Pool(dbConfig);
+
+pool.on('connect', async (client) => {
+  try {
+    await client.query("SET timezone = 'UTC'");
+    const statementTimeout = dbConfig.statement_timeout || 30000;
+    await client.query(`SET statement_timeout = ${statementTimeout}`);
+    logger.debug('New PostgreSQL client connected (timezone and statement_timeout set)', {
+      statementTimeout,
+    });
+  } catch (error) {
+    // Downgraded from ERROR to DEBUG — Railway often terminates idle connections,
+    // causing SET timezone/statement_timeout to fail on dead connections.
+    // The pool automatically creates new connections, so this is non-fatal.
+    logger.debug('Connection setup failed (pool will retry with new connection)', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+pool.on('error', (err) => {
+  logger.error('PostgreSQL pool error', { error: err.message });
+});
+
+/**
+ * Execute a query with parameters. Includes retry logic for connection timeouts.
+ */
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: (string | number | boolean | null | Date | object)[],
+  retries: number = 2
+): Promise<QueryResult<T>> {
+  const start = Date.now();
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const result = await pool.query<T>(text, params);
+      const duration = Date.now() - start;
+
+      if (attempt > 0) {
+        logger.info('Query succeeded after retry', {
+          attempt: attempt + 1,
+          duration,
+          text: text.substring(0, 100),
+        });
+      } else {
+        logger.debug('Executed query', {
+          text: text.substring(0, 100),
+          duration,
+          rows: result.rowCount,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      lastError = error as Error;
+      const errorMessage = lastError.message;
+      const errorCode = (error as any)?.code;
+
+      const isConnectionError =
+        errorMessage?.includes('Connection terminated') ||
+        errorMessage?.includes('connection timeout') ||
+        errorMessage?.includes('Connection terminated due to connection timeout') ||
+        errorCode === '57P01' || // Admin shutdown
+        errorCode === '57P02' || // Crash shutdown
+        errorCode === '57P03';   // Cannot connect now
+
+      const isVectorExtensionError =
+        errorCode === '42704' ||
+        errorCode === '58P01' ||
+        errorCode === '0A000' ||
+        errorMessage?.includes('type "vector" does not exist') ||
+        errorMessage?.includes('extension "vector" is not available') ||
+        errorMessage?.includes('extension "vector" does not exist') ||
+        (errorMessage?.includes('vector') && errorMessage?.includes('does not exist')) ||
+        (errorMessage?.includes('extension') && errorMessage?.includes('not available'));
+
+      if (isVectorExtensionError) {
+        logger.debug('Query error (pgvector extension not available, fallback will be used)', {
+          text: text.substring(0, 100),
+          error: errorMessage,
+          errorCode,
+        });
+        throw error;
+      }
+
+      if (isConnectionError && attempt < retries) {
+        const delay = Math.min(100 * Math.pow(2, attempt), 1000);
+        logger.warn('Query connection error, retrying', {
+          attempt: attempt + 1,
+          maxRetries: retries + 1,
+          delay,
+          error: errorMessage,
+          errorCode,
+          text: text.substring(0, 100),
+        });
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      logger.error('Query error', {
+        text: text.substring(0, 200),
+        error: errorMessage,
+        errorCode,
+        fullQuery: text,
+        attempt: attempt + 1,
+        poolStats: getPoolStats(),
+      });
+      throw error;
+    }
+  }
+
+  throw lastError || new Error('Query failed after retries');
+}
+
+export async function getClient(): Promise<PoolClient> {
+  const client = await pool.connect();
+  await client.query("SET timezone = 'UTC'");
+  return client;
+}
+
+export async function transaction<T>(
+  callback: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("SET timezone = 'UTC'");
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function testConnection(): Promise<boolean> {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    logger.info('PostgreSQL connected successfully', {
+      timestamp: result.rows[0].now,
+    });
+    return true;
+  } catch (error) {
+    logger.error('PostgreSQL connection failed', {
+      error: (error as Error).message,
+    });
+    return false;
+  }
+}
+
+export async function closePool(): Promise<void> {
+  await pool.end();
+  logger.info('PostgreSQL pool closed');
+}
+
+export function getPoolStats() {
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+  };
+}
 
 class DatabaseConnection {
   private static instance: DatabaseConnection;
-  private pool: Pool;
   private isConnected = false;
   private retryCount = 0;
   private readonly maxRetries: number;
@@ -53,10 +227,8 @@ class DatabaseConnection {
     this.maxRetries = options.maxRetries ?? 5;
     this.retryDelay = options.retryDelay ?? 5000;
 
-    // Initialize PostgreSQL Pool
-    this.pool = new Pool(dbConfig);
-
-    this.setupEventHandlers();
+    process.on('SIGINT', () => this.gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', () => this.gracefulShutdown('SIGTERM'));
   }
 
   public static getInstance(options?: ConnectionOptions): DatabaseConnection {
@@ -64,28 +236,6 @@ class DatabaseConnection {
       DatabaseConnection.instance = new DatabaseConnection(options);
     }
     return DatabaseConnection.instance;
-  }
-
-  private setupEventHandlers(): void {
-    // Log connections and set timezone to UTC for consistent timestamps
-    this.pool.on('connect', async (client) => {
-      // Set timezone to UTC to ensure all timestamps are stored consistently
-      await client.query("SET timezone = 'UTC'");
-      logger.debug('New PostgreSQL client connected (timezone set to UTC)');
-    });
-
-    // Log errors
-    this.pool.on('error', (err) => {
-      logger.error('PostgreSQL pool error', { error: err.message });
-      this.isConnected = false;
-      if (this.retryCount < this.maxRetries) {
-        this.scheduleReconnect();
-      }
-    });
-
-    // Handle process termination
-    process.on('SIGINT', () => this.gracefulShutdown('SIGINT'));
-    process.on('SIGTERM', () => this.gracefulShutdown('SIGTERM'));
   }
 
   private scheduleReconnect(): void {
@@ -109,7 +259,7 @@ class DatabaseConnection {
   public async connect(): Promise<Pool> {
     if (this.isConnected) {
       logger.debug('Already connected to PostgreSQL');
-      return this.pool;
+      return pool;
     }
 
     try {
@@ -120,8 +270,7 @@ class DatabaseConnection {
         user: dbConfig.user,
       });
 
-      // Test the connection
-      const client = await this.pool.connect();
+      const client = await pool.connect();
       const result = await client.query('SELECT NOW()');
       client.release();
 
@@ -132,12 +281,7 @@ class DatabaseConnection {
         timestamp: result.rows[0].now,
       });
 
-      // Note: Database migrations should be run manually via:
-      // - npm run db:setup (for full schema setup)
-      // - Custom migration scripts (for incremental migrations)
-      // Auto-migration is disabled to prevent unexpected schema changes on startup
-
-      return this.pool;
+      return pool;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('Failed to connect to PostgreSQL', { error: errorMessage });
@@ -159,7 +303,7 @@ class DatabaseConnection {
     }
 
     try {
-      await this.pool.end();
+      await closePool();
       this.isConnected = false;
       logger.info('PostgreSQL disconnected gracefully');
     } catch (error) {
@@ -186,13 +330,10 @@ class DatabaseConnection {
   }
 
   public getPool(): Pool {
-    return this.pool;
+    return pool;
   }
 
-  public getConnectionStatus(): {
-    isConnected: boolean;
-    database: string;
-  } {
+  public getConnectionStatus(): { isConnected: boolean; database: string } {
     return {
       isConnected: this.isConnected,
       database: 'PostgreSQL',
@@ -203,7 +344,7 @@ class DatabaseConnection {
     const startTime = Date.now();
 
     try {
-      const client = await this.pool.connect();
+      const client = await pool.connect();
       await client.query('SELECT 1');
       client.release();
       const latency = Date.now() - startTime;
@@ -219,98 +360,13 @@ class DatabaseConnection {
     }
   }
 
-  /**
-   * Execute a query with parameters
-   */
-  public async query<T extends QueryResultRow = QueryResultRow>(
-    text: string,
-    params?: (string | number | boolean | null | Date | object)[]
-  ): Promise<QueryResult<T>> {
-    const start = Date.now();
-    try {
-      const result = await this.pool.query<T>(text, params);
-      const duration = Date.now() - start;
-      if (env.isDevelopment) {
-        logger.debug('Executed query', { text: text.substring(0, 100), duration, rows: result.rowCount });
-      }
-      return result;
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-      const errorCode = (error as any)?.code;
-      
-      // Check if this is a known pgvector missing error (non-critical, has fallback)
-      const isVectorExtensionError = 
-        errorCode === '42704' || // type does not exist
-        errorCode === '58P01' || // extension not available
-        errorCode === '0A000' || // feature not supported (extension not available)
-        errorMessage?.includes('type "vector" does not exist') ||
-        errorMessage?.includes('extension "vector" is not available') ||
-        errorMessage?.includes('extension "vector" does not exist') ||
-        (errorMessage?.includes('vector') && errorMessage?.includes('does not exist')) ||
-        (errorMessage?.includes('extension') && errorMessage?.includes('not available'));
-      
-      if (isVectorExtensionError) {
-        // Log as debug instead of error since we have fallback handling
-        logger.debug('Query error (pgvector extension not available, fallback will be used)', { 
-          text: text.substring(0, 100), 
-          error: errorMessage 
-        });
-      } else {
-        logger.error('Query error', { text: text.substring(0, 100), error: errorMessage });
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Get a client from the pool for transaction support
-   */
-  public async getClient(): Promise<PoolClient> {
-    const client = await this.pool.connect();
-    // Ensure timezone is set to UTC for this client
-    await client.query("SET timezone = 'UTC'");
-    return client;
-  }
-
-  /**
-   * Execute a transaction
-   */
-  public async transaction<T>(
-    callback: (client: PoolClient) => Promise<T>
-  ): Promise<T> {
-    const client = await this.pool.connect();
-    try {
-      // Ensure timezone is set to UTC for this transaction
-      await client.query("SET timezone = 'UTC'");
-      await client.query('BEGIN');
-      const result = await callback(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
-  /**
-   * Get pool statistics
-   */
   public getPoolStats() {
-    return {
-      totalCount: this.pool.totalCount,
-      idleCount: this.pool.idleCount,
-      waitingCount: this.pool.waitingCount,
-    };
+    return getPoolStats();
   }
 }
 
 export const database = DatabaseConnection.getInstance();
 
-// Export convenience functions
-export const query = database.query.bind(database);
-export const transaction = database.transaction.bind(database);
-export const getClient = database.getClient.bind(database);
+export { pool };
 
 export default database;

@@ -98,7 +98,7 @@ export function useDeepAssessment({
     aiCoachService.checkStatus().then((status) => {
       setAiAvailable(status.available);
       if (!status.available) {
-        setError('AI Coach is not available. Please try again later.');
+        setError('Our AI health coach is temporarily offline. Switching to quick assessment mode...');
       }
     });
   }, []);
@@ -149,7 +149,7 @@ export function useDeepAssessment({
         setError(null);
       } catch (err) {
         console.error('Failed to start conversation:', err);
-        setError('Failed to connect to AI Coach. Please try again.');
+        setError('Unable to start your health assessment. Please check your connection and try again.');
       } finally {
         setIsTyping(false);
         setTimeout(scrollToBottom, 100);
@@ -243,7 +243,7 @@ export function useDeepAssessment({
         prev.map((m) => (m.id === userMessage.id ? { ...m, status: 'error' as const } : m))
       );
 
-      setError('Failed to get AI response. Please try again.');
+      setError('Something went wrong. Tap retry to resend your message.');
     } finally {
       setIsTyping(false);
       setTimeout(scrollToBottom, 100);
@@ -426,7 +426,7 @@ export function useDeepAssessment({
         }
       } catch (err) {
         console.error('Failed to regenerate message:', err);
-        setError('Failed to regenerate response. Please try again.');
+        setError('Could not regenerate the response. Please try again.');
       } finally {
         setIsTyping(false);
         setTimeout(scrollToBottom, 100);

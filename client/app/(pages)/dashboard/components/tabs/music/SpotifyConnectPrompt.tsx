@@ -17,14 +17,24 @@ export function SpotifyConnectPrompt({ isConfigured, hasJamendoFallback }: Spoti
   const handleConnect = async () => {
     try {
       setIsConnecting(true);
-      const response = await api.post<{ authUrl: string }>("/spotify/auth/connect", {});
+      // Explicit redirectUri ensures Spotify returns to our Next.js callback route,
+      // not a stale default from env. Must match the URI registered in the Spotify
+      // Developer Dashboard.
+      const redirectUri = `${window.location.origin}/api/integrations/oauth/callback/spotify`;
+      const response = await api.post<{ authUrl: string; state: string }>(
+        "/spotify/auth/connect",
+        { redirectUri }
+      );
       if (response.success && response.data?.authUrl) {
         window.location.href = response.data.authUrl;
       } else {
-        toast.error("Failed to initiate Spotify connection");
+        toast.error("Failed to initiate Spotify connection. Please check your credentials in Settings.");
       }
-    } catch {
-      toast.error("Failed to connect Spotify");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to connect Spotify.";
+      toast.error(msg.includes("not configured")
+        ? "Add your Spotify Client ID & Secret in Settings → Integrations first."
+        : msg);
     } finally {
       setIsConnecting(false);
     }

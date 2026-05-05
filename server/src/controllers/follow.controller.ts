@@ -4,6 +4,7 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { followService } from '../services/follow.service.js';
+import { query } from '../config/database.config.js';
 
 export const sendFollowRequest = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.userId;
@@ -137,6 +138,43 @@ export const dismissSuggestion = asyncHandler(async (req: AuthenticatedRequest, 
   ApiResponse.success(res, null, 'Suggestion dismissed');
 });
 
+export const searchUsers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const rawQuery = (req.query.query ?? req.query.q ?? '').toString().trim();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '10'), 10) || 10, 1), 50);
+
+  if (rawQuery.length < 2) {
+    ApiResponse.success(res, { users: [] }, 'Search results');
+    return;
+  }
+
+  const like = `%${rawQuery.replace(/[%_]/g, (m) => `\\${m}`)}%`;
+  const result = await query<{ id: string; name: string; avatar: string | null }>(
+    `SELECT id,
+            TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) AS name,
+            avatar
+     FROM users
+     WHERE id <> $1
+       AND (
+         first_name ILIKE $2 OR
+         last_name ILIKE $2 OR
+         (first_name || ' ' || COALESCE(last_name, '')) ILIKE $2 OR
+         email ILIKE $2
+       )
+     ORDER BY first_name ASC
+     LIMIT $3`,
+    [userId, like, limit]
+  );
+
+  ApiResponse.success(
+    res,
+    { users: result.rows.map((r) => ({ id: r.id, name: r.name || 'User', avatar: r.avatar ?? undefined })) },
+    'Search results'
+  );
+});
+
 export default {
   sendFollowRequest,
   acceptFollowRequest,
@@ -153,4 +191,5 @@ export default {
   updateConsent,
   getSuggestions,
   dismissSuggestion,
+  searchUsers,
 };

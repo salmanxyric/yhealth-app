@@ -4,7 +4,7 @@
  * Supports 7/30/90 day analysis with pattern detection
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================

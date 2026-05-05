@@ -4,7 +4,7 @@
  * Injects context into AI coach for culturally-aware coaching.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 
 // ============================================
 // TYPES

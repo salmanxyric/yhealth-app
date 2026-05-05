@@ -5,7 +5,7 @@
  * the dominant interests of the user base.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -189,6 +189,75 @@ class SmartCompetitionService {
       [limit]
     );
     return result.rows.map(r => r.name);
+  }
+
+  /**
+   * Check if a competition matches a user's active goals.
+   * Returns true if any of the user's goal pillars match the competition's rules/eligibility.
+   *
+   * NOTE: `ug.pillar` is a `health_pillar` enum — Postgres does not implicitly
+   * compare enums to text/jsonb values, so we cast to ::text on every side.
+   * The `?` operator also requires the RHS be text, not enum.
+   */
+  async isRecommendedForUser(userId: string, competitionId: string): Promise<boolean> {
+    try {
+      const result = await query<{ matched: number }>(
+        `SELECT COUNT(*)::int as matched
+         FROM user_goals ug
+         JOIN competitions c ON c.id = $2
+         WHERE ug.user_id = $1 AND ug.status = 'active'
+           AND (
+             c.rules->>'metric' = ug.pillar::text
+             OR c.eligibility->'pillars' ? (ug.pillar::text)
+             OR c.rules->>'metric' IN ('total', 'engagement')
+           )`,
+        [userId, competitionId]
+      );
+      return Number(result.rows[0]?.matched || 0) > 0;
+    } catch (err) {
+      // Don't crash suggestion paths on DB shape drift — fail open to "not recommended".
+      logger.warn('[SmartCompetition] isRecommendedForUser query failed', {
+        userId,
+        competitionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Count how many of a user's followed buddies are in a competition.
+   * Resilient to the `user_follows` table being absent (pre-migration): returns 0.
+   */
+  async getBuddiesInCompetition(userId: string, competitionId: string): Promise<number> {
+    try {
+      const result = await query<{ count: number }>(
+        `SELECT COUNT(DISTINCT ce.user_id)::int as count
+         FROM competition_entries ce
+         JOIN user_follows uf ON (
+           (uf.requester_id = $1 AND uf.recipient_id = ce.user_id)
+           OR (uf.recipient_id = $1 AND uf.requester_id = ce.user_id)
+         )
+         WHERE ce.competition_id = $2 AND ce.status = 'active'
+           AND uf.status = 'accepted'`,
+        [userId, competitionId]
+      );
+      return Number(result.rows[0]?.count || 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // 42P01 = undefined_table. If the follow graph isn't migrated yet, we just
+      // return 0 buddies instead of failing the whole competition list.
+      if (msg.includes('user_follows') || (err as { code?: string })?.code === '42P01') {
+        logger.debug('[SmartCompetition] user_follows missing — returning 0 buddies');
+        return 0;
+      }
+      logger.warn('[SmartCompetition] getBuddiesInCompetition query failed', {
+        userId,
+        competitionId,
+        error: msg,
+      });
+      return 0;
+    }
   }
 }
 

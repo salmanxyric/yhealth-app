@@ -8,6 +8,7 @@
 
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { logger } from './logger.service.js';
+import type { ToolTurnContext } from '../types/tool-turn-context.js';
 
 // ============================================
 // INTENT TYPES
@@ -30,6 +31,7 @@ export type ToolIntent =
   | 'personal'     // Personal life context (occupation, family, routine)
   | 'music'        // Music playback, playlists, Spotify/Pulse
   | 'status'       // Activity status (sick, traveling, injured, etc.)
+  | 'finance'      // Budget, spending, income, savings, transactions
   | 'general';     // Profile, preferences, general queries
 
 // ============================================
@@ -56,6 +58,7 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
   workouts: [
     'workoutManager',
     'scheduleManager', // Needed for rescheduling missed workouts
+    'checkScheduleConflicts', // Conflict check for "schedule my workout at X"
     'getUserWorkoutPlans',
     'getUserWorkoutLogs',
     'getUserActivePlans',
@@ -74,6 +77,7 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'getUserSchedules',
     'getScheduleByDate',
     'getUserTasks',
+    'checkScheduleConflicts',
   ],
 
   wellbeing: [
@@ -83,8 +87,10 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'voiceJournalManager',
     'energyManager',
     'habitManager',
+    'sleepManager',
     'scheduleManager',
     'getScheduleByDate',
+    'checkScheduleConflicts',
     'getUserMoodTrends',
     'getUserActivityLogsWithMood',
     'createDailyCheckin',
@@ -106,12 +112,18 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
   ],
 
   shopping: [
-    // No dedicated manager yet - uses general tools
-    'getUserActivePlans',
+    'getShoppingListItems',
+    'createShoppingListItem',
+    'updateShoppingListItem',
+    'deleteShoppingListItem',
+    'getUserDietPlans',
   ],
 
   reminders: [
-    // No dedicated manager yet - uses scheduleManager
+    'getScheduledReminders',
+    'createScheduledReminder',
+    'updateScheduledReminder',
+    'deleteScheduledReminder',
     'scheduleManager',
     'getUserTasks',
   ],
@@ -135,19 +147,23 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
   gamification: [
     'gamificationManager',
     'getUserActivePlans',
+    'getStreakStatus',
+    'getStreakCalendar',
+    'getStreakLeaderboard',
+    'freezeStreak',
+    'getStreakStats',
   ],
 
   personal: [
     'personalContextManager',
+    'medicationManager',
     'getUserProfile',
     'getUserPreferences',
   ],
 
   status: [
-    'statusManager',
-    'activityStatusUpdater',
-    'statusHistoryViewer',
-    'planAdjustmentManager',
+    'getStatusHistory',
+    'getUserActivePlans',
   ],
 
   general: [
@@ -160,11 +176,37 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'getUserMoodTrends',
     'getUserTasks',
     'getScheduleByDate',
+    'getDashboardSummary',
     'scheduleManager', // Always available — system prompt references it for many scenarios
+    'checkScheduleConflicts', // Always available — paired with scheduleManager for conflict detection
     'gamificationManager',
     'mentalRecoveryManager',
     'personalContextManager', // Always available — AI can save personal facts anytime
     'whoopAnalyticsManager', // Always available — WHOOP data queries for health coaching
+    'activityTimeline', // Always available — cross-domain activity feed
+    'aiDecisionHistory', // Always available — AI accountability ("what did you do?")
+  ],
+
+  finance: [
+    'getFinancialSummary',
+    'getMonthlySummary',
+    'getSpendingByCategory',
+    'getSpendingTrends',
+    'getMonthComparison',
+    'getFinancialForecast',
+    'getBudgets',
+    'getBudgetAlerts',
+    'getSavingGoals',
+    'getRecentTransactions',
+    'logTransaction',
+    'updateTransaction',
+    'deleteTransaction',
+    'createBudget',
+    'updateBudget',
+    'deleteBudget',
+    'createSavingGoal',
+    'updateSavingGoal',
+    'deleteSavingGoal',
   ],
 
   music: [
@@ -212,6 +254,7 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
     'check-in', 'checkin', 'check in', 'daily checkin', 'daily check-in',
     'reflection', 'reflections', 'insights', 'constellation', 'stars',
     'voice journal', 'voice entry', 'speak', 'record', 'voice reflection',
+    'sleep', 'slept', 'bedtime', 'wake up', 'woke up', 'insomnia', 'nap', 'rest',
   ],
 
   progress: [
@@ -259,9 +302,10 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
   personal: [
     'personal', 'family', 'married', 'wife', 'husband', 'kids', 'children',
     'job', 'work', 'office', 'occupation', 'career', 'schedule',
-    'cook', 'cooking', 'kitchen', 'budget', 'money', 'afford',
+    'cook', 'cooking', 'kitchen',
     'live', 'living', 'apartment', 'house', 'home',
     'hobby', 'hobbies', 'interests', 'relationship',
+    'medication', 'medicine', 'pill', 'pills', 'prescription', 'drug', 'supplement', 'vitamin',
   ],
 
   music: [
@@ -275,6 +319,12 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
     'status', 'sick', 'injured', 'traveling', 'vacation', 'rest day',
     'activity status', 'feeling sick', 'hurt', 'recovery day', 'on leave',
     'under the weather', 'not feeling well',
+  ],
+
+  finance: [
+    'finance', 'financial', 'money', 'income', 'expense', 'expenses', 'budget',
+    'savings', 'saving', 'spending', 'transaction', 'transactions', 'salary',
+    'financial report', 'cash flow', 'net worth', 'forecast', 'category breakdown',
   ],
 
   general: [], // Fallback - no specific keywords
@@ -303,6 +353,7 @@ export function classifyIntent(message: string): { primary: ToolIntent; secondar
     personal: 0,
     music: 0,
     status: 0,
+    finance: 0,
     general: 0,
   };
 
@@ -401,25 +452,32 @@ export function filterToolsByIntent(
 const toolCache = new Map<string, { tools: DynamicStructuredTool[]; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+function toolCacheKey(userId: string, contextSuffix?: string): string {
+  return contextSuffix ? `${userId}|ctx:${contextSuffix}` : userId;
+}
+
 /**
  * Get cached tools for a user, or create new ones
+ * @param contextSuffix When set (e.g. active life area id), bypasses sharing the default per-user cache so tool closures keep correct link targets.
  */
 export function getCachedTools(
   userId: string,
-  createFn: () => DynamicStructuredTool[]
+  createFn: () => DynamicStructuredTool[],
+  contextSuffix?: string
 ): DynamicStructuredTool[] {
-  const cached = toolCache.get(userId);
+  const key = toolCacheKey(userId, contextSuffix);
+  const cached = toolCache.get(key);
   const now = Date.now();
 
   if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
-    logger.debug('[ToolRouter] Using cached tools', { userId, toolCount: cached.tools.length });
+    logger.debug('[ToolRouter] Using cached tools', { userId, key, toolCount: cached.tools.length });
     return cached.tools;
   }
 
   try {
     const tools = createFn();
-    toolCache.set(userId, { tools, timestamp: now });
-    logger.debug('[ToolRouter] Created and cached tools', { userId, toolCount: tools.length });
+    toolCache.set(key, { tools, timestamp: now });
+    logger.debug('[ToolRouter] Created and cached tools', { userId, key, toolCount: tools.length });
     return tools;
   } catch (error) {
     logger.error('[ToolRouter] CRITICAL: Failed to create tools', {
@@ -434,10 +492,15 @@ export function getCachedTools(
 
 /**
  * Clear cache for a specific user (e.g., after preference changes)
+ * Removes default key and any `userId|ctx:*` variants.
  */
 export function clearToolCache(userId?: string): void {
   if (userId) {
-    toolCache.delete(userId);
+    for (const k of toolCache.keys()) {
+      if (k === userId || k.startsWith(`${userId}|ctx:`)) {
+        toolCache.delete(k);
+      }
+    }
   } else {
     toolCache.clear();
   }
@@ -454,10 +517,13 @@ export function clearToolCache(userId?: string): void {
 export function getToolsForMessage(
   userId: string,
   message: string,
-  createAllTools: () => DynamicStructuredTool[]
+  createAllTools: () => DynamicStructuredTool[],
+  toolTurnContext?: ToolTurnContext
 ): DynamicStructuredTool[] {
-  // Get or create cached tools
-  const allTools = getCachedTools(userId, createAllTools);
+  const cacheSuffix = toolTurnContext?.activeLifeAreaId
+    ? `la:${toolTurnContext.activeLifeAreaId}`
+    : undefined;
+  const allTools = getCachedTools(userId, createAllTools, cacheSuffix);
 
   // Classify intent
   const intent = classifyIntent(message);
@@ -477,6 +543,20 @@ export function getToolsForMessage(
 }
 
 // ============================================
+// GRAPH ALERTS (per-user runtime alerts from reasoning graph)
+// ============================================
+
+const userGraphAlerts = new Map<string, Array<{ type: string; severity: string; message: string; relatedNodeId?: string }>>();
+
+export function setGraphAlertsForUser(userId: string, alerts: Array<{ type: string; severity: string; message: string; relatedNodeId?: string }>): void {
+  userGraphAlerts.set(userId, alerts);
+}
+
+export function getGraphAlertsForUser(userId: string): Array<{ type: string; severity: string; message: string; relatedNodeId?: string }> {
+  return userGraphAlerts.get(userId) || [];
+}
+
+// ============================================
 // SERVICE EXPORT
 // ============================================
 
@@ -486,5 +566,7 @@ export const toolRouterService = {
   getCachedTools,
   clearToolCache,
   getToolsForMessage,
+  setGraphAlertsForUser,
+  getGraphAlertsForUser,
   TOOL_GROUPS,
 };

@@ -4,7 +4,7 @@
  */
 
 import type { Response } from 'express';
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { ApiResponse } from '../../utils/ApiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -23,6 +23,7 @@ import type { AuthenticatedRequest } from '../../types/index.js';
 import type { GeneratePlanInput } from '../../validators/plan.validator.js';
 import { modelFactory } from '../../services/model-factory.service.js';
 import { embeddingQueueService } from '../../services/embedding-queue.service.js';
+import { userCoachingProfileService } from '../../services/user-coaching-profile.service.js';
 import { JobPriorities } from '../../config/queue.config.js';
 import {
   type UserGoalRow,
@@ -518,6 +519,14 @@ export const completeOnboarding = asyncHandler(async (req: AuthenticatedRequest,
 
   logger.info('Onboarding completed', { userId, planId: finalPlanResult.rows[0].id });
 
+  // Pre-generate coaching profile so first AI coach chat isn't cold
+  userCoachingProfileService.generateProfile(userId).catch((err) => {
+    logger.warn('[Onboarding] Background profile pre-generation failed (non-blocking)', {
+      userId,
+      error: err instanceof Error ? err.message : 'Unknown',
+    });
+  });
+
   ApiResponse.success(res, {
     message: "You're all set! Your personalized plan is ready.",
     planId: finalPlanResult.rows[0].id,
@@ -936,9 +945,9 @@ export const generateOnboardingPlans = asyncHandler(async (req: AuthenticatedReq
   // This is done asynchronously so it doesn't block plan generation
   (async () => {
     try {
-      const { query } = await import('../../database/pg.js');
+      const { query } = await import('../../config/database.config.js');
       const { r2Service } = await import('../../services/r2.service.js');
-      const { aiCoachService } = await import('../../services/ai-coach.service.js');
+      const { aiCoachService } = await import('../../services/ai-coach/index.js');
       
       // Get all pending images
       const imagesResult = await query<{ id: string; image_type: string; image_key: string }>(

@@ -4,11 +4,11 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Lock, CheckCircle2, Sparkles } from "lucide-react";
 import type { Achievement } from "./types";
 import {
-  rarityGradients,
+  
   rarityBgColors,
   rarityBorderColors,
   rarityGlowStyles,
-  rarityTextColors,
+  
   rarityHexColors,
   categoryConfig,
   gentleSpring,

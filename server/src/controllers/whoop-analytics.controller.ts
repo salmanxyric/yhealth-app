@@ -11,6 +11,7 @@ import type { AuthenticatedRequest } from '../types/index.js';
 import { whoopAnalyticsService } from '../services/whoop-analytics.service.js';
 import { whoopStressService } from '../services/whoop-stress.service.js';
 import cache from '../services/cache.service.js';
+import { checkHealthProfileAccess } from '../services/health-profile-access.service.js';
 
 /**
  * GET /api/whoop/analytics/overview
@@ -293,23 +294,15 @@ export const getUserHealthProfile = asyncHandler(
       throw ApiError.badRequest('userId query parameter is required');
     }
 
-    // Privacy check: Verify users are in a chat together
-    const { query } = await import('../database/pg.js');
-    const chatCheck = await query<{ chat_id: string }>(
-      `SELECT DISTINCT c.id as chat_id
-       FROM chats c
-       INNER JOIN chat_participants cp1 ON c.id = cp1.chat_id
-       INNER JOIN chat_participants cp2 ON c.id = cp2.chat_id
-       WHERE cp1.user_id = $1 
-       AND cp2.user_id = $2
-       AND cp1.left_at IS NULL
-       AND cp2.left_at IS NULL
-       LIMIT 1`,
-      [currentUserId, targetUserId]
-    );
-
-    if (chatCheck.rows.length === 0) {
-      throw ApiError.forbidden('You can only view health profiles of users you chat with');
+    const access = await checkHealthProfileAccess(currentUserId, targetUserId);
+    if (!access.allowed) {
+      res.status(403).json({
+        success: false,
+        blocked: true,
+        visibility: access.visibility,
+        message: access.reason || 'Health profile is not available',
+      });
+      return;
     }
 
     // Get today's date range

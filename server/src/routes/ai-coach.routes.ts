@@ -4,6 +4,7 @@ import { authenticate } from '../middlewares/auth.middleware.js';
 import { uploadImage } from '../middlewares/upload.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { aiGenerationLimiter } from '../middlewares/rateLimiter.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 import {
   startConversationSchema,
   sendMessageSchema,
@@ -12,6 +13,8 @@ import {
   sessionSchema,
   chatSchema,
   generateDietPlanSchema,
+  generateBatchMCQQuestionsSchema,
+  generateLifeCoachQuestionsSchema,
 } from '../validators/ai-coach.validator.js';
 
 const router = Router();
@@ -43,7 +46,14 @@ router.post('/start', authenticate, validate(startConversationSchema), aiCoachCo
  *            extractedInsights?: ExtractedInsight[]
  *          }
  */
-router.post('/message', authenticate, validate(sendMessageSchema), aiCoachController.sendMessage);
+router.post(
+  '/message',
+  authenticate,
+  validate(sendMessageSchema),
+  requireFeature('ai.coach.message'),
+  consumeCredits('ai.coach.message'),
+  aiCoachController.sendMessage
+);
 
 /**
  * @route   POST /api/ai-coach/complete
@@ -104,7 +114,14 @@ router.get('/history', authenticate, aiCoachController.getChatHistory);
  * @access  Private
  * @body    { sessionId?: string, message: string, goal: GoalCategory }
  */
-router.post('/chat', authenticate, validate(chatSchema), aiCoachController.chat);
+router.post(
+  '/chat',
+  authenticate,
+  validate(chatSchema),
+  requireFeature('ai.coach.message'),
+  consumeCredits('ai.coach.message'),
+  aiCoachController.chat
+);
 
 // ============================================================================
 // Goal Generation
@@ -121,7 +138,15 @@ router.post('/chat', authenticate, validate(chatSchema), aiCoachController.chat)
  *            customGoalText?: string
  *          }
  */
-router.post('/generate-goals', authenticate, aiGenerationLimiter, validate(generateGoalsSchema), aiCoachController.generateGoals);
+router.post(
+  '/generate-goals',
+  authenticate,
+  aiGenerationLimiter,
+  validate(generateGoalsSchema),
+  requireFeature('ai.coach.goal_generate'),
+  consumeCredits('ai.coach.goal_generate'),
+  aiCoachController.generateGoals
+);
 
 // ============================================================================
 // MCQ Dynamic Question Generation
@@ -153,6 +178,34 @@ router.post('/mcq/question', authenticate, aiCoachController.generateMCQQuestion
  */
 router.post('/mcq/answer', authenticate, aiCoachController.processMCQAnswer);
 
+/**
+ * @route   POST /api/ai-coach/mcq/batch-questions
+ * @desc    Generate batch of MCQ questions for quick assessment
+ * @access  Private
+ * @body    { goal: GoalCategory, customGoalText?: string, count?: number, language?: string }
+ */
+router.post(
+  '/mcq/batch-questions',
+  authenticate,
+  aiGenerationLimiter,
+  validate(generateBatchMCQQuestionsSchema),
+  aiCoachController.generateBatchMCQQuestions
+);
+
+/**
+ * @route   POST /api/ai-coach/life-coach-questions
+ * @desc    Generate dynamic life-coach questions based on goal + assessment
+ * @access  Private
+ * @body    { goal: GoalCategory, customGoalText?: string, assessmentResponses?: array, language?: string }
+ */
+router.post(
+  '/life-coach-questions',
+  authenticate,
+  aiGenerationLimiter,
+  validate(generateLifeCoachQuestionsSchema),
+  aiCoachController.generateLifeCoachQuestions
+);
+
 // ============================================================================
 // Diet Plan Generation
 // ============================================================================
@@ -163,7 +216,14 @@ router.post('/mcq/answer', authenticate, aiCoachController.processMCQAnswer);
  * @access  Private
  * @body    { goal: GoalCategory, extractedInsights: ExtractedInsight[], preferences?: {...} }
  */
-router.post('/diet-plan/generate', authenticate, validate(generateDietPlanSchema), aiCoachController.generateDietPlan);
+router.post(
+  '/diet-plan/generate',
+  authenticate,
+  validate(generateDietPlanSchema),
+  requireFeature('ai.coach.diet_plan_generate'),
+  consumeCredits('ai.coach.diet_plan_generate'),
+  aiCoachController.generateDietPlan
+);
 
 /**
  * @route   GET /api/ai-coach/diet-plan
@@ -182,7 +242,14 @@ router.get('/diet-plan', authenticate, aiCoachController.getDietPlan);
  * @access  Private
  * @body    FormData with 'image' file, optional 'question' and 'goal'
  */
-router.post('/image/analyze', authenticate, uploadImage, aiCoachController.analyzeImage);
+router.post(
+  '/image/analyze',
+  authenticate,
+  uploadImage,
+  requireFeature('ai.coach.image_analyze'),
+  consumeCredits('ai.coach.image_analyze'),
+  aiCoachController.analyzeImage
+);
 
 /**
  * @route   POST /api/ai-coach/image/validate
@@ -198,7 +265,14 @@ router.post('/image/validate', authenticate, uploadImage, aiCoachController.vali
  * @access  Private
  * @body    FormData with 'image' file, 'goal', optional 'message' and 'sessionId'
  */
-router.post('/chat-with-image', authenticate, uploadImage, aiCoachController.chatWithImage);
+router.post(
+  '/chat-with-image',
+  authenticate,
+  uploadImage,
+  requireFeature('ai.coach.image_analyze'),
+  consumeCredits('ai.coach.image_analyze'),
+  aiCoachController.chatWithImage
+);
 
 // ============================================================================
 // Coaching Profile

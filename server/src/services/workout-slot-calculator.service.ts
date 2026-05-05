@@ -3,7 +3,7 @@
  * Pure code function to compute valid slots for rescheduling
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import type { UserConstraints } from './workout-constraint.service.js';
 import type { MissedTask } from './workout-audit.service.js';

@@ -4,7 +4,7 @@
  * from daily_analysis_reports with today's actual metrics from the snapshot.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 
 // ============================================

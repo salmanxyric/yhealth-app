@@ -113,6 +113,10 @@ export interface Message {
   readBy?: string[];
   isViewOnce?: boolean;
   viewOnceOpenedAt?: string | null;
+  /** Proactive coach payloads (socket); may be absent on messages loaded from REST */
+  proactiveType?: string;
+  obstacleId?: string;
+  reconnectionId?: string;
 }
 
 interface _CreateChatParams {

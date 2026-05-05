@@ -5,7 +5,7 @@
  * ensuring consistent DB persistence + Socket.IO delivery.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { socketService } from './socket.service.js';
 
@@ -162,10 +162,25 @@ class NotificationEngine {
       const counts = await this.getUnreadCounts(userId);
       socketService.emitToUser(userId, 'notification:count', counts);
 
-      // 4. Trigger email for urgent/high priority notifications (non-blocking)
+      // 4. Email (non-blocking) — respects user_communication_preferences.email_urgent_only
       if (priority === 'urgent' || priority === 'high') {
-        this.triggerEmailForNotification(userId, notification.title, notification.message).catch(() => {});
+        this.triggerEmailForNotification(userId, notification.title, notification.message, priority).catch(
+          () => {}
+        );
       }
+
+      // 5. Mobile push (non-blocking, optional FCM)
+      import('./push-notification.service.js')
+        .then(({ pushNotificationService }) =>
+          pushNotificationService.deliverForUser(userId, {
+            title: notification.title,
+            body: notification.message,
+            type: notification.type,
+            category: notification.category || undefined,
+            actionUrl: notification.action_url || undefined,
+          })
+        )
+        .catch(() => {});
 
       logger.info('[NotificationEngine] Sent notification', {
         userId,
@@ -241,8 +256,22 @@ class NotificationEngine {
   /**
    * Trigger email for high-priority notifications (non-blocking helper)
    */
-  private async triggerEmailForNotification(userId: string, title: string, message: string): Promise<void> {
+  private async triggerEmailForNotification(
+    userId: string,
+    title: string,
+    message: string,
+    priority: string
+  ): Promise<void> {
     try {
+      const { communicationPreferencesService } = await import('./communication-preferences.service.js');
+      const prefs = await communicationPreferencesService.getForUser(userId);
+      if (!prefs.email_digest && priority !== 'urgent') {
+        return;
+      }
+      if (prefs.email_urgent_only && priority !== 'urgent') {
+        return;
+      }
+
       // Lazy import to avoid circular dependency
       const { emailEngine } = await import('./email-engine.service.js');
 
@@ -259,7 +288,7 @@ class NotificationEngine {
         recipient: result.rows[0].email,
         data: { title, message, appUrl: process.env['APP_URL'] || 'https://balencia.app' },
         category: 'engagement',
-        priority: 'high',
+        priority: priority === 'urgent' ? 'high' : 'normal',
       });
     } catch (error) {
       logger.debug('[NotificationEngine] Email trigger failed (non-critical)', {

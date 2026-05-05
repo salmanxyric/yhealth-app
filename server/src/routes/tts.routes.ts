@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ttsController } from '../controllers/tts.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 
 const router = Router();
 
@@ -17,7 +18,13 @@ router.get('/status', ttsController.getStatus);
  * @access  Private
  * @body    { text: string, voiceId?: string, stream?: boolean }
  */
-router.post('/speak', authenticate, ttsController.speak);
+router.post(
+  '/speak',
+  authenticate,
+  requireFeature('ai.voice.tts'),
+  consumeCredits('ai.voice.tts'),
+  ttsController.speak
+);
 
 export default router;
 

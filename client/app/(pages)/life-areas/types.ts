@@ -4,6 +4,8 @@ export type LifeAreaDomainType =
 
 export interface LifeAreaPreferences {
   preferredTimeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
+  checkInWindowStartHour?: number;
+  checkInWindowEndHour?: number;
   blockedDays?: ('mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun')[];
   tone?: 'gentle' | 'direct' | 'playful' | 'neutral';
   followUpFrequency?: 'daily' | 'every-other-day' | 'weekly' | 'off';
@@ -31,6 +33,24 @@ export interface LifeAreaLink {
   entity_type: 'goal' | 'schedule' | 'contract' | 'reminder';
   entity_id: string;
   created_at: string;
+}
+
+export interface ResolvedLifeAreaLink extends LifeAreaLink {
+  label: string;
+  subtitle: string | null;
+}
+
+export interface LifeAreaSummaryRow {
+  id: string;
+  display_name: string;
+  domain_type: string;
+  link_count: number;
+}
+
+export interface LifeAreasDashboardSummary {
+  activeAreaCount: number;
+  totalLinks: number;
+  areas: LifeAreaSummaryRow[];
 }
 
 export interface LifeAreaDomain {

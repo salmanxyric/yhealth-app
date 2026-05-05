@@ -761,6 +761,7 @@ const FOOD_ICON_MAP: [string[], string][] = [
 ];
 
 export function getFoodIcon(foodName: string, category?: string): string {
+  if (!foodName) return "🍽️";
   const lower = foodName.toLowerCase();
   for (const [keywords, icon] of FOOD_ICON_MAP) {
     if (keywords.some(kw => lower.includes(kw))) return icon;

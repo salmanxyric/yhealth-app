@@ -10,7 +10,7 @@
  *  - snoozed    → suppresses future prompts until snoozed_until
  */
 
-import { query } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import type {
   GoalReconnection,
@@ -242,56 +242,60 @@ class GoalReconnectionService {
           : null;
         const note = typeof opts.checkinNote === 'string' ? opts.checkinNote.slice(0, 2000) : null;
 
-        // Insert a check-in for today (ON CONFLICT because unique per (goal, date))
-        await query(
-          `INSERT INTO life_goal_checkins (life_goal_id, user_id, checkin_date, note, mood_about_goal)
-           VALUES ($1, $2, CURRENT_DATE, $3, $4)
-           ON CONFLICT (life_goal_id, checkin_date) DO UPDATE
-             SET note = COALESCE(EXCLUDED.note, life_goal_checkins.note),
-                 mood_about_goal = COALESCE(EXCLUDED.mood_about_goal, life_goal_checkins.mood_about_goal)`,
-          [existing.lifeGoalId, userId, note, mood]
-        );
+        return await transaction(async (client) => {
+          // Insert a check-in for today (ON CONFLICT because unique per (goal, date))
+          await client.query(
+            `INSERT INTO life_goal_checkins (life_goal_id, user_id, checkin_date, note, mood_about_goal)
+             VALUES ($1, $2, CURRENT_DATE, $3, $4)
+             ON CONFLICT (life_goal_id, checkin_date) DO UPDATE
+               SET note = COALESCE(EXCLUDED.note, life_goal_checkins.note),
+                   mood_about_goal = COALESCE(EXCLUDED.mood_about_goal, life_goal_checkins.mood_about_goal)`,
+            [existing.lifeGoalId, userId, note, mood]
+          );
 
-        // Touch the goal so `updated_at` and `last_mentioned_at` reflect engagement
-        await query(
-          `UPDATE life_goals
-             SET last_mentioned_at = NOW(), updated_at = NOW()
-           WHERE id = $1 AND user_id = $2`,
-          [existing.lifeGoalId, userId]
-        );
+          // Touch the goal so `updated_at` and `last_mentioned_at` reflect engagement
+          await client.query(
+            `UPDATE life_goals
+               SET last_mentioned_at = NOW(), updated_at = NOW()
+             WHERE id = $1 AND user_id = $2`,
+            [existing.lifeGoalId, userId]
+          );
 
-        const updated = await query<ReconnectionRow>(
-          `UPDATE goal_reconnections
-             SET user_response = 'committed',
-                 checkin_note = $1,
-                 mood_about_goal = $2,
-                 resolved_at = NOW(),
-                 updated_at = NOW()
-           WHERE id = $3 AND user_id = $4
-           RETURNING *`,
-          [note, mood, id, userId]
-        );
-        return rowToReconnection(updated.rows[0]);
+          const updated = await client.query<ReconnectionRow>(
+            `UPDATE goal_reconnections
+               SET user_response = 'committed',
+                   checkin_note = $1,
+                   mood_about_goal = $2,
+                   resolved_at = NOW(),
+                   updated_at = NOW()
+             WHERE id = $3 AND user_id = $4
+             RETURNING *`,
+            [note, mood, id, userId]
+          );
+          return rowToReconnection(updated.rows[0]);
+        });
       }
 
       case 'paused':
       case 'archived': {
         const newStatus = response === 'paused' ? 'paused' : 'abandoned';
-        await query(
-          `UPDATE life_goals SET status = $1, updated_at = NOW()
-           WHERE id = $2 AND user_id = $3`,
-          [newStatus, existing.lifeGoalId, userId]
-        );
-        const updated = await query<ReconnectionRow>(
-          `UPDATE goal_reconnections
-             SET user_response = $1,
-                 resolved_at = NOW(),
-                 updated_at = NOW()
-           WHERE id = $2 AND user_id = $3
-           RETURNING *`,
-          [response, id, userId]
-        );
-        return rowToReconnection(updated.rows[0]);
+        return await transaction(async (client) => {
+          await client.query(
+            `UPDATE life_goals SET status = $1, updated_at = NOW()
+             WHERE id = $2 AND user_id = $3`,
+            [newStatus, existing.lifeGoalId, userId]
+          );
+          const updated = await client.query<ReconnectionRow>(
+            `UPDATE goal_reconnections
+               SET user_response = $1,
+                   resolved_at = NOW(),
+                   updated_at = NOW()
+             WHERE id = $2 AND user_id = $3
+             RETURNING *`,
+            [response, id, userId]
+          );
+          return rowToReconnection(updated.rows[0]);
+        });
       }
 
       case 'snoozed': {

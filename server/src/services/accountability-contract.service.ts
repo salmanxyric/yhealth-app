@@ -7,7 +7,7 @@
  * Reuses evaluation patterns from accountability-trigger.service.ts.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { gamificationService } from './gamification.service.js';
 import { notificationService } from './notification.service.js';
@@ -490,6 +490,22 @@ class AccountabilityContractService {
     return result.rows.length > 0 ? mapRow(result.rows[0]) : null;
   }
 
+  async deleteContract(userId: string, contractId: string): Promise<boolean> {
+    const result = await query(
+      `DELETE FROM accountability_contracts WHERE id = $1 AND user_id = $2 RETURNING id`,
+      [contractId, userId]
+    );
+    return result.rows.length > 0;
+  }
+
+  async bulkDeleteContracts(userId: string, contractIds: string[]): Promise<number> {
+    const result = await query(
+      `DELETE FROM accountability_contracts WHERE id = ANY($1) AND user_id = $2 RETURNING id`,
+      [contractIds, userId]
+    );
+    return result.rowCount || 0;
+  }
+
   // ══════════════════════════════════════════════════════════════════
   // EVALUATION (called by background job)
   // ══════════════════════════════════════════════════════════════════
@@ -681,13 +697,16 @@ class AccountabilityContractService {
 
     const violation = mapViolationRow(result.rows[0]);
 
-    // Update contract stats
+    const AT_RISK_THRESHOLD = 3;
+    const newViolationCount = contract.violationCount + 1;
+    const newStatus = newViolationCount >= AT_RISK_THRESHOLD ? 'violated' : 'at_risk';
+
     await query(
       `UPDATE accountability_contracts
        SET violation_count = violation_count + 1, last_violation_at = NOW(),
-           status = 'violated', updated_at = NOW()
+           status = $2, updated_at = NOW()
        WHERE id = $1`,
-      [contract.id]
+      [contract.id, newStatus]
     );
 
     // Notify user
@@ -784,10 +803,21 @@ class AccountabilityContractService {
           break;
         }
         case 'donation': {
-          // No payment integration yet — mark as pending
           details.donationAmount = contract.penaltyAmount;
           details.donationCurrency = contract.penaltyCurrency;
-          details.donationStatus = 'pending_manual';
+          details.donationPledge = true;
+          details.donationStatus = 'pledge_reminder';
+
+          await notificationService.create({
+            userId: contract.userId,
+            type: 'reminder',
+            title: 'Donation Pledge Reminder',
+            message: `Your contract "${contract.title}" was violated. You pledged to donate ${contract.penaltyAmount} ${contract.penaltyCurrency}. Please fulfill your commitment.`,
+            icon: '💰',
+            priority: 'high',
+            relatedEntityType: 'contract',
+            relatedEntityId: contract.id,
+          });
           break;
         }
         case 'streak_freeze_loss': {
@@ -908,7 +938,8 @@ class AccountabilityContractService {
       `SELECT * FROM accountability_contracts
        WHERE status IN ('active', 'at_risk')
          AND start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE
-       ORDER BY created_at`
+         AND (last_checked_at IS NULL OR last_checked_at < NOW() - INTERVAL '1 hour')
+       ORDER BY last_checked_at NULLS FIRST, created_at`
     );
     return result.rows.map(mapRow);
   }
@@ -923,8 +954,31 @@ class AccountabilityContractService {
       total_checks: string;
       penalties_executed: string;
       penalties_pending: string;
+      current_streak: string;
     }>(
-      `SELECT
+      `WITH streak AS (
+        SELECT COUNT(*) as current_streak
+        FROM (
+          SELECT ch.checked_at, ch.passed,
+                 ROW_NUMBER() OVER (ORDER BY ch.checked_at DESC) -
+                 ROW_NUMBER() OVER (PARTITION BY ch.passed ORDER BY ch.checked_at DESC) as grp
+          FROM accountability_contract_checks ch
+          JOIN accountability_contracts c ON c.id = ch.contract_id
+          WHERE c.user_id = $1 AND c.status IN ('active', 'at_risk')
+        ) grouped
+        WHERE passed = TRUE AND grp = (
+          SELECT MIN(g2.grp) FROM (
+            SELECT passed,
+                   ROW_NUMBER() OVER (ORDER BY checked_at DESC) -
+                   ROW_NUMBER() OVER (PARTITION BY passed ORDER BY checked_at DESC) as grp
+            FROM accountability_contract_checks ch2
+            JOIN accountability_contracts c2 ON c2.id = ch2.contract_id
+            WHERE c2.user_id = $1 AND c2.status IN ('active', 'at_risk')
+          ) g2
+          WHERE g2.passed = TRUE
+        )
+      )
+      SELECT
         COUNT(*) FILTER (WHERE c.status IN ('active', 'at_risk')) as active_count,
         COUNT(*) FILTER (WHERE c.status = 'completed') as completed_count,
         COALESCE(SUM(c.violation_count), 0) as total_violations,
@@ -933,7 +987,8 @@ class AccountabilityContractService {
         (SELECT COUNT(*) FROM accountability_contract_violations v
          WHERE v.user_id = $1 AND v.penalty_status = 'executed') as penalties_executed,
         (SELECT COUNT(*) FROM accountability_contract_violations v
-         WHERE v.user_id = $1 AND v.penalty_status = 'pending') as penalties_pending
+         WHERE v.user_id = $1 AND v.penalty_status = 'pending') as penalties_pending,
+        COALESCE((SELECT current_streak FROM streak), 0) as current_streak
       FROM accountability_contracts c
       WHERE c.user_id = $1`,
       [userId]
@@ -949,7 +1004,7 @@ class AccountabilityContractService {
       totalViolations: Number(r?.total_violations || 0),
       totalSuccessChecks: totalSuccess,
       overallSuccessRate: totalChecks > 0 ? Math.round((totalSuccess / totalChecks) * 100) : 0,
-      currentActiveStreak: 0, // calculated separately if needed
+      currentActiveStreak: Number(r?.current_streak || 0),
       penaltiesExecuted: Number(r?.penalties_executed || 0),
       penaltiesPending: Number(r?.penalties_pending || 0),
     };

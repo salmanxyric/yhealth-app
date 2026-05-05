@@ -18,7 +18,7 @@ import {
   BarChart3,
   AlertTriangle,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api-client";
+import { api } from "@/lib/api-client";
 import type { TransactionSummary, MonthlySummary, CategoryBreakdownItem, SpendingTrend, FinanceTransaction, FinanceBudget, FinanceSavingGoal, FinanceAIInsight, BudgetAlert, FinanceCategory, CreateTransactionInput } from "@shared/types/domain/finance";
 import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 
@@ -294,7 +294,7 @@ export function FinanceTab() {
       if (goalsRes.status === "fulfilled" && goalsRes.value.data) setGoals(goalsRes.value.data);
       if (insightsRes.status === "fulfilled" && insightsRes.value.data) setInsights(insightsRes.value.data);
       if (alertsRes.status === "fulfilled" && alertsRes.value.data) setBudgetAlerts(alertsRes.value.data);
-    } catch (err) {
+    } catch (_err) {
       // Partial failures handled by allSettled
     } finally {
       setIsLoading(false);

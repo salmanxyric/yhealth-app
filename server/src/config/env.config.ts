@@ -245,7 +245,10 @@ export const env = {
   spotify: {
     clientId: process.env['SPOTIFY_CLIENT_ID'],
     clientSecret: process.env['SPOTIFY_CLIENT_SECRET'],
-    redirectUri: process.env['SPOTIFY_REDIRECT_URI'] || 'http://localhost:3000/settings?callback=spotify',
+    // Users must register this exact URI in their Spotify Developer Dashboard.
+    // The frontend will normally pass an explicit redirectUri, but this env var is used as a fallback.
+    redirectUri: process.env['SPOTIFY_REDIRECT_URI']
+      || `${process.env['NEXT_PUBLIC_SITE_URL'] || 'http://localhost:3000'}/api/integrations/oauth/callback/spotify`,
   },
 
   // Jamendo Integration (Free CC-licensed music fallback when Spotify not configured)
@@ -257,6 +260,20 @@ export const env = {
   // Google APIs (YouTube Data API v3)
   google: {
     apiKey: process.env['GOOGLE_API_KEY'],
+  },
+
+  // Entitlement enforcement mode — controls the credit middleware stack.
+  //   'shadow'       — log would-be-denials, never block. Ledger still writes.
+  //   'enforce-new'  — enforce for users created after ROLLOUT_START, shadow otherwise.
+  //   'enforce-all'  — full enforcement.
+  // Default 'shadow' for safety; flip to enforce-new once the ledger has run
+  // clean for ~48 hours with real traffic.
+  entitlement: {
+    mode: (process.env['ENTITLEMENT_ENFORCEMENT_MODE'] || 'shadow') as
+      | 'shadow'
+      | 'enforce-new'
+      | 'enforce-all',
+    rolloutStart: process.env['ENTITLEMENT_ROLLOUT_START'] || '',
   },
 } as const;
 

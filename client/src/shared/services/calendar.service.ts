@@ -60,6 +60,37 @@ export interface SpecialDay {
   };
 }
 
+export interface Holiday {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  type: 'religious' | 'national' | 'cultural' | 'personal';
+  region: string;
+  affectsFitness: boolean;
+  affectsNutrition: boolean;
+}
+
+export interface HolidayContext {
+  activeHolidays: Holiday[];
+  upcomingHolidays: Holiday[];
+  isFastingPeriod: boolean;
+  fastingName: string | null;
+  suggestedAdjustments: string[];
+}
+
+export interface UserHolidayPrefs {
+  region: string;
+  religiousCalendar: string | null;
+  customHolidays: Array<{ name: string; date: string }>;
+}
+
+export interface GoogleCalendarInfo {
+  id: string;
+  summary: string;
+  primary: boolean;
+}
+
 export interface DayContext {
   date: string;
   totalItems: number;
@@ -75,6 +106,7 @@ export interface DayContext {
   backToBackCount: number;
   categories: Record<string, number>;
   specialDays: SpecialDay[];
+  holidayContext?: HolidayContext;
 }
 
 // ============================================
@@ -111,6 +143,31 @@ class CalendarApiService {
     return api.get<{ events: CalendarEvent[]; count: number }>('/calendar/events', {
       params: { start: startDate, end: endDate },
     });
+  }
+
+  // ── Multi-Calendar ──
+
+  async listCalendars(connectionId: string) {
+    return api.get<{ calendars: GoogleCalendarInfo[] }>(`/calendar/connections/${connectionId}/calendars`);
+  }
+
+  async updateSyncCalendars(connectionId: string, calendarIds: string[]) {
+    return api.put(`/calendar/connections/${connectionId}/calendars`, { calendarIds });
+  }
+
+  // ── Holidays ──
+
+  async getHolidays(days?: number) {
+    const params = days ? { days } : {};
+    return api.get<{
+      upcoming: Holiday[];
+      preferences: UserHolidayPrefs;
+      context: HolidayContext;
+    }>('/v1/schedules/holidays', { params });
+  }
+
+  async updateHolidayPreferences(prefs: Partial<UserHolidayPrefs>) {
+    return api.put('/v1/schedules/holidays/preferences', prefs);
   }
 }
 

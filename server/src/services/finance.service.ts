@@ -4,7 +4,7 @@
  * budgets, saving goals, and monthly snapshots.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import type {

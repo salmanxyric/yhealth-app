@@ -3,7 +3,7 @@
  * @description AI-extracted and user-entered structured insights from journals and evening reviews
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../logger.service.js';
 import { modelFactory } from '../model-factory.service.js';

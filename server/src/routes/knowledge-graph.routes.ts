@@ -22,6 +22,12 @@ router.get('/node/:nodeId', knowledgeGraphController.getNodeDetail);
 // Search
 router.post('/search', knowledgeGraphController.searchNodes);
 
+// Reasoning graph overlay (feature nodes + edges + states)
+router.get('/reasoning', knowledgeGraphController.getReasoningOverlay);
+
+// Next best actions (graph-traversal recommendations)
+router.get('/next-actions', knowledgeGraphController.getNextBestActions);
+
 // Export
 router.get('/export', knowledgeGraphController.exportGraph);
 

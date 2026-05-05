@@ -3,7 +3,7 @@
  * @description Handles wellbeing routines and completion tracking (F7.6)
  */
 
-import { query } from '../../database/pg.js';
+import { query } from '../../config/database.config.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type {
   WellbeingRoutine,

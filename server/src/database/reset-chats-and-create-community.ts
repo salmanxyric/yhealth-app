@@ -3,7 +3,7 @@
  * @description Deletes all chats, messages, and related data, then creates a single "balencia community" group chat with all users
  */
 
-import { transaction, query, closePool } from './pg.js';
+import { transaction, query, closePool } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { chatCacheService } from '../services/chat-cache.service.js';
 import type { PoolClient } from 'pg';

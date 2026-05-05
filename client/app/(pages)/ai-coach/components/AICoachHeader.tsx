@@ -1,15 +1,16 @@
 "use client";
 
-import { Mic, X, PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { Mic, X, PanelLeftOpen, PanelLeftClose, FolderOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 interface AICoachHeaderProps {
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
+  onOpenIntelligence?: () => void;
 }
 
-export function AICoachHeader({ onToggleSidebar, isSidebarOpen }: AICoachHeaderProps) {
+export function AICoachHeader({ onToggleSidebar, isSidebarOpen, onOpenIntelligence }: AICoachHeaderProps) {
   const router = useRouter();
 
   return (
@@ -49,8 +50,20 @@ export function AICoachHeader({ onToggleSidebar, isSidebarOpen }: AICoachHeaderP
         </div>
       </div>
 
-      {/* Right: Voice Mode + Close */}
+      {/* Right: Intelligence + Voice Mode + Close */}
       <div className="flex items-center gap-4">
+        {/* Intelligence Files button */}
+        {onOpenIntelligence && (
+          <button
+            onClick={onOpenIntelligence}
+            className="flex items-center justify-center w-[44px] h-[44px] rounded-[11px] border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] transition-colors"
+            aria-label="Intelligence Files"
+            title="Intelligence Files"
+          >
+            <FolderOpen className="w-[21px] h-[21px] text-white/70" />
+          </button>
+        )}
+
         {/* Voice Mode button */}
         <button
           onClick={() => router.push("/voice-assistant")}

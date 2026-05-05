@@ -1,10 +1,10 @@
 import type { Request, Response } from 'express';
-import { database } from '../config/database.config.js';
+import { database, query, getPoolStats } from '../config/database.config.js';
 import { cache } from '../services/cache.service.js';
 import { env } from '../config/env.config.js';
 import { llmCircuitBreaker } from '../services/llm-circuit-breaker.service.js';
 import { modelFactory } from '../services/model-factory.service.js';
-import { query } from '../database/pg.js';
+import { getPerformanceMetrics } from '../middlewares/performance-tracing.middleware.js';
 import type { HealthCheckResponse } from '../types/index.js';
 
 // Server start time for uptime calculation
@@ -65,6 +65,9 @@ export async function detailedHealthCheck(_req: Request, res: Response): Promise
 
   const isHealthy = dbHealth.status === 'up';
 
+  const perfMetrics = getPerformanceMetrics();
+  const poolStats = getPoolStats();
+
   const response: HealthCheckResponse = {
     status: isHealthy ? 'healthy' : 'unhealthy',
     timestamp: new Date().toISOString(),
@@ -88,7 +91,11 @@ export async function detailedHealthCheck(_req: Request, res: Response): Promise
     },
   };
 
-  res.status(isHealthy ? 200 : 503).json(response);
+  res.status(isHealthy ? 200 : 503).json({
+    ...response,
+    performance: perfMetrics,
+    dbPool: poolStats,
+  });
 }
 
 /**

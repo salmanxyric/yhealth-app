@@ -1,21 +1,50 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 import { ChatList } from './components/ChatList';
 import { MessagesView } from './components/MessagesView';
+import { ChatSettingsModal } from './components/ChatSettingsModal';
 import { cn } from '@/lib/utils';
 import { initSocket } from '@/lib/socket-client';
 
 export function ChatPageContent() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  // Lazy initializer restores the last-open chat from localStorage so a reload
+  // keeps the conversation open. Guarded for SSR.
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return window.localStorage.getItem('chat.selectedChatId');
+    } catch {
+      return null;
+    }
+  });
   const [showSidebar, setShowSidebar] = useState(true);
-  const [chatListRefreshTrigger, setChatListRefreshTrigger] = useState(0);
+  const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
+  const [chatSettingsTab, setChatSettingsTab] = useState<'general' | 'privacy'>('general');
+
+  // Persist the selected chat whenever it changes.
+  useEffect(() => {
+    try {
+      if (selectedChatId) {
+        window.localStorage.setItem('chat.selectedChatId', selectedChatId);
+      } else {
+        window.localStorage.removeItem('chat.selectedChatId');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [selectedChatId]);
+
+  const openChatSettings = useCallback((tab: 'general' | 'privacy' = 'general') => {
+    setChatSettingsTab(tab);
+    setChatSettingsOpen(true);
+  }, []);
 
   // Initialize socket connection when authenticated
   useEffect(() => {
@@ -106,6 +135,11 @@ export function ChatPageContent() {
 
   return (
     <div className="relative flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950">
+      <ChatSettingsModal
+        open={chatSettingsOpen}
+        onOpenChange={setChatSettingsOpen}
+        initialTab={chatSettingsTab}
+      />
       {/* Overlay for mobile when sidebar is open */}
       {showSidebar && (
         <motion.div
@@ -141,7 +175,7 @@ export function ChatPageContent() {
               setShowSidebar(false);
             }
           }}
-          refreshTrigger={chatListRefreshTrigger}
+          onOpenChatSettings={openChatSettings}
         />
       </motion.div>
 
@@ -158,9 +192,7 @@ export function ChatPageContent() {
           onChatDeleted={() => {
             setSelectedChatId(null);
           }}
-          onChatRead={() => {
-            setChatListRefreshTrigger((prev) => prev + 1);
-          }}
+          onOpenChatSettings={openChatSettings}
         />
       </div>
     </div>

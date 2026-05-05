@@ -5,7 +5,7 @@
  */
 
 import { embeddingQueueService } from '../services/embedding-queue.service.js';
-import { query } from './pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { JobPriorities } from '../config/queue.config.js';
 

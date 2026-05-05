@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileSpreadsheet, Upload, X, Loader2, CheckCircle2, AlertCircle,
-  Camera, Sparkles, RotateCcw, Check, ArrowDownRight, ArrowUpRight,
+  Sparkles, RotateCcw, Check,
 } from "lucide-react";
 import { api } from "@/lib/api-client";
 import {
@@ -21,6 +21,22 @@ interface ExtractedTransaction {
   type: "income" | "expense";
   category: FinanceCategory;
   selected: boolean;
+}
+
+interface ReceiptScanItem {
+  name?: string;
+  price?: number;
+  quantity?: number;
+}
+
+interface ReceiptScanResult {
+  error?: boolean;
+  message?: string;
+  items?: ReceiptScanItem[];
+  total?: number;
+  vendor?: string;
+  date?: string;
+  category?: string;
 }
 
 interface StatementScanModalProps {
@@ -52,13 +68,13 @@ export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanM
   const processImage = useCallback(async (base64: string) => {
     setState("scanning");
     try {
-      const res = await api.post<{ receipt: any }>("/finance/receipts/scan", {
+      const _res = await api.post<{ receipt: ReceiptScanResult }>("/finance/receipts/scan", {
         imageBase64: base64,
       });
 
       // The receipt endpoint works for statements too — we send a different prompt
       // Actually, let's use a dedicated statement extraction
-      const stmtRes = await api.post<{ receipt: any }>("/finance/receipts/scan", {
+      const stmtRes = await api.post<{ receipt: ReceiptScanResult }>("/finance/receipts/scan", {
         imageBase64: base64,
       });
 
@@ -77,7 +93,7 @@ export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanM
           items.push({ name: r.vendor || "Statement entry", price: r.total, quantity: 1 });
         }
 
-        const mapped: ExtractedTransaction[] = items.map((item: any) => ({
+        const mapped: ExtractedTransaction[] = items.map((item: ReceiptScanItem) => ({
           date: r.date || new Date().toISOString().split("T")[0],
           description: item.name || "Unknown",
           amount: Math.abs(item.price || 0),

@@ -4,7 +4,7 @@
  */
 
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { crisisDetectionService } from './crisis-detection.service.js';
 
 // ============================================
@@ -19,7 +19,14 @@ export type SessionType =
   | 'health_coach'
   | 'nutrition'
   | 'fitness'
-  | 'wellness';
+  | 'wellness'
+  | 'workout'
+  | 'meal'
+  | 'emotion'
+  | 'sleep'
+  | 'stress'
+  | 'recovery'
+  | 'general_health';
 
 export interface SessionContext {
   userId: string;
@@ -93,7 +100,7 @@ class SessionOrchestrationService {
         const crisisDetection = await crisisDetectionService.detectCrisisKeywords(
           context.userRequest
         );
-        if (crisisDetection.isCrisis && crisisDetection.severity !== 'low') {
+        if (crisisDetection.isCrisis) {
           logger.warn('[SessionOrchestration] Crisis detected in request, triggering emergency', {
             userId: context.userId,
             severity: crisisDetection.severity,
@@ -303,7 +310,7 @@ class SessionOrchestrationService {
       // Check for crisis in user request
       if (userRequest) {
         const crisisDetection = await crisisDetectionService.detectCrisisKeywords(userRequest);
-        context.crisisDetected = crisisDetection.isCrisis && crisisDetection.severity !== 'low';
+        context.crisisDetected = crisisDetection.isCrisis;
       }
 
       return context;
@@ -377,6 +384,34 @@ class SessionOrchestrationService {
       },
       wellness: {
         estimatedDuration: 20,
+        phases: ['opening', 'assessment', 'discussion', 'recommendations', 'closing'],
+      },
+      workout: {
+        estimatedDuration: 15,
+        phases: ['opening', 'warm_up_review', 'technique_guidance', 'progression_plan', 'closing'],
+      },
+      meal: {
+        estimatedDuration: 10,
+        phases: ['opening', 'preference_check', 'meal_suggestion', 'portion_guidance', 'closing'],
+      },
+      emotion: {
+        estimatedDuration: 15,
+        phases: ['opening', 'emotional_checkin', 'active_listening', 'coping_strategies', 'closing'],
+      },
+      sleep: {
+        estimatedDuration: 10,
+        phases: ['opening', 'sleep_review', 'hygiene_guidance', 'wind_down_plan', 'closing'],
+      },
+      stress: {
+        estimatedDuration: 15,
+        phases: ['opening', 'stress_assessment', 'trigger_exploration', 'relief_techniques', 'closing'],
+      },
+      recovery: {
+        estimatedDuration: 15,
+        phases: ['opening', 'recovery_assessment', 'rest_planning', 'active_recovery_tips', 'closing'],
+      },
+      general_health: {
+        estimatedDuration: 15,
         phases: ['opening', 'assessment', 'discussion', 'recommendations', 'closing'],
       },
     };

@@ -28,3 +28,6 @@ export * from './voice-schedule.service';
 export * from './chat.service';
 export * from './workout-reschedule.service';
 export * from './exercises.service';
+export * from './accountability.service';
+export * from './communication.service';
+export * from './data-source.service';

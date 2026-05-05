@@ -167,6 +167,21 @@ const TABLE_FILES = [
   '116-goal-obstacles.sql',
   // Goal reconnection (DKA prevention)
   '117-goal-reconnections.sql',
+  // Contextual Timing — learned peak engagement hours
+  '118-user-timing-profiles.sql',
+  // Holiday / cultural calendar for AI coaching
+  '119-holiday-calendar.sql',
+  // Universal Data Source Correlation
+  '120-data-source-connections.sql',
+  '121-data-source-signals.sql',
+  '122-user-daily-correlations.sql',
+  '123-spotify-listening-history.sql',
+  '124-prayer-schedules.sql',
+  '125-finance-tracking.sql',
+  // Competition invitations (shared challenges)
+  '126-competition-invitations.sql',
+  // Mental health screening audit (no raw message body)
+  '127-mental-health-screening-events.sql',
   // Triggers (must be last)
   '99-triggers.sql',
 ];

@@ -8,10 +8,11 @@
  * Safety rails prevent harmful mode selections (e.g., no tough_love on low recovery).
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { cache } from './cache.service.js';
 import type { UserTier } from './user-classification.service.js';
+import { normalizePersonaId } from '../../../shared/types/domain/coach-persona.js';
 
 // ============================================
 // TYPES
@@ -40,6 +41,8 @@ export interface PersonalityContext {
   streakDays: number;
   isCompetitionWeek?: boolean;
   isDeloadWeek?: boolean;
+  /** User-selected coach persona — prevents contradictory dynamic modes (e.g. tough_love + gentle_friend). */
+  userCoachPersona?: string | null;
 }
 
 // ============================================
@@ -124,7 +127,13 @@ class PersonalityModeService {
     // Apply safety rails
     const safetyResult = this.applySafetyRails(mode, ctx, scores);
     mode = safetyResult.mode;
-    const triggerReason = safetyResult.reason;
+    let triggerReason = safetyResult.reason;
+
+    const beforePersonaClamp = mode;
+    mode = this.clampModeForUserPersona(mode, ctx.userCoachPersona);
+    if (mode !== beforePersonaClamp) {
+      triggerReason = `${triggerReason} + user persona guardrail`;
+    }
 
     const result: PersonalityModeResult = {
       mode,
@@ -316,6 +325,19 @@ class PersonalityModeService {
     }
 
     return { mode, reason };
+  }
+
+  /** Align dynamic mode with fixed product persona from user_preferences.ai_coach_persona */
+  private clampModeForUserPersona(
+    mode: PersonalityMode,
+    personaRaw: string | null | undefined,
+  ): PersonalityMode {
+    if (!personaRaw) return mode;
+    const persona = normalizePersonaId(personaRaw);
+    if (persona === 'friend' && mode === 'tough_love') return 'supportive_coach';
+    if (persona === 'data_nerd' && mode === 'tough_love') return 'performance_strategist';
+    if (persona === 'commander' && mode === 'calm_recovery') return 'competitive_challenger';
+    return mode;
   }
 
   // ---- Tough Love Cap (async check) ----

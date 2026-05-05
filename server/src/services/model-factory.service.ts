@@ -27,6 +27,7 @@ export interface ModelOptions {
   temperature?: number;
   maxTokens?: number;
   streaming?: boolean;
+  responseFormat?: { type: 'json_object' };
 }
 
 type ProviderName = 'gemini' | 'anthropic' | 'deepseek' | 'openai';
@@ -110,7 +111,7 @@ class ModelFactory {
    * Skips providers that are currently rate-limited, returning the next available one.
    */
   getModel(options: ModelOptions = {}): BaseChatModel {
-    const { tier = 'default', temperature = 0.7, maxTokens = 1000, streaming = false } = options;
+    const { tier = 'default', temperature = 0.7, maxTokens = 1000, streaming = false, responseFormat } = options;
 
     for (const provider of this.providers) {
       if (!provider.available) continue;
@@ -119,7 +120,7 @@ class ModelFactory {
       const modelId = MODEL_MAP[provider.name][tier];
 
       try {
-        const model = this.createModel(provider.name, modelId, { temperature, maxTokens, streaming });
+        const model = this.createModel(provider.name, modelId, { temperature, maxTokens, streaming, responseFormat });
         this.lastProviderUsed = provider.name;
         return model;
       } catch (error) {
@@ -286,7 +287,7 @@ class ModelFactory {
   private createModel(
     provider: ProviderName,
     modelId: string,
-    opts: { temperature: number; maxTokens: number; streaming: boolean },
+    opts: { temperature: number; maxTokens: number; streaming: boolean; responseFormat?: { type: 'json_object' } },
   ): BaseChatModel {
     switch (provider) {
       case 'gemini':
@@ -296,7 +297,8 @@ class ModelFactory {
           temperature: opts.temperature,
           maxOutputTokens: opts.maxTokens,
           streaming: opts.streaming,
-          maxRetries: 1, // Fail fast — circuit breaker handles retries at higher level
+          maxRetries: 1,
+          ...(opts.responseFormat ? { responseMimeType: 'application/json' } : {}),
         });
 
       case 'anthropic':
@@ -316,6 +318,7 @@ class ModelFactory {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           streaming: opts.streaming,
+          ...(opts.responseFormat ? { modelKwargs: { response_format: opts.responseFormat } } : {}),
         });
 
       case 'openai':
@@ -325,6 +328,7 @@ class ModelFactory {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           streaming: opts.streaming,
+          ...(opts.responseFormat ? { modelKwargs: { response_format: opts.responseFormat } } : {}),
         });
     }
   }

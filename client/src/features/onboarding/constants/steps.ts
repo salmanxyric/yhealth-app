@@ -22,26 +22,16 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
   },
   {
     id: 3,
-    label: 'Upload Body Photos',
-    shortLabel: 'Photos',
-  },
-  {
-    id: 4,
     label: 'Set Your Goals',
     shortLabel: 'My Plan',
   },
   {
-    id: 5,
-    label: 'Life Goals',
-    shortLabel: 'Life Coach',
-  },
-  {
-    id: 6,
+    id: 4,
     label: 'Set Preferences',
     shortLabel: 'Preferences',
   },
   {
-    id: 7,
+    id: 5,
     label: 'Generate Plan',
     shortLabel: 'Plan',
   },

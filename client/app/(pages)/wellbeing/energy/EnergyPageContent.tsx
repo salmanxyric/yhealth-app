@@ -328,7 +328,7 @@ function EnergyContent() {
       }
 
       // Time of day
-      const timeOfDay = (patterns as any)?.timeOfDay || {};
+      const timeOfDay = (patterns as unknown as Record<string, unknown>)?.timeOfDay as Record<string, number> || {};
       let peakTime = "—";
       let lowTime = "—";
       const todEntries = Object.entries(timeOfDay) as [string, number][];
@@ -341,7 +341,7 @@ function EnergyContent() {
       // Context tags
       const contextMap: Record<string, number> = {};
       logs.forEach((l) => {
-        const tag = (l as any).context_tag || (l as any).contextTag;
+        const tag = String((l as unknown as Record<string, unknown>).context_tag || (l as unknown as Record<string, unknown>).contextTag || '');
         if (tag) contextMap[tag] = (contextMap[tag] || 0) + 1;
       });
       const contexts = Object.entries(contextMap)

@@ -15,6 +15,18 @@ import type { Competition, CompetitionRules, CompetitionEligibility } from '../.
 const mockQuery = jest.fn<any>();
 const mockLogger = { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
 
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
+  query: mockQuery,
+  transaction: jest.fn(),
+  pool: { query: mockQuery, end: jest.fn() },
+  database: { healthCheck: jest.fn() },
+  getClient: jest.fn(),
+  closePool: jest.fn(),
+  testConnection: jest.fn(),
+  getPoolStats: jest.fn(),
+  default: {},
+}));
+
 jest.unstable_mockModule('../../../src/database/pg.js', () => ({
   query: mockQuery,
 }));
@@ -166,25 +178,31 @@ describe('CompetitionService', () => {
     it('should return competitions with participant count', async () => {
       const dbRow1 = generateCompetitionData({ id: 'comp-1', participant_count: '5' });
       const dbRow2 = generateCompetitionData({ id: 'comp-2', participant_count: '12' });
+      // First call: COUNT query, second call: main SELECT
+      mockQuery.mockResolvedValueOnce(mockQueryResult([{ count: '2' }]) as never);
       mockQuery.mockResolvedValueOnce(mockQueryResult([dbRow1, dbRow2]) as never);
 
       const result = await competitionService.getActiveCompetitions();
 
-      expect(result).toHaveLength(2);
-      expect(result[0].participantCount).toBe(5);
-      expect(result[1].participantCount).toBe(12);
-      expect(result[0].id).toBe('comp-1');
+      expect(result.competitions).toHaveLength(2);
+      expect(result.total).toBe(2);
+      expect(result.competitions[0].participantCount).toBe(5);
+      expect(result.competitions[1].participantCount).toBe(12);
+      expect(result.competitions[0].id).toBe('comp-1');
     });
 
     it('should return an empty array when no competitions are active', async () => {
+      mockQuery.mockResolvedValueOnce(mockQueryResult([{ count: '0' }]) as never);
       mockQuery.mockResolvedValueOnce(mockQueryResult([]) as never);
 
       const result = await competitionService.getActiveCompetitions();
 
-      expect(result).toEqual([]);
+      expect(result.competitions).toEqual([]);
+      expect(result.total).toBe(0);
     });
 
     it('should query with correct WHERE clause for active competitions', async () => {
+      mockQuery.mockResolvedValueOnce(mockQueryResult([{ count: '0' }]) as never);
       mockQuery.mockResolvedValueOnce(mockQueryResult([]) as never);
 
       await competitionService.getActiveCompetitions('active');

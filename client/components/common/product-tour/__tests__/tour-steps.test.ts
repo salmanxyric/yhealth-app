@@ -1,8 +1,8 @@
 import { TOUR_STEPS, ADMIN_EXTRA_STEPS, TOUR_VERSION } from "../tour-steps";
 
 describe("TOUR_STEPS configuration", () => {
-  it("has exactly 8 steps", () => {
-    expect(TOUR_STEPS).toHaveLength(8);
+  it("has exactly 16 steps", () => {
+    expect(TOUR_STEPS).toHaveLength(16);
   });
 
   it("starts with a welcome fullscreen step", () => {
@@ -92,34 +92,28 @@ describe("TOUR_STEPS configuration", () => {
     const ids = TOUR_STEPS.map((s) => s.id);
     expect(ids).toEqual([
       "welcome",
-      "health-dashboard",
-      "competitions",
+      "overview-metrics",
+      "overview-heart-rate",
+      "dashboard-header",
+      "sidebar",
       "ai-coach",
+      "competitions",
       "gamification",
       "integrations",
-      "community",
+      "chat",
+      "voice-assistant",
+      "settings-nav",
+      "nutrition",
+      "workouts",
+      "wellbeing",
       "completion",
     ]);
   });
 });
 
 describe("ADMIN_EXTRA_STEPS", () => {
-  it("has at least one admin step", () => {
-    expect(ADMIN_EXTRA_STEPS.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("all admin steps are marked adminOnly", () => {
-    ADMIN_EXTRA_STEPS.forEach((step) => {
-      expect(step.adminOnly).toBe(true);
-    });
-  });
-
-  it("admin-panel step has correct configuration", () => {
-    const adminPanel = ADMIN_EXTRA_STEPS.find((s) => s.id === "admin-panel");
-    expect(adminPanel).toBeDefined();
-    expect(adminPanel!.type).toBe("spotlight");
-    expect(adminPanel!.targetSelector).toBe('[data-tour="admin-panel"]');
-    expect(adminPanel!.icon).toBe("Shield");
+  it("is an empty array reserved for future use", () => {
+    expect(ADMIN_EXTRA_STEPS).toHaveLength(0);
   });
 
   it("admin step IDs do not conflict with main steps", () => {
@@ -146,9 +140,8 @@ describe("step role-based merging", () => {
     allSteps.splice(completionIndex, 0, ...ADMIN_EXTRA_STEPS);
     expect(allSteps.length).toBe(TOUR_STEPS.length + ADMIN_EXTRA_STEPS.length);
 
-    // Admin steps should be right before completion
+    // Completion should still be last
     const newCompletionIndex = allSteps.findIndex((s) => s.id === "completion");
     expect(newCompletionIndex).toBe(allSteps.length - 1);
-    expect(allSteps[newCompletionIndex - 1].id).toBe("admin-panel");
   });
 });

@@ -7,7 +7,15 @@
 
 import React, { useCallback, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Edit2, Trash2, Clock, GripVertical } from "lucide-react";
+import {
+  Edit2,
+  Trash2,
+  Clock,
+  GripVertical,
+  Calendar as CalendarIcon,
+  Check,
+  Moon,
+} from "lucide-react";
 import type { ScheduleItem } from "@/src/shared/services/schedule.service";
 
 /* ─────────── Helpers ─────────── */
@@ -50,11 +58,19 @@ const getDuration = (
 
 /* ─────────── Types ─────────── */
 
+export type WorkflowNodeSource = "manual" | "google" | "prayer";
+
 export interface WorkflowNodeData {
   item: ScheduleItem;
   onEdit: (item: ScheduleItem) => void;
   onDelete: () => void;
   connectionCount: number;
+  /** Defaults to "manual". Google/prayer nodes are read-only. */
+  source?: WorkflowNodeSource;
+  /** Prayer-only: fires "mark done" when the user clicks the chip. */
+  onMarkDone?: () => void;
+  /** Prayer-only: true if already marked done. */
+  done?: boolean;
 }
 
 /* ─────────── Component ─────────── */
@@ -62,23 +78,45 @@ export interface WorkflowNodeData {
 function WorkflowNode(props: NodeProps): React.JSX.Element {
   const { data, selected } = props;
   const nodeData = data as unknown as WorkflowNodeData;
-  const { item, onEdit, onDelete, connectionCount } = nodeData;
+  const {
+    item,
+    onEdit,
+    onDelete,
+    connectionCount,
+    source = "manual",
+    onMarkDone,
+    done = false,
+  } = nodeData;
   const [isHovered, setIsHovered] = useState(false);
+
+  const isReadOnly = source !== "manual";
+  const isGoogle = source === "google";
+  const isPrayer = source === "prayer";
 
   const handleEdit = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (isReadOnly) return;
       onEdit(item);
     },
-    [item, onEdit]
+    [item, onEdit, isReadOnly]
   );
 
   const handleDelete = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (isReadOnly) return;
       onDelete();
     },
-    [onDelete]
+    [onDelete, isReadOnly]
+  );
+
+  const handleMarkDone = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onMarkDone?.();
+    },
+    [onMarkDone]
   );
 
   const duration = getDuration(
@@ -86,8 +124,12 @@ function WorkflowNode(props: NodeProps): React.JSX.Element {
     item.endTime,
     item.durationMinutes
   );
-  const color = item.color || "#10b981";
-  const showActions = isHovered || selected;
+  const color = isGoogle
+    ? "#2d9cdb"
+    : isPrayer
+      ? "#a855f7"
+      : item.color || "#10b981";
+  const showActions = !isReadOnly && (isHovered || selected);
 
   return (
     <div
@@ -143,7 +185,17 @@ function WorkflowNode(props: NodeProps): React.JSX.Element {
                 border: `1px solid ${hexToRgba(color, 0.2)}`,
               }}
             >
-              {item.icon ? (
+              {isGoogle ? (
+                <CalendarIcon
+                  className="w-4 h-4"
+                  style={{ color: hexToRgba(color, 0.9) }}
+                />
+              ) : isPrayer ? (
+                <Moon
+                  className="w-4 h-4"
+                  style={{ color: hexToRgba(color, 0.9) }}
+                />
+              ) : item.icon ? (
                 <span className="text-base leading-none">{item.icon}</span>
               ) : (
                 <GripVertical
@@ -158,13 +210,29 @@ function WorkflowNode(props: NodeProps): React.JSX.Element {
               <h3 className="text-[13px] font-semibold text-white leading-tight truncate">
                 {item.title}
               </h3>
-              {item.category && (
+              {isGoogle ? (
                 <span
                   className="text-[10px] font-medium leading-tight"
                   style={{ color: hexToRgba(color, 0.9) }}
                 >
-                  {item.category}
+                  Google Calendar
                 </span>
+              ) : isPrayer ? (
+                <span
+                  className="text-[10px] font-medium leading-tight"
+                  style={{ color: hexToRgba(color, 0.9) }}
+                >
+                  Prayer
+                </span>
+              ) : (
+                item.category && (
+                  <span
+                    className="text-[10px] font-medium leading-tight"
+                    style={{ color: hexToRgba(color, 0.9) }}
+                  >
+                    {item.category}
+                  </span>
+                )
               )}
             </div>
 
@@ -224,7 +292,45 @@ function WorkflowNode(props: NodeProps): React.JSX.Element {
           </div>
         </div>
 
-        {/* Hover Actions Overlay */}
+        {/* Source badge (google/prayer) */}
+        {isReadOnly && (
+          <div
+            className="absolute top-[7px] right-2 z-20 flex items-center gap-1 rounded-full px-2 py-0.5"
+            style={{
+              background: hexToRgba(color, 0.15),
+              border: `1px solid ${hexToRgba(color, 0.3)}`,
+            }}
+          >
+            <span
+              className="text-[9px] font-bold uppercase tracking-wide"
+              style={{ color: hexToRgba(color, 0.95) }}
+            >
+              {isGoogle ? "Google" : "Prayer"}
+            </span>
+          </div>
+        )}
+
+        {/* Prayer "Mark Done" / "Done" chip */}
+        {isPrayer && onMarkDone && (
+          <div className="px-3.5 pb-3 -mt-1">
+            <button
+              type="button"
+              onClick={handleMarkDone}
+              onMouseDown={(e) => e.stopPropagation()}
+              disabled={done}
+              className={`w-full h-7 rounded-md text-[11px] font-semibold transition-colors flex items-center justify-center gap-1 ${
+                done
+                  ? "bg-emerald-500/15 text-emerald-300 cursor-default"
+                  : "bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 hover:text-white cursor-pointer"
+              }`}
+            >
+              <Check className="w-3 h-3" />
+              {done ? "Done" : "Mark Done"}
+            </button>
+          </div>
+        )}
+
+        {/* Hover Actions Overlay (manual only) */}
         {showActions && (
           <div className="absolute top-[3px] right-0 flex gap-1 p-1.5 z-30">
             <button

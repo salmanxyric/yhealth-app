@@ -4,7 +4,7 @@
  * Publishes to event bus for async processing
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { Queue } from 'bullmq';
 import { redisConnection, queueConfig, QueueNames, JobPriorities } from '../config/queue.config.js';

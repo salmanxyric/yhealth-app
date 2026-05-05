@@ -8,7 +8,7 @@ import {
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
-import { AILoader } from "@/app/components/preloader/preloader";
+import { DashboardPageSkeleton } from "@/components/loading";
 import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -39,7 +39,7 @@ import {
 } from "./components";
 import { DashboardLayout } from "@/components/layout";
 import { SubscriptionAccessProvider } from "@/app/context/SubscriptionAccessContext";
-import { TrialBanner } from "@/components/subscription/SubscriptionGate";
+import { TrialCountdownBanner } from "@/components/subscription/TrialCountdownBanner";
 import { ObstacleCard } from "./components/ObstacleCard";
 import { ReconnectionCard } from "./components/ReconnectionCard";
 import dynamic from "next/dynamic";
@@ -141,11 +141,13 @@ function DashboardContent() {
         "notifications",
         "chat-history",
         "chat",
-        // "messages",
         "preferences",
         "settings",
         "profile",
         "wellbeing",
+        "accountability",
+        "social",
+        "finance",
       ].includes(tab)
     ) {
       return tab as TabId;
@@ -446,7 +448,9 @@ function DashboardContent() {
   };
 
   if (authLoading || isLoading) {
-    return <AILoader text="Initializing" />;
+    return (
+      <DashboardPageSkeleton activeTab={activeTab} variant="heroTabsGrid" />
+    );
   }
 
   if (error === "no_plan") {
@@ -519,7 +523,7 @@ function DashboardContent() {
         <div className="relative max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-2">
           {/* Trial banner when in free trial */}
           <div className="mb-4">
-            <TrialBanner />
+            <TrialCountdownBanner />
           </div>
           {/* Obstacle diagnosis invitations (proactive coach) */}
           <div className="mb-4">
@@ -539,7 +543,7 @@ function DashboardContent() {
 
 // Loading fallback component
 function DashboardLoading() {
-  return <AILoader text="Loading" />;
+  return <DashboardPageSkeleton activeTab="overview" variant="heroTabsGrid" />;
 }
 
 // Main export with Suspense boundary

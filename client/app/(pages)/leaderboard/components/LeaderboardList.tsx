@@ -1,24 +1,27 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Skeleton } from '../../../../components/ui/skeleton';
 import type { LeaderboardEntry } from '@/src/shared/services/leaderboard.service';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { ScoreBreakdownBars } from './ScoreBreakdownBars';
+import { PaginationBar } from '@/components/ui/pagination-bar';
 
 interface LeaderboardListProps {
   entries: LeaderboardEntry[];
   startRank: number;
   total: number;
-  onLoadMore?: () => void;
-  hasMore?: boolean;
   isLoading?: boolean;
   currentUserId?: string;
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
 }
 
-/** Neon accent color by rank */
 function getAccentColor(rank: number) {
   if (rank <= 5) return { border: 'border-l-emerald-500/50', glow: 'rgba(16,185,129,0.12)' };
   if (rank <= 10) return { border: 'border-l-blue-500/40', glow: 'rgba(96,165,250,0.08)' };
@@ -85,31 +88,14 @@ export function LeaderboardList({
   entries,
   startRank,
   total,
-  onLoadMore,
-  hasMore,
   isLoading = false,
   currentUserId,
+  currentPage,
+  totalPages,
+  pageSize,
+  onPageChange,
 }: LeaderboardListProps) {
-  const loadMoreRef = useRef<HTMLDivElement>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  // Intersection Observer for infinite scroll
-  useEffect(() => {
-    if (!loadMoreRef.current || !hasMore || !onLoadMore) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isLoadingMore) {
-          setIsLoadingMore(true);
-          onLoadMore();
-          setTimeout(() => setIsLoadingMore(false), 1000);
-        }
-      },
-      { threshold: 0.1 }
-    );
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, onLoadMore, isLoadingMore]);
 
   if (isLoading && entries.length === 0) {
     return (
@@ -134,14 +120,35 @@ export function LeaderboardList({
   return (
     <div
       className="rounded-2xl bg-gray-900/60 backdrop-blur-sm border border-white/5 overflow-hidden"
-      role="list"
+      role="table"
       aria-label="Leaderboard entries"
     >
+      {/* Table header — desktop only */}
+      <div
+        className="hidden md:grid md:grid-cols-[60px_1fr_340px_80px_40px] gap-2 items-center px-4 py-3 border-b border-white/[0.06] text-[11px] text-gray-500 font-semibold uppercase tracking-wider"
+        role="row"
+      >
+        <div role="columnheader">Rank</div>
+        <div role="columnheader">Name</div>
+        <div role="columnheader">Score Breakdown</div>
+        <div role="columnheader" className="text-right">Score</div>
+        <div role="columnheader" className="sr-only">Expand</div>
+      </div>
+
       {entries.map((entry, index) => {
         const rank = startRank + index;
         const isCurrentUser = currentUserId === entry.user_id;
         const isExpanded = expandedRows.has(entry.user_id);
         const accent = getAccentColor(rank);
+        const scores = (entry.component_scores ?? {}) as unknown as Record<string, number>;
+        const normalizedScores = {
+          workout: scores.workout ?? 0,
+          nutrition: scores.nutrition ?? 0,
+          wellbeing: scores.wellbeing ?? 0,
+          biometrics: scores.biometrics ?? 0,
+          engagement: scores.engagement ?? scores.participation ?? 0,
+          consistency: scores.consistency ?? 0,
+        };
 
         return (
           <motion.div
@@ -149,13 +156,14 @@ export function LeaderboardList({
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.5) }}
-            role="listitem"
+            role="row"
             aria-label={`Rank ${rank}: ${entry.user?.name || 'Anonymous'} — ${(Number(entry.total_score) || 0).toFixed(1)} pts`}
             className="group"
           >
             <div
               className={cn(
                 'relative flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 transition-colors duration-200 cursor-pointer',
+                'md:grid md:grid-cols-[60px_1fr_340px_80px_40px] md:gap-2',
                 'border-l-2',
                 accent.border,
                 isCurrentUser
@@ -179,60 +187,66 @@ export function LeaderboardList({
               />
 
               {/* Rank number */}
-              <div className="relative w-7 sm:w-8 text-center shrink-0">
+              <div className="relative w-7 sm:w-8 md:w-auto text-center shrink-0">
                 <span className={cn(
                   'text-xs sm:text-sm font-bold tabular-nums',
                   rank <= 5 ? 'text-emerald-400' : rank <= 10 ? 'text-blue-400' : 'text-gray-500'
                 )}>
-                  {rank}
+                  #{rank}
                 </span>
               </div>
 
-              {/* Avatar */}
-              <div className="relative shrink-0">
-                <Avatar className={cn(
-                  'w-9 h-9 sm:w-10 sm:h-10 border',
-                  isCurrentUser ? 'border-emerald-500/50' : 'border-white/10'
-                )}>
-                  <AvatarImage src={entry.user?.avatar} alt={entry.user?.name || 'User'} />
-                  <AvatarFallback className="bg-gray-800 text-gray-300 text-xs sm:text-sm font-semibold">
-                    {entry.user?.name?.charAt(0) || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                {/* Online indicator for current user */}
-                {isCurrentUser && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-gray-900" />
-                )}
-              </div>
-
-              {/* Name + username */}
-              <div className="relative flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className={cn(
-                    'text-sm sm:text-base font-semibold truncate',
-                    isCurrentUser ? 'text-emerald-300' : 'text-white'
+              {/* Avatar + Name */}
+              <div className="relative flex items-center gap-2.5 flex-1 min-w-0 md:flex-none">
+                <div className="relative shrink-0">
+                  <Avatar className={cn(
+                    'w-9 h-9 sm:w-10 sm:h-10 border',
+                    isCurrentUser ? 'border-emerald-500/50' : 'border-white/10'
                   )}>
-                    {entry.user?.name || 'Anonymous'}
-                  </p>
+                    <AvatarImage src={entry.user?.avatar} alt={entry.user?.name || 'User'} />
+                    <AvatarFallback className="bg-gray-800 text-gray-300 text-xs sm:text-sm font-semibold">
+                      {entry.user?.name?.charAt(0) || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
                   {isCurrentUser && (
-                    <span className="shrink-0 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] sm:text-[10px] font-bold rounded-full uppercase tracking-wider">
-                      You
-                    </span>
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-gray-900" />
                   )}
                 </div>
-                <p className="text-[10px] sm:text-xs text-gray-500 truncate">@balencia</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className={cn(
+                      'text-sm sm:text-base font-semibold truncate',
+                      isCurrentUser ? 'text-emerald-300' : 'text-white'
+                    )}>
+                      {entry.user?.name || 'Anonymous'}
+                    </p>
+                    {isCurrentUser && (
+                      <span className="shrink-0 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] sm:text-[10px] font-bold rounded-full uppercase tracking-wider">
+                        You
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] sm:text-xs text-gray-500 truncate">@balencia</p>
+                </div>
+              </div>
+
+              {/* Inline Score Breakdown — desktop only */}
+              <div className="hidden md:block relative">
+                <ScoreBreakdownBars scores={normalizedScores} />
               </div>
 
               {/* Score */}
-              <div className="relative flex items-center gap-2 sm:gap-3 shrink-0">
+              <div className="relative flex items-center justify-end gap-2 sm:gap-3 shrink-0 md:text-right">
                 <span className={cn(
                   'text-base sm:text-lg font-bold font-mono tabular-nums',
                   isCurrentUser ? 'text-emerald-400' : 'text-white'
                 )}>
                   {(Number(entry.total_score) || 0).toFixed(0)}
                 </span>
+              </div>
 
-                {/* Expand indicator */}
+              {/* Expand indicator */}
+              <div className="relative flex items-center justify-center shrink-0">
                 <motion.div
                   animate={{ rotate: isExpanded ? 180 : 0 }}
                   transition={{ duration: 0.2 }}
@@ -243,39 +257,21 @@ export function LeaderboardList({
             </div>
 
             {/* Expandable breakdown */}
-            {isExpanded && <ScoreBreakdown entry={entry} />}
+            <AnimatePresence>
+              {isExpanded && <ScoreBreakdown entry={entry} />}
+            </AnimatePresence>
           </motion.div>
         );
       })}
 
-      {/* Infinite Scroll Trigger */}
-      {hasMore && (
-        <div ref={loadMoreRef} className="py-4 text-center">
-          {isLoadingMore && (
-            <div className="flex items-center justify-center gap-2 text-gray-500">
-              <div className="w-3.5 h-3.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs">Loading more...</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Load More fallback button */}
-      {hasMore && onLoadMore && !isLoadingMore && (
-        <div className="py-4 text-center border-t border-white/[0.04]">
-          <button
-            onClick={onLoadMore}
-            className="px-5 py-2 text-xs sm:text-sm font-semibold text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg transition-all duration-200"
-          >
-            Load More
-          </button>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="px-4 py-2.5 text-center text-gray-600 text-[10px] sm:text-xs border-t border-white/[0.04]">
-        Showing {entries.length} of {total} participants
-      </div>
+      {/* Pagination Bar */}
+      <PaginationBar
+        currentPage={currentPage}
+        totalPages={totalPages}
+        total={total}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+      />
     </div>
   );
 }

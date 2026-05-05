@@ -1,8 +1,10 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { Embeddings } from '@langchain/core/embeddings';
+import { createHash } from 'crypto';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
+import { redisCacheService } from './redis-cache.service.js';
 
 /**
  * Thrown when an embedding provider returns an authentication error (401/403).
@@ -417,7 +419,19 @@ class VectorEmbeddingService {
     this.maybeRecoverPrimary();
     const cleanText = this.preprocessText(text);
 
-    // De-duplicate concurrent identical embedding requests
+    // L1: Redis cache (TTL 5min) — avoids API call for repeated/similar queries
+    const cacheKey = `emb:${createHash('sha256').update(cleanText).digest('hex').slice(0, 32)}`;
+    try {
+      const cached = await redisCacheService.get<number[]>(cacheKey);
+      if (cached) {
+        logger.debug('Embedding Redis cache hit', { provider: this.providerName, textLength: text.length });
+        return cached;
+      }
+    } catch {
+      // Redis down — continue to API
+    }
+
+    // L2: De-duplicate concurrent identical embedding requests
     const inflight = this.embeddingInflight.get(cleanText);
     if (inflight) {
       logger.debug('Embedding de-dup hit', { provider: this.providerName, textLength: text.length });
@@ -428,6 +442,7 @@ class VectorEmbeddingService {
       try {
         const embedding = await this.embeddings.embedQuery(cleanText);
         logger.debug('Generated embedding', { provider: this.providerName, textLength: text.length, dimensions: embedding.length });
+        redisCacheService.set(cacheKey, embedding, 300).catch(() => {});
         return embedding;
       } catch (error) {
         // Auth errors are unrecoverable — don't retry, don't fallback
@@ -440,6 +455,7 @@ class VectorEmbeddingService {
           try {
             const embedding = await this.embeddings.embedQuery(cleanText);
             logger.debug('Generated embedding via fallback', { provider: this.providerName, textLength: text.length, dimensions: embedding.length });
+            redisCacheService.set(cacheKey, embedding, 300).catch(() => {});
             return embedding;
           } catch (fallbackError) {
             if (this.isAuthError(fallbackError)) {

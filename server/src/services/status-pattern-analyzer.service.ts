@@ -9,7 +9,7 @@
  *  3. Streak disruption patterns (status changes that break streaks)
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import type { ActivityStatus, StatusPattern, StatusPatternType } from '../types/activity-status.types.js';
 
@@ -170,7 +170,8 @@ class StatusPatternAnalyzerService {
 
   /**
    * Detect correlation between non-working statuses and streak breaks.
-   * If status changes frequently coincide with streak breaks, flag it.
+   * Detect days where the user had a non-working status AND no streak activity logged
+   * (i.e., status was poor/bad and they broke their streak by not doing any activity).
    */
   private async detectStreakDisruptionPatterns(userId: string): Promise<StatusPattern[]> {
     const result = await query<{
@@ -179,13 +180,14 @@ class StatusPatternAnalyzerService {
     }>(
       `SELECT ash.activity_status, COUNT(*) as disruption_count
        FROM activity_status_history ash
-       JOIN streak_activity_log sal
-         ON sal.user_id = ash.user_id
-         AND sal.activity_date = ash.status_date
-         AND sal.action = 'break'
        WHERE ash.user_id = $1
          AND ash.status_date >= CURRENT_DATE - INTERVAL '180 days'
          AND ash.activity_status NOT IN ('working', 'excellent', 'good')
+         AND NOT EXISTS (
+           SELECT 1 FROM streak_activity_log sal
+           WHERE sal.user_id = ash.user_id
+             AND sal.activity_date = ash.status_date
+         )
        GROUP BY ash.activity_status
        HAVING COUNT(*) >= 3`,
       [userId]
@@ -214,24 +216,19 @@ class StatusPatternAnalyzerService {
   /**
    * Persist detected patterns to the user's coaching profile.
    * Upserts into user_coaching_profiles.
+   * New rows need `profile_data` (NOT NULL); use empty object until full coach profile is generated.
    */
   async persistPatterns(userId: string, patterns: StatusPattern[]): Promise<void> {
     const patternsJson = JSON.stringify(patterns);
 
-    const result = await query(
-      `UPDATE user_coaching_profiles SET status_patterns = $1, updated_at = NOW() WHERE user_id = $2`,
-      [patternsJson, userId]
+    await query(
+      `INSERT INTO user_coaching_profiles (user_id, profile_data, status_patterns, updated_at)
+       VALUES ($1, '{}'::jsonb, $2::jsonb, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET
+         status_patterns = EXCLUDED.status_patterns,
+         updated_at = EXCLUDED.updated_at`,
+      [userId, patternsJson]
     );
-
-    // If no row was updated, insert one
-    if (result.rowCount === 0) {
-      await query(
-        `INSERT INTO user_coaching_profiles (user_id, status_patterns, updated_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (user_id) DO UPDATE SET status_patterns = $2, updated_at = NOW()`,
-        [userId, patternsJson]
-      );
-    }
 
     logger.info('[StatusPatternAnalyzer] Persisted patterns', {
       userId: userId.slice(0, 8),

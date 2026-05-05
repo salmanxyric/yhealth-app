@@ -3,7 +3,7 @@
  * Handles weight, measurements, photos, and progress analytics
  */
 
-import { pool } from '../database/pg.js';
+import { pool } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { gamificationService } from './gamification.service.js';
 import { r2Service } from './r2.service.js';

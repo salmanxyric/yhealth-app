@@ -40,6 +40,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { PaginationBar } from '@/components/ui/pagination-bar';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -175,6 +176,8 @@ export default function CompetitionsPageContent() {
   const [competitionForJoin, setCompetitionForJoin] = useState<Competition | null>(null);
   const [optimisticJoins, setOptimisticJoins] = useState<Set<string>>(new Set());
   const [optimisticLeaves, setOptimisticLeaves] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 12;
 
   // ---- Fetch ----
   const {
@@ -182,7 +185,7 @@ export default function CompetitionsPageContent() {
     isLoading,
     error: competitionsError,
     refetch,
-  } = useFetch<Competition[] | { competitions: Competition[] }>('/competitions', {
+  } = useFetch<Competition[] | { competitions: Competition[]; total: number }>('/competitions?limit=200', {
     immediate: !!user?.id,
     deps: [user?.id],
   });
@@ -255,6 +258,16 @@ export default function CompetitionsPageContent() {
 
     return list;
   }, [competitions, statusFilter, filterMode, sortMode, isJoined]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, filterMode, sortMode]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCompetitions.length / PAGE_SIZE));
+  const paginatedCompetitions = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredCompetitions.slice(start, start + PAGE_SIZE);
+  }, [filteredCompetitions, currentPage]);
 
   // ---- Stats ----
   const stats = useMemo(() => {
@@ -533,16 +546,15 @@ export default function CompetitionsPageContent() {
               </div>
             )}
 
-            {/* ── Competition Cards Grid ── */}
+            {/* ── Competition Cards Grid — Figma 4-col layout ── */}
             {!isLoading && !competitionsError && filteredCompetitions.length > 0 && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredCompetitions.map((competition, index) => {
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {paginatedCompetitions.map((competition, index) => {
                   const endDate = new Date(competition.end_date);
                   const startDate = new Date(competition.start_date);
                   const daysLeft = getDaysRemaining(endDate);
                   const joined = isJoined(competition.id);
                   const isEnded = competition.status === 'ended' || daysLeft === 0;
-                  const isEndingSoon = daysLeft <= 3 && daysLeft > 0;
                   const participantCount = competition.participant_count ?? 0;
                   const rules = competition.rules as Record<string, unknown> | undefined;
                   const metric = rules?.metric as string | undefined;
@@ -550,66 +562,51 @@ export default function CompetitionsPageContent() {
                   return (
                     <motion.article
                       key={competition.id}
-                      initial={{ opacity: 0, y: 12 }}
+                      initial={{ opacity: 0, y: 14 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05, duration: 0.3 }}
+                      transition={{ delay: index * 0.04, duration: 0.3 }}
                       onClick={() => setSelectedCompetitionId(competition.id)}
                       className={cn(
-                        'group relative cursor-pointer rounded-xl border bg-[#0f0f18] transition-all duration-200',
+                        'group relative cursor-pointer rounded-xl border bg-[#111827]/80 backdrop-blur-sm transition-all duration-200',
                         joined
                           ? 'border-emerald-500/25 hover:border-emerald-500/40'
                           : 'border-white/[0.06] hover:border-white/[0.12]',
-                        isEnded && !joined && 'opacity-60',
-                        'hover:bg-[#111120]'
+                        isEnded && !joined && 'opacity-70',
                       )}
                     >
-                      {/* Joined indicator strip */}
-                      {joined && (
-                        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500/60 via-emerald-400/40 to-emerald-500/60 rounded-t-xl" />
-                      )}
-
                       <div className="p-5">
-                        {/* Status + tags row */}
+                        {/* Status badges */}
                         <div className="flex items-center gap-1.5 flex-wrap mb-3">
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wider',
-                              isEnded
-                                ? 'bg-red-500/10 text-red-400'
-                                : 'bg-emerald-500/10 text-emerald-400'
-                            )}
-                          >
+                          <span className={cn(
+                            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
+                            isEnded
+                              ? 'bg-red-500/15 text-red-400'
+                              : 'bg-emerald-500/15 text-emerald-400'
+                          )}>
                             <span className={cn(
                               'h-1.5 w-1.5 rounded-full',
-                              isEnded ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'
+                              isEnded ? 'bg-red-400' : 'bg-emerald-400'
                             )} />
                             {isEnded ? 'Ended' : 'Active'}
                           </span>
 
                           {competition.type === 'ai_generated' && (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 text-[10px] font-semibold uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-violet-500/15 text-violet-400">
                               <Sparkles className="h-2.5 w-2.5" />
-                              AI
+                              AI Generated
                             </span>
                           )}
 
                           {joined && (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 text-[10px] font-semibold uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300">
                               <CheckCircle className="h-2.5 w-2.5" />
                               Joined
-                            </span>
-                          )}
-
-                          {isEndingSoon && (
-                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 text-[10px] font-semibold uppercase tracking-wider">
-                              <Flame className="h-2.5 w-2.5" />
-                              Ending Soon
                             </span>
                           )}
                         </div>
 
                         {/* Title */}
-                        <h3 className="text-[15px] font-semibold text-white leading-snug mb-1 group-hover:text-emerald-50 transition-colors">
+                        <h3 className="text-[15px] font-semibold text-white leading-snug mb-1">
                           {competition.name}
                         </h3>
 
@@ -620,105 +617,108 @@ export default function CompetitionsPageContent() {
                           </p>
                         )}
 
-                        {/* Info grid */}
-                        <div className="space-y-1.5 mb-4">
-                          <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                        {/* Info row — date, countdown, participants inline */}
+                        <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500 mb-3">
+                          <span className="inline-flex items-center gap-1">
                             <Calendar className="h-3 w-3 shrink-0" />
-                            {formatDate(startDate)} – {formatDate(endDate)}
-                          </div>
-
-                          <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                            <Users className="h-3 w-3 shrink-0" />
-                            <span className="text-emerald-400/80 font-medium">{participantCount}</span>
-                            <span>participants</span>
-                          </div>
-
-                          {metric && (
-                            <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                              <TrendingUp className="h-3 w-3 shrink-0" />
-                              <span className="capitalize">{metric.replace(/_/g, ' ')}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Countdown + Prizes row */}
-                        <div className="flex items-center gap-2 flex-wrap mb-4">
+                            {formatDate(startDate)} - {formatDate(endDate)}
+                          </span>
                           {!isEnded && <CountdownPill endDate={endDate} />}
-
-                          {competition.prize_metadata?.badges?.slice(0, 2).map((badge, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/8 text-amber-400/80 text-[10px] font-medium border border-amber-500/10"
-                            >
-                              <Award className="h-2.5 w-2.5" />
-                              {badge}
-                            </span>
-                          ))}
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="h-3 w-3 shrink-0" />
+                            {participantCount} Participants
+                          </span>
                         </div>
 
-                        {/* Actions */}
-                        <div className="flex items-center gap-2 pt-3 border-t border-white/[0.04]">
-                          {joined ? (
-                            <>
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedCompetitionId(competition.id);
-                                }}
-                                className="flex-1 h-8 text-xs bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15 border border-emerald-500/15 rounded-lg"
+                        {/* Metric type */}
+                        {metric && (
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
+                            <TrendingUp className="h-3 w-3 shrink-0" />
+                            <span className="capitalize">{metric.replace(/_/g, ' ')}</span>
+                          </div>
+                        )}
+
+                        {/* Prize badges */}
+                        {competition.prize_metadata?.badges && competition.prize_metadata.badges.length > 0 && (
+                          <div className="flex items-center gap-1.5 flex-wrap mb-4">
+                            {competition.prize_metadata.badges.slice(0, 2).map((badge, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 text-[11px] font-medium border border-amber-500/15"
                               >
-                                <TrendingUp className="mr-1.5 h-3 w-3" />
-                                Leaderboard
-                                <ChevronRight className="ml-auto h-3 w-3 opacity-40" />
-                              </Button>
-                              <Button
-                                onClick={(e) => handleLeave(competition.id, e)}
-                                disabled={leaving === competition.id}
-                                variant="outline"
-                                className="h-8 w-8 p-0 border-red-500/15 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/25 rounded-lg"
-                              >
-                                {leaving === competition.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <XCircle className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              onClick={(e) => handleJoinClick(competition, e)}
-                              disabled={joining === competition.id || isEnded}
-                              className={cn(
-                                'w-full h-8 text-xs font-semibold rounded-lg transition-all',
-                                isEnded
-                                  ? 'bg-white/[0.04] text-slate-500 border border-white/[0.06]'
-                                  : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm shadow-emerald-500/20'
-                              )}
+                                <Award className="h-2.5 w-2.5" />
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Action button */}
+                        {joined ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCompetitionId(competition.id);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/15 transition-all"
                             >
-                              {joining === competition.id ? (
-                                <>
-                                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                                  Joining...
-                                </>
-                              ) : isEnded ? (
-                                <>
-                                  <Archive className="mr-1.5 h-3 w-3" />
-                                  Ended
-                                </>
+                              <TrendingUp className="h-3.5 w-3.5" />
+                              Leaderboard
+                              <ChevronRight className="h-3.5 w-3.5 opacity-40" />
+                            </button>
+                            <button
+                              onClick={(e) => handleLeave(competition.id, e)}
+                              disabled={leaving === competition.id}
+                              className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg border border-red-500/15 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/25 transition-colors"
+                            >
+                              {leaving === competition.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               ) : (
-                                <>
-                                  <CheckCircle className="mr-1.5 h-3 w-3" />
-                                  Join Competition
-                                </>
+                                <XCircle className="h-3.5 w-3.5" />
                               )}
-                            </Button>
-                          )}
-                        </div>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => handleJoinClick(competition, e)}
+                            disabled={joining === competition.id || isEnded}
+                            className={cn(
+                              'w-full flex items-center justify-center gap-2 h-10 rounded-lg text-sm font-semibold transition-all duration-200',
+                              isEnded
+                                ? 'bg-white/[0.03] text-slate-400 border border-white/[0.06]'
+                                : 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white hover:from-teal-500 hover:to-emerald-500 shadow-lg shadow-emerald-600/15'
+                            )}
+                          >
+                            {joining === competition.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Joining...
+                              </>
+                            ) : isEnded ? (
+                              'Ended'
+                            ) : (
+                              'Join Competition'
+                            )}
+                          </button>
+                        )}
                       </div>
                     </motion.article>
                   );
                 })}
               </div>
+            )}
+
+            {/* Pagination */}
+            {!isLoading && !competitionsError && filteredCompetitions.length > 0 && (
+              <PaginationBar
+                currentPage={currentPage}
+                totalPages={totalPages}
+                total={filteredCompetitions.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setCurrentPage}
+                className="rounded-2xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-sm"
+              />
             )}
           </div>
         </div>

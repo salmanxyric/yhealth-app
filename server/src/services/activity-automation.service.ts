@@ -6,7 +6,7 @@
 
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
-import { query, transaction } from '../database/pg.js';
+import { query, transaction } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { modelFactory } from './model-factory.service.js';
 import { messageService } from './message.service.js';
@@ -337,6 +337,7 @@ class ActivityAutomationService {
           moodLevel: 5,
           stressLevel: 5,
           streakDays: compactCtx.streakDays,
+          userCoachPersona: compactCtx.aiCoachPersona,
         });
         personalityPrefix = modeResult.systemPromptPrefix + '\n\n';
       } catch {

@@ -1,5 +1,6 @@
 import { createMetadata } from '@/lib/seo';
 import MoneyMapPageContent from './MoneyMapPageContent';
+import { PageAccessGate } from '@/components/gates/PageAccessGate';
 
 export const metadata = createMetadata({
   title: 'Money Map - Smart Finance Tracker | Balencia',
@@ -9,5 +10,9 @@ export const metadata = createMetadata({
 });
 
 export default function MoneyMapPage() {
-  return <MoneyMapPageContent />;
+  return (
+    <PageAccessGate pageKey="money-map" requiredPlan="Pro">
+      <MoneyMapPageContent />
+    </PageAccessGate>
+  );
 }

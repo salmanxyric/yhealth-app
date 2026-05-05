@@ -9,7 +9,8 @@
  *  3. Extended absence (no end date, >14 days) → gentle nudge
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
+import { getUserLocalHour } from '../lib/user-timezone.js';
 import { logger } from '../services/logger.service.js';
 import { activityStatusService } from '../services/activity-status.service.js';
 import { statusPlanAdjusterService } from '../services/status-plan-adjuster.service.js';
@@ -34,23 +35,6 @@ let startupTimeoutId: NodeJS.Timeout | null = null;
 // ============================================
 // HELPERS
 // ============================================
-
-/**
- * Convert current UTC time to user's local time using their IANA timezone.
- * Returns a Date adjusted so getUTCHours()/getUTCDay() return user-local values.
- * Falls back to UTC if timezone is invalid.
- */
-function getUserLocalTime(timezone: string): Date {
-  try {
-    const now = new Date();
-    const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-    const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-    const utcOffset = (localDate.getTime() - utcDate.getTime()) / (1000 * 60);
-    return new Date(now.getTime() + utcOffset * 60 * 1000);
-  } catch {
-    return new Date();
-  }
-}
 
 /**
  * Build a follow-up message based on the user's status.
@@ -110,8 +94,7 @@ async function processStatusFollowUps(): Promise<void> {
         batch.map(async (entry) => {
           try {
             // Check user's local time — only process during 6AM-10PM
-            const userLocalTime = getUserLocalTime(entry.timezone);
-            const userHour = userLocalTime.getUTCHours();
+            const userHour = getUserLocalHour(entry.timezone);
             if (userHour < 6 || userHour >= 22) {
               skippedTimeWindow++;
               return;

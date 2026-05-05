@@ -23,6 +23,18 @@ const mockRedis = {
   expire: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
 };
 
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
+  query: mockQuery,
+  transaction: jest.fn(),
+  pool: { query: mockQuery, end: jest.fn() },
+  database: { healthCheck: jest.fn() },
+  getClient: jest.fn(),
+  closePool: jest.fn(),
+  testConnection: jest.fn(),
+  getPoolStats: jest.fn(),
+  default: {},
+}));
+
 jest.unstable_mockModule('../../../src/database/pg.js', () => ({
   query: mockQuery,
 }));
@@ -149,12 +161,12 @@ describe('LeaderboardService', () => {
     it('should return from Redis cache when available', async () => {
       (mockRedis.zRevRange as jest.Mock<any>).mockResolvedValueOnce(['u1', '90', 'u2', '80']);
 
-      // User details queries
+      // Single batch enrichment query for all user IDs
       mockQuery
-        .mockResolvedValueOnce(qr([{ first_name: 'User', last_name: 'One', avatar: null }]))
-        .mockResolvedValueOnce(qr([{ component_scores: { workout: 90, nutrition: 80, wellbeing: 85, biometrics: 70, engagement: 65, consistency: 60 } }]))
-        .mockResolvedValueOnce(qr([{ first_name: 'User', last_name: 'Two', avatar: null }]))
-        .mockResolvedValueOnce(qr([{ component_scores: { workout: 80, nutrition: 70, wellbeing: 75, biometrics: 60, engagement: 55, consistency: 50 } }]))
+        .mockResolvedValueOnce(qr([
+          { id: 'u1', first_name: 'User', last_name: 'One', avatar: null, component_scores: { workout: 90, nutrition: 80, wellbeing: 85, biometrics: 70, engagement: 65, consistency: 60 } },
+          { id: 'u2', first_name: 'User', last_name: 'Two', avatar: null, component_scores: { workout: 80, nutrition: 70, wellbeing: 75, biometrics: 60, engagement: 55, consistency: 50 } },
+        ]))
         .mockResolvedValueOnce(qr([{ count: '2' }])); // total count
 
       const result = await leaderboardService.getLeaderboard('global', '2026-02-16');

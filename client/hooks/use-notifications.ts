@@ -135,11 +135,10 @@ export function useNotifications() {
           setUrgentCount((prev) => prev + 1);
         }
 
-        // Show toast notification
+        // In-app toast (rich UI when header dropdown registered a handler)
         if (toastHandlerRef.current) {
           toastHandlerRef.current(data);
         } else {
-          // Default toast fallback
           toast(data.title, {
             duration: 5000,
             icon: "🔔",

@@ -34,6 +34,8 @@ export interface AdminExerciseListParams {
 
 export interface CreateExercisePayload {
   name: string;
+  /** Optional; required for round-trip import / dedup by slug */
+  slug?: string;
   description?: string | null;
   category: string;
   primary_muscle_group?: string | null;
@@ -69,6 +71,13 @@ export interface SyncResult {
   failed: number;
   errors: { exerciseId: string; exerciseName: string; error: string }[];
   durationMs: number;
+}
+
+export interface AdminImportExercisesResult {
+  inserted: number;
+  skipped: number;
+  failed: number;
+  errors: { index: number; name: string; slug: string; error: string }[];
 }
 
 // ============================================
@@ -126,5 +135,9 @@ export const adminExercisesService = {
 
   async sync(source: 'exercisedb' | 'musclewiki', options?: { dryRun?: boolean; limit?: number }): Promise<ApiResponse<SyncResult>> {
     return api.post<SyncResult>(`${BASE}/sync`, { source, ...options });
+  },
+
+  async importExercises(exercises: CreateExercisePayload[]): Promise<ApiResponse<AdminImportExercisesResult>> {
+    return api.post<AdminImportExercisesResult>(`${BASE}/import`, { exercises });
   },
 };

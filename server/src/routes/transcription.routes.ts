@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { transcriptionController, transcriptionUpload } from '../controllers/transcription.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 
 const router = Router();
 
@@ -21,14 +22,28 @@ router.get('/status', authenticate, transcriptionController.getStatus);
  * @desc    Transcribe audio file (synchronous - waits for result)
  * @access  Private
  */
-router.post('/transcribe', authenticate, transcriptionUpload, transcriptionController.transcribe);
+router.post(
+  '/transcribe',
+  authenticate,
+  transcriptionUpload,
+  requireFeature('ai.stt.transcribe'),
+  consumeCredits('ai.stt.transcribe'),
+  transcriptionController.transcribe
+);
 
 /**
  * @route   POST /api/transcription/start
  * @desc    Start transcription (asynchronous - returns transcript ID)
  * @access  Private
  */
-router.post('/start', authenticate, transcriptionUpload, transcriptionController.startTranscription);
+router.post(
+  '/start',
+  authenticate,
+  transcriptionUpload,
+  requireFeature('ai.stt.transcribe'),
+  consumeCredits('ai.stt.transcribe'),
+  transcriptionController.startTranscription
+);
 
 /**
  * @route   GET /api/transcription/:transcriptId

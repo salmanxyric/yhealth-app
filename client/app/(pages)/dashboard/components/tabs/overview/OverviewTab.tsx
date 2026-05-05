@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api-client';
 import type {
@@ -10,14 +11,14 @@ import type {
   DashboardStats,
   WeeklyActivityData,
   HealthMetrics,
-  QuickLogModalState,
+  
 } from './types';
-import { StatsCards } from './StatsCards';
+
 import { TodaySchedule } from './TodaySchedule';
 import { WeeklyChart, type ActivityPeriod } from './WeeklyChart';
 import { CurrentPlanCard } from './CurrentPlanCard';
 import { WeeklyFocus } from './WeeklyFocus';
-import { WaterIntakeWidget, XPLevelWidget, StreakWidget, StreakMilestoneModal } from '../../gamification';
+import { XPLevelWidget, StreakWidget, StreakMilestoneModal } from '../../gamification';
 import { useStreak } from '@/hooks/use-streak';
 import { EmotionTrendsWidget } from '../../wellbeing';
 import { AnalyticsTab } from './AnalyticsTab';
@@ -29,7 +30,14 @@ import { StatusWidget } from './widgets/StatusWidget';
 import { UnifiedHealthDashboard } from './widgets/UnifiedHealthDashboard';
 import type { EnhancedHealthMetrics } from './widgets/UnifiedHealthDashboard';
 import { DashboardCard } from './widgets/DashboardCard';
+import { LifeAreasOverviewWidget } from './widgets/LifeAreasOverviewWidget';
+import { ProactiveCoachOverviewWidget } from './widgets/ProactiveCoachOverviewWidget';
+import { SmartTimingOverviewWidget } from './widgets/SmartTimingOverviewWidget';
 import { DashboardUnderlineTabs } from '../../DashboardUnderlineTabs';
+import {
+  parseOverviewSubParam,
+  type OverviewSubTab,
+} from '../../../utils/overview-sub-tab';
 
 interface OverviewTabProps {
   plan: Plan | null;
@@ -64,6 +72,9 @@ export function OverviewTab({
   onActivityComplete,
   onRefresh,
 }: OverviewTabProps) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   // Streak system
   const { milestone, dismissMilestone } = useStreak();
 
@@ -74,7 +85,7 @@ export function OverviewTab({
   const [enhancedHealthMetrics, setEnhancedHealthMetrics] = useState<EnhancedHealthMetrics | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [selectedWeek, setSelectedWeek] = useState<ActivityPeriod>('current');
-  const [_isLoggingQuickAction, setIsLoggingQuickAction] = useState(false);
+  const [_isLoggingQuickAction, _setIsLoggingQuickAction] = useState(false);
 
   // Fetch dashboard stats
   const fetchDashboardStats = useCallback(async () => {
@@ -214,14 +225,37 @@ export function OverviewTab({
   // Computed values
   const completedToday = todayData?.completedCount || 0;
   const totalToday = todayData?.totalCount || 0;
-  const todayProgress = totalToday > 0 ? (completedToday / totalToday) * 100 : 0;
+  const _todayProgress = totalToday > 0 ? (completedToday / totalToday) * 100 : 0;
 
-  const currentStreak = dashboardStats?.streak.current || 0;
-  const weekChange = dashboardStats?.weekProgress.change || 0;
-  const effectiveWeekRate = dashboardStats?.weekProgress.rate ?? weekCompletionRate;
+  const _currentStreak = dashboardStats?.streak.current || 0;
+  const _weekChange = dashboardStats?.weekProgress.change || 0;
+  const _effectiveWeekRate = dashboardStats?.weekProgress.rate ?? weekCompletionRate;
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'analytics' | 'scoring' | 'alarms'>('dashboard');
+  // Overview inner tabs — synced with `overviewSub` query param
+  const [activeTab, setActiveTab] = useState<OverviewSubTab>(() =>
+    parseOverviewSubParam(searchParams.get('overviewSub'))
+  );
+
+  useEffect(() => {
+    const fromUrl = parseOverviewSubParam(searchParams.get('overviewSub'));
+    setActiveTab((prev) => (prev === fromUrl ? prev : fromUrl));
+  }, [searchParams]);
+
+  const handleOverviewSubTabChange = useCallback(
+    (id: string) => {
+      const next = parseOverviewSubParam(id);
+      setActiveTab(next);
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === 'dashboard') {
+        params.delete('overviewSub');
+      } else {
+        params.set('overviewSub', next);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   const tabs = [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
@@ -247,7 +281,7 @@ export function OverviewTab({
         layoutId="overviewSubTabUnderline"
         tabs={tabs}
         activeId={activeTab}
-        onTabChange={(id) => setActiveTab(id as typeof activeTab)}
+        onTabChange={handleOverviewSubTabChange}
         trailing={
           onRefresh ? (
             <button
@@ -267,7 +301,7 @@ export function OverviewTab({
         {activeTab === 'dashboard' && (
           <TabContent key="dashboard" tabId="dashboard">
             <div className="space-y-6">
-              {/* Health Metrics Dashboard */}
+              {/* Health metrics + live cards (tour: overview-metrics, overview-heart-rate) */}
               <UnifiedHealthDashboard
                 data={enhancedHealthMetrics || {
                   steps: { value: null, target: 10000 },
@@ -327,9 +361,27 @@ export function OverviewTab({
                   className="space-y-4"
                 >
                   <StatusWidget />
-                  <StreakWidget />
-                  <EmotionTrendsWidget compact />
-                  {plan && <CurrentPlanCard plan={plan} />}
+                  <ProactiveCoachOverviewWidget />
+                  <SmartTimingOverviewWidget />
+                  <LifeAreasOverviewWidget />
+
+                  <div className="grid grid-cols-1 gap-3 rounded-[22px] border border-white/[0.09] bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_16px_48px_rgba(0,0,0,0.5)] backdrop-blur-sm min-[1481px]:grid-cols-2 min-[1481px]:gap-3 min-[1481px]:p-3">
+                    <div className="min-w-0 h-full min-h-[200px] flex flex-col min-[1481px]:min-h-[240px]">
+                      <StreakWidget variant="compact" />
+                    </div>
+                    <div className="min-w-0 h-full min-h-[200px] flex flex-col min-[1481px]:min-h-[240px]">
+                      <XPLevelWidget variant="compact" />
+                    </div>
+                    <div className="min-w-0 h-full min-h-[200px] flex flex-col min-[1481px]:min-h-[240px]">
+                      <EmotionTrendsWidget compact minimal showPrivacyControls={false} />
+                    </div>
+                    {plan ? (
+                      <div className="min-w-0 h-full min-h-[200px] flex flex-col min-[1481px]:min-h-[240px]">
+                        <CurrentPlanCard plan={plan} variant="compact" />
+                      </div>
+                    ) : null}
+                  </div>
+
                   <WeeklyFocus weeklySummary={weeklySummary} />
                 </motion.div>
               </div>

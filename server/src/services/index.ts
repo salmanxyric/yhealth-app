@@ -5,7 +5,7 @@ export { socketService } from "./socket.service.js";
 export { smsService } from "./sms.service.js";
 export { oauthService } from "./oauth.service.js";
 export { r2Service } from "./r2.service.js";
-export { aiCoachService } from "./ai-coach.service.js";
+export { aiCoachService } from "./ai-coach/index.js";
 export type {
   GoalCategory,
   ConversationPhase,
@@ -33,7 +33,13 @@ export type {
   MCQQuestion,
   MCQGenerationRequest,
   MCQGenerationResponse,
-} from "./ai-coach.service.js";
+  // Batch MCQ & Life Coach Questions
+  BatchMCQRequest,
+  BatchMCQResponse,
+  LifeCoachQuestionsRequest,
+  LifeCoachQuestionsResponse,
+  LifeCoachQuestionItem,
+} from "./ai-coach/index.js";
 
 export { nutritionService } from "./nutrition.service.js";
 export type {

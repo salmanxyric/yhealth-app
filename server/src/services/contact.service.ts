@@ -3,7 +3,7 @@
  * Handles contact submission CRUD operations, filtering, and admin management
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from './logger.service.js';
 import { mailHelper } from '../helper/mail.js';

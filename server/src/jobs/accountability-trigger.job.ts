@@ -12,7 +12,8 @@
  * Consent is checked at EVERY step. No message sent without explicit opt-in.
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
+import { getUserLocalHour } from '../lib/user-timezone.js';
 import { logger } from '../services/logger.service.js';
 
 // ============================================
@@ -25,29 +26,12 @@ const JOB_INTERVAL_MS = process.env.ACCOUNTABILITY_JOB_INTERVAL_MS
 const STARTUP_DELAY_MS = process.env.ACCOUNTABILITY_STARTUP_DELAY_MS
   ? parseInt(process.env.ACCOUNTABILITY_STARTUP_DELAY_MS, 10)
   : 780_000; // 13 minutes (after status pattern analysis at 720s)
-const BATCH_SIZE = 5;
-const INTER_BATCH_DELAY_MS = 2000;
+const BATCH_SIZE = 50;
+const INTER_BATCH_DELAY_MS = 1000;
 
 let isRunning = false;
 let intervalId: NodeJS.Timeout | null = null;
 let startupTimeoutId: NodeJS.Timeout | null = null;
-
-// ============================================
-// TIMEZONE HELPER
-// ============================================
-
-function getUserLocalHour(timezone: string): number {
-  try {
-    const now = new Date();
-    const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-    const localDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
-    const offsetMs = localDate.getTime() - utcDate.getTime();
-    const localTime = new Date(now.getTime() + offsetMs);
-    return localTime.getUTCHours();
-  } catch {
-    return new Date().getUTCHours();
-  }
-}
 
 // ============================================
 // JOB PROCESSOR
@@ -60,12 +44,14 @@ async function processAccountabilityTriggers(): Promise<void> {
   const startTime = Date.now();
 
   try {
-    // Get users with accountability enabled
+    // Only fetch users who have active triggers AND whose triggers haven't fired recently (within cooldown)
     const usersResult = await query<{ user_id: string; timezone: string }>(
-      `SELECT ac.user_id, COALESCE(u.timezone, 'UTC') as timezone
+      `SELECT DISTINCT ac.user_id, COALESCE(u.timezone, 'UTC') as timezone
        FROM accountability_consent ac
        JOIN users u ON u.id = ac.user_id AND u.is_active = true
-       WHERE ac.enabled = true`
+       JOIN accountability_triggers at ON at.user_id = ac.user_id AND at.is_active = true
+       WHERE ac.enabled = true
+         AND (at.last_triggered_at IS NULL OR at.last_triggered_at < NOW() - (at.cooldown_hours || ' hours')::interval)`
     );
 
     const users = usersResult.rows;

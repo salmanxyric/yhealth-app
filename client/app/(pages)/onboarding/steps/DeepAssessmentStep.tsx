@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { useOnboarding } from '@/src/features/onboarding/context/OnboardingContext';
 import { useDeepAssessment } from '../hooks/useDeepAssessment';
 import { useMCQAssessment } from '../hooks/useMCQAssessment';
@@ -34,8 +35,8 @@ export function DeepAssessmentStep() {
 
   const {
     selectedGoal,
+    customGoalText,
     prevStep,
-    nextStep,
     goToStep,
     setAssessmentMode,
     addAssessmentResponse,
@@ -76,6 +77,7 @@ export function DeepAssessmentStep() {
   // MCQ Mode Hook
   const mcqAssessment = useMCQAssessment({
     selectedGoal,
+    customGoalText: customGoalText || undefined,
     onAddAssessmentResponse: addAssessmentResponse,
   });
 
@@ -94,6 +96,24 @@ export function DeepAssessmentStep() {
     setAssessmentMode('quick');
     goToStep(2);
   }, [setAssessmentMode, goToStep]);
+
+  // Auto-fallback to quick mode when AI is unavailable
+  useEffect(() => {
+    const qaUnavailable = qaAiAvailable === false;
+    const mcqUnavailable = mcqAssessment.aiAvailable === false;
+    if (qaUnavailable && mcqUnavailable) {
+      toast('AI coach is temporarily unavailable. Switching to quick assessment.', {
+        icon: '🔄',
+        duration: 4000,
+        style: {
+          background: '#1e293b',
+          color: '#e2e8f0',
+          border: '1px solid rgba(255,255,255,0.1)',
+        },
+      });
+      handleSwitchToQuick();
+    }
+  }, [qaAiAvailable, mcqAssessment.aiAvailable, handleSwitchToQuick]);
 
   const handleModeChange = useCallback((mode: AssessmentInteractionMode) => {
     // Only allow mode change if no progress made
@@ -134,7 +154,6 @@ export function DeepAssessmentStep() {
     }
 
     completeAssessment();
-    nextStep();
   }, [
     isQAMode,
     qaMessages,
@@ -143,7 +162,6 @@ export function DeepAssessmentStep() {
     mcqAssessment.questionCount,
     addAssessmentResponse,
     completeAssessment,
-    nextStep,
   ]);
 
   const handleLanguageChange = useCallback(

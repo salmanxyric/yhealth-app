@@ -4,7 +4,7 @@
  * Sends push notifications and emails when task time arrives
  */
 
-import { query, pool } from '../database/pg.js';
+import { query, pool } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { notificationService } from './notification.service.js';
 import { mailHelper } from '../helper/mail.js';

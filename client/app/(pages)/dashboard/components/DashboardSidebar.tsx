@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -22,11 +22,9 @@ import {
   RiFlowerFill,
   RiMedalFill,
   RiTeamFill,
-  RiShieldCheckFill,
   RiBookReadFill,
   RiEmotionHappyFill,
   RiLeafFill,
-  RiMenuFill,
   RiCloseFill,
   RiMindMap,
   RiMore2Fill,
@@ -41,15 +39,22 @@ import {
   RiHeadphoneFill,
   RiLightbulbFill,
   RiBankFill,
-  RiSparklingFill,
   RiPhoneFill,
   RiUserFill,
   RiEqualizerFill,
+  RiWalletFill,
+  RiVipCrownFill,
+  RiHistoryFill,
+  RiGroupFill,
+  RiFileList3Fill,
+  RiAdminFill,
 } from "react-icons/ri";
 import Image from "next/image";
 import { useAuth } from "@/app/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { useUnreadCount } from "@/hooks/use-unread-count";
+import { useNavEntitlement } from "@/hooks/useNavEntitlement";
+import { usePaywallStore } from "@/stores/paywallStore";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -119,7 +124,9 @@ const sections: NavSection[] = [
       { id: "life-areas", label: "Life Areas", icon: <RiCompassFill className={S18} />, href: "/life-areas" },
       { id: "leaderboard", label: "Leaderboard", icon: <RiMedalFill className={S18} />, href: "/leaderboard" },
       { id: "competitions", label: "Competitions", icon: <RiTeamFill className={S18} />, href: "/competitions" },
+      { id: "community", label: "Community", icon: <RiGroupFill className={S18} />, href: "/community" },
       { id: "knowledge-graph", label: "Knowledge Graph", icon: <RiMindMap className={S18} />, href: "/knowledge-graph" },
+      { id: "contracts", label: "Contracts", icon: <RiFileList3Fill className={S18} />, href: "/contracts" },
     ],
   },
   {
@@ -128,6 +135,7 @@ const sections: NavSection[] = [
     collapsible: true,
     items: [
       { id: "chat", label: "Chat", icon: <RiChat3Fill className={S18} />, href: "/chat" },
+      { id: "chat-history", label: "Chat History", icon: <RiHistoryFill className={S18} />, href: "/chat-history" },
       { id: "voice-assistant", label: "Voice Assistant", icon: <RiMicFill className={S18} />, href: "/voice-assistant" },
       { id: "voice-call", label: "Call Coach", icon: <RiPhoneFill className={S18} />, href: "/voice-call" },
       { id: "notifications", label: "Notifications", icon: <RiNotification3Fill className={S18} />, href: "/notifications" },
@@ -144,8 +152,11 @@ const sections: NavSection[] = [
 ];
 
 const utilityItems: NavItem[] = [
+  { id: "admin-panel", label: "Admin Panel", icon: <RiAdminFill className={S18} />, href: "/admin", badge: "ADMIN" },
   { id: "profile", label: "Profile", icon: <RiUserFill className={S18} />, href: "/profile" },
   { id: "preferences", label: "Preferences", icon: <RiEqualizerFill className={S18} />, href: "/preferences" },
+  { id: "upgrade", label: "Upgrade Plan", icon: <RiVipCrownFill className={S18} />, href: "/subscription", badge: "PRO" },
+  { id: "billing", label: "Billing", icon: <RiWalletFill className={S18} />, href: "/settings/billing" },
   { id: "settings", label: "Settings", icon: <RiSettings4Fill className={S18} />, href: "/settings" },
   { id: "help", label: "Help", icon: <RiQuestionAnswerFill className={S18} />, href: "/help" },
 ];
@@ -160,16 +171,12 @@ function getBadgeStyle(badge: string) {
 }
 
 /** Flatten all navigable items for search filtering. */
-function getAllItems(isAdmin: boolean): NavItem[] {
-  const all = [
+function getAllItems(_isAdmin: boolean): NavItem[] {
+  return [
     ...primaryItems,
     ...sections.flatMap((s) => s.items),
     ...utilityItems,
   ];
-  if (isAdmin) {
-    all.push({ id: "admin-panel", label: "Admin Panel", icon: <RiShieldCheckFill className={S18} />, href: "/admin" });
-  }
-  return all;
 }
 
 function resolveActiveId(pathname: string): string | null {
@@ -198,6 +205,8 @@ function resolveActiveId(pathname: string): string | null {
   if (pathname.startsWith("/wellbeing")) return "wellbeing";
   if (pathname.startsWith("/yoga")) return "yoga";
   if (pathname.startsWith("/notifications")) return "notifications";
+  if (pathname.startsWith("/settings/billing")) return "billing";
+  if (pathname.startsWith("/upgrade")) return "upgrade";
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.startsWith("/help")) return "help";
   if (pathname.startsWith("/competitions")) return "competitions";
@@ -210,6 +219,11 @@ function resolveActiveId(pathname: string): string | null {
   if (pathname.startsWith("/goals")) return "goals";
   if (pathname.startsWith("/profile")) return "profile";
   if (pathname.startsWith("/preferences")) return "preferences";
+  if (pathname.startsWith("/contracts")) return "contracts";
+  if (pathname.startsWith("/community")) return "community";
+  if (pathname.startsWith("/chat-history")) return "chat-history";
+  if (pathname.startsWith("/webinars")) return "webinars";
+  if (pathname.startsWith("/subscription")) return "subscription";
   if (pathname.startsWith("/admin")) return "admin-panel";
   return null;
 }
@@ -221,8 +235,8 @@ function resolveActiveId(pathname: string): string | null {
 const COLLAPSED_KEY = "sidebar-collapsed-sections";
 const DEFAULT_COLLAPSED = new Set(["communicate"]);
 
+/** Read persisted section collapse state (client-only; not for SSR initial state). */
 function loadCollapsed(): Set<string> {
-  if (typeof window === "undefined") return new Set(DEFAULT_COLLAPSED);
   try {
     const raw = localStorage.getItem(COLLAPSED_KEY);
     return raw ? new Set(JSON.parse(raw) as string[]) : new Set(DEFAULT_COLLAPSED);
@@ -262,12 +276,19 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(loadCollapsed);
+  // Same initial value on server and client so hydration matches; sync from localStorage after mount.
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set(DEFAULT_COLLAPSED));
+  /** Framer layout/height:auto differs between SSR and client — enable section animations only after hydration. */
+  const [sectionMotionReady, setSectionMotionReady] = useState(false);
+  /** Avoid writing DEFAULT_COLLAPSED to localStorage before loadCollapsed() runs in useLayoutEffect. */
+  const [collapseStorageReady, setCollapseStorageReady] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
   const { unreadCount: chatUnreadCount } = useUnreadCount();
+  const getNavEntitlement = useNavEntitlement();
+  const openPaywall = usePaywallStore((s) => s.open);
 
   const isSearching = searchQuery.trim().length > 0;
   const isAdmin = user?.role?.toLowerCase() === "admin";
@@ -293,10 +314,17 @@ export function DashboardSidebar({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isCollapsed, onCollapsedChange]);
 
-  // Persist collapsed sections
+  useLayoutEffect(() => {
+    setCollapsedSections(loadCollapsed());
+    setSectionMotionReady(true);
+    setCollapseStorageReady(true);
+  }, []);
+
+  // Persist collapsed sections (only after hydration read from localStorage)
   useEffect(() => {
+    if (!collapseStorageReady) return;
     saveCollapsed(collapsedSections);
-  }, [collapsedSections]);
+  }, [collapsedSections, collapseStorageReady]);
 
   const toggleSection = (id: string) => {
     setCollapsedSections((prev) => {
@@ -316,6 +344,14 @@ export function DashboardSidebar({
   };
 
   const handleNavClick = (item: NavItem, e: React.MouseEvent) => {
+    // Locked items open the paywall instead of navigating. Server enforces
+    // the same gate via layout guards / 402 responses, so this is UX only.
+    const ent = getNavEntitlement(item.href);
+    if (ent.locked) {
+      e.preventDefault();
+      openPaywall({ reason: "plan_required", context: { menu: item.id } });
+      return;
+    }
     if (onTabChange && item.href.includes("?tab=")) {
       e.preventDefault();
       const tab = item.href.split("?tab=")[1];
@@ -331,6 +367,13 @@ export function DashboardSidebar({
   // Filter items by search
   const matchesSearch = (item: NavItem) =>
     !isSearching || item.label.toLowerCase().includes(searchQuery.toLowerCase());
+
+  // Hide items that are not visible for this plan. Locked items still render
+  // but open the paywall on click instead of navigating.
+  const isNavVisible = (item: NavItem) => {
+    const ent = getNavEntitlement(item.href);
+    return ent.visible;
+  };
 
   // ---- Render helpers ----
 
@@ -432,6 +475,7 @@ export function DashboardSidebar({
     const filtered = getAllItems(isAdmin).filter(matchesSearch).map(enrich);
     return (
       <motion.aside
+        data-tour="sidebar"
         initial={false}
         animate={{ width: 260 }}
         className="fixed left-0 top-0 h-screen bg-[#0a0a14] border-r border-white/[0.04] flex flex-col z-40"
@@ -450,6 +494,7 @@ export function DashboardSidebar({
 
   return (
     <motion.aside
+      data-tour="sidebar"
       initial={false}
       animate={{ width: isCollapsed ? 64 : 260 }}
       transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
@@ -478,31 +523,39 @@ export function DashboardSidebar({
       <nav className="flex-1 overflow-y-auto py-2 px-2.5 space-y-3 scrollbar-thin scrollbar-thumb-white/[0.06] scrollbar-track-transparent">
         {/* Primary items */}
         <div className="space-y-0.5">
-          {primaryItems.filter(matchesSearch).map(renderItem)}
+          {primaryItems.filter(isNavVisible).filter(matchesSearch).map(renderItem)}
         </div>
 
         {/* Sections */}
         {sections.map((section) => {
-          const visibleItems = section.items.filter(matchesSearch);
+          const visibleItems = section.items.filter(isNavVisible).filter(matchesSearch);
           if (visibleItems.length === 0 && !isCollapsed) return null;
           const isSectionCollapsed = section.collapsible && collapsedSections.has(section.id) && !isSearching;
 
           return (
             <div key={section.id} className="space-y-0.5">
               {renderSectionHeader(section)}
-              <AnimatePresence initial={false}>
-                {!isSectionCollapsed && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: "easeInOut" }}
-                    className="overflow-hidden space-y-0.5"
-                  >
-                    {(isCollapsed ? section.items : visibleItems).map(renderItem)}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {!sectionMotionReady ? (
+                !isSectionCollapsed && (
+                  <div className="overflow-hidden space-y-0.5">
+                    {(isCollapsed ? section.items.filter(isNavVisible) : visibleItems).map(renderItem)}
+                  </div>
+                )
+              ) : (
+                <AnimatePresence initial={false}>
+                  {!isSectionCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeInOut" }}
+                      className="overflow-hidden space-y-0.5"
+                    >
+                      {(isCollapsed ? section.items.filter(isNavVisible) : visibleItems).map(renderItem)}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              )}
             </div>
           );
         })}
@@ -511,21 +564,9 @@ export function DashboardSidebar({
         {!isCollapsed && <div className="mx-2 h-px bg-white/[0.04]" />}
         {isCollapsed && <div className="mx-auto my-1.5 w-6 h-px bg-white/[0.06] rounded-full" />}
         <div className="space-y-0.5">
-          {utilityItems.filter(matchesSearch).map((item) => renderItem({ ...item }))}
+          {utilityItems.filter((item) => item.id !== "admin-panel" || isAdmin).filter(isNavVisible).filter(matchesSearch).map((item) => renderItem({ ...item }))}
         </div>
 
-        {/* Admin */}
-        {isAdmin && (
-          <div className="space-y-0.5">
-            {!isCollapsed && (
-              <span className="block pl-3 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
-                Admin
-              </span>
-            )}
-            {isCollapsed && <div className="mx-auto my-1.5 w-6 h-px bg-white/[0.06] rounded-full" />}
-            {renderItem({ id: "admin-panel", label: "Admin Panel", icon: <RiShieldCheckFill className={S18} />, href: "/admin" })}
-          </div>
-        )}
       </nav>
 
       {renderFooter(user, isCollapsed, handleLogout)}
@@ -539,7 +580,7 @@ export function DashboardSidebar({
 
 function renderHeader(
   isCollapsed: boolean,
-  setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>,
+  setIsCollapsed: React.Dispatch<React.SetStateAction<boolean> >,
   onCollapsedChange?: (c: boolean) => void,
 ) {
   return (
@@ -810,18 +851,11 @@ function MobileNavDrawer({
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {group.items.map(renderDrawerItem)}
+                {group.items.filter((item) => item.id !== "admin-panel" || isAdmin).map(renderDrawerItem)}
               </div>
             </div>
           ))}
 
-          {/* Admin */}
-          {isAdmin && (
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-600 font-semibold px-2 mb-1.5">Admin</p>
-              {renderDrawerItem({ id: "admin-panel", label: "Admin Panel", icon: <RiShieldCheckFill className={S18} />, href: "/admin" })}
-            </div>
-          )}
         </div>
       </motion.div>
     </>
@@ -863,7 +897,10 @@ export function MobileBottomNav({
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0a0a14]/95 backdrop-blur-xl border-t border-white/[0.06] z-40 md:hidden pb-safe">
+      <nav
+        data-tour="sidebar"
+        className="fixed bottom-0 left-0 right-0 bg-[#0a0a14]/95 backdrop-blur-xl border-t border-white/[0.06] z-40 md:hidden pb-safe"
+      >
         <div className="flex items-center justify-around py-1.5 px-1">
           {mobileNavItems.map((item) => {
             const isActive = activeId === item.id;

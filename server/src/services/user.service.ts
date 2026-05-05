@@ -3,7 +3,7 @@
  * Handles user CRUD operations, filtering, and admin management
  */
 
-import { query } from '../database/pg.js';
+import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from './logger.service.js';
 import type { UserRow } from '../database/schemas/user.schemas.js';

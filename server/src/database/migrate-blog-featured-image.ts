@@ -3,7 +3,7 @@
  * Cloudflare R2 presigned URLs can be longer than 500 characters
  */
 
-import { query, closePool } from './pg.js';
+import { query, closePool } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 
 async function migrate() {

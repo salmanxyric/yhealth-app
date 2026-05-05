@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { query, closePool } from './pg.js';
+import { query, closePool } from '../config/database.config.js';
 
 async function makeAdmin() {
   const ADMIN_ROLE_ID = '11111111-1111-1111-1111-111111111102';

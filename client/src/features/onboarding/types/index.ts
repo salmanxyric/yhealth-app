@@ -106,6 +106,31 @@ export interface OnboardingStepConfig {
 }
 
 /**
+ * AI-generated assessment question (from batch endpoint)
+ */
+export interface GeneratedQuestion {
+  id: string;
+  question: string;
+  goal_area: string;
+  reason_for_asking?: string;
+  options: { label: string; value: string }[];
+}
+
+/**
+ * AI-generated life-coach question
+ */
+export interface GeneratedLifeCoachQuestion {
+  id: string;
+  question: string;
+  type: 'text' | 'cards' | 'mcq';
+  goal_area: string;
+  purpose: string;
+  optional?: boolean;
+  placeholder?: string;
+  options?: { label: string; value: string }[];
+}
+
+/**
  * Onboarding state
  */
 export interface OnboardingState {
@@ -124,6 +149,12 @@ export interface OnboardingState {
   assessmentResponses: AssessmentResponse[];
   bodyStats: BodyStats;
   assessmentComplete: boolean;
+
+  // AI-generated question cache (survives refresh via localStorage)
+  generatedAssessmentQuestions: GeneratedQuestion[] | null;
+  assessmentQuestionsGoalKey: string | null;
+  generatedLifeCoachQuestions: GeneratedLifeCoachQuestion[] | null;
+  lifeCoachQuestionsGoalKey: string | null;
 
   // Step 3: Body Images (NEW)
   bodyImages: BodyImagesState;
@@ -167,6 +198,10 @@ export interface OnboardingActions {
   addAssessmentResponse: (response: AssessmentResponse) => void;
   setBodyStats: (stats: Partial<BodyStats>) => void;
   completeAssessment: () => void;
+
+  // AI-generated question cache
+  setGeneratedAssessmentQuestions: (questions: GeneratedQuestion[], goalKey: string) => void;
+  setGeneratedLifeCoachQuestions: (questions: GeneratedLifeCoachQuestion[], goalKey: string) => void;
 
   // Step 3: Body Images
   updateBodyImage: (type: BodyImageType, image: Partial<BodyImage>) => void;

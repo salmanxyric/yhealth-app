@@ -14,6 +14,11 @@ CREATE TABLE mood_logs (
     -- One-word descriptor (Light mode, optional)
     descriptor VARCHAR(50),
     
+    -- Composite mood rating (1-10) used by the cross-domain correlator.
+    -- Populated directly in light mode (from emoji mapping) or in deep mode
+    -- (from happiness_rating, or derived from energy/stress/anxiety).
+    mood_rating INTEGER CHECK (mood_rating >= 1 AND mood_rating <= 10),
+
     -- Detailed ratings (Deep mode, 1-10 scale)
     happiness_rating INTEGER CHECK (happiness_rating >= 1 AND happiness_rating <= 10),
     energy_rating INTEGER CHECK (energy_rating >= 1 AND energy_rating <= 10),

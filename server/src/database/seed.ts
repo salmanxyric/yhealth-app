@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { query, closePool } from './pg.js';
+import { query, closePool } from '../config/database.config.js';
 
 interface UserRow {
   id: string;

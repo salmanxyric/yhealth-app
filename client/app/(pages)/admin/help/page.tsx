@@ -32,6 +32,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { api, ApiError } from "@/lib/api-client";
 import { AIHelpGenerator, type GeneratedHelpData } from "@/components/help/AIHelpGenerator";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { confirm } from "@/components/common/ConfirmDialog";
 
 interface HelpArticle {
   id: string;
@@ -127,7 +128,8 @@ export default function AdminHelpPage() {
   }, [page, search, statusFilter]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this article?")) return;
+    const ok = await confirm({ description: "Are you sure you want to delete this article?", confirmText: "Delete", variant: "destructive" });
+    if (!ok) return;
     try {
       await api.delete(`/admin/help/${id}`);
       setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
@@ -168,7 +170,9 @@ export default function AdminHelpPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0 || !confirm(`Delete ${selectedIds.size} article(s)?`)) return;
+    if (selectedIds.size === 0) return;
+    const ok = await confirm({ description: `Are you sure you want to delete ${selectedIds.size} article(s)?`, confirmText: "Delete", variant: "destructive" });
+    if (!ok) return;
     try {
       await api.post("/admin/help/bulk-delete", { ids: Array.from(selectedIds) });
       setSelectedIds(new Set());

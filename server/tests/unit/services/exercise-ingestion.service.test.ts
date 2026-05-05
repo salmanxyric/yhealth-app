@@ -15,6 +15,18 @@ import type { ExerciseDBExercise, RapidAPIExercise } from '../../../src/types/ex
 const mockQuery = jest.fn<any>();
 const mockTransaction = jest.fn<any>();
 
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
+  query: mockQuery,
+  transaction: mockTransaction,
+  pool: { query: mockQuery, end: jest.fn() },
+  database: { healthCheck: jest.fn() },
+  getClient: jest.fn(),
+  closePool: jest.fn(),
+  testConnection: jest.fn(),
+  getPoolStats: jest.fn(),
+  default: {},
+}));
+
 jest.unstable_mockModule('../../../src/database/pg.js', () => ({
   query: mockQuery,
   transaction: mockTransaction,

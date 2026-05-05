@@ -35,6 +35,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { api, ApiError } from "@/lib/api-client";
 import { AICommunityGenerator, type GeneratedCommunityData } from "@/components/community/AICommunityGenerator";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { confirm } from "@/components/common/ConfirmDialog";
 
 interface CommunityPost {
   id: string;
@@ -127,7 +128,8 @@ export default function AdminCommunityPage() {
   }, [page, search, statusFilter]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this community post?")) return;
+    const ok = await confirm({ description: "Are you sure you want to delete this community post?", confirmText: "Delete", variant: "destructive" });
+    if (!ok) return;
     try {
       await api.delete(`/admin/community/${id}`);
       setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
@@ -168,7 +170,9 @@ export default function AdminCommunityPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedIds.size === 0 || !confirm(`Delete ${selectedIds.size} post(s)?`)) return;
+    if (selectedIds.size === 0) return;
+    const ok = await confirm({ description: `Are you sure you want to delete ${selectedIds.size} post(s)?`, confirmText: "Delete", variant: "destructive" });
+    if (!ok) return;
     try {
       await api.post("/admin/community/bulk-delete", { ids: Array.from(selectedIds) });
       setSelectedIds(new Set());

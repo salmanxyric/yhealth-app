@@ -3,12 +3,13 @@
 import { forwardRef } from 'react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 
-type AccentColor = 'emerald' | 'cyan' | 'purple' | 'amber' | 'red' | 'blue' | 'sky' | 'orange' | 'pink' | 'none';
+type AccentColor = 'emerald' | 'cyan' | 'purple' | 'violet' | 'amber' | 'red' | 'blue' | 'sky' | 'orange' | 'pink' | 'none';
 
 const ACCENT_MAP: Record<AccentColor, { glow: string; border: string; shadow: string }> = {
   emerald: { glow: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.15)', shadow: 'rgba(16,185,129,0.06)' },
   cyan:    { glow: 'rgba(6,182,212,0.08)',   border: 'rgba(6,182,212,0.15)',   shadow: 'rgba(6,182,212,0.06)' },
   purple:  { glow: 'rgba(139,92,246,0.08)',  border: 'rgba(139,92,246,0.15)',  shadow: 'rgba(139,92,246,0.06)' },
+  violet:  { glow: 'rgba(124,58,237,0.08)',  border: 'rgba(124,58,237,0.15)',  shadow: 'rgba(124,58,237,0.06)' },
   amber:   { glow: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.15)',  shadow: 'rgba(245,158,11,0.06)' },
   red:     { glow: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.15)',   shadow: 'rgba(239,68,68,0.06)' },
   blue:    { glow: 'rgba(59,130,246,0.08)',   border: 'rgba(59,130,246,0.15)',  shadow: 'rgba(59,130,246,0.06)' },
