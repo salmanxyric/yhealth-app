@@ -93,6 +93,7 @@ import obstacleRoutes from './obstacle.routes.js';
 import reconnectionRoutes from './reconnection.routes.js';
 import timingProfileRoutes from './timing-profile.routes.js';
 import dataSourceRoutes from './data-source.routes.js';
+import wikiRoutes from './wiki.routes.js';
 import { env } from '../config/env.config.js';
 
 const router = Router();
@@ -152,6 +153,7 @@ router.get('/', (_req, res) => {
       email: '/api/email',
       streaks: '/api/streaks',
       dataSources: '/api/data-sources',
+      wiki: '/api/v1/wiki',
     },
   });
 });
@@ -425,5 +427,8 @@ router.use('/timing-profile', timingProfileRoutes);
 
 // Universal Data Source Correlation
 router.use('/data-sources', dataSourceRoutes);
+
+// Personal Health Wiki
+router.use('/v1/wiki', wikiRoutes);
 
 export default router;
