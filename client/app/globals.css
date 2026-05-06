@@ -608,70 +608,6 @@
   50%      { box-shadow: 0 0 120px 44px rgba(168,85,247,0.45), 0 0 240px 100px rgba(139,92,246,0.2); }
 }
 
-/* Mind Orb — liquid glass with flowing colored blobs */
-@keyframes mind-halo-breathe {
-  0%, 100% {
-    opacity: 0.85;
-    transform: translate(-50%, -50%) scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.05);
-  }
-}
-
-/* Wider, slower aura — Mind Observatory hub */
-@keyframes mind-outer-aura {
-  0%, 100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 0.95;
-  }
-}
-
-/* Satellite nodes — gentle idle glow (uses --sat-glow on the element) */
-@keyframes observatory-sat-pulse-kf {
-  0%, 100% {
-    box-shadow: 0 0 12px 2px var(--sat-glow);
-  }
-  50% {
-    box-shadow: 0 0 22px 6px var(--sat-glow);
-  }
-}
-
-.observatory-sat-pulse {
-  animation: observatory-sat-pulse-kf 4.5s ease-in-out infinite;
-}
-@keyframes mind-blob-drift-a {
-  0%   { transform: translate(-20%, -15%) scale(1);   }
-  25%  { transform: translate(15%, -30%) scale(1.15); }
-  50%  { transform: translate(25%, 10%) scale(0.95);  }
-  75%  { transform: translate(-10%, 20%) scale(1.1);  }
-  100% { transform: translate(-20%, -15%) scale(1);   }
-}
-@keyframes mind-blob-drift-b {
-  0%   { transform: translate(20%, 20%) scale(0.9);   }
-  25%  { transform: translate(-15%, 25%) scale(1.1);  }
-  50%  { transform: translate(-25%, -10%) scale(1);   }
-  75%  { transform: translate(10%, -20%) scale(1.2);  }
-  100% { transform: translate(20%, 20%) scale(0.9);   }
-}
-@keyframes mind-blob-drift-c {
-  0%   { transform: translate(0%, 0%) scale(1.05);    }
-  33%  { transform: translate(-25%, 15%) scale(0.85); }
-  66%  { transform: translate(25%, -15%) scale(1.15); }
-  100% { transform: translate(0%, 0%) scale(1.05);    }
-}
-@keyframes mind-spec-shift {
-  0%, 100% { transform: translate(0, 0); opacity: 0.55; }
-  50%      { transform: translate(4%, -3%); opacity: 0.75; }
-}
-@keyframes mind-ring-spin {
-  from { transform: translate(-50%, -50%) rotate(0deg);   }
-  to   { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
 @keyframes constellation-fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -709,9 +645,7 @@
   .core-orbit-ring,
   .core-particle,
   .star-label-float,
-  .core-pulse,
-  .mind-outer-aura,
-  .observatory-sat-pulse {
+  .core-pulse {
     animation: none !important;
     transition: none !important;
   }
@@ -896,15 +830,5 @@ body::-webkit-scrollbar {
 .btn-sky > * {
   position: relative;
   z-index: 2;
-}
-
-/* Settings → Privacy: user-chosen reduce motion (see yhealth-reduce-motion localStorage) */
-html.reduce-motion *,
-html.reduce-motion *::before,
-html.reduce-motion *::after {
-  animation-duration: 0.001ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.001ms !important;
-  scroll-behavior: auto !important;
 }
 

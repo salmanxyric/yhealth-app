@@ -122,3 +122,6 @@ export type {
   StreamExplainabilityEvent,
   IntelligenceDonePayload,
 } from './intelligence-files';
+
+// Wiki types
+export * from './wiki';
