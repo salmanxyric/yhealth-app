@@ -87,8 +87,8 @@ class WikiController {
     const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized('Authentication required');
 
-    const filters = searchWikiQuerySchema.parse(req.query);
-    const results = await wikiService.searchPages(userId, filters);
+    const { q, ...filters } = searchWikiQuerySchema.parse(req.query);
+    const results = await wikiService.searchPages(userId, q, filters);
 
     ApiResponse.success(res, results, 'Search results retrieved', 200, req);
   });
@@ -198,7 +198,13 @@ class WikiController {
 
     const { slug } = req.params;
     const { reason } = flagWikiPageSchema.parse(req.body);
-    await wikiService.logOperation(userId, slug, 'flag', { reason });
+    await wikiService.logOperation(userId, {
+      operation: 'update',
+      pageIds: [],
+      summary: `Page flagged: ${slug} — ${reason}`,
+      details: { slug, reason },
+      pagesTouched: 1,
+    });
 
     ApiResponse.success(res, null, 'Page flagged', 200, req);
   });
@@ -209,7 +215,13 @@ class WikiController {
 
     const { slug } = req.params;
     const data = wikiPageFeedbackSchema.parse(req.body);
-    await wikiService.logOperation(userId, slug, 'feedback', data);
+    await wikiService.logOperation(userId, {
+      operation: 'update',
+      pageIds: [],
+      summary: `Feedback submitted for: ${slug}`,
+      details: { slug, ...data },
+      pagesTouched: 1,
+    });
 
     ApiResponse.success(res, null, 'Feedback submitted', 200, req);
   });

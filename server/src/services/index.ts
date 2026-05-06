@@ -153,3 +153,5 @@ export type {
   TranscriptionOptions,
   TranscriptionResult,
 } from "./assemblyai.service.js";
+
+export { wikiService } from './wiki.service.js';
