@@ -48,10 +48,23 @@ import { routeCoachIntent } from './life-area-intent-router.service.js';
 import type { ToolTurnContext } from '../types/tool-turn-context.js';
 import { buildPersonaDirectiveBlock } from './coach-persona-prompt.service.js';
 import { adaptiveCoachingLoopService } from './adaptive-coaching-loop.service.js';
+import {
+  formatUserLocalDateTime,
+  getUserLocalDateISO,
+  getUserLocalHour,
+  resolveTimeZone,
+} from '../lib/user-timezone.js';
+import { artifactGenerationService } from './artifact-generation.service.js';
 
 const lifeAreaRouterOpenAI: OpenAI | null = env.openai.apiKey
   ? new OpenAI({ apiKey: env.openai.apiKey })
   : null;
+
+function isGeminiPartsStreamError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Cannot read properties of undefined (reading 'parts')") ||
+    (message.includes('Cannot read properties of undefined') && message.includes('parts'));
+}
 
 /** Thin JSON-mode LLM for life-area intent routing (same contract as rag-chatbot.controller). */
 async function lifeAreaRouterLlm(prompt: string): Promise<string> {
@@ -204,6 +217,7 @@ Available tools: workout/diet/general plans, activity logs, meal logs, goals, we
 - **voiceJournalManager**: Start voice journaling sessions.
 - **musicManager**: ALWAYS call for music requests. Actions: play_activity, search_and_play, control, recommend. NEVER say music is broken — call the tool.
 - **scheduleManager**: Create/manage daily schedules. ALWAYS use the tool (never text-only). Use reasonable defaults for prayer times, meal times, etc.
+- **finance tools**: ALWAYS call finance tools for financial report, spending, budget, income, expense, or saving-goal requests. Do not claim you lack finance access until a finance tool confirms no tracked data. If no data exists, say "I don't have tracked finance data yet" and offer to log income, expenses, budgets, or saving goals.
 - **personalContextManager**: Save personal facts the user shares.
 
 ### CONTEXT VS TOOLS (CRITICAL)
@@ -332,6 +346,39 @@ You are a life coach who happens to have health data, not a health tracker with 
 - If sensitive topics arise (mental health crisis, self-harm, abuse): provide general safe guidance, encourage professional consultation, stay neutral and supportive. Use crisis resources when appropriate.
 - Never provide specific investment advice, legal counsel, or medical diagnoses.`;
 
+const WIKI_KNOWLEDGE_BASE_PROMPT = `
+## PERSONAL HEALTH WIKI
+
+You maintain a personal wiki for this user — a structured collection of interlinked pages that captures everything you've learned about them. The wiki is your long-term analytical notebook.
+
+### When to use the wiki:
+- ALWAYS search the wiki first (search_wiki_pages) before answering complex health questions
+- When you discover a new pattern about the user → create a wiki page
+- When you notice a contradiction between wiki claims → flag it with flag_wiki_contradiction
+- When a user asks a great question and your answer is insightful → file it with file_query_as_wiki_page
+- When new data changes what you know → update the relevant wiki page
+
+### Wiki page conventions:
+- Use [[slug]] syntax for cross-references to other wiki pages
+- Every claim should cite evidence: data table, memory ID, or date range
+- Mark confidence honestly (0-1) — don't inflate
+- Note contradictions with a ⚠️ prefix
+- One topic per page — link to related pages rather than cramming everything in
+
+### Page types:
+- **entity**: Things (supplements, exercises, foods, conditions, people)
+- **concept**: Ideas (progressive overload, sleep hygiene, caloric deficit)
+- **pattern**: User-specific behaviors (morning motivation spike, weekend nutrition drift)
+- **journal**: Time summaries (weekly, monthly, quarterly reviews)
+- **synthesis**: Cross-cutting analysis (sleep vs performance correlation)
+- **source**: Ingested document summaries (articles, podcast notes)
+
+### Quality rules:
+- Never delete a wiki page — archive it instead
+- Always provide a changeReason when updating
+- Prefer updating an existing page over creating a near-duplicate
+- Search before creating to avoid duplicates
+`;
 
 // ============================================
 // SERVICE CLASS
@@ -341,11 +388,8 @@ class LangGraphChatbotService {
   private llm: BaseChatModel;
   private userNameCache: Map<string, { name: string | null; timestamp: number }> = new Map();
   private engagementScoreCache: Map<string, { score: number; timestamp: number }> = new Map();
-  private systemPromptCache: Map<string, { prompt: string; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-  private readonly PROMPT_CACHE_TTL = 60 * 1000; // 60s — user data doesn't change between rapid messages
   /** Cache for Zod→OpenAI JSON Schema conversion, keyed by intent classification */
-  private toolSchemaCache: Map<string, any[]> = new Map();
 
   constructor() {
     this.llm = modelFactory.getModel({
@@ -642,6 +686,31 @@ class LangGraphChatbotService {
   }
 
   /**
+   * Resolve the user's timezone from preferences/users.
+   * Falls back to UTC, but all relative dates in coach prompts/tools use this value.
+   */
+  private async getUserTimezone(userId: string): Promise<string> {
+    try {
+      const result = await query<{ timezone: string | null }>(
+        `SELECT COALESCE(up.timezone, u.timezone, 'UTC') AS timezone
+         FROM users u
+         LEFT JOIN user_preferences up ON up.user_id = u.id
+         WHERE u.id = $1
+         LIMIT 1`,
+        [userId],
+      );
+
+      return resolveTimeZone(result.rows[0]?.timezone);
+    } catch (error) {
+      logger.warn('[LangGraphChatbot] Error getting user timezone', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+      return 'UTC';
+    }
+  }
+
+  /**
    * Check if user registered recently (within last 24 hours)
    */
   private async isNewUser(userId: string): Promise<boolean> {
@@ -895,12 +964,11 @@ class LangGraphChatbotService {
   }
 
   /**
-   * Detect if user message is on-topic (health, fitness, wellness, nutrition)
+   * Detect if user message is on-topic for life coaching (all life domains)
    */
   private detectTopicRelevance(message: string): { isRelevant: boolean; confidence: number } {
     const lowerMessage = message.toLowerCase();
-    
-    // Health, fitness, wellness keywords (positive indicators)
+
     const relevantKeywords = [
       // Health & Wellness
       'health', 'wellness', 'wellbeing', 'healthy', 'fitness', 'exercise', 'workout', 'workouts', 'training',
@@ -917,75 +985,74 @@ class LangGraphChatbotService {
       'breakfast', 'lunch', 'dinner', 'snack', 'recipe', 'recipes', 'cooking', 'meal prep', 'meal planning',
       'vegetarian', 'vegan', 'keto', 'paleo', 'intermittent fasting', 'macros', 'macronutrient', 'micronutrient',
       // Plans
-      'diet plan', 'workout plan', 'meal plan', 'nutrition plan', 'fitness plan', 'health plan',
-      // Health conditions (as they relate to fitness/health)
+      'diet plan', 'workout plan', 'meal plan', 'nutrition plan', 'fitness plan', 'health plan', 'life plan',
+      // Health conditions
       'injury', 'pain', 'doctor', 'medical', 'condition', 'diabetes', 'hypertension',
       'cholesterol', 'blood pressure', 'heart health',
       // Music / Pulse
       'music', 'song', 'songs', 'playlist', 'play', 'pause', 'spotify', 'pulse', 'soundscape',
       'listen', 'track', 'volume', 'next song', 'beats', 'tune',
-      // Finance
+      // Finance & Money
       'finance', 'financial', 'money', 'income', 'expense', 'expenses', 'budget', 'savings',
       'spending', 'transaction', 'transactions', 'salary', 'report', 'financial report',
+      'invest', 'investing', 'debt', 'credit', 'loan', 'mortgage', 'retirement', 'emergency fund',
+      // Career & Education
+      'career', 'job', 'work', 'profession', 'interview', 'resume', 'cv', 'promotion', 'raise',
+      'skill', 'skills', 'learning', 'study', 'studying', 'course', 'certification', 'education',
+      'productivity', 'time management', 'focus', 'procrastination', 'deadline',
+      // Relationships & Social
+      'relationship', 'dating', 'love', 'friend', 'family', 'marriage', 'partner', 'spouse',
+      'communication', 'conflict', 'boundary', 'boundaries', 'social', 'loneliness', 'networking',
+      // Faith & Spirituality
+      'faith', 'prayer', 'spiritual', 'spirituality', 'meditation', 'mindfulness', 'gratitude',
+      'religion', 'church', 'mosque', 'temple', 'worship', 'fasting', 'ramadan',
+      // Personal Growth & Mental Wellbeing
+      'growth', 'self-improvement', 'self-care', 'confidence', 'self-esteem', 'motivation',
+      'discipline', 'mindset', 'journaling', 'therapy', 'counseling', 'happiness',
+      'purpose', 'meaning', 'values', 'vision', 'accountability', 'balance', 'life balance',
+      // Creativity & Hobbies
+      'hobby', 'hobbies', 'creative', 'creativity', 'art', 'writing', 'reading', 'travel',
     ];
 
-    // Greetings and general conversation keywords (always allow these)
     const greetingKeywords = [
       'hello', 'hi', 'hey', 'salaam', 'assalam', 'alaikum', 'good morning', 'good afternoon', 'good evening',
       'how are you', 'how are', 'thanks', 'thank you', 'thank', 'please', 'help', 'hello', 'hi there',
       'greetings', 'wassalam', 'alhamdulillah', 'inshallah', 'mashallah',
     ];
-    
-    // Off-topic keywords (negative indicators)
+
     const offTopicKeywords = [
-      // Technology & Programming
       'code', 'programming', 'javascript', 'python', 'html', 'css', 'react', 'node',
       'software', 'app development', 'website', 'database', 'api',
-      // General knowledge (unless health-related)
       'history', 'math', 'science', 'physics', 'chemistry',
       'politics', 'election', 'government', 'news', 'current events',
       'movie', 'film', 'game', 'gaming', 'entertainment',
-      'shopping', 'buy', 'purchase', 'price', 'cost',
-      'travel', 'vacation', 'trip', 'hotel', 'flight',
-      'relationship', 'dating', 'love', 'friend',
     ];
-    
-    // Check for greetings first (always allow these)
-    const hasGreeting = greetingKeywords.some(keyword => 
+
+    const hasGreeting = greetingKeywords.some(keyword =>
       lowerMessage.includes(keyword)
     );
-    
-    // Count relevant keyword matches
-    const relevantMatches = relevantKeywords.filter(keyword => 
+
+    const relevantMatches = relevantKeywords.filter(keyword =>
       lowerMessage.includes(keyword)
     ).length;
-    
-    // Count off-topic keyword matches
-    const offTopicMatches = offTopicKeywords.filter(keyword => 
+
+    const offTopicMatches = offTopicKeywords.filter(keyword =>
       lowerMessage.includes(keyword)
     ).length;
-    
-    // Calculate confidence
+
     const totalKeywords = relevantMatches + offTopicMatches;
-    const confidence = totalKeywords > 0 
-      ? relevantMatches / totalKeywords 
-      : 0.5; // Default to neutral if no keywords found
-    
-    // Consider it relevant if:
-    // 1. Contains a greeting (always allow greetings and general conversation), OR
-    // 2. Has relevant keywords and confidence > 0.4, OR
-    // 3. No off-topic keywords and has some relevant keywords, OR
-    // 4. Message is very short (likely a greeting or simple question), OR
-    // 5. Has 2+ relevant keywords (strong indicator of health/fitness topic), OR
-    // 6. No off-topic keywords found (allow general questions if not clearly off-topic)
-    const isRelevant = 
+    const confidence = totalKeywords > 0
+      ? relevantMatches / totalKeywords
+      : 0.5;
+
+    const isRelevant =
       hasGreeting ||
       (relevantMatches > 0 && confidence > 0.4) ||
       (offTopicMatches === 0 && relevantMatches > 0) ||
       (message.trim().length < 30 && offTopicMatches === 0) ||
       (relevantMatches >= 2) ||
-      (offTopicMatches === 0 && message.trim().length < 100); // Allow general questions if no clear off-topic keywords
-    
+      (offTopicMatches === 0 && message.trim().length < 100);
+
     return { isRelevant, confidence };
   }
 
@@ -995,21 +1062,21 @@ class LangGraphChatbotService {
   private generateOffTopicResponse(userName: string | null): string {
     const name = userName ? `${userName}, ` : '';
     const responses = [
-      `${name}I'm sorry, but I'm your health, fitness, and wellness coach. I specialize in helping you with workouts, nutrition, meals, diet, and all health & fitness related topics. How can I help you with your fitness, nutrition, or wellness goals today?`,
-      `${name}I'm your personal health and fitness coach, so I focus exclusively on workouts, nutrition, meals, diet, wellness, and all health-related topics. Is there something about your health, workout routine, meal planning, or nutrition I can help you with?`,
-      `${name}As your health and wellness coach, I'm here to help with fitness, workouts, nutrition, meals, diet, and all health & fitness questions. What would you like to know about your health, fitness, or nutrition journey?`,
-      `${name}I'm specialized in health, fitness, and wellness coaching. Let's focus on your workouts, nutrition, meals, diet, or other health & fitness goals. How can I assist you today?`,
-      `${name}I'm your health, fitness, and wellness coach. I can help you with workouts, nutrition, meal planning, diet strategies, and all health & fitness related topics. What would you like to explore today?`,
+      `${name}I'm your personal life coach — I help with health, fitness, finances, career, relationships, faith, and personal growth. That topic is a bit outside my coaching scope. What life goal can I help you work on today?`,
+      `${name}As your life coach, I cover health, fitness, nutrition, finances, career development, relationships, spirituality, and personal growth. That one's outside my wheelhouse — but I'd love to help with any of your life goals. What's on your mind?`,
+      `${name}I'm here to coach you across all areas of life — health, career, finances, relationships, faith, and personal development. That particular topic is outside my scope, but let's focus on something I can help you make real progress on.`,
+      `${name}My coaching covers health, fitness, career, finances, relationships, spirituality, and personal growth. That question falls outside those areas. What life area would you like to work on instead?`,
+      `${name}I'm your life coach, helping you across health, finances, career, relationships, faith, and personal growth. That topic is a bit outside what I cover — but I'm ready to help with any of your life goals!`,
     ];
-    
+
     return responses[Math.floor(Math.random() * responses.length)];
   }
 
   /**
    * Get time of day context
    */
-  private getTimeOfDay(): 'morning' | 'afternoon' | 'evening' {
-    const hour = new Date().getHours();
+  private getTimeOfDay(timezone?: string | null): 'morning' | 'afternoon' | 'evening' {
+    const hour = getUserLocalHour(timezone);
     if (hour < 12) return 'morning';
     if (hour < 17) return 'afternoon';
     return 'evening';
@@ -1585,23 +1652,13 @@ class LangGraphChatbotService {
     wellbeingContext?: any,
     wellnessQuestion?: { question: string; type: string; context?: string }
   ): Promise<string> {
-    // Return cached base prompt if ragContext is empty (stream path caches base only)
-    const cacheKey = `${userId}:${sessionType || ''}:${callPurpose || ''}`;
-    if (!ragContext) {
-      const cached = this.systemPromptCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < this.PROMPT_CACHE_TTL) {
-        logger.debug('[LangGraphChatbot] System prompt cache hit', { userId });
-        return cached.prompt;
-      }
-    }
-
     const startTime = Date.now();
 
     // Get ALL user data in parallel — coaching profile + daily report + delta
-    const [userName, assistantName, timeOfDay, recentActivity, comprehensiveContext, newUser, coachingProfile, dailyReport, deltaSummary] = await Promise.all([
+    const [userName, assistantName, userTimezone, recentActivity, comprehensiveContext, newUser, coachingProfile, dailyReport, deltaSummary] = await Promise.all([
       this.getUserName(userId),
       this.getAssistantName(userId),
-      Promise.resolve(this.getTimeOfDay()),
+      this.getUserTimezone(userId),
       this.getRecentActivity(userId),
       comprehensiveUserContextService.getComprehensiveContext(userId).catch((err) => {
         logger.warn('[LangGraphChatbot] Comprehensive context failed', { userId, error: err instanceof Error ? err.message : 'Unknown' });
@@ -1618,6 +1675,10 @@ class LangGraphChatbotService {
       }),
       userDeltaService.getLatestDelta(userId).catch(() => null),
     ]);
+
+    const timeOfDay = this.getTimeOfDay(userTimezone);
+    const currentLocalDate = getUserLocalDateISO(userTimezone);
+    const currentLocalDateTime = formatUserLocalDateTime(userTimezone);
 
     const personalizationTime = Date.now() - startTime;
     if (personalizationTime > 500) {
@@ -1638,6 +1699,7 @@ class LangGraphChatbotService {
     }
 
     contextParts.push(`It's ${timeOfDay}.`);
+    contextParts.push(`Authoritative today date: ${currentLocalDate} (${currentLocalDateTime}).`);
 
     if (newUser) {
       contextParts.push(`This is a BRAND NEW user who just registered. Welcome them warmly, introduce yourself, and help them get started. Do NOT reference any past activity, progress, completion rates, or history.`);
@@ -1713,7 +1775,7 @@ class LangGraphChatbotService {
         wellness: 'Holistic health guidance — physical, mental, emotional wellbeing. Broad topic is OK.',
         recovery: 'Focus on recovery, rest days, active recovery, overtraining prevention. Redirect off-topic.',
         goal_review: 'Focus on goal progress, adjustments, motivation, and targets. Redirect off-topic.',
-        general_health: 'Comprehensive health, fitness, and wellness guidance. All health topics OK.',
+        general_health: 'Comprehensive life coaching guidance. All life domains OK — health, fitness, finances, career, relationships, faith, personal growth.',
       };
       if (purposeContexts[callPurpose]) {
         contextParts.push(`Call purpose: ${callPurpose}. ${purposeContexts[callPurpose]}`);
@@ -1746,6 +1808,12 @@ class LangGraphChatbotService {
     if (personalizedContext) {
       systemPrompt += `\n\nCurrent context: ${personalizedContext}`;
     }
+
+    systemPrompt += `\n\n---\nCURRENT DATE & TIME (AUTHORITATIVE)
+- User timezone: ${userTimezone}
+- Today is ${currentLocalDate} (${currentLocalDateTime})
+- When the user says "today", "my today schedule", or "today's plan", use ${currentLocalDate}. Do not infer today from conversation history or older tool results.
+- For schedule tools, omit the date for today or pass "today"; never pass an old explicit date unless the user explicitly named that date.`;
 
     // Add comprehensive user context (includes WHOOP, workouts, nutrition, lifestyle, goals, chat history)
     const comprehensiveContextStr = comprehensiveUserContextService.formatContextForPrompt(comprehensiveContext);
@@ -1842,6 +1910,9 @@ class LangGraphChatbotService {
       systemPrompt += this.buildCoachingMemorySection(coachingProfile);
     }
 
+    // Add wiki knowledge base instructions
+    systemPrompt += WIKI_KNOWLEDGE_BASE_PROMPT;
+
     // Add pre-computed daily analysis report — dailyReport already fetched in parallel above
     if (dailyReport) {
       systemPrompt += this.buildDailyAnalysisSection(dailyReport);
@@ -1919,24 +1990,150 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       approxTokens,
     });
 
-    // Cache base prompt (when called without ragContext from stream path)
-    if (!ragContext) {
-      this.systemPromptCache.set(cacheKey, { prompt: systemPrompt, timestamp: Date.now() });
-    }
-
     return systemPrompt;
   }
 
   private async getFallbackSystemPrompt(userId: string): Promise<string> {
     const userName = await this.getUserName(userId).catch(() => null);
     const assistantName = await this.getAssistantName(userId).catch(() => 'Aurea');
+    const userTimezone = await this.getUserTimezone(userId).catch(() => 'UTC');
+    const currentLocalDate = getUserLocalDateISO(userTimezone);
+    const currentLocalDateTime = formatUserLocalDateTime(userTimezone);
     let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/Aurea/g, assistantName).replace(/\*\*Aurea\*\*/g, `**${assistantName}**`);
     prompt += `\n\nYour name is ${assistantName}. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
+    prompt += `\n\nCURRENT DATE & TIME (AUTHORITATIVE): User timezone ${userTimezone}. Today is ${currentLocalDate} (${currentLocalDateTime}). For schedule tools, omit the date for today or pass "today"; never use an older explicit date unless the user named it.`;
     if (userName) {
       prompt += `\n\nYou're chatting with ${userName}.`;
     }
     prompt += `\n\nNote: Some personalization data was unavailable this turn. Respond helpfully with whatever context you have.`;
+    prompt += WIKI_KNOWLEDGE_BASE_PROMPT;
     return prompt;
+  }
+
+  private formatToolResultEvent(
+    toolName: string,
+    resultContent: string
+  ): { label?: string; delta: string; icon?: string } {
+    const compact = (value: unknown, fallback = 'completed'): string => {
+      const text = String(value ?? fallback)
+        .replace(/\s+/g, ' ')
+        .replace(/^[{\[][\s\S]*[}\]]$/, fallback)
+        .trim();
+      if (!text) return fallback;
+      return text.length > 96 ? `${text.slice(0, 93)}...` : text;
+    };
+
+    const formatDate = (value?: string): string => {
+      if (!value) return 'the selected date';
+      const date = new Date(`${value}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return value;
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      }).format(date);
+    };
+
+    const money = (value: unknown): string => {
+      const amount = typeof value === 'number' ? value : Number(value || 0);
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(Number.isFinite(amount) ? amount : 0);
+    };
+
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(resultContent);
+    } catch {
+      return { delta: compact(resultContent), icon: undefined };
+    }
+
+    const message = parsed?.message || parsed?.data?.message;
+
+    if (toolName === 'getScheduleByDate') {
+      const data = parsed?.data || parsed;
+      const schedule = data?.schedule;
+      const items = Array.isArray(schedule?.items)
+        ? schedule.items
+        : Array.isArray(data?.items)
+          ? data.items
+          : [];
+      const date = data?.requestedDate || data?.scheduleDate || schedule?.scheduleDate || data?.today;
+      return {
+        label: 'Schedule retrieved',
+        delta: items.length > 0
+          ? `${items.length} item${items.length === 1 ? '' : 's'} for ${formatDate(date)}`
+          : `No schedule for ${formatDate(date)}`,
+        icon: 'calendar-check',
+      };
+    }
+
+    if (toolName === 'createDailySchedule' || toolName === 'updateDailySchedule') {
+      const data = parsed?.data || parsed;
+      const items = Array.isArray(data?.schedule?.items) ? data.schedule.items : [];
+      const date = data?.schedule?.scheduleDate || data?.requestedDate || data?.today;
+      return {
+        label: toolName === 'createDailySchedule' ? 'Schedule saved' : 'Schedule updated',
+        delta: items.length > 0
+          ? `${items.length} item${items.length === 1 ? '' : 's'} for ${formatDate(date)}`
+          : compact(message, 'schedule updated'),
+        icon: 'calendar-check',
+      };
+    }
+
+    if (toolName === 'getFinancialReport') {
+      const data = parsed?.data || parsed;
+      const report = data?.report || data;
+      const summary = report?.summary || {};
+      if (data?.hasTrackedData === false) {
+        return {
+          label: 'No finance data yet',
+          delta: compact(message, 'No tracked finance data'),
+          icon: 'wallet-cards',
+        };
+      }
+      return {
+        label: 'Financial report ready',
+        delta: summary
+          ? `${money(summary.totalIncome)} income / ${money(summary.totalExpense)} expenses / ${money(summary.netSavings)} net`
+          : compact(message, 'report ready'),
+        icon: 'wallet-cards',
+      };
+    }
+
+    if (toolName.toLowerCase().includes('finance') || toolName.toLowerCase().includes('budget') || toolName.toLowerCase().includes('transaction')) {
+      return {
+        label: message ? 'Finance updated' : 'Finance checked',
+        delta: compact(message, 'finance data ready'),
+        icon: 'wallet-cards',
+      };
+    }
+
+    if (parsed?.artifact || parsed?.data?.artifact) {
+      const artifact = parsed.artifact || parsed.data.artifact;
+      return {
+        label: 'Artifact generated',
+        delta: compact(artifact?.title || message, 'artifact ready'),
+        icon: 'file-text',
+      };
+    }
+
+    if (toolName.toLowerCase().includes('goal')) {
+      return {
+        label: message ? 'Goal updated' : 'Goals checked',
+        delta: compact(message, 'goal data ready'),
+        icon: 'target',
+      };
+    }
+
+    return {
+      label: message ? undefined : 'Tool completed',
+      delta: compact(message, 'completed'),
+      icon: undefined,
+    };
   }
 
   /**
@@ -2348,7 +2545,14 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   /**
    * Retrieve RAG context for the user's query (includes activity logs with mood data)
    */
-  private async retrieveContext(userId: string, queryText: string): Promise<string> {
+  private async retrieveContext(userId: string, queryText: string, timeoutMs = 2500): Promise<string> {
+    const CONTEXT_TIMEOUT_MS = timeoutMs; // Per-operation timeout to keep slow context fetches from blocking first token
+    const withTimeout = <T>(promise: Promise<T>, fallback: T): Promise<T> =>
+      Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), CONTEXT_TIMEOUT_MS)),
+      ]);
+
     try {
       const [
         relevantKnowledge,
@@ -2357,25 +2561,22 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         userDataEmbeddings,
         activityLogsWithMood,
       ] = await Promise.all([
-        vectorEmbeddingService.searchKnowledge({
-          queryText,
-          limit: 5,
-        }),
+        withTimeout(
+          vectorEmbeddingService.searchKnowledge({ queryText, limit: 5 }),
+          [],
+        ),
         // User profile data is already loaded via comprehensiveUserContext in buildPersonalizedSystemPrompt
         Promise.resolve([] as { section: string; content: string; similarity: number }[]),
-        vectorEmbeddingService.searchConversationHistory({
-          userId,
-          queryText,
-          limit: 5,
-        }),
-        vectorEmbeddingService.searchSimilar({
-          queryText,
-          userId,
-          limit: 8,
-          minSimilarity: 0.6,
-        }),
+        withTimeout(
+          vectorEmbeddingService.searchConversationHistory({ userId, queryText, limit: 5 }),
+          [],
+        ),
+        withTimeout(
+          vectorEmbeddingService.searchSimilar({ queryText, userId, limit: 8, minSimilarity: 0.6 }),
+          [],
+        ),
         // Get recent activity logs with mood data (last 7 days)
-        query<{
+        withTimeout(query<{
           activity_id: string;
           scheduled_date: Date;
           status: string;
@@ -2387,9 +2588,9 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
            WHERE user_id = $1
            AND scheduled_date >= NOW() - INTERVAL '7 days'
            ORDER BY scheduled_date DESC
-           LIMIT 10`,
+          LIMIT 10`,
           [userId]
-        ),
+        ), { rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] }),
       ]);
 
       const sections: string[] = [];
@@ -2895,7 +3096,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       // Retrieve RAG context, wellbeing context, and status detection in parallel
       const contextStartTime = Date.now();
       const [ragContext, wellbeingContext, statusDetection] = await Promise.all([
-        this.retrieveContext(userId, message),
+        this.retrieveContext(userId, message, 2200),
         wellbeingContextService.getWellbeingContext(userId, message).catch(() => ({})),
         statusIntentClassifierService.classifyFromMessage(message, currentUserStatus as import('../types/activity-status.types.js').ActivityStatus).catch((error) => {
           logger.warn('[Chat] Status classifier failed', { error: error instanceof Error ? error.message : 'unknown' });
@@ -3117,16 +3318,11 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         toolCount: tools.length,
       });
 
-      // Convert StructuredTool to OpenAI function format (cached per intent to avoid repeated Zod parsing)
-      const intentCacheKey = `${intent.primary}:${intent.secondary.sort().join(',')}:${tools.length}`;
-      let openAITools = this.toolSchemaCache.get(intentCacheKey);
+      // Convert StructuredTool to OpenAI function format every turn so tool schemas
+      // cannot retain stale route/date behavior across code changes.
+      logger.debug('[LangGraphChatbot] Converting tools', { toolCount: tools.length });
 
-      if (openAITools) {
-        logger.debug('[LangGraphChatbot] Tool schema cache hit', { intentCacheKey, toolCount: openAITools.length });
-      } else {
-        logger.debug('[LangGraphChatbot] Converting tools (cache miss)', { toolCount: tools.length });
-
-      openAITools = tools.map((tool, index) => {
+      const openAITools = tools.map((tool, index) => {
         // StructuredTool stores name/description in lc_kwargs
         // Try multiple ways to access them
         let toolName: string | undefined;
@@ -3440,10 +3636,6 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         return toolDef;
       });
 
-        // Cache the converted schemas for future requests with same intent
-        this.toolSchemaCache.set(intentCacheKey, openAITools);
-      } // end cache-miss block
-
       // Validate tools before binding
       const validTools = openAITools.filter(tool => {
         const isValid = tool.type === 'function' && 
@@ -3599,7 +3791,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
 
         // Extract tool call info for response
         const currentToolCalls = responseToolCalls || (response as any).tool_calls || [];
-        toolResults.forEach((tr, idx) => {
+        for (const [idx, tr] of toolResults.entries()) {
           const toolCall = currentToolCalls[idx];
           if (toolCall) {
             const resultContent = typeof tr.content === 'string'
@@ -3610,7 +3802,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
               result: resultContent,
             });
           }
-        });
+        }
 
         messages.push(...toolResults);
 
@@ -4283,6 +4475,22 @@ I'm listening. What's happening right now?`;
       // intent routing (thin LLM), mental health assessment, wellness question check
       const conversationDetails = conversationDataForContext?.conversation;
       const contextStartTime = Date.now();
+      const contextPhaseTimings: Record<string, number> = {};
+
+      const PRE_LLM_TIMEOUT_MS = 2500; // Cap non-critical pre-LLM work to keep TTFT under control
+      const raceTimeout = <T>(promise: Promise<T>, fallback: T): Promise<T> =>
+        Promise.race([
+          promise,
+          new Promise<T>((resolve) => setTimeout(() => resolve(fallback), PRE_LLM_TIMEOUT_MS)),
+        ]);
+      const timedPhase = async <T>(name: string, promise: Promise<T>): Promise<T> => {
+        const start = Date.now();
+        try {
+          return await promise;
+        } finally {
+          contextPhaseTimings[name] = Date.now() - start;
+        }
+      };
 
       const [
         ragContext,
@@ -4292,32 +4500,51 @@ I'm listening. What's happening right now?`;
         streamMentalHealth,
         questionCheck,
       ] = await Promise.all([
-        this.retrieveContext(userId, message),
-        wellbeingContextService.getWellbeingContext(userId, message).catch(() => ({})),
-        this.buildPersonalizedSystemPrompt(
-          userId,
-          '', // RAG context appended after parallel resolution
-          emotion || undefined,
-          conversationDetails?.sessionType || undefined,
-          effectiveCallPurpose,
-          language,
-        ).catch((error) => {
-          logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
-          return this.getFallbackSystemPrompt(userId);
-        }),
-        routeCoachIntent({
-          userId,
-          userMessage: message,
-          llm: lifeAreaRouterLlm,
-        }).catch(() => null),
-        mentalHealthGuardrailService.assessUserText(message).catch(
-          () => ({ lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] }) as MentalHealthAssessment
-        ),
-        this.shouldAskWellnessQuestion(
+        timedPhase('ragContext', this.retrieveContext(userId, message, 1500)),
+        timedPhase('wellbeingContext', wellbeingContextService.getWellbeingContext(userId, message).catch(() => ({}))),
+        timedPhase('systemPrompt', Promise.race([
+          this.buildPersonalizedSystemPrompt(
+            userId,
+            '', // RAG context appended after parallel resolution
+            emotion || undefined,
+            conversationDetails?.sessionType || undefined,
+            effectiveCallPurpose,
+            language,
+          ).catch((error) => {
+            logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+            return this.getFallbackSystemPrompt(userId);
+          }),
+          new Promise<string>((resolve) => setTimeout(() => {
+            logger.debug('[LangGraphChatbot] Stream system prompt timed out, using base prompt', { userId });
+            resolve(BASE_HUMAN_LIKE_PROMPT);
+          }, 2500)),
+        ])),
+        timedPhase('lifeAreaRouting', raceTimeout(
+          routeCoachIntent({
+            userId,
+            userMessage: message,
+            llm: lifeAreaRouterLlm,
+          }).catch(() => null),
+          null,
+        )),
+        timedPhase('mentalHealthGuardrail', raceTimeout(
+          mentalHealthGuardrailService.assessUserText(message).catch(
+            () => ({ lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] }) as MentalHealthAssessment
+          ),
+          { lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] } as MentalHealthAssessment,
+        )),
+        timedPhase('wellnessQuestionCheck', this.shouldAskWellnessQuestion(
           userId, message, emotion, null, conversationDataForContext
-        ).catch(() => ({ shouldAsk: false, reason: null, priority: null })),
+        ).catch(() => ({ shouldAsk: false, reason: null, priority: null }))),
       ]);
       const contextTime = Date.now() - contextStartTime;
+      if (contextTime > 1500) {
+        logger.info('[LangGraphChatbot] Stream context timing breakdown', {
+          userId,
+          contextTime,
+          phases: contextPhaseTimings,
+        });
+      }
 
       // Generate wellness question if needed (rule-based, no LLM call)
       let wellnessQuestion: { question: string; type: string; context?: string } | null = null;
@@ -4405,8 +4632,18 @@ I'm listening. What's happening right now?`;
 
       // Create tools for this user - USE OPTIMIZED TOOLS WITH INTENT ROUTING
       const startToolTime = Date.now();
-      const tools = getToolsForMessage(userId, message, streamToolTurnContext);
+      const disableToolsForRetry = Boolean((params as any)._disableToolsForRetry);
+      const tools = disableToolsForRetry
+        ? []
+        : getToolsForMessage(userId, message, streamToolTurnContext);
       const toolCreationTime = Date.now() - startToolTime;
+      const promptStats = {
+        messageCount: messages.length,
+        approxChars: messages.reduce((sum, msg) => {
+          const content = (msg as any).content;
+          return sum + (typeof content === 'string' ? content.length : JSON.stringify(content || '').length);
+        }, 0),
+      };
 
       // Log intent classification and tool reduction
       const intent = toolRouterService.classifyIntent(message);
@@ -4415,10 +4652,14 @@ I'm listening. What's happening right now?`;
         primaryIntent: intent.primary,
         toolCount: tools.length,
         toolCreationTimeMs: toolCreationTime,
+        ...promptStats,
         lifeAreaContext: !!streamToolTurnContext?.activeLifeAreaId,
+        toolsDisabledForRetry: disableToolsForRetry,
       });
 
-      // Convert tools to OpenAI format (reuse logic from chat method)
+      // Legacy conversion kept for reference only; native LangChain tool
+      // binding below is faster and avoids provider compatibility warnings.
+      if (false) {
       const openAITools = tools.map((tool) => {
         const toolAny = tool as any;
         let toolName: string | undefined;
@@ -4590,9 +4831,15 @@ I'm listening. What's happening right now?`;
         typeof tool.function.name === 'string' && 
         tool.function.name.length > 0
       );
+      void openAITools;
+      }
 
-      // Bind tools to LLM
-      const llmWithTools = this.llm.bindTools!(openAITools);
+      // Bind the native LangChain tool instances. Passing manually converted
+      // OpenAI schemas triggers provider compatibility warnings in newer
+      // LangChain packages and loses provider-specific tool-call metadata.
+      const llmWithTools = tools.length > 0 && this.llm.bindTools
+        ? this.llm.bindTools(tools as any)
+        : this.llm;
 
       // Stream initial response
       let fullResponse = '';
@@ -4619,8 +4866,13 @@ I'm listening. What's happening right now?`;
         if (!firstTokenTime) {
           firstTokenTime = Date.now();
           const timeToFirstToken = firstTokenTime - llmStartTime;
-          if (timeToFirstToken > 2000) {
+          if (timeToFirstToken > 6000) {
             logger.warn('[LangGraphChatbot] Slow time to first token', {
+              userId,
+              time: timeToFirstToken,
+            });
+          } else if (timeToFirstToken > 2500) {
+            logger.debug('[LangGraphChatbot] Elevated time to first token', {
               userId,
               time: timeToFirstToken,
             });
@@ -4804,7 +5056,7 @@ I'm listening. What's happening right now?`;
 
         // Extract tool call info for response
         const currentToolCalls = responseToolCalls || (response as any).tool_calls || [];
-        toolResults.forEach((tr, idx) => {
+        for (const [idx, tr] of toolResults.entries()) {
           const toolCall = currentToolCalls[idx];
           if (toolCall) {
             const resultContent = typeof tr.content === 'string'
@@ -4817,13 +5069,18 @@ I'm listening. What's happening right now?`;
 
             if (onToolResult) {
               try {
+                const formattedResult = this.formatToolResultEvent(
+                  toolCall.name || toolCall.function?.name || 'unknown',
+                  resultContent
+                );
                 onToolResult({
                   operationId: toolCall.id,
                   toolName: toolCall.name || toolCall.function?.name || 'unknown',
                   success: true,
-                  delta: typeof resultContent === 'string' ? resultContent.substring(0, 100) : 'completed',
-                  icon: undefined,
+                  delta: formattedResult.delta,
+                  icon: formattedResult.icon,
                   undoable: false,
+                  label: formattedResult.label,
                 });
               } catch { /* stream closed */ }
             }
@@ -4832,12 +5089,34 @@ I'm listening. What's happening right now?`;
               try {
                 const parsed = JSON.parse(resultContent);
                 if (parsed.artifact) {
-                  onArtifact({ artifact: parsed.artifact, toolName: toolCall.name || toolCall.function?.name || 'unknown' });
+                  const toolName = toolCall.name || toolCall.function?.name || 'unknown';
+                  let artifact = parsed.artifact;
+                  try {
+                    const saved = await artifactGenerationService.saveInlineArtifact({
+                      userId,
+                      artifact,
+                      generatedBy: toolName,
+                      conversationId: activeConversationId,
+                      tags: [toolName],
+                    });
+                    artifact = {
+                      ...artifact,
+                      intelligenceFileId: saved.id,
+                      persisted: true,
+                    };
+                  } catch (persistError) {
+                    logger.warn('[LangGraphChatbot] Failed to persist generated artifact', {
+                      userId,
+                      toolName,
+                      error: persistError instanceof Error ? persistError.message : 'Unknown error',
+                    });
+                  }
+                  onArtifact({ artifact, toolName });
                 }
               } catch { /* not JSON or no artifact */ }
             }
           }
-        });
+        }
 
         // CRITICAL: Push the AIMessage with tool_calls BEFORE pushing tool results
         // The LLM requires that ToolMessages must follow an AIMessage with tool_calls
@@ -4850,8 +5129,29 @@ I'm listening. What's happening right now?`;
             arguments: typeof tc.args === 'object' ? JSON.stringify(tc.args) : (tc.function?.arguments || JSON.stringify({})),
           },
         }));
+        const normalizedToolCalls = responseToolCalls.map((tc: any) => {
+          let args: Record<string, unknown> = {};
+          if (tc.args && typeof tc.args === 'object') {
+            args = tc.args;
+          } else if (tc.function?.arguments) {
+            try {
+              args = typeof tc.function.arguments === 'string'
+                ? JSON.parse(tc.function.arguments)
+                : tc.function.arguments;
+            } catch {
+              args = {};
+            }
+          }
+          return {
+            id: tc.id,
+            name: tc.name || tc.function?.name || 'unknown',
+            args,
+            type: 'tool_call' as const,
+          };
+        });
         const aiMessageToPush = new AIMessage({
           content: response?.content || fullResponse || '',
+          tool_calls: normalizedToolCalls,
           additional_kwargs: {
             tool_calls: openAIToolCalls,
           },
@@ -5068,7 +5368,8 @@ I'm listening. What's happening right now?`;
       const llmTime = Date.now() - llmStartTime;
 
       const totalTime = Date.now() - totalStartTime;
-      const SLOW_THRESHOLD_MS = 5000;
+      const hasExecutedTools = toolCalls.length > 0;
+      const SLOW_THRESHOLD_MS = hasExecutedTools ? 12000 : 9000;
 
       // Structured timing breakdown — INFO level for all requests to enable dashboarding
       const timingBreakdown = {
@@ -5079,7 +5380,7 @@ I'm listening. What's happening right now?`;
         timeToFirstToken: firstTokenTime ? firstTokenTime - llmStartTime : null,
         totalTime,
         iterations,
-        hasToolCalls: toolCalls.length > 0,
+        hasToolCalls: hasExecutedTools,
       };
 
       if (totalTime > SLOW_THRESHOLD_MS) {
@@ -5193,6 +5494,18 @@ I'm listening. What's happening right now?`;
     } catch (error: any) {
       const errorMsg = error?.message || 'Unknown error';
       const retryCount = (params as any)._retryCount ?? 0;
+      const toolsRetryDisabled = Boolean((params as any)._disableToolsForRetry);
+
+      if (isGeminiPartsStreamError(error) && !toolsRetryDisabled) {
+        logger.warn('[LangGraphChatbot] Gemini stream returned malformed parts; retrying without tools for this turn', {
+          userId,
+          error: errorMsg,
+        });
+        return await this.chatStream({
+          ...params,
+          _disableToolsForRetry: true,
+        } as any);
+      }
 
       const isProviderError = modelFactory.handleProviderError(error);
 
@@ -5254,15 +5567,16 @@ I'm listening. What's happening right now?`;
 
       // Get user context in parallel — comprehensive context + coaching profile + basic info + delta
       // coachingProfile gets a tighter timeout (5s) as it can trigger expensive LLM profile generation
-      const [userName, timeOfDay, newUser, comprehensiveContext, assistantName, deltaSummary, coachingProfile] = await Promise.all([
+      const [userName, userTimezone, newUser, comprehensiveContext, assistantName, deltaSummary, coachingProfile] = await Promise.all([
         this.getUserName(userId),
-        Promise.resolve(this.getTimeOfDay()),
+        this.getUserTimezone(userId),
         this.isNewUser(userId),
         withTimeout(comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null), 8000, null),
         this.getAssistantName(userId),
         withTimeout(userDeltaService.recordSessionStart(userId, callPurpose ? 'voice_call' : 'app_open').catch(() => null), 5000, null),
         withTimeout(userCoachingProfileService.getOrGenerateProfile(userId).catch(() => null), 5000, null),
       ]);
+      const timeOfDay = this.getTimeOfDay(userTimezone);
 
       const contextGatherTime = Date.now() - greetingStartTime;
       logger.info('[LangGraphChatbot] Greeting context gathered', { userId, contextGatherTimeMs: contextGatherTime, hasContext: !!comprehensiveContext, hasProfile: !!coachingProfile });
@@ -5696,11 +6010,12 @@ Generate the greeting. Return ONLY the spoken text.`;
 
       // Fallback to data-aware greeting on error
       try {
-        const [userName, timeOfDay, comprehensiveContext] = await Promise.all([
+        const [userName, userTimezone, comprehensiveContext] = await Promise.all([
           this.getUserName(userId),
-          Promise.resolve(this.getTimeOfDay()),
+          this.getUserTimezone(userId),
           comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null),
         ]);
+        const timeOfDay = this.getTimeOfDay(userTimezone);
         return this.buildDataAwareFallbackGreeting(userName, timeOfDay, comprehensiveContext, null);
       } catch (fallbackError) {
         logger.error('[LangGraphChatbot] Error in greeting fallback', { error: fallbackError, userId });
