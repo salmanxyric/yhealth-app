@@ -52,6 +52,46 @@ const DeleteAllWaterIntakeLogsSchema = z.object({
 
 // --- Implementations ---
 
+function buildWaterCharts(
+  logs: { logDate: string; glassesConsumed: number; mlConsumed: number; targetGlasses: number; targetMl: number; goalAchieved: boolean }[],
+): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (logs.length === 0) return artifacts;
+
+  const sorted = [...logs].sort((a, b) => String(a.logDate || '').localeCompare(String(b.logDate || '')));
+
+  artifacts.push({
+    type: 'chart', chartType: 'comparison_bar', title: 'Water Intake vs Goal',
+    data: sorted.map((log) => ({
+      date: String(log.logDate || '').slice(0, 10),
+      consumed: log.glassesConsumed || 0,
+      target: log.targetGlasses || 8,
+    })),
+    xAxisKey: 'date',
+    dataKeys: [
+      { key: 'consumed', label: 'Consumed', color: '#06b6d4' },
+      { key: 'target', label: 'Target', color: '#3b82f6' },
+    ],
+    yAxisLabel: 'Glasses',
+    insight: `Goal achieved on ${sorted.filter((l) => l.goalAchieved).length} of ${sorted.length} days.`,
+  });
+
+  if (sorted.length > 1) {
+    artifacts.push({
+      type: 'chart', chartType: 'area', title: 'Water Intake Trend',
+      data: sorted.map((log) => ({
+        date: String(log.logDate || '').slice(0, 10),
+        ml: log.mlConsumed || 0,
+      })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'ml', label: 'mL Consumed', color: '#06b6d4' }],
+      yAxisLabel: 'mL',
+    });
+  }
+
+  return artifacts;
+}
+
 async function getWaterIntakeLogs(userId: string, params?: z.infer<typeof GetWaterIntakeLogsSchema>): Promise<string> {
   let sqlQuery = `SELECT * FROM water_intake_logs WHERE user_id = $1`;
   const queryParams: (string | Date)[] = [userId];
@@ -89,7 +129,8 @@ async function getWaterIntakeLogs(userId: string, params?: z.infer<typeof GetWat
     entries: row.entries || [],
   }));
 
-  return JSON.stringify({ logs: formatted, count: formatted.length }, null, 2);
+  const artifacts = buildWaterCharts(formatted);
+  return JSON.stringify({ logs: formatted, count: formatted.length, artifacts }, null, 2);
 }
 
 async function getWaterIntakeLogByDate(userId: string, params: z.infer<typeof GetWaterIntakeLogByDateSchema>): Promise<string> {
