@@ -320,6 +320,84 @@ async function findRecipeByName(userId: string, name: string, exactMatch: boolea
 
 // --- Implementations ---
 
+function buildNutritionCharts(
+  meals: { mealType: string; mealName: string; eatenAt: string; calories: number; macros: { protein: number; carbs: number; fat: number; fiber: number } }[],
+  totals: { calories: number; protein: number; carbs: number; fat: number },
+): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (meals.length === 0) return artifacts;
+
+  const dailyMap = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
+  for (const meal of meals) {
+    const date = typeof meal.eatenAt === 'string' ? meal.eatenAt.slice(0, 10) : 'unknown';
+    const existing = dailyMap.get(date) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    existing.calories += meal.calories || 0;
+    existing.protein += meal.macros?.protein || 0;
+    existing.carbs += meal.macros?.carbs || 0;
+    existing.fat += meal.macros?.fat || 0;
+    dailyMap.set(date, existing);
+  }
+  const dailyData = Array.from(dailyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, data]) => ({ date, ...data }));
+
+  if (dailyData.length > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'bar',
+      title: 'Daily Calorie Intake',
+      data: dailyData.map((d) => ({ date: d.date, calories: Math.round(d.calories) })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'calories', label: 'Calories', color: '#f59e0b' }],
+      yAxisLabel: 'Calories',
+      insight: `Average: ${Math.round(dailyData.reduce((s, d) => s + d.calories, 0) / dailyData.length)} cal/day.`,
+    });
+  }
+
+  if (totals.protein > 0 || totals.carbs > 0 || totals.fat > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'pie',
+      title: 'Macronutrient Split',
+      data: [
+        { name: 'Protein', value: Math.round(totals.protein) },
+        { name: 'Carbs', value: Math.round(totals.carbs) },
+        { name: 'Fat', value: Math.round(totals.fat) },
+      ],
+      xAxisKey: 'name',
+      dataKeys: [
+        { key: 'value', label: 'Protein', color: '#3b82f6' },
+        { key: 'value', label: 'Carbs', color: '#f59e0b' },
+        { key: 'value', label: 'Fat', color: '#ef4444' },
+      ],
+      insight: `${Math.round(totals.protein)}g protein, ${Math.round(totals.carbs)}g carbs, ${Math.round(totals.fat)}g fat.`,
+    });
+  }
+
+  if (dailyData.length > 1) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'line',
+      title: 'Macro Trends',
+      data: dailyData.map((d) => ({
+        date: d.date,
+        protein: Math.round(d.protein),
+        carbs: Math.round(d.carbs),
+        fat: Math.round(d.fat),
+      })),
+      xAxisKey: 'date',
+      dataKeys: [
+        { key: 'protein', label: 'Protein (g)', color: '#3b82f6' },
+        { key: 'carbs', label: 'Carbs (g)', color: '#f59e0b' },
+        { key: 'fat', label: 'Fat (g)', color: '#ef4444' },
+      ],
+      yAxisLabel: 'Grams',
+    });
+  }
+
+  return artifacts;
+}
+
 /**
  * Get user's diet plans
  */
@@ -415,7 +493,8 @@ async function getUserMealLogs(userId: string, params?: {
     fat: acc.fat + (meal.macros?.fat || 0),
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
-  return JSON.stringify({ meals: formatted, totals, count: formatted.length }, null, 2);
+  const artifacts = buildNutritionCharts(formatted, totals);
+  return JSON.stringify({ meals: formatted, totals, count: formatted.length, artifacts }, null, 2);
 }
 
 /**
