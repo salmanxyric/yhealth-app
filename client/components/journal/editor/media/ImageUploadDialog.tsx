@@ -35,7 +35,7 @@ export function ImageUploadDialog({ isOpen, onClose, onInsert }: ImageUploadDial
         const formData = new FormData();
         formData.append("file", file);
         const response = await api.post<{ publicUrl?: string; url: string }>(
-          "/upload/journal",
+          "/upload/image",
           formData,
           { headers: { "Content-Type": "multipart/form-data" } }
         );

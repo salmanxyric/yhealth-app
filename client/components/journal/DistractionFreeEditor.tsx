@@ -178,6 +178,13 @@ export function DistractionFreeEditor({
         e.preventDefault();
         document.dispatchEvent(new CustomEvent("toggle-ai-pill"));
       }
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag !== "INPUT" && tag !== "TEXTAREA" && !(e.target as HTMLElement)?.closest?.(".ProseMirror")) {
+          e.preventDefault();
+          document.dispatchEvent(new CustomEvent("toggle-features-guide"));
+        }
+      }
     };
 
     window.addEventListener("keydown", handleGlobalKeyDown);

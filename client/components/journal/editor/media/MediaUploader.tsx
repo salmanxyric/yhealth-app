@@ -62,7 +62,7 @@ export function MediaUploader({
         formData.append("file", file);
 
         const response = await api.post<{ publicUrl?: string; url: string }>(
-          "/upload/journal",
+          "/upload/file",
           formData,
           { headers: { "Content-Type": "multipart/form-data" } }
         );

@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 import { EditorContent } from "@tiptap/react";
 import { motion } from "framer-motion";
 import { useAgenticEditor, type AgenticEditorAPI } from "./useAgenticEditor";
+import { HelpCircle } from "lucide-react";
 import { BubbleToolbar } from "./toolbar/BubbleToolbar";
+import { LinkInputPopover } from "./toolbar/LinkInputPopover";
 import { ImageUploadDialog } from "./media/ImageUploadDialog";
 import { useDictation } from "./useDictation";
 import { DictationOverlay } from "./dictation/DictationOverlay";
 import { useAICoach } from "./ai/useAICoach";
 import { AIPill } from "./ai/AIPill";
 import { CoachingNudge } from "./ai/CoachingNudge";
+import { FeaturesGuideModal } from "./FeaturesGuideModal";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 
 interface AgenticEditorProps {
@@ -30,6 +33,8 @@ export function AgenticEditor({
 }: AgenticEditorProps) {
   const api = useAgenticEditor({ mode, initialContent, onUpdate });
   const [showImageDialog, setShowImageDialog] = useState(false);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [dictationActive, setDictationActive] = useState(false);
   const [nudgeMessage, setNudgeMessage] = useState<string | null>(null);
 
@@ -51,9 +56,17 @@ export function AgenticEditor({
   }, [api.editor]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const handler = () => setShowImageDialog(true);
-    document.addEventListener("slash-menu:image", handler);
-    return () => document.removeEventListener("slash-menu:image", handler);
+    const imageHandler = () => setShowImageDialog(true);
+    const linkHandler = () => setShowLinkInput(true);
+    const guideHandler = () => setShowGuide((prev) => !prev);
+    document.addEventListener("slash-menu:image", imageHandler);
+    document.addEventListener("editor:open-link-input", linkHandler);
+    document.addEventListener("toggle-features-guide", guideHandler);
+    return () => {
+      document.removeEventListener("slash-menu:image", imageHandler);
+      document.removeEventListener("editor:open-link-input", linkHandler);
+      document.removeEventListener("toggle-features-guide", guideHandler);
+    };
   }, []);
 
   useEffect(() => {
@@ -130,6 +143,15 @@ export function AgenticEditor({
 
       {api.editor && <BubbleToolbar editor={api.editor} />}
 
+      {/* Guide button */}
+      <button
+        onClick={() => setShowGuide(true)}
+        title="Editor features & shortcuts"
+        className="fixed bottom-20 left-6 z-[65] p-2.5 rounded-full border border-white/8 bg-white/[0.03] text-white/20 hover:text-white/50 hover:bg-white/[0.06] hover:border-white/15 transition-all"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
+
       <ImageUploadDialog
         isOpen={showImageDialog}
         onClose={() => setShowImageDialog(false)}
@@ -137,6 +159,16 @@ export function AgenticEditor({
           api.editor?.chain().focus().setImage({ src: url, alt: alt || "" }).run();
         }}
       />
+
+      {api.editor && (
+        <LinkInputPopover
+          editor={api.editor}
+          isOpen={showLinkInput}
+          onClose={() => setShowLinkInput(false)}
+        />
+      )}
+
+      <FeaturesGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
 
       <DictationOverlay
         isActive={dictationActive}

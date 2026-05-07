@@ -25,7 +25,7 @@ export function FileBlockView({ node, updateAttributes, deleteNode }: NodeViewPr
     formData.append("file", file);
     try {
       const response = await api.post<{ publicUrl?: string; url: string }>(
-        "/upload/journal",
+        "/upload/document",
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );

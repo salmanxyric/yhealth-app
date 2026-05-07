@@ -84,11 +84,8 @@ export function getToolbarGroups(): ToolbarGroup[] {
         {
           name: "Link",
           icon: "link",
-          action: (e) => {
-            const url = window.prompt("Enter URL:");
-            if (url) {
-              e.chain().focus().setLink({ href: url }).run();
-            }
+          action: () => {
+            document.dispatchEvent(new CustomEvent("editor:open-link-input"));
           },
           isActive: (e) => e.isActive("link"),
           shortcut: "Ctrl+K",
