@@ -18,6 +18,8 @@ import {
   Hash,
   Flame,
   ArrowLeft,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import type { JournalEntry, JournalingMode } from "@shared/types/domain/wellbeing";
 import { formatStarLabel, formatTime, getMoodEmoji, getMoodLabel } from "./constellation-math";
@@ -89,6 +91,7 @@ export function JournalEntryDetailView({
   const contentRef = useRef<HTMLDivElement>(null);
   const [showReflection, setShowReflection] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const sentimentColor = getSentimentColor(entry.sentimentScore);
   const moodEmoji = getMoodEmoji(entry.sentimentScore);
@@ -148,13 +151,19 @@ export function JournalEntryDetailView({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 30 }}
           transition={{ type: "spring", damping: 30, stiffness: 280 }}
+          layout
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-2xl border border-purple-500/15 shadow-2xl overflow-hidden"
+          className={`relative flex flex-col border border-purple-500/15 shadow-2xl overflow-hidden transition-all duration-300 ease-out ${
+            isFullscreen
+              ? "w-full h-full max-w-none max-h-none rounded-none"
+              : "w-full max-w-3xl max-h-[90vh] rounded-2xl"
+          }`}
           style={{
             background:
               "linear-gradient(180deg, rgba(14, 10, 34, 0.97) 0%, rgba(7, 5, 22, 0.99) 40%, rgba(2, 2, 10, 1) 100%)",
-            boxShadow:
-              "0 0 80px rgba(139, 92, 246, 0.06), 0 24px 80px rgba(0, 0, 0, 0.6)",
+            boxShadow: isFullscreen
+              ? "none"
+              : "0 0 80px rgba(139, 92, 246, 0.06), 0 24px 80px rgba(0, 0, 0, 0.6)",
           }}
         >
           {/* Top glow accent */}
@@ -214,6 +223,17 @@ export function JournalEntryDetailView({
                 </button>
               )}
               <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="p-1.5 rounded-lg hover:bg-white/5 text-white/25 hover:text-white/50 transition-colors"
+                aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="w-4 h-4" />
+                ) : (
+                  <Maximize2 className="w-4 h-4" />
+                )}
+              </button>
+              <button
                 onClick={onClose}
                 className="p-1.5 rounded-lg hover:bg-white/5 text-white/25 hover:text-white/50 transition-colors"
                 aria-label="Close"
@@ -225,6 +245,7 @@ export function JournalEntryDetailView({
 
           {/* ─── Scrollable Content ─── */}
           <div className="flex-1 overflow-y-auto observatory-scroll" ref={contentRef}>
+           <div className={`mx-auto w-full ${isFullscreen ? "max-w-4xl" : ""}`}>
             {/* Hero section */}
             <div className="px-8 pt-8 pb-6 space-y-6">
               {/* Date + Time */}
@@ -491,6 +512,7 @@ export function JournalEntryDetailView({
 
             {/* Bottom spacer */}
             <div className="h-4" />
+           </div>
           </div>
         </motion.div>
       </motion.div>
