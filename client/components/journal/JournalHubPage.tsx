@@ -230,7 +230,7 @@ function JournalHubContent() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [editorText, selectedMode, entryDate, handleCloseNewEntry]);
+  }, [editorText, editorHtml, editorJson, selectedMode, entryDate, handleCloseNewEntry]);
 
   // ---------------------------------------------------------------------------
   // Edit entry handlers
@@ -269,7 +269,7 @@ function JournalHubContent() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [editorText, editingEntry, handleCloseNewEntry]);
+  }, [editorText, editorHtml, editorJson, editingEntry, handleCloseNewEntry]);
 
   // ---------------------------------------------------------------------------
   // Check-in flow handlers

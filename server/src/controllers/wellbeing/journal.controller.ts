@@ -51,6 +51,9 @@ class JournalController {
       voice_entry,
       duration_seconds,
       logged_at,
+      checkin_id,
+      journaling_mode,
+      ai_generated_prompt,
     } = req.body;
 
     if (!prompt || !entry_text || !mode) {
@@ -72,6 +75,9 @@ class JournalController {
       voiceEntry: voice_entry,
       durationSeconds: duration_seconds,
       loggedAt: logged_at,
+      checkinId: checkin_id,
+      journalingMode: journaling_mode,
+      aiGeneratedPrompt: ai_generated_prompt,
     });
 
     ApiResponse.success(
