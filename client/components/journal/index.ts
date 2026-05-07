@@ -15,6 +15,11 @@ export { DayComparisonCard } from "./DayComparisonCard";
 export { LessonsLearned } from "./LessonsLearned";
 export { LessonReminderBanner } from "./LessonReminderBanner";
 
+// Agentic editor components
+export { AgenticEditor } from "./editor/AgenticEditor";
+export { useAgenticEditor } from "./editor/useAgenticEditor";
+export type { AgenticEditorAPI } from "./editor/useAgenticEditor";
+
 // Voice journaling components
 export { VoiceJournalSession } from "./voice/VoiceJournalSession";
 
