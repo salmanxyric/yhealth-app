@@ -212,11 +212,22 @@ OFF-TOPIC (redirect politely): Programming, politics, entertainment (unless heal
 NOT OFF-TOPIC: Music (use musicManager), greetings, daily routine, lifestyle questions.
 
 ## TOOL USAGE
-Available tools: workout/diet/general plans, activity logs, meal logs, goals, wellbeing data (mood, stress, journal, energy, habits, schedules), gamification, WHOOP analytics, music player, camera/image upload, navigation, finance (budgets, transactions, spending, savings goals, financial reports).
+Available tools: workout/diet/general plans, activity logs, meal logs, goals, wellbeing data (mood, stress, journal, energy, habits, schedules), gamification, WHOOP analytics, music player, camera/image upload, navigation, finance (budgets, transactions, spending, savings goals, financial reports), alarms.
 - **journalManager**: CRUD for journal entries + streak checking.
 - **voiceJournalManager**: Start voice journaling sessions.
 - **musicManager**: ALWAYS call for music requests. Actions: play_activity, search_and_play, control, recommend. NEVER say music is broken — call the tool.
 - **scheduleManager**: Create/manage daily schedules. ALWAYS use the tool (never text-only). Use reasonable defaults for prayer times, meal times, etc.
+- **alarmManager**: Create/manage alarms and reminders that appear on the user's Alarms page. ALWAYS use alarm tools when the user says "alarm", "set alarm", "reminder alarm", "wake me up", or wants a persistent recurring notification. Alarms are DIFFERENT from schedule items — alarms trigger audible notifications at set times and appear on the dedicated Alarms page.
+  - **createWorkoutAlarm**: Create a new alarm (requires alarmTime in HH:MM, optional: title, daysOfWeek, soundFile, snoozeMinutes).
+  - **getAllAlarms**: List all user alarms. Use when user asks "show my alarms", "what alarms do I have".
+  - **getAlarmById**: Get details of a specific alarm.
+  - **getAlarmsByDay**: Get alarms for a specific day (0=Sun, 1=Mon, ..., 6=Sat).
+  - **getTodayAlarms**: Get today's active alarms.
+  - **getAlarmSummary**: Overview of alarm counts, next alarm, today's alarms.
+  - **updateWorkoutAlarm**: Modify an existing alarm (time, days, title, sound, etc.).
+  - **deleteWorkoutAlarm**: Remove an alarm.
+  - **toggleAlarm**: Enable/disable an alarm without deleting it.
+  - **snoozeAlarm**: Snooze an alarm for N minutes.
 - **finance tools**: ALWAYS call finance tools for financial report, spending, budget, income, expense, or saving-goal requests. Do not claim you lack finance access until a finance tool confirms no tracked data. If no data exists, say "I don't have tracked finance data yet" and offer to log income, expenses, budgets, or saving goals.
 - **personalContextManager**: Save personal facts the user shares.
 
@@ -224,6 +235,17 @@ Available tools: workout/diet/general plans, activity logs, meal logs, goals, we
 - You receive COMPREHENSIVE USER CONTEXT with current WHOOP, workouts, meals, goals, lifestyle data.
 - USE CONTEXT DATA FIRST — reference specific numbers directly ("You got 6.5h sleep" not "Let me check").
 - Only call tools to CREATE/UPDATE/DELETE, or for data NOT in context.
+
+## DEEP ANALYSIS TOOLS
+When users ask analytical questions (correlations, trends, comparisons, anomalies, what affects X), use these tools:
+- **analyzeCorrelation**: Scatter plot + Pearson r for two metrics (e.g. "relationship between sleep and HRV")
+- **analyzeTrend**: Time series chart with trend line, mean, ±2σ bands (e.g. "show my sleep trend")
+- **compareTimePeriods**: Side-by-side comparison of two periods (e.g. "compare this week to last week")
+- **detectAnomalies**: Find outlier days for a metric (e.g. "any unusual days in my cardio load?")
+- **analyzeMultiFactor**: Which factors most affect a target metric (e.g. "what affects my recovery?")
+- **analyzeGoalProgress**: Goal trajectory with projected completion
+Available metrics: sleep_hours, sleep_quality, sleep_score, resting_hr, hrv, daily_steps, workout_intensity, total_calories, active_calories, recovery_score, cardio_load, strain_score.
+These tools generate chart artifacts automatically. Always include natural-language interpretation alongside the chart.
 
 ## DATA ANALYSIS & CROSS-DOMAIN INSIGHTS
 - Cross-reference data: low recovery + scheduled workout = suggest modification.
@@ -258,6 +280,14 @@ When the user wants to add, create, or schedule an activity at a specific time:
    - Different time: Ask what time they prefer, re-check and create.
 5. **Never silently overwrite** an existing scheduled activity.
 6. For bulk schedule creation (e.g., "plan my whole day"), check conflicts for all proposed times and report them together.
+
+## ALARM VS SCHEDULE (CRITICAL DISTINCTION)
+- **Alarm** = persistent, recurring audible notification that appears on the Alarms page. Use createWorkoutAlarm. User says: "set alarm", "alarm for 7am", "remind me daily", "create alarm", "add alarm".
+- **Schedule item** = calendar entry in the daily schedule. Use createScheduleItem/createDailySchedule. User says: "add to schedule", "plan my day", "schedule a meeting".
+- When user says "alarm" or "reminder alarm" — ALWAYS use alarm tools (createWorkoutAlarm, getAllAlarms, etc.). NEVER add a schedule item instead.
+- When user says "schedule" or "add to my day" — use schedule tools.
+- If unclear, ASK the user: "Would you like me to set an alarm (audible notification) or add it to your schedule?"
+- NEVER say you cannot create alarms. You CAN create alarms using createWorkoutAlarm.
 
 ## SPECIAL DAY AWARENESS
 - If Ramadan: user is fasting during daylight hours. Suggest lighter workouts, hydration reminders at iftar, suhoor meal planning. NEVER suggest eating during fasting hours.
@@ -390,6 +420,70 @@ class LangGraphChatbotService {
   private engagementScoreCache: Map<string, { score: number; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   /** Cache for Zod→OpenAI JSON Schema conversion, keyed by intent classification */
+
+  private getEmptyComprehensiveContext(): any {
+    return {
+      whoop: { isConnected: false, lastSyncAt: null },
+      lifestyle: {},
+      workouts: { recentWorkouts: [] },
+      nutrition: { recentMeals: [] },
+      wellbeing: {},
+      chatHistory: { recentMessages: [] },
+      goals: { activeGoals: [] },
+      bodyStats: {},
+      gamification: {},
+      habits: { activeHabits: [] },
+      mentalHealth: {},
+      waterIntake: {},
+      dailyScore: {},
+      nutritionAnalysis: {},
+      competitions: {},
+      progressTrend: {},
+      activityStatus: {},
+    };
+  }
+
+  private async withOptionalTimeout<T>(
+    label: string,
+    userId: string,
+    promise: Promise<T>,
+    timeoutMs: number,
+    fallback: T,
+  ): Promise<T> {
+    let timedOut = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const result = await Promise.race([
+        promise,
+        new Promise<T>((resolve) => {
+          timeoutId = setTimeout(() => {
+            timedOut = true;
+            resolve(fallback);
+          }, timeoutMs);
+        }),
+      ]);
+
+      if (timedOut) {
+        logger.debug('[LangGraphChatbot] Optional personalization source timed out', {
+          userId,
+          source: label,
+          timeoutMs,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      logger.debug('[LangGraphChatbot] Optional personalization source failed', {
+        userId,
+        source: label,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return fallback;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
 
   constructor() {
     this.llm = modelFactory.getModel({
@@ -1653,38 +1747,70 @@ class LangGraphChatbotService {
     wellnessQuestion?: { question: string; type: string; context?: string }
   ): Promise<string> {
     const startTime = Date.now();
+    const emptyContext = this.getEmptyComprehensiveContext();
+    const GLOBAL_PERSONALIZATION_DEADLINE_MS = 900;
 
-    // Get ALL user data in parallel — coaching profile + daily report + delta
-    const [userName, assistantName, userTimezone, recentActivity, comprehensiveContext, newUser, coachingProfile, dailyReport, deltaSummary] = await Promise.all([
-      this.getUserName(userId),
-      this.getAssistantName(userId),
-      this.getUserTimezone(userId),
-      this.getRecentActivity(userId),
-      comprehensiveUserContextService.getComprehensiveContext(userId).catch((err) => {
-        logger.warn('[LangGraphChatbot] Comprehensive context failed', { userId, error: err instanceof Error ? err.message : 'Unknown' });
-        return { whoop: { isConnected: false, lastSyncAt: null }, lifestyle: {}, workouts: { recentWorkouts: [] }, nutrition: { recentMeals: [] }, wellbeing: {}, chatHistory: { recentMessages: [] }, goals: { activeGoals: [] }, bodyStats: {}, gamification: {}, habits: { activeHabits: [] }, mentalHealth: {}, waterIntake: {}, dailyScore: {}, nutritionAnalysis: {}, competitions: {}, progressTrend: {}, activityStatus: {} } as any;
-      }),
-      this.isNewUser(userId),
-      userCoachingProfileService.getProfileFromCache(userId).catch((err) => {
-        logger.warn('[LangGraphChatbot] Failed to fetch coaching profile from cache', { userId, error: err instanceof Error ? err.message : 'Unknown' });
-        return null;
-      }),
-      dailyAnalysisService.getLatestReport(userId).catch((err) => {
-        logger.debug('[LangGraphChatbot] No daily analysis report available', { userId, error: err instanceof Error ? err.message : 'Unknown' });
-        return null;
-      }),
-      userDeltaService.getLatestDelta(userId).catch(() => null),
+    const defaults = {
+      userName: null as string | null,
+      assistantName: 'Aurea',
+      userTimezone: 'UTC',
+      recentActivity: {} as RecentActivity,
+      comprehensiveContext: emptyContext,
+      newUser: false,
+      coachingProfile: null as any,
+      dailyReport: null as any,
+      deltaSummary: null as any,
+    };
+
+    // Track per-source timing for diagnostics
+    const timings: Record<string, number> = {};
+    const timed = <T>(label: string, promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+      const sourceStart = Date.now();
+      return this.withOptionalTimeout(label, userId, promise, timeoutMs, fallback)
+        .then(result => { timings[label] = Date.now() - sourceStart; return result; });
+    };
+
+    // Get ALL user data in parallel with a global hard deadline.
+    // Individual timeouts cap each source, but the global deadline protects against
+    // event-loop congestion where setTimeout callbacks are delayed by pool contention.
+    const sources = Promise.all([
+      timed('userName', this.getUserName(userId), 250, defaults.userName),
+      timed('assistantName', this.getAssistantName(userId), 250, defaults.assistantName),
+      timed('userTimezone', this.getUserTimezone(userId), 250, defaults.userTimezone),
+      timed('recentActivity', this.getRecentActivity(userId), 500, defaults.recentActivity),
+      timed('comprehensiveContext', comprehensiveUserContextService.getComprehensiveContext(userId), 750, defaults.comprehensiveContext),
+      timed('newUser', this.isNewUser(userId), 300, defaults.newUser),
+      timed('coachingProfile', userCoachingProfileService.getProfileFromCache(userId), 500, defaults.coachingProfile),
+      timed('dailyReport', dailyAnalysisService.getLatestReport(userId), 350, defaults.dailyReport),
+      timed('deltaSummary', userDeltaService.getLatestDelta(userId), 350, defaults.deltaSummary),
     ]);
+
+    let deadlineHit = false;
+    const [userName, assistantName, userTimezone, recentActivity, comprehensiveContext, newUser, coachingProfile, dailyReport, deltaSummary] = await Promise.race([
+      sources,
+      new Promise<typeof defaults[keyof typeof defaults][]>((resolve) =>
+        setTimeout(() => {
+          deadlineHit = true;
+          resolve([
+            defaults.userName, defaults.assistantName, defaults.userTimezone,
+            defaults.recentActivity, defaults.comprehensiveContext, defaults.newUser,
+            defaults.coachingProfile, defaults.dailyReport, defaults.deltaSummary,
+          ]);
+        }, GLOBAL_PERSONALIZATION_DEADLINE_MS)
+      ),
+    ]) as [string | null, string, string, RecentActivity, typeof emptyContext, boolean, any, any, any];
 
     const timeOfDay = this.getTimeOfDay(userTimezone);
     const currentLocalDate = getUserLocalDateISO(userTimezone);
     const currentLocalDateTime = formatUserLocalDateTime(userTimezone);
 
     const personalizationTime = Date.now() - startTime;
-    if (personalizationTime > 500) {
+    if (personalizationTime > 1000 || deadlineHit) {
       logger.warn('[LangGraphChatbot] Personalization took longer than expected', {
         userId,
         time: personalizationTime,
+        deadlineHit,
+        timings,
       });
     }
 
@@ -1994,9 +2120,11 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   }
 
   private async getFallbackSystemPrompt(userId: string): Promise<string> {
-    const userName = await this.getUserName(userId).catch(() => null);
-    const assistantName = await this.getAssistantName(userId).catch(() => 'Aurea');
-    const userTimezone = await this.getUserTimezone(userId).catch(() => 'UTC');
+    const [userName, assistantName, userTimezone] = await Promise.all([
+      this.getUserName(userId).catch(() => null),
+      this.getAssistantName(userId).catch(() => 'Aurea'),
+      this.getUserTimezone(userId).catch(() => 'UTC'),
+    ]);
     const currentLocalDate = getUserLocalDateISO(userTimezone);
     const currentLocalDateTime = formatUserLocalDateTime(userTimezone);
     let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/Aurea/g, assistantName).replace(/\*\*Aurea\*\*/g, `**${assistantName}**`);
@@ -4036,7 +4164,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
             if (autoInvoked) {
               responseContent = autoInvoked.message;
             } else {
-              responseContent = 'I apologize, but I encountered an error processing your request. Please try again or rephrase your question.';
+              responseContent = "I'm having a little trouble processing that right now. Could you try rephrasing your question, or let me know what you'd like help with?";
             }
           } else {
             
@@ -4515,9 +4643,9 @@ I'm listening. What's happening right now?`;
             return this.getFallbackSystemPrompt(userId);
           }),
           new Promise<string>((resolve) => setTimeout(() => {
-            logger.debug('[LangGraphChatbot] Stream system prompt timed out, using base prompt', { userId });
+            logger.warn('[LangGraphChatbot] Stream system prompt timed out, using static fallback', { userId });
             resolve(BASE_HUMAN_LIKE_PROMPT);
-          }, 2500)),
+          }, 4000)),
         ])),
         timedPhase('lifeAreaRouting', raceTimeout(
           routeCoachIntent({
@@ -5088,28 +5216,36 @@ I'm listening. What's happening right now?`;
             if (onArtifact) {
               try {
                 const parsed = JSON.parse(resultContent);
-                if (parsed.artifact) {
-                  const toolName = toolCall.name || toolCall.function?.name || 'unknown';
-                  let artifact = parsed.artifact;
-                  try {
-                    const saved = await artifactGenerationService.saveInlineArtifact({
-                      userId,
-                      artifact,
-                      generatedBy: toolName,
-                      conversationId: activeConversationId,
-                      tags: [toolName],
-                    });
-                    artifact = {
-                      ...artifact,
-                      intelligenceFileId: saved.id,
-                      persisted: true,
-                    };
-                  } catch (persistError) {
-                    logger.warn('[LangGraphChatbot] Failed to persist generated artifact', {
-                      userId,
-                      toolName,
-                      error: persistError instanceof Error ? persistError.message : 'Unknown error',
-                    });
+                const toolName = toolCall.name || toolCall.function?.name || 'unknown';
+
+                // Collect artifacts: single `artifact` or `artifacts` array
+                const rawArtifacts: Record<string, unknown>[] = [];
+                if (parsed.artifact) rawArtifacts.push(parsed.artifact);
+                if (Array.isArray(parsed.artifacts)) rawArtifacts.push(...parsed.artifacts);
+
+                for (const raw of rawArtifacts) {
+                  let artifact = raw;
+                  if (!artifact.saved && !artifact.artifactId) {
+                    try {
+                      const saved = await artifactGenerationService.saveInlineArtifact({
+                        userId,
+                        artifact,
+                        generatedBy: toolName,
+                        conversationId: activeConversationId,
+                        tags: [toolName],
+                      });
+                      artifact = {
+                        ...artifact,
+                        intelligenceFileId: saved.id,
+                        persisted: true,
+                      };
+                    } catch (persistError) {
+                      logger.warn('[LangGraphChatbot] Failed to persist generated artifact', {
+                        userId,
+                        toolName,
+                        error: persistError instanceof Error ? persistError.message : 'Unknown error',
+                      });
+                    }
                   }
                   onArtifact({ artifact, toolName });
                 }
@@ -5350,7 +5486,7 @@ I'm listening. What's happening right now?`;
             responseContent = autoInvoked.message;
             // suggestedAction is auto-injected via the existing musicManager toolCalls loop
           } else {
-            responseContent = 'I apologize, but I encountered an error processing your request. Please try again or rephrase your question.';
+            responseContent = "I'm having a little trouble processing that right now. Could you try rephrasing your question, or let me know what you'd like help with?";
           }
 
           // Send the response as a token
@@ -5571,10 +5707,10 @@ I'm listening. What's happening right now?`;
         this.getUserName(userId),
         this.getUserTimezone(userId),
         this.isNewUser(userId),
-        withTimeout(comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null), 8000, null),
+        withTimeout(comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null), 4000, null),
         this.getAssistantName(userId),
-        withTimeout(userDeltaService.recordSessionStart(userId, callPurpose ? 'voice_call' : 'app_open').catch(() => null), 5000, null),
-        withTimeout(userCoachingProfileService.getOrGenerateProfile(userId).catch(() => null), 5000, null),
+        withTimeout(userDeltaService.recordSessionStart(userId, callPurpose ? 'voice_call' : 'app_open').catch(() => null), 3000, null),
+        withTimeout(userCoachingProfileService.getOrGenerateProfile(userId).catch(() => null), 3000, null),
       ]);
       const timeOfDay = this.getTimeOfDay(userTimezone);
 
@@ -5978,7 +6114,7 @@ Generate the greeting. Return ONLY the spoken text.`;
       ];
 
       const llmStartTime = Date.now();
-      const llmTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 15000));
+      const llmTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 8000));
       const llmResult = await Promise.race([
         this.llm.invoke(messages),
         llmTimeout,
