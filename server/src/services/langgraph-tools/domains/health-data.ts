@@ -3,6 +3,12 @@ import { query } from '../../../config/database.config.js';
 import type { ToolDefinition } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
+const CHART_COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+  '#14b8a6', '#e11d48', '#a855f7',
+];
+
 // --- Schemas ---
 
 // User Integrations Schemas
@@ -358,6 +364,103 @@ async function deleteAllUserIntegrations(userId: string, params: z.infer<typeof 
 
 // Health Data Records
 
+function buildHealthDataCharts(
+  records: { provider: string; dataType: string; recordedAt: string; value: any; unit: string }[],
+): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (records.length === 0) return artifacts;
+
+  const byType = new Map<string, typeof records>();
+  for (const r of records) {
+    const type = r.dataType || 'unknown';
+    if (!byType.has(type)) byType.set(type, []);
+    byType.get(type)!.push(r);
+  }
+
+  const numVal = (r: any): number => {
+    if (typeof r.value === 'number') return r.value;
+    if (typeof r.value === 'object' && r.value !== null) {
+      return r.value.value ?? r.value.hrv ?? r.value.rmssd ?? r.value.heart_rate ?? r.value.rhr ??
+        r.value.steps ?? r.value.duration ?? r.value.score ?? r.value.hours ?? 0;
+    }
+    return parseFloat(String(r.value)) || 0;
+  };
+
+  const sortByDate = (items: typeof records) =>
+    [...items].sort((a, b) => String(a.recordedAt || '').localeCompare(String(b.recordedAt || '')));
+
+  const hrvRecords = byType.get('hrv') || byType.get('heart_rate_variability') || [];
+  if (hrvRecords.length > 1) {
+    const sorted = sortByDate(hrvRecords);
+    artifacts.push({
+      type: 'chart', chartType: 'line', title: 'HRV Trend',
+      data: sorted.map((r) => ({ date: String(r.recordedAt).slice(0, 10), hrv: Math.round(numVal(r)) })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'hrv', label: 'HRV (ms)', color: '#3b82f6' }],
+      yAxisLabel: 'HRV (ms)',
+      insight: `Average HRV: ${Math.round(sorted.reduce((s, r) => s + numVal(r), 0) / sorted.length)} ms.`,
+    });
+  }
+
+  const rhrRecords = byType.get('resting_heart_rate') || byType.get('rhr') || [];
+  if (rhrRecords.length > 1) {
+    const sorted = sortByDate(rhrRecords);
+    artifacts.push({
+      type: 'chart', chartType: 'line', title: 'Resting Heart Rate',
+      data: sorted.map((r) => ({ date: String(r.recordedAt).slice(0, 10), rhr: Math.round(numVal(r)) })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'rhr', label: 'RHR (bpm)', color: '#ef4444' }],
+      yAxisLabel: 'BPM',
+      insight: `Average RHR: ${Math.round(sorted.reduce((s, r) => s + numVal(r), 0) / sorted.length)} bpm.`,
+    });
+  }
+
+  const sleepRecords = byType.get('sleep') || byType.get('sleep_duration') || [];
+  if (sleepRecords.length > 1) {
+    const sorted = sortByDate(sleepRecords);
+    artifacts.push({
+      type: 'chart', chartType: 'bar', title: 'Sleep Duration',
+      data: sorted.map((r) => {
+        let hours = numVal(r);
+        if (hours > 24) hours = hours / 60;
+        if (hours > 24) hours = hours / 60;
+        return { date: String(r.recordedAt).slice(0, 10), hours: Math.round(hours * 10) / 10 };
+      }),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'hours', label: 'Hours', color: '#8b5cf6' }],
+      yAxisLabel: 'Hours',
+    });
+  }
+
+  const stepRecords = byType.get('steps') || byType.get('step_count') || [];
+  if (stepRecords.length > 1) {
+    const sorted = sortByDate(stepRecords);
+    artifacts.push({
+      type: 'chart', chartType: 'bar', title: 'Daily Steps',
+      data: sorted.map((r) => ({ date: String(r.recordedAt).slice(0, 10), steps: Math.round(numVal(r)) })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'steps', label: 'Steps', color: '#10b981' }],
+      yAxisLabel: 'Steps',
+    });
+  }
+
+  const recoveryRecords = byType.get('recovery') || byType.get('recovery_score') || [];
+  if (recoveryRecords.length > 0) {
+    const sorted = sortByDate(recoveryRecords);
+    const latest = sorted[sorted.length - 1];
+    artifacts.push({
+      type: 'chart', chartType: 'gauge', title: 'Recovery Score',
+      data: [{ value: Math.round(numVal(latest)) }],
+      xAxisKey: 'value',
+      dataKeys: [{ key: 'value', label: 'Recovery %', color: CHART_COLORS[0] }],
+      gaugeMax: 100,
+      insight: `Latest recovery: ${Math.round(numVal(latest))}%.`,
+    });
+  }
+
+  return artifacts;
+}
+
 async function getHealthDataRecords(userId: string, params?: z.infer<typeof GetHealthDataRecordsSchema>): Promise<string> {
   let sqlQuery = `SELECT hdr.*, ui.provider as integration_provider
                   FROM health_data_records hdr
@@ -416,7 +519,8 @@ async function getHealthDataRecords(userId: string, params?: z.infer<typeof GetH
     isGoldenSource: row.is_golden_source,
   }));
 
-  return JSON.stringify({ records: formatted, count: formatted.length }, null, 2);
+  const artifacts = buildHealthDataCharts(formatted);
+  return JSON.stringify({ records: formatted, count: formatted.length, artifacts }, null, 2);
 }
 
 async function getHealthDataRecordById(userId: string, params: z.infer<typeof GetHealthDataRecordByIdSchema>): Promise<string> {
