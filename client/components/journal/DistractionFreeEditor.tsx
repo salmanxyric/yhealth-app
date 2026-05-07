@@ -7,10 +7,12 @@
  * serif textarea, word/character counts, elapsed timer, and keyboard shortcuts.
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { X, Loader2, Check, CloudOff, Feather, CalendarDays } from "lucide-react";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
+import { AgenticEditor } from "./editor/AgenticEditor";
+import type { AgenticEditorAPI } from "./editor/useAgenticEditor";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +23,7 @@ export interface DistractionFreeEditorProps {
   mode: JournalingMode;
   value: string;
   onChange: (text: string) => void;
+  onContentChange?: (html: string, text: string, json: Record<string, unknown>) => void;
   onClose: () => void;
   onSubmit: () => void;
   isSubmitting?: boolean;
@@ -102,6 +105,7 @@ export function DistractionFreeEditor({
   mode,
   value,
   onChange,
+  onContentChange,
   onClose,
   onSubmit,
   isSubmitting = false,
@@ -109,16 +113,8 @@ export function DistractionFreeEditor({
   entryDate,
   onDateChange,
 }: DistractionFreeEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorApiRef = useRef<AgenticEditorAPI | null>(null);
   const [elapsed, setElapsed] = useState(0);
-
-  // Focus textarea on mount
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Elapsed timer
   useEffect(() => {
@@ -129,11 +125,12 @@ export function DistractionFreeEditor({
   }, []);
 
   // Keyboard shortcuts
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
-        if (value.trim().length > 0 && !isSubmitting) {
+        const isEmpty = editorApiRef.current?.isEmpty() ?? true;
+        if (!isEmpty && !isSubmitting) {
           onSubmit();
         }
       }
@@ -141,12 +138,14 @@ export function DistractionFreeEditor({
         e.preventDefault();
         onClose();
       }
-    },
-    [value, isSubmitting, onSubmit, onClose]
-  );
+    };
 
-  const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;
-  const charCount = value.length;
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isSubmitting, onSubmit, onClose]);
+
+  const wordCount = editorApiRef.current?.wordCount ?? 0;
+  const charCount = editorApiRef.current?.charCount ?? 0;
   const modeInfo = MODE_LABELS[mode];
 
   return (
@@ -209,7 +208,7 @@ export function DistractionFreeEditor({
         <div className="flex items-center gap-3">
           <button
             onClick={onSubmit}
-            disabled={isSubmitting || value.trim().length === 0}
+            disabled={isSubmitting || (editorApiRef.current?.isEmpty() ?? true)}
             className="observatory-font-display flex items-center gap-2 px-4 py-2 rounded-full border border-purple-500/30 bg-purple-500/10 backdrop-blur-sm text-purple-200 hover:bg-purple-500/20 hover:border-purple-400/50 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{ fontSize: 10, letterSpacing: "0.15em" }}
           >
@@ -281,29 +280,25 @@ export function DistractionFreeEditor({
             </motion.div>
           )}
 
-          {/* Textarea */}
+          {/* Rich Editor */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
             className="flex-1 flex flex-col"
           >
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={PLACEHOLDER_BY_MODE[mode]}
-              aria-label="Journal entry text"
-              className="
-                flex-1 w-full resize-none bg-transparent border-none outline-none
-                observatory-font-body
-                text-white/70 placeholder:text-white/15
-                selection:bg-purple-500/20
-                min-h-[300px]
-              "
-              style={{ fontSize: 16, lineHeight: 1.9, letterSpacing: "0.01em" }}
-              spellCheck
+            <AgenticEditor
+              mode={mode}
+              initialContent={value}
+              onUpdate={(html, text, json) => {
+                onChange(text);
+                onContentChange?.(html, text, json);
+              }}
+              onReady={(api) => {
+                editorApiRef.current = api;
+                setTimeout(() => api.focus(), 400);
+              }}
+              className="flex-1"
             />
           </motion.div>
         </div>
