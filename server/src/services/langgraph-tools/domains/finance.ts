@@ -116,9 +116,7 @@ function buildReportCharts(
         label: item.category,
         color: CHART_COLORS[i % CHART_COLORS.length],
       })),
-      insight: breakdown.length > 0
-        ? `Top category: ${breakdown[0].category} at ${breakdown[0].percentage}% of spending.`
-        : undefined,
+      insight: `Top category: ${breakdown[0].category} at ${breakdown[0].percentage}% of spending.`,
     });
   }
 
@@ -208,8 +206,9 @@ function buildReportCharts(
     });
   }
 
-  // 6. Forecast line chart
-  if (forecast && forecast.dailyBurnRate > 0) {
+  // 6. Forecast line chart (only for current month — forecast data is always current)
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  if (month === currentMonth && forecast && forecast.dailyBurnRate > 0) {
     const now = new Date();
     const dayOfMonth = now.getDate();
     const daysInMonth = dayOfMonth + forecast.daysRemaining;
