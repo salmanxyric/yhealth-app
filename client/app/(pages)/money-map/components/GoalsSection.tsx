@@ -9,7 +9,6 @@ import {
   Trophy,
   Sparkles,
   Zap,
-  TrendingUp,
   Calendar,
   Crown,
 } from "lucide-react";
@@ -20,7 +19,6 @@ import type {
 } from "@shared/types/domain/finance";
 import {
   formatCurrency,
-  AnimatedCurrency,
   fadeSlideUp,
   staggerContainer,
   spring,
@@ -126,19 +124,6 @@ interface GoalsSectionProps {
 
 const MILESTONE_TICKS = [25, 50, 75, 100];
 const QUICK_AMOUNTS = [10, 25, 50, 100, 500];
-
-const GOAL_ICONS: Record<string, string> = {
-  "🎯": "target",
-  "✈️": "travel",
-  "🏠": "home",
-  "🚗": "car",
-  "💍": "ring",
-  "📱": "tech",
-  "🎓": "education",
-  "🏖️": "vacation",
-  "💰": "wealth",
-  "🔥": "fire",
-};
 
 // ============================================
 // MAIN COMPONENT

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import type { CategoryBreakdownItem, FinanceCategory } from "@shared/types/domain/finance";
 import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";

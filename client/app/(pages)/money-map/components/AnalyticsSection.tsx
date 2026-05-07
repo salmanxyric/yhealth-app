@@ -64,7 +64,7 @@ function SectionHeader({ icon: Icon, label, color }: { icon: React.ComponentType
 
 export function AnalyticsSection({
   categoryBreakdown, trends, comparison, budgetAlerts,
-  transactions, totalExpense, totalIncome, savingsRate, financeScore,
+  transactions, totalExpense, _totalIncome, savingsRate, financeScore,
 }: AnalyticsSectionProps) {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -87,11 +87,6 @@ export function AnalyticsSection({
       expense: t.expense,
     }));
   }, [trends]);
-
-  const avgDailySpend = useMemo(() => {
-    const daysWithSpend = Object.keys(heatmapData).length;
-    return daysWithSpend > 0 ? totalExpense / daysWithSpend : 0;
-  }, [heatmapData, totalExpense]);
 
   const topCategoryPct = categoryBreakdown.length > 0 ? categoryBreakdown[0].percentage : 0;
 

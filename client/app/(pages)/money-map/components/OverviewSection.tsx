@@ -59,7 +59,7 @@ function ViewportSection({ children, className = "" }: { children: React.ReactNo
 export function OverviewSection({
   summary,
   monthlySummary,
-  budgetAlerts,
+  _budgetAlerts,
   recentTransactions,
   budgets,
   goals,
@@ -95,7 +95,6 @@ export function OverviewSection({
   const budgetUsed = budgets.reduce((s, b) => s + (b.currentSpend || 0), 0);
   const budgetTotal = budgets.reduce((s, b) => s + b.monthlyLimit, 0);
   const goalsSaved = goals.reduce((s, g) => s + (g.currentAmount || 0), 0);
-  const goalsTarget = goals.reduce((s, g) => s + g.targetAmount, 0);
   const emergencyMonths = income > 0 ? goalsSaved / (expense / Math.max(dayOfMonth, 1) * 30) : 0;
 
   const cashFlowData = useMemo(() => {

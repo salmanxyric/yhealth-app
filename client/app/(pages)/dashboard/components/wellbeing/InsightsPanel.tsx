@@ -6,7 +6,6 @@ import {
   Lightbulb,
   X,
   TrendingUp,
-  TrendingDown,
   Activity,
   Moon,
   Dumbbell,

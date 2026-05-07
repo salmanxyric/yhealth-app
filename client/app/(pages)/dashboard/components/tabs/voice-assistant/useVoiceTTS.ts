@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { ttsService, type VoiceGender } from "@/src/shared/services/tts.service";
 import { analyzeResponse as analyzeResponseForGestures } from "@/lib/avatar/conversationDirector";
 import type { AvatarLayerHandle } from "@/components/avatar/AvatarLayer";
@@ -39,7 +39,6 @@ export function useVoiceTTS(options: UseVoiceTTSOptions) {
     isProcessingRef,
     isListeningActiveRef,
     isTTSActiveRef,
-    isTTSEnabledRef,
     currentUtteranceRef,
     currentAudioRef,
     currentAudioUrlRef,

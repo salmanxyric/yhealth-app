@@ -28,7 +28,6 @@ import {
   LineChart as LineChartIcon,
   BarChart2,
   Layers,
-  Zap,
   Flame,
   Sparkles,
 } from "lucide-react";

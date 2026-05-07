@@ -15,7 +15,6 @@ import {
   TrendingUp,
   CheckCircle2,
   Circle,
-  Sparkles,
   Info,
   BarChart3,
   Heart,

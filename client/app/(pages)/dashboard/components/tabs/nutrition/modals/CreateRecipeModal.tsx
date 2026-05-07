@@ -94,7 +94,7 @@ export function CreateRecipeModal({
   setRecipeImageCaptureMode,
   recipeCapturedImage,
   setRecipeCapturedImage,
-  recipeImageFile,
+  recipeImageFile: _recipeImageFile,
   setRecipeImageFile,
   isAnalyzingRecipeImage,
   recipeImageAnalysisResult,

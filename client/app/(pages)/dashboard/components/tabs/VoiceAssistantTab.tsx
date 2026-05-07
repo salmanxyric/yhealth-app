@@ -175,7 +175,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   });
 
   // ── Avatar upload hook ──
-  const avatarUpload = useAvatarUpload();
+  useAvatarUpload();
 
   // ── Detect mood wrapper ──
   const detectMood = useCallback(

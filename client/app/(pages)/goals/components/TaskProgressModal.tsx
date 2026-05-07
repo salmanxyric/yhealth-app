@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   X, CheckCircle2, Circle, Loader2, Sparkles, TrendingUp,
   Dumbbell, Utensils, Smile, BookOpen, Droplets, Activity,
-  CheckCircle, AlertCircle, ChevronDown, Save, Edit3,
+  AlertCircle, ChevronDown, Save, Edit3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
@@ -94,7 +94,7 @@ export default function TaskProgressModal({
   const [saving, setSaving] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [manualValue, setManualValue] = useState<number>(goal.currentValue || 0);
-  const [generating, setGenerating] = useState(false);
+  const [_generating, setGenerating] = useState(false);
 
   const goalId = goal.id;
 

@@ -53,15 +53,6 @@ const TYPE_CONFIG: Record<
   },
 };
 
-const cardExitVariants: Variants = {
-  exit: {
-    opacity: 0,
-    scale: 0.9,
-    x: -20,
-    transition: { ...spring.snappy, duration: 0.3 },
-  },
-};
-
 function InsightCard({
   insight,
   onDismiss,

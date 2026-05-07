@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Plus, ArrowDownRight, ArrowUpRight, Camera, X, FileSpreadsheet } from "lucide-react";
+import { Plus, ArrowDownRight, ArrowUpRight, Camera, FileSpreadsheet } from "lucide-react";
 import { spring } from "../lib/motion";
 
 const fabVariants: Variants = {

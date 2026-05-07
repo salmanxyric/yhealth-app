@@ -35,14 +35,6 @@ const containerVariants: Variants = {
   },
 };
 
-const ringVariants: Variants = {
-  hidden: { strokeDashoffset: 1 },
-  show: {
-    strokeDashoffset: 0,
-    transition: { duration: 1.2, ease: "easeOut" },
-  },
-};
-
 export function SpendingOrbit({ categories, totalExpense }: SpendingOrbitProps) {
   const [hovered, setHovered] = useState<number | null>(null);
 

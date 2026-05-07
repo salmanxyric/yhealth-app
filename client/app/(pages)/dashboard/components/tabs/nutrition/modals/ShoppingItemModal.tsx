@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import type { ShoppingItem } from "../types";
 
 const SHOPPING_CATEGORIES = [

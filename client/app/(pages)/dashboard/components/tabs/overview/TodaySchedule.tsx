@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity, Clock, Timer, Check, ChevronRight, RefreshCw,
   Sparkles, ChevronDown, Droplets, Utensils, Moon, Sun,
-  Dumbbell, Brain, Heart, Calendar, Star, TrendingUp, Flame, Zap,
+  Dumbbell, Brain, Heart, Calendar, Star,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { TodayData, Plan } from './types';

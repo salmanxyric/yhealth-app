@@ -13,7 +13,7 @@ import {
   WeekSummary,
   DAY_FULL_LABELS,
 } from "./types";
-import { CircularProgress, MiniCircularProgress } from "./CircularProgress";
+import { CircularProgress } from "./CircularProgress";
 
 interface WeeklyPlanViewProps {
   planName: string;
@@ -120,11 +120,6 @@ export function WeeklyPlanView({
     return toLocalDateStr(targetDate);
   };
 
-  const formatDayDate = (dateStr: string): string => {
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-  };
-
   const formatShortDayDate = (dateStr: string): string => {
     const date = new Date(dateStr + 'T00:00:00');
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -199,7 +194,6 @@ export function WeeklyPlanView({
         <AnimatePresence mode="wait">
           {DAYS_ORDER.map((day, index) => {
             const workout = weekDays[day];
-            const isRestDay = !workout;
             const progress = getDayProgress(day);
             const dayDate = getDayDate(index);
             const todayStr = toLocalDateStr(new Date());

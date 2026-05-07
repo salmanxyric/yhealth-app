@@ -11,8 +11,6 @@ import {
   Target,
   Sparkles,
   X,
-  ChevronLeft,
-  ChevronRight as ChevronRightIcon,
   ArrowUpRight,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout";
@@ -316,7 +314,7 @@ interface ChatMessage {
 
 /** Convert markdown in AI responses to styled HTML */
 function formatAIMessage(content: string): string {
-  let html = content
+  const html = content
     // Escape HTML entities first
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

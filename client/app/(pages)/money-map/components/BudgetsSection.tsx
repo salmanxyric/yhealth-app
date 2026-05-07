@@ -7,7 +7,6 @@ import {
   Plus,
   X,
   AlertTriangle,
-  TrendingUp,
   Pencil,
   Trash2,
   Download,
@@ -20,7 +19,6 @@ import type { FinanceBudget, FinanceCategory, CreateBudgetInput } from "@shared/
 import { FINANCE_CATEGORY_ICONS, FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 import {
   formatCurrency,
-  AnimatedCurrency,
   fadeSlideUp,
   staggerContainer,
   spring,
@@ -104,20 +102,6 @@ function TiltCard({
 // ============================================
 // VARIANTS
 // ============================================
-const cardHover: Variants = {
-  rest: { y: 0, scale: 1 },
-  hover: { y: -4, scale: 1.02, transition: spring.soft },
-};
-
-const ringPulse: Variants = {
-  idle: { opacity: 1 },
-  pulse: {
-    opacity: [1, 0.6, 1],
-    scale: [1, 1.02, 1],
-    transition: { duration: 2, repeat: Infinity, ease: "easeInOut" },
-  },
-};
-
 const sheetBackdrop: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1 },
