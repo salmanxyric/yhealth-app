@@ -7,12 +7,16 @@
  * serif textarea, word/character counts, elapsed timer, and keyboard shortcuts.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { X, Loader2, Check, CloudOff, Feather, CalendarDays } from "lucide-react";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 import { AgenticEditor } from "./editor/AgenticEditor";
 import type { AgenticEditorAPI } from "./editor/useAgenticEditor";
+import { useAutoSave } from "./editor/useAutoSave";
+import { useValidation } from "./editor/useValidation";
+import { CompletenessBar } from "./editor/validation/CompletenessBar";
+import { ValidationReview } from "./editor/validation/ValidationReview";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,6 +120,38 @@ export function DistractionFreeEditor({
   const editorApiRef = useRef<AgenticEditorAPI | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
+  const [richContent, setRichContent] = useState<{
+    html: string;
+    text: string;
+    json: Record<string, unknown>;
+  } | null>(null);
+
+  const [showValidation, setShowValidation] = useState(false);
+
+  const validation = useValidation({
+    text: richContent?.text ?? value,
+    html: richContent?.html ?? "",
+    mode,
+  });
+
+  const autoSave = useAutoSave({
+    data: richContent,
+    onSave: async (data) => {
+      onChange(data.text);
+      onContentChange?.(data.html, data.text, data.json);
+    },
+    enabled: true,
+  });
+
+  const handleSave = useCallback(() => {
+    const hasBlockers = validation.checks.some((c) => c.status === "block");
+    if (hasBlockers || validation.checks.some((c) => c.status === "warn")) {
+      setShowValidation(true);
+    } else {
+      onSubmit();
+    }
+  }, [validation, onSubmit]);
+
   // Elapsed timer
   useEffect(() => {
     const interval = setInterval(() => {
@@ -131,7 +167,7 @@ export function DistractionFreeEditor({
         e.preventDefault();
         const isEmpty = editorApiRef.current?.isEmpty() ?? true;
         if (!isEmpty && !isSubmitting) {
-          onSubmit();
+          handleSave();
         }
       }
       if (e.key === "Escape") {
@@ -142,7 +178,7 @@ export function DistractionFreeEditor({
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [isSubmitting, onSubmit, onClose]);
+  }, [isSubmitting, handleSave, onClose]);
 
   const wordCount = editorApiRef.current?.wordCount ?? 0;
   const charCount = editorApiRef.current?.charCount ?? 0;
@@ -181,7 +217,7 @@ export function DistractionFreeEditor({
       >
         {/* Left: auto-save + date picker + mode badge */}
         <div className="flex items-center gap-4">
-          <AutoSaveBadge status={autoSaveStatus} />
+          <AutoSaveBadge status={autoSave.status === "error" ? "idle" : autoSave.status === "saved" ? "saved" : autoSave.status === "saving" ? "saving" : "idle"} />
           {/* Date picker */}
           {onDateChange && (
             <label className="relative flex items-center gap-1.5 cursor-pointer group">
@@ -207,7 +243,7 @@ export function DistractionFreeEditor({
         {/* Right: submit + close */}
         <div className="flex items-center gap-3">
           <button
-            onClick={onSubmit}
+            onClick={handleSave}
             disabled={isSubmitting || (editorApiRef.current?.isEmpty() ?? true)}
             className="observatory-font-display flex items-center gap-2 px-4 py-2 rounded-full border border-purple-500/30 bg-purple-500/10 backdrop-blur-sm text-purple-200 hover:bg-purple-500/20 hover:border-purple-400/50 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{ fontSize: 10, letterSpacing: "0.15em" }}
@@ -293,6 +329,7 @@ export function DistractionFreeEditor({
               onUpdate={(html, text, json) => {
                 onChange(text);
                 onContentChange?.(html, text, json);
+                setRichContent({ html, text, json });
               }}
               onReady={(api) => {
                 editorApiRef.current = api;
@@ -318,13 +355,14 @@ export function DistractionFreeEditor({
         >
           <span>{wordCount} WORDS</span>
           <span>{charCount} CHARACTERS</span>
+          <CompletenessBar score={validation.completenessScore} />
         </div>
 
         <div
           className="flex items-center gap-4 observatory-font-display text-white/15"
           style={{ fontSize: 9, letterSpacing: "0.1em" }}
         >
-          {autoSaveStatus === "idle" && value.length > 0 && (
+          {autoSave.status === "idle" && richContent && richContent.text.length > 0 && (
             <span className="inline-flex items-center gap-1">
               <CloudOff className="w-3 h-3" />
               NOT SAVED
@@ -336,6 +374,17 @@ export function DistractionFreeEditor({
           </span>
         </div>
       </motion.div>
+
+      <ValidationReview
+        result={validation}
+        isOpen={showValidation}
+        onClose={() => setShowValidation(false)}
+        onSaveAnyway={() => {
+          setShowValidation(false);
+          onSubmit();
+        }}
+        onGoBack={() => setShowValidation(false)}
+      />
     </motion.div>
   );
 }
