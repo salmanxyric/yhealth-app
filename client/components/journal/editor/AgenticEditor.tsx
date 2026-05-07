@@ -152,15 +152,17 @@ export function AgenticEditor({
         <HelpCircle className="w-4 h-4" />
       </button>
 
-      <ImageUploadDialog
-        isOpen={showImageDialog}
-        onClose={() => setShowImageDialog(false)}
-        onInsert={(url, alt) => {
-          api.editor?.chain().focus().setImage({ src: url, alt: alt || "" }).run();
-        }}
-      />
+      {showImageDialog && (
+        <ImageUploadDialog
+          isOpen={showImageDialog}
+          onClose={() => setShowImageDialog(false)}
+          onInsert={(url, alt) => {
+            api.editor?.chain().focus().setImage({ src: url, alt: alt || "" }).run();
+          }}
+        />
+      )}
 
-      {api.editor && (
+      {showLinkInput && api.editor && (
         <LinkInputPopover
           editor={api.editor}
           isOpen={showLinkInput}
@@ -168,7 +170,9 @@ export function AgenticEditor({
         />
       )}
 
-      <FeaturesGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
+      {showGuide && (
+        <FeaturesGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
+      )}
 
       <DictationOverlay
         isActive={dictationActive}
