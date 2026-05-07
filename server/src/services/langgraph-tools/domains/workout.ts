@@ -9,6 +9,12 @@ import { logger } from '../../logger.service.js';
 import type { ToolDefinition } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
+const CHART_COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+  '#14b8a6', '#e11d48', '#a855f7',
+];
+
 // --- Schemas ---
 
 const GetUserWorkoutPlansSchema = z.object({
@@ -212,6 +218,69 @@ async function getUserWorkoutPlans(userId: string, params?: { status?: string })
   return JSON.stringify({ plans: formatted, count: formatted.length }, null, 2);
 }
 
+function buildWorkoutCharts(
+  logs: { workoutName?: string; scheduledDate: string; durationMinutes?: number; difficultyRating?: number; energyLevel?: number; status: string }[],
+): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (logs.length === 0) return artifacts;
+
+  const recentLogs = logs.slice(0, 15).reverse();
+  artifacts.push({
+    type: 'chart',
+    chartType: 'bar',
+    title: 'Workout Duration',
+    data: recentLogs.map((log) => ({
+      date: log.scheduledDate?.slice(0, 10) || 'N/A',
+      duration: log.durationMinutes || 0,
+    })),
+    xAxisKey: 'date',
+    dataKeys: [{ key: 'duration', label: 'Minutes', color: '#3b82f6' }],
+    yAxisLabel: 'Minutes',
+    insight: `Average duration: ${Math.round(recentLogs.reduce((s, l) => s + (l.durationMinutes || 0), 0) / recentLogs.length)} min.`,
+  });
+
+  const withRatings = recentLogs.filter((l) => l.difficultyRating || l.energyLevel);
+  if (withRatings.length > 1) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'line',
+      title: 'Difficulty & Energy Trends',
+      data: withRatings.map((log) => ({
+        date: log.scheduledDate?.slice(0, 10) || 'N/A',
+        difficulty: log.difficultyRating || 0,
+        energy: log.energyLevel || 0,
+      })),
+      xAxisKey: 'date',
+      dataKeys: [
+        { key: 'difficulty', label: 'Difficulty', color: '#ef4444' },
+        { key: 'energy', label: 'Energy', color: '#10b981' },
+      ],
+      yAxisLabel: 'Rating (1-5)',
+    });
+  }
+
+  const statusCounts: Record<string, number> = {};
+  for (const log of logs) {
+    const s = log.status || 'unknown';
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  }
+  artifacts.push({
+    type: 'chart',
+    chartType: 'pie',
+    title: 'Workout Completion Status',
+    data: Object.entries(statusCounts).map(([name, value]) => ({ name, value })),
+    xAxisKey: 'name',
+    dataKeys: Object.entries(statusCounts).map(([name], i) => ({
+      key: 'value',
+      label: name,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    })),
+    insight: `${statusCounts['completed'] || 0} completed out of ${logs.length} total workouts.`,
+  });
+
+  return artifacts;
+}
+
 /**
  * Get user's workout logs
  */
@@ -243,7 +312,8 @@ async function getUserWorkoutLogs(userId: string, params?: {
     status: log.status,
   }));
 
-  return JSON.stringify({ logs: formatted, total: result.total }, null, 2);
+  const artifacts = buildWorkoutCharts(formatted);
+  return JSON.stringify({ logs: formatted, total: result.total, artifacts }, null, 2);
 }
 
 /**
