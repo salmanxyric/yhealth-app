@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { EditorContent } from "@tiptap/react";
 import { motion } from "framer-motion";
 import { useAgenticEditor, type AgenticEditorAPI } from "./useAgenticEditor";
 import { BubbleToolbar } from "./toolbar/BubbleToolbar";
+import { ImageUploadDialog } from "./media/ImageUploadDialog";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 
 interface AgenticEditorProps {
@@ -23,12 +24,19 @@ export function AgenticEditor({
   className,
 }: AgenticEditorProps) {
   const api = useAgenticEditor({ mode, initialContent, onUpdate });
+  const [showImageDialog, setShowImageDialog] = useState(false);
 
   useEffect(() => {
     if (api.editor && onReady) {
       onReady(api);
     }
   }, [api.editor]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const handler = () => setShowImageDialog(true);
+    document.addEventListener("slash-menu:image", handler);
+    return () => document.removeEventListener("slash-menu:image", handler);
+  }, []);
 
   if (!api.editor) {
     return (
@@ -52,6 +60,14 @@ export function AgenticEditor({
       />
 
       {api.editor && <BubbleToolbar editor={api.editor} />}
+
+      <ImageUploadDialog
+        isOpen={showImageDialog}
+        onClose={() => setShowImageDialog(false)}
+        onInsert={(url, alt) => {
+          api.editor?.chain().focus().setImage({ src: url, alt: alt || "" }).run();
+        }}
+      />
 
       <style jsx global>{`
         .is-editor-empty::before {
