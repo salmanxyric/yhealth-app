@@ -82,11 +82,12 @@ function EntryCard({
 
   return (
     <div
-      className="relative rounded-xl border border-purple-500/10 overflow-hidden"
+      className="relative rounded-xl border border-purple-500/10 overflow-hidden cursor-pointer hover:border-purple-500/25 transition-colors"
       style={{
         background:
           "linear-gradient(135deg, rgba(14, 10, 34, 0.6) 0%, rgba(7, 5, 22, 0.8) 100%)",
       }}
+      onClick={() => onView?.(entry)}
     >
       {/* Left accent line */}
       <div
@@ -167,7 +168,7 @@ function EntryCard({
 
         {isLong && (
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
             className="inline-flex items-center gap-1 text-purple-400/50 hover:text-purple-300/70 transition-colors observatory-font-display"
             style={{ fontSize: 9, letterSpacing: "0.1em" }}
           >
@@ -187,7 +188,7 @@ function EntryCard({
         {entry.coachReflection && (
           <div>
             <button
-              onClick={() => setShowReflection(!showReflection)}
+              onClick={(e) => { e.stopPropagation(); setShowReflection(!showReflection); }}
               className="inline-flex items-center gap-1.5 text-purple-400/40 hover:text-purple-300/60 transition-colors observatory-font-display"
               style={{ fontSize: 9, letterSpacing: "0.12em" }}
             >
@@ -229,7 +230,7 @@ function EntryCard({
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
           {onView && (
             <button
               onClick={() => onView(entry)}
