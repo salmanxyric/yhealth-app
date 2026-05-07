@@ -139,6 +139,16 @@ export interface JournalEntry {
   voiceDurationMs?: number;
   voiceEmotionAnalysis?: VoiceEmotionAnalysis;
   transcriptionStatus?: TranscriptionStatus;
+  // Rich editor content
+  contentJson?: Record<string, unknown>;
+  contentHtml?: string;
+  attachments?: JournalAttachment[];
+  drawings?: JournalDrawing[];
+  aiInteractions?: AIInteraction[];
+  completenessScore?: number;
+  validationResult?: ValidationResult;
+  isDraft?: boolean;
+  lastAutoSavedAt?: string;
   loggedAt: string; // ISO timestamp
   createdAt: string;
   updatedAt: string;
@@ -149,6 +159,58 @@ export interface VoiceEmotionAnalysis {
   confidence: number; // 0-1
   energy: number; // 1-10
   pace: string; // 'slow', 'normal', 'fast'
+}
+
+// ============================================
+// RICH JOURNAL EDITOR TYPES
+// ============================================
+
+export interface JournalAttachment {
+  id: string;
+  type: 'image' | 'audio' | 'video' | 'file';
+  url: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  durationMs?: number;
+  width?: number;
+  height?: number;
+  caption?: string;
+  altText?: string;
+  transcription?: string;
+  transcriptionStatus?: TranscriptionStatus;
+  uploadedAt: string;
+}
+
+export interface JournalDrawing {
+  id: string;
+  fabricJson: string;
+  previewUrl: string;
+  width: number;
+  height: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AIInteraction {
+  id: string;
+  type: 'completion' | 'rewrite' | 'expand' | 'summarize' | 'reframe' | 'prompt' | 'coaching';
+  input: string;
+  output: string;
+  accepted: boolean;
+  timestamp: string;
+}
+
+export interface ValidationCheck {
+  name: string;
+  status: 'pass' | 'warn' | 'block' | 'suggestion';
+  message: string;
+}
+
+export interface ValidationResult {
+  completenessScore: number;
+  wordCount: number;
+  checks: ValidationCheck[];
 }
 
 // ============================================
