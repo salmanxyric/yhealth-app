@@ -92,8 +92,8 @@ export function getSlashMenuItems(): SlashMenuItem[] {
       description: "Open the drawing tool",
       icon: "pencil-ruler",
       category: "media",
-      action: () => {
-        document.dispatchEvent(new CustomEvent("slash-menu:drawing"));
+      action: (editor) => {
+        editor.chain().focus().insertContent({ type: "drawingBlock" }).run();
       },
     },
     {
