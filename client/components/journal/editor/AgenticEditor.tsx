@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { EditorContent } from "@tiptap/react";
 import { motion } from "framer-motion";
 import { useAgenticEditor, type AgenticEditorAPI } from "./useAgenticEditor";
+import { BubbleToolbar } from "./toolbar/BubbleToolbar";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 
 interface AgenticEditorProps {
@@ -49,6 +50,8 @@ export function AgenticEditor({
         className="flex-1 w-full observatory-font-body"
         style={{ fontSize: 16, lineHeight: 1.9, letterSpacing: "0.01em" }}
       />
+
+      {api.editor && <BubbleToolbar editor={api.editor} />}
 
       <style jsx global>{`
         .is-editor-empty::before {
