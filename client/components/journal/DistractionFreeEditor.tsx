@@ -145,7 +145,7 @@ export function DistractionFreeEditor({
 
   const handleSave = useCallback(() => {
     const hasBlockers = validation.checks.some((c) => c.status === "block");
-    if (hasBlockers || validation.checks.some((c) => c.status === "warn")) {
+    if (hasBlockers) {
       setShowValidation(true);
     } else {
       onSubmit();

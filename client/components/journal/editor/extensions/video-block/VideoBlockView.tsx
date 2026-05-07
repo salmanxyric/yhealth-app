@@ -4,6 +4,12 @@ import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { useState } from "react";
 import { Video, Trash2, Link } from "lucide-react";
 
+const ALLOWED_EMBED_ORIGINS = [
+  "https://www.youtube-nocookie.com",
+  "https://player.vimeo.com",
+  "https://www.loom.com",
+] as const;
+
 function getEmbedUrl(url: string): { embedUrl: string; provider: string } | null {
   // YouTube
   const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]+)/);
@@ -18,6 +24,10 @@ function getEmbedUrl(url: string): { embedUrl: string; provider: string } | null
   if (loomMatch) return { embedUrl: `https://www.loom.com/embed/${loomMatch[1]}`, provider: "Loom" };
 
   return null;
+}
+
+function isSafeEmbedUrl(url: string): boolean {
+  return ALLOWED_EMBED_ORIGINS.some((origin) => url.startsWith(origin + "/"));
 }
 
 export function VideoBlockView({ node, updateAttributes, deleteNode }: NodeViewProps) {
@@ -75,12 +85,19 @@ export function VideoBlockView({ node, updateAttributes, deleteNode }: NodeViewP
     <NodeViewWrapper className="my-3">
       <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
         <div className="aspect-video">
-          <iframe
-            src={src}
-            className="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+          {isSafeEmbedUrl(src) ? (
+            <iframe
+              src={src}
+              className="w-full h-full"
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-red-400/60 text-sm">
+              Blocked: untrusted embed origin
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-between px-3 py-2 border-t border-white/5">
           <span className="text-white/20 text-xs">{provider || "Video"}</span>

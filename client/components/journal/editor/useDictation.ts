@@ -32,8 +32,12 @@ export function useDictation({
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusRef = useRef<DictationStatus>("idle");
+  const onTranscriptRef = useRef(onTranscript);
+  const onEndRef = useRef(onEnd);
 
-  // Keep statusRef in sync so recognition.onend can read current status
+  onTranscriptRef.current = onTranscript;
+  onEndRef.current = onEnd;
+
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -41,20 +45,22 @@ export function useDictation({
   const isSupported = typeof window !== "undefined" &&
     ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
-  const stop = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setStatus("idle");
-    if (timerRef.current) clearInterval(timerRef.current);
-    onEnd?.();
-  }, [onEnd]);
-
-  const start = useCallback(() => {
-    if (!isSupported) {
-      setError("Speech recognition not supported in this browser");
-      setStatus("error");
-      return;
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
+  }, []);
+
+  const startTimer = useCallback(() => {
+    stopTimer();
+    timerRef.current = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
+  }, [stopTimer]);
+
+  const createRecognition = useCallback(() => {
+    if (!isSupported) return null;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -68,24 +74,27 @@ export function useDictation({
         const text = result[0].transcript;
         const isFinal = result.isFinal;
 
-        // Voice commands
         if (isFinal) {
           const lower = text.toLowerCase().trim();
           if (lower === "new paragraph") {
-            onTranscript("\n\n", true);
+            onTranscriptRef.current("\n\n", true);
             continue;
           }
           if (lower === "new line") {
-            onTranscript("\n", true);
+            onTranscriptRef.current("\n", true);
             continue;
           }
           if (lower === "stop dictation") {
-            stop();
+            recognitionRef.current?.stop();
+            recognitionRef.current = null;
+            setStatus("idle");
+            stopTimer();
+            onEndRef.current?.();
             continue;
           }
         }
 
-        onTranscript(text, isFinal);
+        onTranscriptRef.current(text, isFinal);
       }
     };
 
@@ -100,45 +109,62 @@ export function useDictation({
 
     recognition.onend = () => {
       if (statusRef.current === "listening") {
-        // Auto-restart for continuous dictation
         try { recognition.start(); } catch { /* already started */ }
-      } else {
-        onEnd?.();
       }
     };
+
+    return recognition;
+  }, [isSupported, lang, stopTimer]);
+
+  const stop = useCallback(() => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setStatus("idle");
+    stopTimer();
+    onEndRef.current?.();
+  }, [stopTimer]);
+
+  const start = useCallback(() => {
+    if (!isSupported) {
+      setError("Speech recognition not supported in this browser");
+      setStatus("error");
+      return;
+    }
+
+    const recognition = createRecognition();
+    if (!recognition) return;
 
     recognitionRef.current = recognition;
     recognition.start();
     setStatus("listening");
     setElapsed(0);
     setError(null);
-
-    timerRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
-    }, 1000);
-  }, [isSupported, lang, onTranscript, onEnd, stop]);
+    startTimer();
+  }, [isSupported, createRecognition, startTimer]);
 
   const pause = useCallback(() => {
     recognitionRef.current?.stop();
+    recognitionRef.current = null;
     setStatus("paused");
-    if (timerRef.current) clearInterval(timerRef.current);
-  }, []);
+    stopTimer();
+  }, [stopTimer]);
 
   const resume = useCallback(() => {
-    recognitionRef.current?.start();
+    const recognition = createRecognition();
+    if (!recognition) return;
+    recognitionRef.current = recognition;
+    recognition.start();
     setStatus("listening");
-    timerRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
-    }, 1000);
-  }, []);
+    startTimer();
+  }, [createRecognition, startTimer]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop();
-      if (timerRef.current) clearInterval(timerRef.current);
+      stopTimer();
     };
-  }, []);
+  }, [stopTimer]);
 
   return { status, start, stop, pause, resume, elapsed, error, isSupported };
 }

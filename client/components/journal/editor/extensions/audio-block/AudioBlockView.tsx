@@ -3,7 +3,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Mic, Square, Play, Pause, Trash2, FileText } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useVoiceRecorder } from "../../../voice/useVoiceRecorder";
 
 export function AudioBlockView({ node, updateAttributes, deleteNode }: NodeViewProps) {
@@ -13,12 +12,17 @@ export function AudioBlockView({ node, updateAttributes, deleteNode }: NodeViewP
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(audioUrl);
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Auto-create blob URL when recording stops
+  // Auto-create blob URL when recording stops; revoke previous to avoid memory leaks
   useEffect(() => {
     if (recorder.state === "stopped" && recorder.audioBlob) {
       const url = URL.createObjectURL(recorder.audioBlob);
-      setLocalAudioUrl(url);
+      setLocalAudioUrl((prev) => {
+        if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+        return url;
+      });
       updateAttributes({
         audioUrl: url,
         duration: recorder.durationMs,
@@ -26,6 +30,33 @@ export function AudioBlockView({ node, updateAttributes, deleteNode }: NodeViewP
       });
     }
   }, [recorder.state, recorder.audioBlob]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Revoke blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (localAudioUrl && localAudioUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(localAudioUrl);
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Track recording elapsed time with a local timer
+  useEffect(() => {
+    if (recorder.state === "recording") {
+      setRecordingElapsed(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingElapsed((prev) => prev + 1000);
+      }, 1000);
+    } else {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    };
+  }, [recorder.state]);
 
   // Start recording on mount if isRecording is true
   useEffect(() => {
@@ -77,7 +108,7 @@ export function AudioBlockView({ node, updateAttributes, deleteNode }: NodeViewP
             </div>
             <div className="flex-1">
               <div className="text-white/60 text-sm">Recording...</div>
-              <div className="text-white/30 text-xs">{formatMs(Date.now() - ((recorder as unknown as { startTimeRef?: { current: number } }).startTimeRef?.current || 0))}</div>
+              <div className="text-white/30 text-xs">{formatMs(recordingElapsed)}</div>
             </div>
             <button
               onClick={() => recorder.stopRecording()}

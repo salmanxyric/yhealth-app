@@ -65,6 +65,39 @@ export function AgenticEditor({
     return () => document.removeEventListener("slash-menu:dictation", handler);
   }, [dictation.start]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // AI slash command listeners
+  useEffect(() => {
+    if (!api.editor) return;
+    const editor = api.editor;
+    const handlers: Record<string, () => void> = {
+      "slash-menu:ai-continue": () => {
+        const text = api.getText();
+        if (text.length > 0) {
+          aiCoach.sendMessage(`Continue this thought: ${text.slice(-200)}`);
+        }
+      },
+      "slash-menu:ai-rewrite": () => {
+        const { from, to } = editor.state.selection;
+        const selected = editor.state.doc.textBetween(from, to);
+        if (selected) aiCoach.sendMessage(`Rewrite this: ${selected}`);
+      },
+      "slash-menu:ai-expand": () => {
+        const text = api.getText();
+        aiCoach.sendMessage(`Expand on this idea: ${text.slice(-200)}`);
+      },
+      "slash-menu:ai-reframe": () => {
+        const text = api.getText();
+        aiCoach.sendMessage(`Apply a CBT cognitive reframe to: ${text.slice(-300)}`);
+      },
+      "slash-menu:ai-prompt": () => {
+        aiCoach.sendMessage("Give me a follow-up journaling prompt based on what I've written so far.");
+      },
+    };
+    const entries = Object.entries(handlers);
+    entries.forEach(([event, handler]) => document.addEventListener(event, handler));
+    return () => entries.forEach(([event, handler]) => document.removeEventListener(event, handler));
+  }, [api.editor]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Analyze content periodically (debounced)
   useEffect(() => {
     if (!api.editor) return;

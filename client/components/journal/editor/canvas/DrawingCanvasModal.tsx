@@ -78,11 +78,26 @@ export function DrawingCanvasModal({
       canvas.on("object:added", saveHistory);
       canvas.on("object:modified", saveHistory);
       canvas.on("object:removed", saveHistory);
+
+      const handleResize = () => {
+        canvas.setDimensions({
+          width: window.innerWidth,
+          height: window.innerHeight - 120,
+        });
+        canvas.renderAll();
+      };
+      window.addEventListener("resize", handleResize);
+      (canvas as any).__resizeHandler = handleResize;
     })();
 
     return () => {
       mounted = false;
-      fabricCanvasRef.current?.dispose();
+      const c = fabricCanvasRef.current;
+      if (c) {
+        const handler = (c as any).__resizeHandler;
+        if (handler) window.removeEventListener("resize", handler);
+        c.dispose();
+      }
       fabricCanvasRef.current = null;
       setFabricLoaded(false);
     };
@@ -226,7 +241,7 @@ export function DrawingCanvasModal({
       if (e.key === "Delete" || e.key === "Backspace") {
         const canvas = fabricCanvasRef.current;
         const active = canvas?.getActiveObject();
-        if (active) {
+        if (active && !(active as any).isEditing) {
           canvas.remove(active);
           canvas.renderAll();
         }

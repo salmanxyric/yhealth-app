@@ -29,34 +29,35 @@ export function useAutoSave({
 }: UseAutoSaveOptions): UseAutoSaveReturn {
   const [status, setStatus] = useState<AutoSaveStatus>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const lastSavedDataRef = useRef<string>("");
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSavedTextRef = useRef<string>("");
+  const dataRef = useRef(data);
+  const onSaveRef = useRef(onSave);
+
+  dataRef.current = data;
+  onSaveRef.current = onSave;
 
   const save = useCallback(async () => {
-    if (!data || !enabled) return;
-
-    const dataHash = data.text;
-    if (dataHash === lastSavedDataRef.current) return;
-    if (data.text.trim().length === 0) return;
+    const current = dataRef.current;
+    if (!current || !enabled) return;
+    if (current.text === lastSavedTextRef.current) return;
+    if (current.text.trim().length === 0) return;
 
     setStatus("saving");
     try {
-      await onSave(data);
-      lastSavedDataRef.current = dataHash;
+      await onSaveRef.current(current);
+      lastSavedTextRef.current = current.text;
       setLastSavedAt(new Date());
       setStatus("saved");
     } catch {
       setStatus("error");
     }
-  }, [data, onSave, enabled]);
+  }, [enabled]);
 
+  // Stable interval that doesn't reset on every keystroke
   useEffect(() => {
     if (!enabled) return;
-
-    timerRef.current = setInterval(save, interval);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    const timer = setInterval(save, interval);
+    return () => clearInterval(timer);
   }, [save, interval, enabled]);
 
   // Save on blur
@@ -85,11 +86,12 @@ export function useAutoSave({
     if (!enabled) return;
 
     const handleBeforeUnload = () => {
-      if (data && data.text.trim().length > 0 && data.text !== lastSavedDataRef.current) {
+      const current = dataRef.current;
+      if (current && current.text.trim().length > 0 && current.text !== lastSavedTextRef.current) {
         try {
           localStorage.setItem(
             "journal-emergency-save",
-            JSON.stringify({ ...data, timestamp: new Date().toISOString() })
+            JSON.stringify({ ...current, timestamp: new Date().toISOString() })
           );
         } catch { /* localStorage full — best effort */ }
       }
@@ -97,7 +99,7 @@ export function useAutoSave({
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [data, enabled]);
+  }, [enabled]);
 
   return { status, lastSavedAt, forceSave: save };
 }
