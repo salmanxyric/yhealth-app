@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, Link, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,17 @@ export function ImageUploadDialog({ isOpen, onClose, onInsert }: ImageUploadDial
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTab("upload");
+      setUrl("");
+      setAlt("");
+      setError(null);
+      setDragActive(false);
+      setUploading(false);
+    }
+  }, [isOpen]);
 
   const handleUpload = useCallback(
     async (file: File) => {
