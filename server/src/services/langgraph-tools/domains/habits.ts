@@ -154,9 +154,52 @@ async function getHabitById(userId: string, params: z.infer<typeof GetHabitByIdS
   return JSON.stringify({ success: true, data: { habit } }, null, 2);
 }
 
+function buildHabitCharts(data: any): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (!data) return artifacts;
+
+  const completionRate = data.completionRate ?? data.completion_rate;
+  const currentStreak = data.currentStreak ?? data.current_streak;
+  const habitName = data.habitName ?? data.habit_name ?? 'Habit';
+  const dailyData = Array.isArray(data.dailyCompletion || data.daily_completion || data.entries)
+    ? (data.dailyCompletion || data.daily_completion || data.entries)
+    : [];
+
+  if (completionRate !== undefined) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'gauge',
+      title: `${habitName} — Completion Rate`,
+      data: [{ value: Math.round(completionRate) }],
+      xAxisKey: 'value',
+      dataKeys: [{ key: 'value', label: 'Completion %', color: '#10b981' }],
+      gaugeMax: 100,
+      insight: `${Math.round(completionRate)}% completion rate.${currentStreak ? ` Current streak: ${currentStreak} days.` : ''}`,
+    });
+  }
+
+  if (dailyData.length > 1) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'bar',
+      title: `${habitName} — Daily Progress`,
+      data: dailyData.slice(-30).map((entry: any) => ({
+        date: String(entry.date || entry.log_date || '').slice(0, 10),
+        completed: entry.completed || entry.value ? 1 : 0,
+      })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'completed', label: 'Completed', color: '#10b981' }],
+      yAxisLabel: 'Done',
+    });
+  }
+
+  return artifacts;
+}
+
 async function getHabitAnalytics(userId: string, params: z.infer<typeof GetHabitAnalyticsSchema>): Promise<string> {
   const result = await habitService.getHabitAnalytics(userId, params.habitId, params.days);
-  return JSON.stringify({ success: true, data: result }, null, 2);
+  const artifacts = buildHabitCharts(result);
+  return JSON.stringify({ success: true, data: result, artifacts }, null, 2);
 }
 
 // --- Registration ---

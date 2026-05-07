@@ -63,6 +63,68 @@ const UpdateAllProgressRecordsSchema = z.object({
 
 // --- Implementations ---
 
+function buildProgressCharts(
+  records: { recordType: string; recordDate: string; value: any }[],
+): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (records.length === 0) return artifacts;
+
+  const byType = new Map<string, typeof records>();
+  for (const r of records) {
+    const type = r.recordType || 'unknown';
+    if (!byType.has(type)) byType.set(type, []);
+    byType.get(type)!.push(r);
+  }
+
+  const sortByDate = (items: typeof records) =>
+    [...items].sort((a, b) => String(a.recordDate || '').localeCompare(String(b.recordDate || '')));
+
+  const weightRecords = byType.get('weight') || [];
+  if (weightRecords.length > 1) {
+    const sorted = sortByDate(weightRecords);
+    artifacts.push({
+      type: 'chart',
+      chartType: 'line',
+      title: 'Weight Trend',
+      data: sorted.map((r) => ({
+        date: String(r.recordDate).slice(0, 10),
+        weight: typeof r.value === 'object' ? (r.value?.weight ?? r.value?.value ?? 0) : (parseFloat(String(r.value)) || 0),
+      })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'weight', label: 'Weight', color: '#3b82f6' }],
+      yAxisLabel: 'Weight',
+      insight: (() => {
+        const vals = sorted.map((r) => typeof r.value === 'object' ? (r.value?.weight ?? r.value?.value ?? 0) : (parseFloat(String(r.value)) || 0));
+        const first = vals[0];
+        const last = vals[vals.length - 1];
+        const diff = last - first;
+        if (diff > 0) return `Up ${diff.toFixed(1)} since first record.`;
+        if (diff < 0) return `Down ${Math.abs(diff).toFixed(1)} since first record.`;
+        return 'Weight stable.';
+      })(),
+    });
+  }
+
+  const bodyCompRecords = byType.get('body_composition') || byType.get('body_fat') || [];
+  if (bodyCompRecords.length > 1) {
+    const sorted = sortByDate(bodyCompRecords);
+    artifacts.push({
+      type: 'chart',
+      chartType: 'area',
+      title: 'Body Composition Trend',
+      data: sorted.map((r) => ({
+        date: String(r.recordDate).slice(0, 10),
+        bodyFat: typeof r.value === 'object' ? (r.value?.bodyFat ?? r.value?.body_fat ?? r.value?.value ?? 0) : (parseFloat(String(r.value)) || 0),
+      })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'bodyFat', label: 'Body Fat %', color: '#f59e0b' }],
+      yAxisLabel: 'Body Fat %',
+    });
+  }
+
+  return artifacts;
+}
+
 async function getUserProgress(userId: string, params?: z.infer<typeof GetUserProgressSchema>): Promise<string> {
   let sqlQuery = `SELECT * FROM progress_records WHERE user_id = $1`;
   const queryParams: (string | Date)[] = [userId];
@@ -99,7 +161,8 @@ async function getUserProgress(userId: string, params?: z.infer<typeof GetUserPr
     value: row.value,
   }));
 
-  return JSON.stringify({ records: formatted, count: formatted.length }, null, 2);
+  const artifacts = buildProgressCharts(formatted);
+  return JSON.stringify({ records: formatted, count: formatted.length, artifacts }, null, 2);
 }
 
 async function getProgressRecordById(userId: string, params: z.infer<typeof GetProgressRecordByIdSchema>): Promise<string> {

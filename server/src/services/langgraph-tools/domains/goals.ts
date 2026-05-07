@@ -72,6 +72,41 @@ const UpdateAllGoalsSchema = z.object({
 
 // --- Implementations ---
 
+function buildGoalCharts(
+  goals: { title: string; targetValue: number; currentValue: number; progress: number; status: string; category: string }[],
+): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (goals.length === 0) return artifacts;
+
+  const withTargets = goals.filter((g) => g.targetValue > 0);
+  if (withTargets.length > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'bar',
+      title: 'Goal Progress',
+      data: withTargets.map((g) => ({
+        name: g.title || 'Goal',
+        current: g.currentValue || 0,
+        target: g.targetValue || 0,
+      })),
+      xAxisKey: 'name',
+      dataKeys: [
+        { key: 'current', label: 'Current', color: '#10b981' },
+        { key: 'target', label: 'Target', color: '#64748b' },
+      ],
+      yAxisLabel: 'Value',
+      insight: (() => {
+        const completed = goals.filter((g) => g.status === 'completed' || g.progress >= 100);
+        return completed.length > 0
+          ? `${completed.length} of ${goals.length} goals completed!`
+          : `${goals.length} active goals in progress.`;
+      })(),
+    });
+  }
+
+  return artifacts;
+}
+
 async function getUserGoals(userId: string, params?: { status?: string; startDate?: string; endDate?: string }): Promise<string> {
   let sqlQuery = `SELECT * FROM user_goals WHERE user_id = $1`;
   const queryParams: (string | Date)[] = [userId];
@@ -122,7 +157,8 @@ async function getUserGoals(userId: string, params?: { status?: string; startDat
     motivation: row.motivation,
   }));
 
-  return JSON.stringify({ goals: formatted, count: formatted.length }, null, 2);
+  const artifacts = buildGoalCharts(formatted);
+  return JSON.stringify({ goals: formatted, count: formatted.length, artifacts }, null, 2);
 }
 
 async function getGoalById(userId: string, params: z.infer<typeof GetGoalByIdSchema>): Promise<string> {

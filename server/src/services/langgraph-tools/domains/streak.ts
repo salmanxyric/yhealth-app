@@ -46,9 +46,52 @@ async function freezeStreak(userId: string, _params: z.infer<typeof FreezeStreak
   }
 }
 
+function buildStreakCharts(stats: any): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  if (!stats) return artifacts;
+
+  const currentStreak = stats.currentStreak ?? stats.current_streak ?? 0;
+  const longestStreak = stats.longestStreak ?? stats.longest_streak ?? 0;
+  const totalActiveDays = stats.totalActiveDays ?? stats.total_active_days ?? 0;
+  const completionRate = stats.completionRate ?? stats.completion_rate ?? 0;
+
+  if (longestStreak > 0 || currentStreak > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'gauge',
+      title: 'Current Streak',
+      data: [{ value: currentStreak }],
+      xAxisKey: 'value',
+      dataKeys: [{ key: 'value', label: 'Days', color: '#f59e0b' }],
+      gaugeMax: Math.max(longestStreak, currentStreak, 30),
+      insight: `Current: ${currentStreak} days. Longest: ${longestStreak} days.`,
+    });
+  }
+
+  if (totalActiveDays > 0 || completionRate > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'bar',
+      title: 'Streak Consistency',
+      data: [
+        { metric: 'Active Days', value: totalActiveDays },
+        { metric: 'Current Streak', value: currentStreak },
+        { metric: 'Longest Streak', value: longestStreak },
+      ],
+      xAxisKey: 'metric',
+      dataKeys: [{ key: 'value', label: 'Days', color: '#10b981' }],
+      yAxisLabel: 'Days',
+      insight: `${Math.round(completionRate)}% overall consistency.`,
+    });
+  }
+
+  return artifacts;
+}
+
 async function getStreakStats(userId: string, _params: z.infer<typeof GetStreakStatsSchema>): Promise<string> {
   const stats = await streakService.getStats(userId);
-  return successResponse({ stats });
+  const artifacts = buildStreakCharts(stats);
+  return successResponse({ stats, artifacts });
 }
 
 export function registerStreakTools(_userId: string): ToolDefinition[] {
