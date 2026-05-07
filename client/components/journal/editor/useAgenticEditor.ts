@@ -18,6 +18,9 @@ import { createLowlight } from "lowlight";
 import { useCallback } from "react";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 import { SlashMenuExtension } from "./slash-menu/slash-menu-extension";
+import { AudioBlock } from "./extensions/audio-block/audio-block-extension";
+import { VideoBlock } from "./extensions/video-block/video-block-extension";
+import { FileBlock } from "./extensions/file-block/file-block-extension";
 
 const PLACEHOLDER_BY_MODE: Record<JournalingMode, string> = {
   quick_reflection: "Take a moment to reflect on your day so far. What stands out?",
@@ -83,6 +86,9 @@ export function useAgenticEditor({
       }),
       CharacterCount,
       SlashMenuExtension,
+      AudioBlock,
+      VideoBlock,
+      FileBlock,
     ],
     content: initialContent || "",
     editorProps: {

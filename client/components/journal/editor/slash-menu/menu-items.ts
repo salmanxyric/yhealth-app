@@ -80,8 +80,11 @@ export function getSlashMenuItems(): SlashMenuItem[] {
       description: "Record a voice clip",
       icon: "mic",
       category: "media",
-      action: () => {
-        document.dispatchEvent(new CustomEvent("slash-menu:audio"));
+      action: (editor) => {
+        editor.chain().focus().insertContent({
+          type: "audioBlock",
+          attrs: { isRecording: true },
+        }).run();
       },
     },
     {
@@ -98,8 +101,8 @@ export function getSlashMenuItems(): SlashMenuItem[] {
       description: "Embed a YouTube or Vimeo video",
       icon: "video",
       category: "media",
-      action: () => {
-        document.dispatchEvent(new CustomEvent("slash-menu:video"));
+      action: (editor) => {
+        editor.chain().focus().insertContent({ type: "videoBlock" }).run();
       },
     },
     {
@@ -107,8 +110,8 @@ export function getSlashMenuItems(): SlashMenuItem[] {
       description: "Attach a document",
       icon: "paperclip",
       category: "media",
-      action: () => {
-        document.dispatchEvent(new CustomEvent("slash-menu:file"));
+      action: (editor) => {
+        editor.chain().focus().insertContent({ type: "fileBlock" }).run();
       },
     },
     {
