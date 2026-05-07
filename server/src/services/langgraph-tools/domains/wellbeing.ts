@@ -11,6 +11,12 @@ import { energyService } from '../../wellbeing/energy.service.js';
 import type { ToolDefinition } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 
+const CHART_COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+  '#14b8a6', '#e11d48', '#a855f7',
+];
+
 // --- Schemas ---
 
 // Cross-cutting schemas (activity_logs)
@@ -336,6 +342,79 @@ async function getUserMoodTrends(userId: string, params?: { days?: number }): Pr
 
 // Mood implementations
 
+function buildMoodCharts(data: any): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  const logs = Array.isArray(data?.logs) ? data.logs : Array.isArray(data) ? data : [];
+  if (logs.length === 0) return artifacts;
+
+  const sorted = [...logs].sort((a: any, b: any) =>
+    String(a.loggedAt || a.logged_at || '').localeCompare(String(b.loggedAt || b.logged_at || '')),
+  );
+
+  if (sorted.length > 1) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'line',
+      title: 'Mood Trend',
+      data: sorted.map((log: any) => ({
+        date: String(log.loggedAt || log.logged_at || '').slice(0, 10),
+        happiness: log.happinessRating || log.happiness_rating || 0,
+      })),
+      xAxisKey: 'date',
+      dataKeys: [{ key: 'happiness', label: 'Happiness', color: '#f59e0b' }],
+      yAxisLabel: 'Rating (1-10)',
+      insight: `Average mood: ${(sorted.reduce((s: number, l: any) => s + (l.happinessRating || l.happiness_rating || 0), 0) / sorted.length).toFixed(1)}/10.`,
+    });
+  }
+
+  const withMultiple = sorted.filter((l: any) =>
+    (l.happinessRating || l.happiness_rating) && (l.energyRating || l.energy_rating),
+  );
+  if (withMultiple.length > 1) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'area',
+      title: 'Mood, Energy & Stress',
+      data: withMultiple.map((log: any) => ({
+        date: String(log.loggedAt || log.logged_at || '').slice(0, 10),
+        happiness: log.happinessRating || log.happiness_rating || 0,
+        energy: log.energyRating || log.energy_rating || 0,
+        stress: log.stressRating || log.stress_rating || 0,
+      })),
+      xAxisKey: 'date',
+      dataKeys: [
+        { key: 'happiness', label: 'Happiness', color: '#f59e0b' },
+        { key: 'energy', label: 'Energy', color: '#10b981' },
+        { key: 'stress', label: 'Stress', color: '#ef4444' },
+      ],
+      yAxisLabel: 'Rating (1-10)',
+    });
+  }
+
+  const emojiCounts: Record<string, number> = {};
+  for (const log of logs) {
+    const emoji = log.moodEmoji || log.mood_emoji || log.descriptor || 'unknown';
+    emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+  }
+  if (Object.keys(emojiCounts).length > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'pie',
+      title: 'Mood Distribution',
+      data: Object.entries(emojiCounts).map(([name, value]) => ({ name, value })),
+      xAxisKey: 'name',
+      dataKeys: Object.entries(emojiCounts).map(([name], i) => ({
+        key: 'value',
+        label: name,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+      })),
+      insight: `Most frequent mood: ${Object.entries(emojiCounts).sort((a, b) => b[1] - a[1])[0][0]}.`,
+    });
+  }
+
+  return artifacts;
+}
+
 async function getUserMoodLogs(userId: string, params?: z.infer<typeof GetUserMoodLogsSchema>): Promise<string> {
   const result = await moodService.getMoodLogs(userId, {
     startDate: params?.startDate,
@@ -343,7 +422,8 @@ async function getUserMoodLogs(userId: string, params?: z.infer<typeof GetUserMo
     page: params?.page,
     limit: params?.limit,
   });
-  return JSON.stringify({ success: true, data: result }, null, 2);
+  const artifacts = buildMoodCharts(result);
+  return JSON.stringify({ success: true, data: result, artifacts }, null, 2);
 }
 
 async function createMoodLog(userId: string, params: z.infer<typeof CreateMoodLogSchema>): Promise<string> {
@@ -517,6 +597,29 @@ async function deleteStressLog(userId: string, params: z.infer<typeof DeleteStre
   return JSON.stringify({ success: true, message: 'Stress log deleted successfully' }, null, 2);
 }
 
+function buildStressCharts(data: any): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  const patterns = data?.patterns || data?.dailyPatterns || data?.daily_patterns;
+  const items = Array.isArray(patterns) ? patterns : [];
+  if (items.length < 2) return artifacts;
+
+  artifacts.push({
+    type: 'chart',
+    chartType: 'area',
+    title: 'Stress Pattern',
+    data: items.map((item: any) => ({
+      date: String(item.date || item.day || '').slice(0, 10),
+      stress: item.averageStress || item.average_stress || item.stressLevel || item.stress_level || 0,
+    })),
+    xAxisKey: 'date',
+    dataKeys: [{ key: 'stress', label: 'Stress Level', color: '#ef4444' }],
+    yAxisLabel: 'Stress (1-10)',
+    insight: `Average stress: ${(items.reduce((s: number, i: any) => s + (i.averageStress || i.average_stress || i.stressLevel || i.stress_level || 0), 0) / items.length).toFixed(1)}/10.`,
+  });
+
+  return artifacts;
+}
+
 async function getStressTrends(userId: string, params?: z.infer<typeof GetStressTrendsSchema>): Promise<string> {
   const days = params?.days || 30;
   const endDate = new Date().toISOString().split('T')[0];
@@ -525,7 +628,8 @@ async function getStressTrends(userId: string, params?: z.infer<typeof GetStress
   const startDateStr = startDate.toISOString().split('T')[0];
 
   const result = await stressService.getMultiSignalStressPatterns(userId, startDateStr, endDate);
-  return JSON.stringify({ success: true, data: result }, null, 2);
+  const artifacts = buildStressCharts(result);
+  return JSON.stringify({ success: true, data: result, artifacts }, null, 2);
 }
 
 // Journal implementations
@@ -705,13 +809,50 @@ async function getTodayCheckin(userId: string, _params?: z.infer<typeof GetToday
   return JSON.stringify({ success: true, data: { checkin: result } }, null, 2);
 }
 
+function buildCheckinCharts(data: any): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+  const checkins = Array.isArray(data?.checkins) ? data.checkins : Array.isArray(data) ? data : [];
+  if (checkins.length < 2) return artifacts;
+
+  const sorted = [...checkins].sort((a: any, b: any) =>
+    String(a.checkinDate || a.checkin_date || a.createdAt || '').localeCompare(
+      String(b.checkinDate || b.checkin_date || b.createdAt || ''),
+    ),
+  );
+
+  artifacts.push({
+    type: 'chart',
+    chartType: 'line',
+    title: 'Daily Check-in Trends',
+    data: sorted.map((c: any) => ({
+      date: String(c.checkinDate || c.checkin_date || c.createdAt || '').slice(0, 10),
+      mood: c.moodScore || c.mood_score || 0,
+      energy: c.energyScore || c.energy_score || 0,
+      sleep: c.sleepQuality || c.sleep_quality || 0,
+      stress: c.stressScore || c.stress_score || 0,
+    })),
+    xAxisKey: 'date',
+    dataKeys: [
+      { key: 'mood', label: 'Mood', color: '#f59e0b' },
+      { key: 'energy', label: 'Energy', color: '#10b981' },
+      { key: 'sleep', label: 'Sleep', color: '#8b5cf6' },
+      { key: 'stress', label: 'Stress', color: '#ef4444' },
+    ],
+    yAxisLabel: 'Score',
+    insight: `${sorted.length} check-ins tracked.`,
+  });
+
+  return artifacts;
+}
+
 async function getCheckinHistory(userId: string, params?: z.infer<typeof GetCheckinHistorySchema>): Promise<string> {
   const result = await dailyCheckinService.getCheckinHistory(userId, {
     startDate: params?.startDate,
     endDate: params?.endDate,
     limit: params?.limit,
   });
-  return JSON.stringify({ success: true, data: result }, null, 2);
+  const artifacts = buildCheckinCharts(result);
+  return JSON.stringify({ success: true, data: result, artifacts }, null, 2);
 }
 
 async function getCheckinStreak(userId: string, _params?: z.infer<typeof GetCheckinStreakSchema>): Promise<string> {
