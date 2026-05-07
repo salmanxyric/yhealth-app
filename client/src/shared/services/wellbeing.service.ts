@@ -233,11 +233,12 @@ export interface CreateJournalEntryRequest {
   prompt_category?: JournalPromptCategory;
   prompt_id?: string;
   entry_text: string;
+  content_html?: string;
+  content_json?: Record<string, unknown>;
   mode: WellbeingMode;
   voice_entry?: boolean;
   duration_seconds?: number;
   logged_at?: string;
-  // Enhanced journaling fields
   checkin_id?: string;
   journaling_mode?: JournalingMode;
   ai_generated_prompt?: boolean;

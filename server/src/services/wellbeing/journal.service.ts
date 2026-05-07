@@ -24,11 +24,12 @@ export interface CreateJournalEntryInput {
   promptCategory?: JournalPromptCategory;
   promptId?: string;
   entryText: string;
+  contentHtml?: string;
+  contentJson?: Record<string, unknown>;
   mode: WellbeingMode;
   voiceEntry?: boolean;
   durationSeconds?: number;
   loggedAt?: string;
-  // Enhanced journaling fields
   checkinId?: string;
   journalingMode?: JournalingMode;
   aiGeneratedPrompt?: boolean;
@@ -36,6 +37,8 @@ export interface CreateJournalEntryInput {
 
 export interface UpdateJournalEntryInput {
   entryText?: string;
+  contentHtml?: string;
+  contentJson?: Record<string, unknown>;
   prompt?: string;
   promptCategory?: JournalPromptCategory;
 }
@@ -66,6 +69,8 @@ interface JournalEntryRow {
   ai_generated_prompt: boolean | null;
   coach_reflection: string | null;
   coach_reflection_at: Date | null;
+  content_html: string | null;
+  content_json: unknown | null;
   voice_audio_url: string | null;
   voice_duration_ms: number | null;
   voice_emotion_analysis: unknown | null;
@@ -312,10 +317,10 @@ class JournalService {
     const result = await query<JournalEntryRow>(
       `INSERT INTO journal_entries (
         user_id, prompt, prompt_category, prompt_id,
-        entry_text, word_count, mode, voice_entry,
+        entry_text, content_html, content_json, word_count, mode, voice_entry,
         duration_seconds, sentiment_score, sentiment_label, streak_day, logged_at,
         checkin_id, journaling_mode, ai_generated_prompt
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
         userId,
@@ -323,6 +328,8 @@ class JournalService {
         input.promptCategory || null,
         input.promptId || null,
         input.entryText,
+        input.contentHtml || null,
+        input.contentJson ? JSON.stringify(input.contentJson) : null,
         wordCount,
         input.mode,
         input.voiceEntry || false,
@@ -494,6 +501,16 @@ class JournalService {
       values.push(input.entryText.trim(), wordCount);
     }
 
+    if (input.contentHtml !== undefined) {
+      updates.push(`content_html = $${paramIndex++}`);
+      values.push(input.contentHtml);
+    }
+
+    if (input.contentJson !== undefined) {
+      updates.push(`content_json = $${paramIndex++}`);
+      values.push(JSON.stringify(input.contentJson));
+    }
+
     if (input.prompt !== undefined) {
       updates.push(`prompt = $${paramIndex++}`);
       values.push(input.prompt);
@@ -613,6 +630,8 @@ class JournalService {
       promptCategory: row.prompt_category || undefined,
       promptId: row.prompt_id || undefined,
       entryText: row.entry_text,
+      contentHtml: row.content_html || undefined,
+      contentJson: row.content_json as Record<string, unknown> | undefined,
       wordCount: row.word_count,
       mode: row.mode,
       voiceEntry: row.voice_entry,

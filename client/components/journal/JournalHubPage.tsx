@@ -137,6 +137,8 @@ function JournalHubContent() {
   const [newEntryStep, setNewEntryStep] = useState<NewEntryStep>("select_mode");
   const [selectedMode, setSelectedMode] = useState<JournalingMode | null>(null);
   const [editorText, setEditorText] = useState("");
+  const [editorHtml, setEditorHtml] = useState("");
+  const [editorJson, setEditorJson] = useState<Record<string, unknown> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [entryDate, setEntryDate] = useState<string>(
     new Date().toISOString().split("T")[0]
@@ -176,6 +178,8 @@ function JournalHubContent() {
     setNewEntryStep("select_mode");
     setSelectedMode(null);
     setEditorText("");
+    setEditorHtml("");
+    setEditorJson(null);
     setEntryDate(new Date().toISOString().split("T")[0]);
   }, []);
 
@@ -189,6 +193,8 @@ function JournalHubContent() {
     setNewEntryStep("select_mode");
     setSelectedMode(null);
     setEditorText("");
+    setEditorHtml("");
+    setEditorJson(null);
     setEditingEntry(null);
   }, []);
 
@@ -206,6 +212,8 @@ function JournalHubContent() {
       const result = await journalService.createEntry({
         prompt: "Free reflection",
         entry_text: editorText.trim(),
+        content_html: editorHtml || undefined,
+        content_json: editorJson || undefined,
         mode: "deep",
         journaling_mode: selectedMode,
         ...(logged_at ? { logged_at } : {}),
@@ -230,7 +238,9 @@ function JournalHubContent() {
   const handleEditEntry = useCallback((entry: JournalEntry) => {
     setEditingEntry(entry);
     setSelectedMode(entry.journalingMode || "free_write");
-    setEditorText(entry.entryText);
+    setEditorText(entry.contentHtml || entry.entryText);
+    setEditorHtml(entry.contentHtml || "");
+    setEditorJson(entry.contentJson || null);
     setEntryDate(entry.loggedAt.split("T")[0]);
     setShowNewEntry(true);
     setNewEntryStep("write");
@@ -243,6 +253,8 @@ function JournalHubContent() {
     try {
       const result = await journalService.updateEntry(editingEntry.id, {
         entry_text: editorText.trim(),
+        content_html: editorHtml || undefined,
+        content_json: editorJson || undefined,
       });
 
       if (result.success) {
@@ -496,36 +508,42 @@ function JournalHubContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
             onClick={handleCloseNewEntry}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ scale: 0.92, opacity: 0, y: 30 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              exit={{ scale: 0.92, opacity: 0, y: 30 }}
+              transition={{ type: "spring", damping: 28, stiffness: 350 }}
               onClick={(e) => e.stopPropagation()}
-              className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 backdrop-blur-xl shadow-2xl shadow-emerald-500/20 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+              className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-950/90 backdrop-blur-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/10 via-blue-600/10 to-indigo-600/10" />
-              <div className="relative p-6 sm:p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500">
+              {/* Ambient background glow */}
+              <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/8 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-violet-500/6 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+
+              <div className="relative p-7 sm:p-9">
+                {/* Header */}
+                <div className="flex items-start justify-between mb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-lg shadow-emerald-500/20">
                       <BookOpen className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-white">New Journal Entry</h3>
-                      <p className="text-sm text-slate-400 mt-0.5">Choose how you want to write today</p>
+                      <h3 className="text-xl font-bold text-white tracking-tight">New Journal Entry</h3>
+                      <p className="text-sm text-slate-500 mt-0.5">Choose how you want to write today</p>
                     </div>
                   </div>
                   <button
                     onClick={handleCloseNewEntry}
                     aria-label="Close"
-                    className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors"
+                    className="p-2 rounded-xl hover:bg-white/5 text-slate-500 hover:text-white transition-all duration-200"
                   >
                     <span className="sr-only">Close</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M18 6 6 18" />
                       <path d="m6 6 12 12" />
                     </svg>
@@ -545,6 +563,11 @@ function JournalHubContent() {
             mode={selectedMode}
             value={editorText}
             onChange={setEditorText}
+            onContentChange={(html, text, json) => {
+              setEditorHtml(html);
+              setEditorText(text);
+              setEditorJson(json);
+            }}
             onClose={handleCloseNewEntry}
             onSubmit={editingEntry ? handleSubmitEdit : handleSubmitEntry}
             isSubmitting={isSubmitting}

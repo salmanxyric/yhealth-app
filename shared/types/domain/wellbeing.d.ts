@@ -36,6 +36,8 @@ export interface JournalEntry {
     sentimentScore?: number;
     sentimentLabel?: 'positive' | 'negative' | 'neutral';
     streakDay?: number;
+    contentHtml?: string;
+    contentJson?: Record<string, unknown>;
     loggedAt: string;
     createdAt: string;
     updatedAt: string;

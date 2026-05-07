@@ -45,6 +45,8 @@ class JournalController {
       prompt_category,
       prompt_id,
       entry_text,
+      content_html,
+      content_json,
       mode,
       voice_entry,
       duration_seconds,
@@ -64,6 +66,8 @@ class JournalController {
       promptCategory: prompt_category,
       promptId: prompt_id,
       entryText: entry_text,
+      contentHtml: content_html,
+      contentJson: content_json,
       mode,
       voiceEntry: voice_entry,
       durationSeconds: duration_seconds,
@@ -140,10 +144,12 @@ class JournalController {
     }
 
     const { id } = req.params;
-    const { entry_text, prompt, prompt_category } = req.body;
+    const { entry_text, content_html, content_json, prompt, prompt_category } = req.body;
 
     const entry = await journalService.updateJournalEntry(userId, id, {
       entryText: entry_text,
+      contentHtml: content_html,
+      contentJson: content_json,
       prompt,
       promptCategory: prompt_category,
     });
