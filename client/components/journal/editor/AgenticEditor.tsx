@@ -8,6 +8,9 @@ import { BubbleToolbar } from "./toolbar/BubbleToolbar";
 import { ImageUploadDialog } from "./media/ImageUploadDialog";
 import { useDictation } from "./useDictation";
 import { DictationOverlay } from "./dictation/DictationOverlay";
+import { useAICoach } from "./ai/useAICoach";
+import { AIPill } from "./ai/AIPill";
+import { CoachingNudge } from "./ai/CoachingNudge";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 
 interface AgenticEditorProps {
@@ -28,6 +31,9 @@ export function AgenticEditor({
   const api = useAgenticEditor({ mode, initialContent, onUpdate });
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [dictationActive, setDictationActive] = useState(false);
+  const [nudgeMessage, setNudgeMessage] = useState<string | null>(null);
+
+  const aiCoach = useAICoach();
 
   const dictation = useDictation({
     onTranscript: (text, isFinal) => {
@@ -58,6 +64,15 @@ export function AgenticEditor({
     document.addEventListener("slash-menu:dictation", handler);
     return () => document.removeEventListener("slash-menu:dictation", handler);
   }, [dictation.start]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Analyze content periodically (debounced)
+  useEffect(() => {
+    if (!api.editor) return;
+    const timer = setTimeout(() => {
+      aiCoach.analyzeContent(api.getText(), mode);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [api.editor?.state.doc.content.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!api.editor) {
     return (
@@ -101,6 +116,18 @@ export function AgenticEditor({
           setDictationActive(false);
         }}
       />
+
+      <AIPill
+        insights={aiCoach.insights}
+        isLoading={aiCoach.isLoading}
+        onSendMessage={aiCoach.sendMessage}
+        onDismissInsight={aiCoach.dismissInsight}
+        onQuickAction={(action) => {
+          // TODO: Wire quick actions to AI slash commands
+        }}
+      />
+
+      <CoachingNudge message={nudgeMessage} onDismiss={() => setNudgeMessage(null)} />
 
       <style jsx global>{`
         .is-editor-empty::before {

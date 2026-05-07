@@ -174,6 +174,10 @@ export function DistractionFreeEditor({
         e.preventDefault();
         onClose();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent("toggle-ai-pill"));
+      }
     };
 
     window.addEventListener("keydown", handleGlobalKeyDown);
