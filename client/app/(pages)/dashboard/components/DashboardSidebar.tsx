@@ -44,7 +44,6 @@ import {
   RiEqualizerFill,
   RiWalletFill,
   RiVipCrownFill,
-  RiHistoryFill,
   RiFileList3Fill,
   RiAdminFill,
   RiStickyNoteFill,
@@ -135,7 +134,6 @@ const sections: NavSection[] = [
     collapsible: true,
     items: [
       { id: "chat", label: "Chat", icon: <RiChat3Fill className={S18} />, href: "/chat" },
-      { id: "chat-history", label: "Chat History", icon: <RiHistoryFill className={S18} />, href: "/chat-history" },
       { id: "voice-assistant", label: "Voice Assistant", icon: <RiMicFill className={S18} />, href: "/voice-assistant" },
       { id: "voice-call", label: "Call Coach", icon: <RiPhoneFill className={S18} />, href: "/voice-call" },
       { id: "notifications", label: "Notifications", icon: <RiNotification3Fill className={S18} />, href: "/notifications" },
