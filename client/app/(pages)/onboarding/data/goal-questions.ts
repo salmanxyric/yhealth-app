@@ -355,6 +355,93 @@ const genericFallback: AssessmentQuestion[] = [
   },
 ];
 
+const customRoutineFallback: AssessmentQuestion[] = [
+  {
+    id: 'custom_routine_breakdown',
+    text: 'Which part of your daily routine breaks down most often?',
+    type: 'single_select',
+    category: 'goal_specific',
+    pillar: 'general',
+    iconName: 'Calendar',
+    options: [
+      { value: 'starting_day', label: 'Starting the day' },
+      { value: 'work_blocks', label: 'Focused work blocks' },
+      { value: 'evening_wind_down', label: 'Evening wind-down' },
+      { value: 'all_areas', label: 'All of these' },
+    ],
+  },
+  {
+    id: 'custom_sleep_disruption',
+    text: 'What most often disrupts your sleep consistency?',
+    type: 'single_select',
+    category: 'goal_specific',
+    pillar: 'wellbeing',
+    iconName: 'Moon',
+    options: [
+      { value: 'late_screens', label: 'Late screens' },
+      { value: 'irregular_bedtime', label: 'Irregular bedtime' },
+      { value: 'overthinking', label: 'Stress or overthinking' },
+      { value: 'demands', label: 'Work or family demands' },
+    ],
+  },
+  {
+    id: 'custom_meaningful_work',
+    text: 'What usually blocks meaningful work each day?',
+    type: 'single_select',
+    category: 'goal_specific',
+    pillar: 'productivity',
+    iconName: 'Target',
+    options: [
+      { value: 'unclear_priority', label: 'No clear priority' },
+      { value: 'distractions', label: 'Distractions' },
+      { value: 'low_energy', label: 'Low energy' },
+      { value: 'avoidance', label: 'Avoiding hard tasks' },
+    ],
+  },
+  {
+    id: 'custom_relationship_action',
+    text: 'Which relationship action is hardest to keep consistent?',
+    type: 'single_select',
+    category: 'goal_specific',
+    pillar: 'relationships',
+    iconName: 'Heart',
+    options: [
+      { value: 'checking_in', label: 'Checking in' },
+      { value: 'quality_time', label: 'Quality time' },
+      { value: 'difficult_conversations', label: 'Difficult conversations' },
+      { value: 'appreciation', label: 'Showing appreciation' },
+    ],
+  },
+  {
+    id: 'custom_discipline_structure',
+    text: 'What kind of structure would help your discipline most?',
+    type: 'single_select',
+    category: 'goal_specific',
+    pillar: 'general',
+    iconName: 'Clock',
+    options: [
+      { value: 'morning_plan', label: 'Morning plan' },
+      { value: 'time_blocks', label: 'Time blocks' },
+      { value: 'evening_review', label: 'Evening review' },
+      { value: 'accountability', label: 'Accountability check-ins' },
+    ],
+  },
+  {
+    id: 'custom_daily_reset',
+    text: 'When would a daily reset be easiest to maintain?',
+    type: 'single_select',
+    category: 'goal_specific',
+    pillar: 'general',
+    iconName: 'Sunrise',
+    options: [
+      { value: 'after_waking', label: 'Right after waking' },
+      { value: 'before_work', label: 'Before work starts' },
+      { value: 'after_work', label: 'After work' },
+      { value: 'before_bed', label: 'Before bed' },
+    ],
+  },
+];
+
 // ---------------------------------------------------------------------------
 // Goal → fallback question map
 // ---------------------------------------------------------------------------
@@ -395,9 +482,20 @@ const goalQuestionMap: Record<GoalCategory, AssessmentQuestion[]> = {
   custom: genericFallback,
 };
 
-export function getQuestionsForGoal(goalCategory: GoalCategory | null): AssessmentQuestion[] {
+function customGoalLooksRoutineBased(customGoalText?: string): boolean {
+  if (!customGoalText) return false;
+  return /\b(discipline|career|work|focus|meaningful|relationship|relationships|sleep|routine|consistent|consistency|daily)\b/i.test(customGoalText);
+}
+
+export function getQuestionsForGoal(
+  goalCategory: GoalCategory | null,
+  customGoalText?: string
+): AssessmentQuestion[] {
   if (!goalCategory) {
     return [...genericFallback, ...commonBaselineQuestions];
+  }
+  if (goalCategory === 'custom' && customGoalLooksRoutineBased(customGoalText)) {
+    return [...customRoutineFallback, ...commonBaselineQuestions];
   }
   const goalSpecificQuestions = goalQuestionMap[goalCategory] || genericFallback;
   return [...goalSpecificQuestions, ...commonBaselineQuestions];

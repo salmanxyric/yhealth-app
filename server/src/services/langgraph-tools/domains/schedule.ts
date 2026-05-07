@@ -6,8 +6,35 @@ import { logger } from '../../logger.service.js';
 import { scheduleService, type DailySchedule } from '../../schedule.service.js';
 import type { ToolDefinition } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+import { addDaysToISODate, getUserLocalDateISO, resolveTimeZone } from '../../../lib/user-timezone.js';
 
 // --- Schemas ---
+
+const ActivityCategorySchema = z.enum([
+  'work',
+  'exercise',
+  'meal',
+  'break',
+  'personal',
+  'study',
+  'social',
+  'health',
+  'other',
+]);
+
+const ActivityShapeSchema = z.enum(['square', 'circle', 'rounded', 'diamond', 'hexagon']);
+
+const CATEGORY_COLORS: Record<z.infer<typeof ActivityCategorySchema>, string> = {
+  work: '#3b82f6',
+  exercise: '#6d4bc3',
+  meal: '#c98111',
+  break: '#1595a8',
+  personal: '#b63d3d',
+  study: '#7c3aed',
+  social: '#b83280',
+  health: '#158f83',
+  other: '#10b981',
+};
 
 const GetUserSchedulesSchema = z.object({
   startDate: z.string().optional().describe('Start date in ISO format (YYYY-MM-DD)'),
@@ -15,7 +42,7 @@ const GetUserSchedulesSchema = z.object({
 });
 
 const GetScheduleByDateSchema = z.object({
-  date: z.string().optional().describe('Date in ISO format (YYYY-MM-DD). If not provided, will default to today\'s date. Optional - defaults to today.'),
+  date: z.string().optional().describe('Date in ISO format (YYYY-MM-DD), or "today", "tomorrow", "yesterday". If not provided, the server resolves today from the user timezone.'),
 });
 
 const CreateScheduleItemInputSchema = z.object({
@@ -26,7 +53,8 @@ const CreateScheduleItemInputSchema = z.object({
   durationMinutes: z.number().optional().describe('Duration in minutes (if endTime not provided)'),
   color: z.string().optional().describe('Color hex code (e.g., "#FF5733")'),
   icon: z.string().optional().describe('Icon name or emoji'),
-  category: z.string().optional().describe('Category (e.g., "workout", "meal", "meeting")'),
+  category: ActivityCategorySchema.optional().describe('Activity category: work, exercise, meal, break, personal, study, social, health, or other'),
+  shape: ActivityShapeSchema.optional().describe('Visual shape for the schedule activity. Defaults to square.'),
   position: z.number().describe('Position in schedule (0-based, required)'),
   metadata: z.record(z.any()).optional().describe('Additional metadata'),
 });
@@ -45,7 +73,7 @@ const CreateScheduleItemInputSchemaForSchedule = CreateScheduleItemInputSchema.e
 });
 
 const CreateDailyScheduleSchema = z.object({
-  scheduleDate: z.string().optional().describe('Schedule date in ISO format (YYYY-MM-DD). If not provided, will default to today\'s date. Optional - defaults to today.'),
+  scheduleDate: z.string().optional().describe('Schedule date in ISO format (YYYY-MM-DD), or "today", "tomorrow", "yesterday". If not provided, the server resolves today from the user timezone.'),
   templateId: z.string().optional().describe('Template ID to use for the schedule (optional)'),
   name: z.string().optional().describe('Schedule name (optional)'),
   notes: z.string().optional().describe('Schedule notes (optional)'),
@@ -75,7 +103,8 @@ const CreateScheduleItemSchema = z.object({
   durationMinutes: z.number().optional().describe('Duration in minutes'),
   color: z.string().optional().describe('Color hex code'),
   icon: z.string().optional().describe('Icon name'),
-  category: z.string().optional().describe('Category'),
+  category: ActivityCategorySchema.optional().describe('Activity category: work, exercise, meal, break, personal, study, social, health, or other'),
+  shape: ActivityShapeSchema.optional().describe('Visual shape for the schedule activity. Defaults to square.'),
   position: z.number().describe('Position in schedule (required)'),
   metadata: z.record(z.any()).optional().describe('Metadata object'),
 });
@@ -89,7 +118,8 @@ const UpdateScheduleItemSchema = z.object({
   durationMinutes: z.number().optional(),
   color: z.string().optional(),
   icon: z.string().optional(),
-  category: z.string().optional(),
+  category: ActivityCategorySchema.optional(),
+  shape: ActivityShapeSchema.optional(),
   position: z.number().optional(),
   metadata: z.record(z.any()).optional(),
 });
@@ -112,12 +142,56 @@ const DeleteScheduleLinkSchema = z.object({
 });
 
 const CheckScheduleConflictsSchema = z.object({
-  date: z.string().optional().describe('Date in YYYY-MM-DD format. Defaults to today.'),
+  date: z.string().optional().describe('Date in YYYY-MM-DD format, or "today", "tomorrow", "yesterday". Defaults to today in the user timezone.'),
   startTime: z.string().describe('Proposed start time (HH:mm or "H:MM AM/PM")'),
   endTime: z.string().describe('Proposed end time (HH:mm or "H:MM AM/PM")'),
 });
 
 // --- Implementations ---
+
+async function getScheduleToolTimezone(userId: string): Promise<string> {
+  try {
+    const result = await query<{ timezone: string | null }>(
+      `SELECT COALESCE(up.timezone, u.timezone, 'UTC') AS timezone
+       FROM users u
+       LEFT JOIN user_preferences up ON up.user_id = u.id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [userId],
+    );
+
+    return resolveTimeZone(result.rows[0]?.timezone);
+  } catch (error) {
+    logger.warn('[LangGraphTools] Failed to resolve user timezone for schedule tool', {
+      userId,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+    return 'UTC';
+  }
+}
+
+async function resolveScheduleDate(
+  userId: string,
+  rawDate: string | undefined,
+): Promise<{ date: string; timezone: string; today: string }> {
+  const timezone = await getScheduleToolTimezone(userId);
+  const today = getUserLocalDateISO(timezone);
+  const normalized = rawDate?.trim().toLowerCase();
+
+  if (!normalized || normalized === 'today' || normalized === 'todays' || normalized === "today's") {
+    return { date: today, timezone, today };
+  }
+
+  if (normalized === 'tomorrow') {
+    return { date: addDaysToISODate(today, 1), timezone, today };
+  }
+
+  if (normalized === 'yesterday') {
+    return { date: addDaysToISODate(today, -1), timezone, today };
+  }
+
+  return { date: rawDate!.trim(), timezone, today };
+}
 
 async function getUserSchedules(userId: string, params?: z.infer<typeof GetUserSchedulesSchema>): Promise<string> {
   // Note: scheduleService doesn't have a method to get all schedules, so we'll use direct query
@@ -145,11 +219,8 @@ async function getUserSchedules(userId: string, params?: z.infer<typeof GetUserS
 }
 
 async function createDailySchedule(userId: string, params: z.infer<typeof CreateDailyScheduleSchema>): Promise<string> {
-  // Use today's date if not provided
-  let scheduleDate = params.scheduleDate;
-  if (!scheduleDate) {
-    scheduleDate = new Date().toISOString().split('T')[0];
-  }
+  const resolved = await resolveScheduleDate(userId, params.scheduleDate);
+  const scheduleDate = resolved.date;
 
   // Validate date format
   if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) {
@@ -168,16 +239,16 @@ async function createDailySchedule(userId: string, params: z.infer<typeof Create
       // If item is a string, try to parse it into an object
       if (typeof item === 'string') {
         // Try to extract time and title from string like "Breakfast at 7:00 a.m." or "Workout at 8:00 a.m."
-        const timeMatch = item.match(/(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?|AM|PM)/i);
+        const timeMatch = item.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?|AM|PM)/i);
         if (timeMatch) {
           const hours = parseInt(timeMatch[1], 10);
-          const minutes = timeMatch[2];
+          const minutes = timeMatch[2] || '00';
           const period = timeMatch[3].toUpperCase();
           let hour24 = hours;
           if (period.includes('P') && hours !== 12) hour24 += 12;
           if (period.includes('A') && hours === 12) hour24 = 0;
           const timeStr = `${hour24.toString().padStart(2, '0')}:${minutes}`;
-          const title = item.replace(/\s*at\s*\d{1,2}:\d{2}\s*(a\.?m\.?|p\.?m\.?|AM|PM)/i, '').trim();
+          const title = item.replace(/\s*at\s*\d{1,2}(?::\d{2})?\s*(a\.?m\.?|p\.?m\.?|AM|PM)/i, '').trim();
           processed.push({
             title: title || item,
             startTime: timeStr,
@@ -282,18 +353,26 @@ async function createDailySchedule(userId: string, params: z.infer<typeof Create
 
         // Auto-generate position if not provided (use index as position)
         const position: number = itemInput.position ?? index;
+        const category = itemInput.category;
+        const shape = itemInput.shape || 'square';
+        const color = itemInput.color || (category ? CATEGORY_COLORS[category] : undefined);
+        const metadata = {
+          ...(itemInput.metadata || {}),
+          shape,
+        };
 
         const item = await scheduleService.addScheduleItem(userId, schedule.id, {
           title: itemInput.title,
           description: itemInput.description,
           startTime: normalizedStartTime,
           endTime: normalizedEndTime,
-          durationMinutes: itemInput.durationMinutes,
-          color: itemInput.color,
+          durationMinutes: itemInput.durationMinutes || (!normalizedEndTime ? 30 : undefined),
+          color,
           icon: itemInput.icon,
-          category: itemInput.category,
+          category,
+          shape,
           position: position,
-          metadata: itemInput.metadata,
+          metadata,
         });
         createdItems.push({ id: item.id, title: item.title, position: item.position });
 
@@ -519,6 +598,8 @@ async function createDailySchedule(userId: string, params: z.infer<typeof Create
       schedule: completeSchedule,
       scheduleId: schedule.id,
       scheduleDate,
+      today: resolved.today,
+      timezone: resolved.timezone,
       createdItems: createdItems.length,
       createdLinks: createdLinks.length,
       totalItems: completeSchedule.items.length,
@@ -563,11 +644,8 @@ async function deleteDailySchedule(userId: string, params: z.infer<typeof Delete
 }
 
 async function getScheduleByDate(userId: string, params: z.infer<typeof GetScheduleByDateSchema>): Promise<string> {
-  // Use today's date if not provided
-  let date = params.date;
-  if (!date) {
-    date = new Date().toISOString().split('T')[0];
-  }
+  const resolved = await resolveScheduleDate(userId, params.date);
+  const date = resolved.date;
 
   // Validate date format
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -591,6 +669,9 @@ async function getScheduleByDate(userId: string, params: z.infer<typeof GetSched
     return JSON.stringify({
       success: true,
       data: result,
+      requestedDate: date,
+      today: resolved.today,
+      timezone: resolved.timezone,
       message: result.items && result.items.length > 0
         ? `Schedule found for ${date} with ${result.items.length} item${result.items.length > 1 ? 's' : ''}`
         : `Schedule found for ${date} (no items yet)`
@@ -604,6 +685,9 @@ async function getScheduleByDate(userId: string, params: z.infer<typeof GetSched
     return JSON.stringify({
       success: true,
       data: null,
+      requestedDate: date,
+      today: resolved.today,
+      timezone: resolved.timezone,
       message: `No schedule found for ${date}`
     }, null, 2);
   }
@@ -644,12 +728,16 @@ async function createScheduleItem(userId: string, params: z.infer<typeof CreateS
     description: params.description,
     startTime: params.startTime,
     endTime: params.endTime,
-    durationMinutes: params.durationMinutes,
-    color: params.color,
+    durationMinutes: params.durationMinutes || (!params.endTime ? 30 : undefined),
+    color: params.color || (params.category ? CATEGORY_COLORS[params.category] : undefined),
     icon: params.icon,
     category: params.category,
+    shape: params.shape || 'square',
     position: params.position,
-    metadata: params.metadata || {},
+    metadata: {
+      ...(params.metadata || {}),
+      shape: params.shape || 'square',
+    },
   });
 
   // Queue embedding
@@ -674,8 +762,11 @@ async function updateScheduleItem(userId: string, params: z.infer<typeof UpdateS
     color: params.color,
     icon: params.icon,
     category: params.category,
+    shape: params.shape,
     position: params.position,
-    metadata: params.metadata,
+    metadata: params.shape
+      ? { ...(params.metadata || {}), shape: params.shape }
+      : params.metadata,
   });
 
   // Queue embedding update for schedule item
@@ -736,10 +827,8 @@ async function checkScheduleConflicts(
   userId: string,
   params: z.infer<typeof CheckScheduleConflictsSchema>,
 ): Promise<string> {
-  let date = params.date;
-  if (!date) {
-    date = new Date().toISOString().split('T')[0];
-  }
+  const resolved = await resolveScheduleDate(userId, params.date);
+  const date = resolved.date;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return JSON.stringify({
@@ -813,7 +902,7 @@ export function registerScheduleTools(_userId: string): ToolDefinition[] {
   return [
     {
       name: 'createDailySchedule',
-      description: 'CRITICAL: ALWAYS call this tool when user requests schedule creation - NEVER just describe a schedule in text format. This tool saves schedules to the database. Use when user says "create schedule", "plan my day", "set up a schedule", "create a daily schedule", "schedule my day", "add in db", or when user describes daily activities with times. IMPORTANT: This is for daily schedules (daily_schedules table), NOT workout plans, diet plans, or user plans. No goal ID is required. scheduleDate is OPTIONAL - if not provided, it will default to today\'s date (YYYY-MM-DD format). If a schedule already exists for the same date, it will be automatically updated with new items and links. You can optionally include items (activities) and links (connections between activities) in the same call. When user describes activities with times, create items for them. Each item needs: title (required), startTime (required), and optionally endTime, description, icon, category. Position will be auto-generated based on item order if not provided. When user mentions activities happening in sequence or connected activities, create links between them. Items and links will be added to existing schedules, not replace them. Before creating, call checkScheduleConflicts first to detect time overlaps. If conflicts found, present them to the user and ask how to proceed (replace existing, keep both, or adjust times). Only create after user confirms or no conflicts exist. The schedule will be automatically saved to the database.',
+      description: 'CRITICAL: ALWAYS call this tool when user requests schedule creation - NEVER just describe a schedule in text format. This tool saves schedules to the database. Use when user says "create schedule", "plan my day", "set up a schedule", "create a daily schedule", "schedule my day", "add in db", or when user describes daily activities with times. IMPORTANT: This is for daily schedules (daily_schedules table), NOT workout plans, diet plans, or user plans. No goal ID is required. scheduleDate is OPTIONAL - if not provided, it will default to today\'s date (YYYY-MM-DD format). If a schedule already exists for the same date, it will be automatically updated with new items and links. You can optionally include items (activities) and links (connections between activities) in the same call. When user describes activities with times, create items for them. Each item needs: title (required), startTime (required), and optionally endTime, description, icon, category, color, and shape. Valid categories: work, exercise, meal, break, personal, study, social, health, other. Valid shapes: square, circle, rounded, diamond, hexagon. Position will be auto-generated based on item order if not provided. When user mentions activities happening in sequence or connected activities, create links between them. Items and links will be added to existing schedules, not replace them. Before creating, call checkScheduleConflicts first to detect time overlaps. If conflicts found, present them to the user and ask how to proceed (replace existing, keep both, or adjust times). Only create after user confirms or no conflicts exist. The schedule will be automatically saved to the database and, when Google Calendar is linked, manual activities are best-effort synced to Google Calendar.',
       schema: CreateDailyScheduleSchema,
       handler: withErrorHandling('createDailySchedule', async (uid, params) =>
         createDailySchedule(uid, params),
@@ -829,7 +918,7 @@ export function registerScheduleTools(_userId: string): ToolDefinition[] {
     },
     {
       name: 'getScheduleByDate',
-      description: 'Get schedule for a specific date. Use when user asks about their schedule for a particular date or day. The date parameter is OPTIONAL - if not provided, it will default to today\'s date. You can call this tool without a date parameter when user asks "what\'s my schedule", "show my schedule", "my schedule today", etc.',
+      description: 'Get schedule for a specific date. Use when user asks about their schedule for a particular date or day. For "today", omit the date or pass "today"; the server resolves the correct current date from the user timezone. You can call this tool without a date parameter when user asks "what\'s my schedule", "show my schedule", "my schedule today", etc.',
       schema: GetScheduleByDateSchema,
       handler: withErrorHandling('getScheduleByDate', async (uid, params) =>
         getScheduleByDate(uid, params),
@@ -853,7 +942,7 @@ export function registerScheduleTools(_userId: string): ToolDefinition[] {
     },
     {
       name: 'createScheduleItem',
-      description: 'Create a schedule item. Use when user mentions an activity, appointment, or task with a time. Can suggest scheduling when user mentions time-based activities.',
+      description: 'Create a schedule item. Use when user mentions an activity, appointment, or task with a time. Supports title, description, start/end time, category, color, shape, and icon. If endTime is missing, default duration is 30 minutes. When Google Calendar is linked, manual activities are best-effort synced to Google Calendar.',
       schema: CreateScheduleItemSchema,
       handler: withErrorHandling('createScheduleItem', async (uid, params) =>
         createScheduleItem(uid, params),

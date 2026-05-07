@@ -36,7 +36,7 @@ jest.unstable_mockModule('../../../src/services/embedding-queue.service.js', () 
 // Mock the shared coach-persona module
 // Controller at src/controllers/ imports ../../../shared/... (resolves to yhealth-app/shared/)
 // From test at tests/unit/controllers/, we need ../../../../shared/...
-jest.unstable_mockModule('../../../../shared/types/domain/coach-persona.js', () => ({
+jest.unstable_mockModule('@shared/types/domain/coach-persona.js', () => ({
   coachingStyleForPersona: jest.fn<any>().mockReturnValue('direct'),
   personaFromCoachingStyle: jest.fn<any>().mockReturnValue('commander'),
   normalizePersonaId: jest.fn<any>().mockImplementation((v: string) => v || 'friend'),

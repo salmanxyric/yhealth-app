@@ -600,24 +600,25 @@ class SocketService {
       });
       
       if (socketCount === 0) {
-        logger.warn('[SocketService] No sockets found in room - user may not be connected', {
+        logger.debug('[SocketService] No sockets in room - user not connected', {
           userId,
           room,
           event,
         });
-        // Still attempt to emit in case user connects shortly
       }
-      
+
       try {
         this.io.to(room).emit(event, data);
-        
-        logger.info('[SocketService] Successfully emitted to user', {
-          userId,
-          event,
-          room,
-          socketCount,
-          dataSize: typeof data === 'object' ? JSON.stringify(data).length : String(data).length,
-        });
+
+        if (socketCount > 0) {
+          logger.info('[SocketService] Emitted to user', {
+            userId,
+            event,
+            room,
+            socketCount,
+            dataSize: typeof data === 'object' ? JSON.stringify(data).length : String(data).length,
+          });
+        }
       } catch (emitError) {
         logger.error('[SocketService] Error during emit operation', {
           userId,

@@ -6,6 +6,8 @@ import { aiCoachService } from '@/src/shared/services/ai-coach.service';
 import type { AssessmentQuestion } from '../data/goal-questions';
 import { getQuestionsForGoal } from '../data/goal-questions';
 
+const inFlightGoalKeys = new Set<string>();
+
 function buildGoalKey(goal: string | null, customText: string): string {
   return `${goal || 'none'}::${customText.trim().toLowerCase()}`;
 }
@@ -80,13 +82,15 @@ export function useQuickAssessmentQuestions() {
   );
 
   const getFallbackQuestions = useCallback((): AssessmentQuestion[] => {
-    return getQuestionsForGoal(selectedGoal);
-  }, [selectedGoal]);
+    return getQuestionsForGoal(selectedGoal, customGoalText);
+  }, [selectedGoal, customGoalText]);
 
   const fetchQuestions = useCallback(async () => {
     if (!selectedGoal) return;
 
     const goalKey = buildGoalKey(selectedGoal, customGoalText);
+    if (inFlightGoalKeys.has(goalKey)) return;
+    inFlightGoalKeys.add(goalKey);
     setIsLoading(true);
     setError(null);
 
@@ -115,6 +119,7 @@ export function useQuickAssessmentQuestions() {
       console.warn('[useQuickAssessmentQuestions] AI generation failed, using fallback', err);
       setError(err instanceof Error ? err.message : 'Failed to generate questions');
     } finally {
+      inFlightGoalKeys.delete(goalKey);
       setIsLoading(false);
     }
   }, [selectedGoal, customGoalText, setGeneratedAssessmentQuestions]);
@@ -143,7 +148,9 @@ export function useQuickAssessmentQuestions() {
       selectedGoal === 'weight_loss'
         ? [targetWeightQuestion, ...bodyStatQuestions]
         : [...bodyStatQuestions];
-    questions = [...staticPrefix, ...aiQuestions];
+    questions = selectedGoal === 'weight_loss'
+      ? [...staticPrefix, ...aiQuestions]
+      : [...aiQuestions, ...staticPrefix];
   } else if (!isLoading && error) {
     questions = getFallbackQuestions();
   } else {

@@ -16,6 +16,8 @@ import {
   DurationSelector,
 } from '../components/goals';
 
+const MAX_CONFIRMED_GOALS = 3;
+
 /**
  * GoalSetupStep - AI-powered goal generation and confirmation
  *
@@ -81,6 +83,10 @@ export function GoalSetupStep() {
 
   const handleContinue = useCallback(async () => {
     if (confirmedGoals.length === 0) return;
+    if (confirmedGoals.length > MAX_CONFIRMED_GOALS) {
+      setSaveError(`Please keep your plan focused with up to ${MAX_CONFIRMED_GOALS} active goals.`);
+      return;
+    }
 
     setIsSaving(true);
     setSaveError(null);
@@ -119,8 +125,11 @@ export function GoalSetupStep() {
     nextStep();
   }, [nextStep]);
 
-  const canContinue = confirmedGoals.length > 0 && !isSaving && !isGenerating;
-  const displayError = error || saveError;
+  const selectionLimitError = confirmedGoals.length > MAX_CONFIRMED_GOALS
+    ? `Please keep your plan focused with up to ${MAX_CONFIRMED_GOALS} active goals.`
+    : null;
+  const canContinue = confirmedGoals.length > 0 && confirmedGoals.length <= MAX_CONFIRMED_GOALS && !isSaving && !isGenerating;
+  const displayError = error || saveError || selectionLimitError;
 
   // Loading state while generating goals
   if (isGenerating && suggestedGoals.length === 0) {
@@ -184,7 +193,7 @@ export function GoalSetupStep() {
       />
 
       {/* Summary */}
-      <GoalsSummary confirmedCount={confirmedGoals.length} />
+      <GoalsSummary confirmedCount={confirmedGoals.length} maxCount={MAX_CONFIRMED_GOALS} />
 
       {/* Error message */}
       {displayError && (
@@ -240,7 +249,7 @@ function GoalSetupHeader() {
         <span className="text-sm font-medium text-white/80">AI-Generated Goals</span>
       </motion.div>
 
-      <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+      <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-semibold text-white mb-3">
         Your Personalized{' '}
         <span className="text-white">
           Goals

@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { Mail, ArrowRight, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Mail, ArrowRight, Loader2, ArrowLeft, CheckCircle2, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +19,11 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPageContent() {
-  const { forgotPassword, isLoading } = useAuth();
+  const { forgotPassword, isLoading, error } = useAuth();
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const visibleError = error && dismissedError !== error ? error : null;
 
   const {
     register,
@@ -109,6 +111,29 @@ export default function ForgotPasswordPageContent() {
 
   return (
     <div className="space-y-6">
+      {visibleError && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Reset Email Error</p>
+              <p className="mt-1 whitespace-pre-line text-xs opacity-80">{visibleError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissedError(visibleError)}
+              className="rounded-lg p-1 transition-colors hover:bg-destructive/10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <div className="text-center space-y-2">
         <motion.h1
@@ -153,7 +178,7 @@ export default function ForgotPasswordPageContent() {
           )}
         </div>
 
-        <Button type="submit" className="w-full h-12" disabled={isLoading}>
+        <Button type="submit" className="auth-emerald-btn w-full h-12" disabled={isLoading}>
           {isLoading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (

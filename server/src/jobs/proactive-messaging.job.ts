@@ -103,6 +103,9 @@ async function processProactiveMessages(): Promise<void> {
     let errors = 0;
     let skippedCapped = 0;
     let skippedTimeWindow = 0;
+    let usersWithCandidates = 0;
+    let candidateAttempts = 0;
+    let handlerRejected = 0;
 
     // Process users in small batches to avoid overwhelming the database
     for (let i = 0; i < users.length; i += BATCH_SIZE) {
@@ -139,6 +142,8 @@ async function processProactiveMessages(): Promise<void> {
               .slice(0, maxToSend);
 
             if (topCandidates.length > 0) {
+              usersWithCandidates++;
+              candidateAttempts += topCandidates.length;
               logger.debug('[ProactiveMessagingJob] Sending top candidates', {
                 userId: user.id.slice(0, 8),
                 userHour,
@@ -215,6 +220,7 @@ async function processProactiveMessages(): Promise<void> {
               if (sent) {
                 counters[candidate.type]++;
               } else {
+                handlerRejected++;
                 logger.debug('[ProactiveMessagingJob] Candidate handler returned false', {
                   userId: user.id.slice(0, 8),
                   type: candidate.type,
@@ -246,6 +252,9 @@ async function processProactiveMessages(): Promise<void> {
       userCount: users.length,
       skippedCapped,
       skippedTimeWindow,
+      usersWithCandidates,
+      candidateAttempts,
+      handlerRejected,
       totalMessagesSent: totalSent,
       ...counters,
       errors,
@@ -254,12 +263,16 @@ async function processProactiveMessages(): Promise<void> {
       circuitBreakerFailures: cbStatusEnd.consecutiveFailures,
     });
 
-    // Alert if no messages were sent to any user (pipeline may be broken)
-    if (totalSent === 0 && users.length > 0 && skippedTimeWindow < users.length) {
+    // Alert only when multiple candidates were attempted but none sent.
+    // A single handler rejection is normal (deeper validation said "not now").
+    if (totalSent === 0 && candidateAttempts >= 3) {
       logger.warn('[ProactiveMessagingJob] ALERT: Zero messages sent this cycle despite eligible users', {
         userCount: users.length,
         skippedCapped,
         skippedTimeWindow,
+        usersWithCandidates,
+        candidateAttempts,
+        handlerRejected,
         errors,
         circuitBreaker: cbStatusEnd.state,
       });

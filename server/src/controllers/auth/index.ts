@@ -23,6 +23,7 @@ export {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  changePassword,
 } from './auth-session.controller.js';
 
 // Onboarding and user management

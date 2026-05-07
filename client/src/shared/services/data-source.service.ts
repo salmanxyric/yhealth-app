@@ -68,6 +68,25 @@ export interface PrayerScheduleItem {
   scheduledTime: string;
   completed: boolean;
   completedAt: string | null;
+  source?: string;
+}
+
+export type PrayerName = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha' | 'tahajjud';
+
+export interface PrayerTimesConfig {
+  city: string;
+  country: string;
+  state?: string;
+  method: number;
+  school: number;
+  latitudeAdjustmentMethod?: number;
+  midnightMode?: number;
+  adjustment?: number;
+  timezone?: string;
+  includeTahajjud?: boolean;
+  reminderLeadMinutes?: number;
+  offsets?: Partial<Record<PrayerName, number>>;
+  manualTimes?: Partial<Record<PrayerName, string>>;
 }
 
 export interface SpendingTransaction {
@@ -113,8 +132,10 @@ type PrayerRowRaw = {
   completed: boolean;
   completed_at?: string | null;
   completedAt?: string | null;
+  source?: string;
 };
 type PrayersResponse = { prayers: PrayerRowRaw[] };
+type PrayerConfigResponse = { prayers: PrayerRowRaw[]; config?: Record<string, unknown> };
 type TransactionResponse = { transaction: SpendingTransaction };
 type TransactionsResponse = { transactions: SpendingTransaction[] };
 type ImportCountResponse = { count: number };
@@ -172,7 +193,28 @@ class DataSourceService {
 
   async getPrayerSchedule(date: string): Promise<PrayerScheduleItem[]> {
     const res = await api.get<PrayersResponse>(`${BASE}/prayers`, { params: { date } });
-    const rows = res.data?.prayers ?? [];
+    return this.mapPrayerRows(res.data?.prayers ?? []);
+  }
+
+  async syncPrayerSchedule(date?: string): Promise<PrayerScheduleItem[]> {
+    const res = await api.post<PrayersResponse>(`${BASE}/prayers/sync`, date ? { date } : {});
+    return this.mapPrayerRows(res.data?.prayers ?? []);
+  }
+
+  async saveManualPrayerTimes(data: {
+    date?: string;
+    manualTimes: Partial<Record<PrayerName, string>>;
+    timezone?: string;
+  }): Promise<PrayerScheduleItem[]> {
+    const res = await api.patch<PrayerConfigResponse>(`${BASE}/prayers/manual`, data);
+    return this.mapPrayerRows(res.data?.prayers ?? []);
+  }
+
+  async markPrayerComplete(prayerId: string): Promise<void> {
+    await api.post(`${BASE}/prayers/${prayerId}/complete`);
+  }
+
+  private mapPrayerRows(rows: PrayerRowRaw[]): PrayerScheduleItem[] {
     return rows.map((r) => ({
       id: r.id,
       prayerDate: r.prayerDate ?? r.prayer_date ?? '',
@@ -180,11 +222,8 @@ class DataSourceService {
       scheduledTime: r.scheduledTime ?? r.scheduled_time ?? '',
       completed: !!r.completed,
       completedAt: r.completedAt ?? r.completed_at ?? null,
+      source: r.source,
     }));
-  }
-
-  async markPrayerComplete(prayerId: string): Promise<void> {
-    await api.post(`${BASE}/prayers/${prayerId}/complete`);
   }
 
   // ─── Spending ─────────────────────────────────────────────

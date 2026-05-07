@@ -680,6 +680,8 @@ describe('AICoachServiceClient', () => {
         assessmentResponses: goalsRequest.assessmentResponses,
         bodyStats: goalsRequest.bodyStats,
         customGoalText: 'Lose 10kg by summer',
+      }, {
+        headers: { 'Idempotency-Key': expect.stringMatching(/^goal-gen-weight_loss-\d+$/) },
       });
       expect(result).toEqual(goalsResponse);
     });

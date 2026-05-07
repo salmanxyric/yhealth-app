@@ -1808,12 +1808,40 @@ class UserCoachingProfileService {
     currentState: CurrentState,
     patterns: Patterns
   ): Promise<AIInsightsResult> {
+    const topRisk = riskFlags[0];
+    const primaryMisalignment = goalAlignment.misaligned[0];
+    const lowEnergy = currentState.energyLevel <= 4;
+    const lowSleep = (currentState.todaysBiometrics?.sleepDuration ?? 8) < 6.5;
+    const strugglingArea = patterns.strugglingAreas?.[0] || (primaryMisalignment ? 'goal execution' : 'daily consistency');
+
     const defaults: AIInsightsResult = {
-      correlations: [],
-      suggestedFocus: 'Continue building consistent habits across all health pillars.',
-      openingStyle: 'Start with a warm, personalized greeting referencing their recent activity.',
-      keyInsights: [],
-      nextBestActions: [],
+      correlations: [
+        {
+          observation: lowSleep
+            ? 'Short sleep is likely reducing recovery and making consistent follow-through harder today.'
+            : `Current energy, adherence, and ${strugglingArea} should be reviewed together before adding more plan complexity.`,
+        },
+      ],
+      suggestedFocus: topRisk
+        ? `Focus today on reducing the ${topRisk.category} risk with one concrete, low-friction action.`
+        : lowEnergy
+          ? 'Focus today on energy management and one small action that preserves momentum.'
+          : 'Focus today on one high-leverage action that improves consistency without adding complexity.',
+      openingStyle: topRisk
+        ? `Start by naming the ${topRisk.category} pattern gently, then give one practical next step.`
+        : 'Start with a concise, data-aware check-in and one specific next step.',
+      keyInsights: [
+        primaryMisalignment
+          ? { type: 'blocking', text: `${primaryMisalignment.goal} is not aligned with the current behavior pattern: ${primaryMisalignment.reason}` }
+          : { type: lowEnergy ? 'blocking' : 'working', text: lowEnergy ? 'Energy is currently the limiting factor, so the plan should be simpler today.' : 'The user has enough recent data to coach from concrete behavior rather than generic advice.' },
+      ],
+      nextBestActions: [
+        {
+          action: lowEnergy ? 'Pick one 10-minute recovery-friendly action and complete it today.' : 'Choose one priority action for today and schedule it into a clear time window.',
+          expectedImpact: lowEnergy ? 'Maintains momentum without overloading recovery.' : 'Improves execution clarity and reduces decision friction.',
+          priority: 1,
+        },
+      ],
       predictions: [],
     };
 
@@ -1849,9 +1877,10 @@ Rules:
         return defaults;
       }
 
-      // Attempt LLM call with timeout + single retry on empty response
+      // Attempt a single LLM call with timeout. If the provider is slow or
+      // empty, the deterministic fallback above is good enough to persist.
       let content = '';
-      const MAX_ATTEMPTS = 2;
+      const MAX_ATTEMPTS = 1;
       const LLM_INSIGHT_TIMEOUT_MS = 15000; // 15s per attempt (was unbounded, causing 18-20s waits)
 
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -1881,13 +1910,13 @@ Rules:
 
           if (content.length > 10) break; // Got a real response
         } catch (_timeoutError) {
-          logger.warn('[CoachingProfile] LLM insight attempt timed out', {
+          logger.info('[CoachingProfile] LLM insight attempt timed out, using deterministic fallback', {
             attempt: attempt + 1,
             timeout: LLM_INSIGHT_TIMEOUT_MS,
           });
         }
 
-        logger.warn('[CoachingProfile] LLM returned near-empty response, retrying', {
+        logger.info('[CoachingProfile] LLM returned near-empty response, using deterministic fallback', {
           attempt: attempt + 1,
           contentLength: content.length,
           rawContent: content.substring(0, 100),
@@ -1902,10 +1931,15 @@ Rules:
       // Parse LLM response using robust helper (handles fences, truncation, control chars)
       const raw = parseLlmJson<Partial<AIInsightsResult>>(content);
       if (!raw) {
-        logger.warn('[CoachingProfile] parseLlmJson returned null', {
+        const logPayload = {
           contentLength: content.length,
           contentPreview: content.substring(0, 200),
-        });
+        };
+        if (content.length === 0) {
+          logger.info('[CoachingProfile] Empty LLM insight response, using deterministic fallback', logPayload);
+        } else {
+          logger.warn('[CoachingProfile] parseLlmJson returned null', logPayload);
+        }
         return defaults;
       }
 

@@ -113,7 +113,7 @@ export function DistractionFreeEditor({
   onClose,
   onSubmit,
   isSubmitting = false,
-  autoSaveStatus = "idle",
+  autoSaveStatus: _autoSaveStatus = "idle",
   entryDate,
   onDateChange,
 }: DistractionFreeEditorProps) {
@@ -191,8 +191,10 @@ export function DistractionFreeEditor({
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [isSubmitting, handleSave, onClose]);
 
-  const wordCount = editorApiRef.current?.wordCount ?? 0;
-  const charCount = editorApiRef.current?.charCount ?? 0;
+  const currentText = richContent?.text ?? value;
+  const wordCount = currentText.trim().length > 0 ? currentText.trim().split(/\s+/).length : 0;
+  const charCount = currentText.length;
+  const editorIsEmpty = !richContent || richContent.text.trim().length === 0;
   const modeInfo = MODE_LABELS[mode];
 
   return (
@@ -255,7 +257,7 @@ export function DistractionFreeEditor({
         <div className="flex items-center gap-3">
           <button
             onClick={handleSave}
-            disabled={isSubmitting || (editorApiRef.current?.isEmpty() ?? true)}
+            disabled={isSubmitting || editorIsEmpty}
             className="observatory-font-display flex items-center gap-2 px-4 py-2 rounded-full border border-purple-500/30 bg-purple-500/10 backdrop-blur-sm text-purple-200 hover:bg-purple-500/20 hover:border-purple-400/50 transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{ fontSize: 10, letterSpacing: "0.15em" }}
           >

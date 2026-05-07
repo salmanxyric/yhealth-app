@@ -29,6 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import { isToday, isYesterday, isThisWeek, isThisMonth, formatDistanceToNow } from 'date-fns';
 import type { RAGConversation } from '@/src/shared/services/rag-chat.service';
+import { stripMarkdownForPreview, getConversationDisplayTitle } from '@/src/shared/utils/coach-message-display';
 
 interface ConversationSidebarProps {
   conversations: RAGConversation[];
@@ -215,8 +216,8 @@ function ConversationItem({
     ? formatDistanceToNow(new Date(conversation.lastMessageAt), { addSuffix: false })
     : '';
 
-  const displayTitle = conversation.title || conversation.lastMessagePreview || (conversation.messageCount > 0 ? `Chat (${conversation.messageCount})` : 'New Chat');
-  const preview = conversation.lastMessagePreview || `${conversation.messageCount} messages`;
+  const displayTitle = getConversationDisplayTitle(conversation);
+  const preview = stripMarkdownForPreview(conversation.lastMessagePreview) || `${conversation.messageCount} messages`;
   const isAssistant = conversation.lastMessageRole === 'assistant';
 
   return (
@@ -257,7 +258,7 @@ function ConversationItem({
         {/* Last message preview */}
         <p className="truncate text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
           {isAssistant && <span className="text-emerald-500/70">Aurea: </span>}
-          {!isAssistant && conversation.lastMessagePreview && <span className="text-zinc-400">You: </span>}
+          {!isAssistant && stripMarkdownForPreview(conversation.lastMessagePreview) && <span className="text-zinc-400">You: </span>}
           {preview}
         </p>
       </div>

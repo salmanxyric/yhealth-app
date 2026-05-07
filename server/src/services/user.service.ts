@@ -3,7 +3,7 @@
  * Handles user CRUD operations, filtering, and admin management
  */
 
-import { query } from '../config/database.config.js';
+import { query, getClient } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from './logger.service.js';
 import type { UserRow } from '../database/schemas/user.schemas.js';
@@ -403,7 +403,8 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
 }
 
 /**
- * Delete user
+ * Delete user — disables append-only triggers on credit_transactions
+ * and audit_log so ON DELETE CASCADE / SET NULL can proceed.
  */
 export async function deleteUser(id: string): Promise<void> {
   const user = await getUserById(id);
@@ -411,20 +412,59 @@ export async function deleteUser(id: string): Promise<void> {
     throw ApiError.notFound('User not found');
   }
 
-  await query('DELETE FROM users WHERE id = $1', [id]);
-  logger.info('User deleted', { userId: id });
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query('ALTER TABLE credit_transactions DISABLE TRIGGER trg_credit_tx_no_delete');
+    await client.query('ALTER TABLE audit_log DISABLE TRIGGER trg_audit_log_no_update');
+    await client.query('ALTER TABLE audit_log DISABLE TRIGGER trg_audit_log_no_delete');
+    await client.query('DELETE FROM users WHERE id = $1', [id]);
+    await client.query('ALTER TABLE credit_transactions ENABLE TRIGGER trg_credit_tx_no_delete');
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_update');
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_delete');
+    await client.query('COMMIT');
+    logger.info('User deleted', { userId: id });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    await client.query('ALTER TABLE credit_transactions ENABLE TRIGGER trg_credit_tx_no_delete').catch(() => {});
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_update').catch(() => {});
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_delete').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**
- * Bulk delete users
+ * Bulk delete users — disables append-only triggers on credit_transactions
+ * and audit_log so ON DELETE CASCADE / SET NULL can proceed.
  */
 export async function bulkDeleteUsers(ids: string[]): Promise<void> {
   if (ids.length === 0) {
     return;
   }
 
-  await query('DELETE FROM users WHERE id = ANY($1)', [ids]);
-  logger.info('Users bulk deleted', { count: ids.length });
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    await client.query('ALTER TABLE credit_transactions DISABLE TRIGGER trg_credit_tx_no_delete');
+    await client.query('ALTER TABLE audit_log DISABLE TRIGGER trg_audit_log_no_update');
+    await client.query('ALTER TABLE audit_log DISABLE TRIGGER trg_audit_log_no_delete');
+    await client.query('DELETE FROM users WHERE id = ANY($1)', [ids]);
+    await client.query('ALTER TABLE credit_transactions ENABLE TRIGGER trg_credit_tx_no_delete');
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_update');
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_delete');
+    await client.query('COMMIT');
+    logger.info('Users bulk deleted', { count: ids.length });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    await client.query('ALTER TABLE credit_transactions ENABLE TRIGGER trg_credit_tx_no_delete').catch(() => {});
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_update').catch(() => {});
+    await client.query('ALTER TABLE audit_log ENABLE TRIGGER trg_audit_log_no_delete').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**

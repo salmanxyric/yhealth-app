@@ -60,7 +60,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     try {
       // Fetch active plan
       const planResponse = await api.get<{
-        plan: Plan;
+        plan: Plan | null;
         todayActivities: unknown[];
         weekCompletionRate: number;
       }>('/plans/active');
@@ -68,6 +68,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (planResponse.success && planResponse.data) {
         setPlan(planResponse.data.plan);
         setWeekCompletionRate(planResponse.data.weekCompletionRate);
+        if (!planResponse.data.plan) {
+          setError('no_plan');
+        }
       }
 
       // Fetch today's activities

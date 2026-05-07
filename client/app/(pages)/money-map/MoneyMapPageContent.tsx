@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { sanitizeHtml } from "@/lib/sanitize";
 import {
@@ -43,6 +43,7 @@ import { TransactionsSection } from "./components/TransactionsSection";
 import { AnalyticsSection } from "./components/AnalyticsSection";
 import { BudgetsSection } from "./components/BudgetsSection";
 import { GoalsSection } from "./components/GoalsSection";
+import { DateFilterBar, getDefaultRange, type DatePreset, type DateRange } from "./components/DateFilterBar";
 
 type MoneyMapTab = "overview" | "transactions" | "analytics" | "budgets" | "goals" | "insights";
 
@@ -60,6 +61,8 @@ export default function MoneyMapPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [showReceiptScan, setShowReceiptScan] = useState(false);
   const [showStatementScan, setShowStatementScan] = useState(false);
+  const [datePreset, setDatePreset] = useState<DatePreset>("month");
+  const [dateRange, setDateRange] = useState<DateRange>(() => getDefaultRange("month"));
 
   // Data state
   const [summary, setSummary] = useState<TransactionSummary | null>(null);
@@ -73,6 +76,33 @@ export default function MoneyMapPageContent() {
   const [insights, setInsights] = useState<FinanceAIInsight[]>([]);
   const [budgetAlerts, setBudgetAlerts] = useState<BudgetAlert[]>([]);
   const [comparison, setComparison] = useState<{ current: MonthlySummary; previous: MonthlySummary } | null>(null);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((t) => {
+      const txDate = new Date(t.transactionDate + "T00:00:00");
+      return txDate >= dateRange.start && txDate <= dateRange.end;
+    });
+  }, [transactions, dateRange]);
+
+  const filteredSummary = useMemo((): TransactionSummary | null => {
+    if (!summary && filteredTransactions.length === 0) return null;
+    const totalIncome = filteredTransactions
+      .filter((t) => t.transactionType === "income")
+      .reduce((s, t) => s + t.amount, 0);
+    const totalExpense = filteredTransactions
+      .filter((t) => t.transactionType === "expense")
+      .reduce((s, t) => s + t.amount, 0);
+    return {
+      totalIncome,
+      totalExpense,
+      netCashFlow: totalIncome - totalExpense,
+      transactionCount: filteredTransactions.length,
+      period: {
+        start: dateRange.start.toISOString().split("T")[0],
+        end: dateRange.end.toISOString().split("T")[0],
+      },
+    };
+  }, [summary, filteredTransactions, dateRange]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -95,7 +125,7 @@ export default function MoneyMapPageContent() {
       if (results[2].status === "fulfilled" && results[2].value.data) setCategoryBreakdown(results[2].value.data);
       if (results[3].status === "fulfilled" && results[3].value.data) setTrends(results[3].value.data);
       if (results[4].status === "fulfilled" && results[4].value.data) {
-        const txData = results[4].value.data as any;
+        const txData = results[4].value.data as { transactions?: FinanceTransaction[]; total?: number };
         setTransactions(txData.transactions || []);
         setTransactionTotal(txData.total || 0);
       }
@@ -132,10 +162,10 @@ export default function MoneyMapPageContent() {
       case "overview":
         return (
           <OverviewSection
-            summary={summary}
+            summary={filteredSummary}
             monthlySummary={monthlySummary}
             budgetAlerts={budgetAlerts}
-            recentTransactions={transactions}
+            recentTransactions={filteredTransactions}
             budgets={budgets}
             goals={goals}
             categoryBreakdown={categoryBreakdown}
@@ -198,6 +228,14 @@ export default function MoneyMapPageContent() {
             Smart finance tracking & AI-powered insights
           </p>
         </motion.div>
+
+        {/* Date Filter */}
+        <DateFilterBar
+          value={dateRange}
+          preset={datePreset}
+          onPresetChange={setDatePreset}
+          onRangeChange={setDateRange}
+        />
 
         {/* Tab Navigation */}
         <div className="flex gap-1 p-1 bg-white/5 rounded-xl overflow-x-auto scrollbar-hide">

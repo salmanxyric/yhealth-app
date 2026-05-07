@@ -28,7 +28,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import { Skeleton } from 'boneyard-js/react';
+import { ContentSkeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { MetricCard, StatusBadge } from '@/components/admin/premium';
@@ -148,7 +148,7 @@ export default function AdminAnalyticsPageContent() {
         </div>
       )}
 
-      <Skeleton
+      <ContentSkeleton
         name="analytics-dashboard"
         loading={!data && !error}
         animate="shimmer"
@@ -508,7 +508,7 @@ export default function AdminAnalyticsPageContent() {
           </div>
         </>
       )}
-      </Skeleton>
+      </ContentSkeleton>
     </div>
   );
 }

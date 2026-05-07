@@ -15,6 +15,7 @@ export { WorkoutScheduleTasks } from './WorkoutScheduleTasks';
 export { WorkoutRescheduleHistory } from './WorkoutRescheduleHistory';
 export { WorkoutConstraints } from './WorkoutConstraints';
 export { RescheduleWorkoutModal } from './RescheduleWorkoutModal';
+export { WorkoutPlanDetailView } from './WorkoutPlanDetailView';
 export { ExerciseExecutionDrawer } from './ExerciseExecutionDrawer';
 export {
   CircularProgress,

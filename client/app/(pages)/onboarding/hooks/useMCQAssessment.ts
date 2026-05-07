@@ -9,6 +9,7 @@ import {
   type ExtractedInsight,
   type ConversationPhase,
 } from '@/src/shared/services';
+import { ragChatService } from '@/src/shared/services/rag-chat.service';
 import {
   type DisplayInsight,
   mapInsightToDisplay,
@@ -138,7 +139,7 @@ export function useMCQAssessment({
     };
 
     initializeAssessment();
-  }, [apiGoal, customGoalText, aiAvailable, language]);
+  }, [apiGoal, customGoalText, goalLabel, aiAvailable, language]);
 
   const toggleOption = useCallback((option: MCQOption) => {
     setSelectedOptions((prev) => {
@@ -191,14 +192,12 @@ export function useMCQAssessment({
       setSelectedOptions([]);
       setIsLoading(true);
 
-      // Fire-and-forget: persist to chat history (non-blocking)
-      if (sessionId) {
-        aiCoachService.chat(
-          `[MCQ Answer] Q: ${currentQuestion.question} → ${selectedOptions.map((o) => o.text).join(', ')}`,
-          apiGoal,
-          sessionId
-        ).catch((chatErr) => console.warn('Failed to persist MCQ to chat history:', chatErr));
-      }
+      // Fire-and-forget: persist MCQ answer to vector store for LLM context (not as a visible chat message)
+      ragChatService.updateHealthProfile({
+        section: 'history',
+        content: `[Assessment] Q: ${currentQuestion.question} → ${selectedOptions.map((o) => o.text).join(', ')}`,
+        metadata: { source: 'mcq_assessment', goal: apiGoal, questionId: currentQuestion.id },
+      }).catch((err) => console.warn('Failed to persist MCQ to health profile:', err));
 
       // Critical path: generate next question (this is what the user waits for)
       const nextResponse = await aiCoachService.generateMCQQuestion({
@@ -214,6 +213,7 @@ export function useMCQAssessment({
       setCurrentQuestion(nextResponse.question);
       setCurrentPhase(nextResponse.phase);
       setProgress(nextResponse.progress);
+      setError(null);
 
       if (nextResponse.isComplete) {
         setConversationComplete(true);
@@ -238,6 +238,7 @@ export function useMCQAssessment({
     language,
     onAddAssessmentResponse,
     sessionId,
+    goalLabel,
   ]);
 
   const retryQuestion = useCallback(() => {
@@ -260,6 +261,7 @@ export function useMCQAssessment({
         setCurrentQuestion(response.question);
         setCurrentPhase(response.phase);
         setProgress(response.progress);
+        setError(null);
       })
       .catch((err) => {
         console.error('Failed to retry question:', err);
@@ -268,7 +270,7 @@ export function useMCQAssessment({
       .finally(() => {
         setIsLoading(false);
       });
-  }, [aiAvailable, apiGoal, customGoalText, currentPhase, previousAnswers, extractedInsights, language]);
+  }, [aiAvailable, apiGoal, customGoalText, goalLabel, currentPhase, previousAnswers, extractedInsights, language]);
 
   const resetAssessment = useCallback(() => {
     hasInitializedRef.current = false;

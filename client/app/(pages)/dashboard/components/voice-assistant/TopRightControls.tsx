@@ -197,9 +197,8 @@ export function TopRightControls({
                         {region}
                       </div>
                       {languages.map((lang) => (
-                        <button
+                        <div
                           key={lang.code}
-                          type="button"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -209,6 +208,20 @@ export function TopRightControls({
                               setSearchQuery("");
                             }, 50);
                           }}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter" && e.key !== " ") return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onLanguageChange(lang.code);
+                            setTimeout(() => {
+                              setIsOpen(false);
+                              setSearchQuery("");
+                            }, 50);
+                          }}
+                          role="option"
+                          aria-selected={selectedLanguage === lang.code}
+                          tabIndex={0}
+                          aria-label={`Select ${lang.displayName}`}
                           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer"
                           style={{
                             background:
@@ -258,7 +271,7 @@ export function TopRightControls({
                               style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.6)" }}
                             />
                           </button>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   ))

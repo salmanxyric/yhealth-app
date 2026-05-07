@@ -35,9 +35,9 @@ async function runMicroWinsJob(): Promise<void> {
     // Get recently active users (logged in within last 7 days)
     const usersResult = await query<{ id: string }>(
       `SELECT id FROM users
-       WHERE last_login_at >= NOW() - INTERVAL '7 days'
+       WHERE last_login >= NOW() - INTERVAL '7 days'
          AND is_active = TRUE
-       ORDER BY last_login_at DESC
+       ORDER BY last_login DESC
        LIMIT 500`
     );
 

@@ -1,9 +1,23 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin, customFetch } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import type { NextAuthConfig } from "next-auth";
+import { googleOAuthFetch } from "@/lib/google-oauth-fetch";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Auth");
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  process.env.AUTH_GOOGLE_ID ||
+  process.env.AUTH_GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET =
+  process.env.GOOGLE_CLIENT_SECRET ||
+  process.env.AUTH_GOOGLE_SECRET ||
+  process.env.AUTH_GOOGLE_CLIENT_SECRET;
+
+const googleProviderEnabled = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 
 export const authConfig: NextAuthConfig = {
   providers: [
@@ -31,9 +45,7 @@ export const authConfig: NextAuthConfig = {
           const data = await response.json();
 
           // Debug: log the full response structure
-          if (process.env.NODE_ENV === "development") {
-            console.log("[NextAuth Authorize] Backend response:", JSON.stringify(data, null, 2));
-          }
+          log.debug("Backend response:", JSON.stringify(data, null, 2));
 
           if (!response.ok || !data.success) {
             throw new Error(data.message || data.error?.message || "Invalid credentials");
@@ -46,13 +58,11 @@ export const authConfig: NextAuthConfig = {
           const refreshToken = tokens.refreshToken;
           const user = responseData.user;
 
-          if (process.env.NODE_ENV === "development") {
-            console.log("[NextAuth Authorize] Extracted tokens:", {
-              hasAccessToken: !!accessToken,
-              hasRefreshToken: !!refreshToken,
-              hasUser: !!user,
-            });
-          }
+          log.debug("Extracted tokens:", {
+            hasAccessToken: !!accessToken,
+            hasRefreshToken: !!refreshToken,
+            hasUser: !!user,
+          });
 
           const userResult = {
             id: user.id,
@@ -67,30 +77,39 @@ export const authConfig: NextAuthConfig = {
             role: user.role || "user", // Include role from backend
           };
 
-          if (process.env.NODE_ENV === "development") {
-            console.log("[NextAuth Authorize] Returning user:", {
-              id: userResult.id,
-              email: userResult.email,
-              hasAccessToken: !!userResult.accessToken,
-              accessTokenPreview: userResult.accessToken
-                ? `${userResult.accessToken.substring(0, 20)}...`
-                : "none",
-            });
-          }
+          log.debug("Returning user:", {
+            id: userResult.id,
+            email: userResult.email,
+            hasAccessToken: !!userResult.accessToken,
+            accessTokenPreview: userResult.accessToken
+              ? `${userResult.accessToken.substring(0, 20)}...`
+              : "none",
+          });
 
           return userResult;
         } catch (error) {
-          console.error("Auth error:", error);
-          return null;
+          log.error("Auth error:", error);
+          throw new CredentialsSignin(
+            error instanceof Error ? error.message : "Invalid credentials"
+          );
         }
       },
     }),
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(googleProviderEnabled
       ? [
           Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: GOOGLE_CLIENT_ID!,
+            clientSecret: GOOGLE_CLIENT_SECRET!,
+            [customFetch]: googleOAuthFetch,
+            // Explicit endpoints bypass the OpenID discovery fetch to
+            // accounts.google.com (unreachable on some networks).
+            issuer: "https://accounts.google.com",
+            wellKnown: undefined as unknown as string,
+            token: "https://oauth2.googleapis.com/token",
+            userinfo: "https://openidconnect.googleapis.com/v1/userinfo",
+            jwks_endpoint: "https://www.googleapis.com/oauth2/v3/certs",
             authorization: {
+              url: "https://accounts.google.com/o/oauth2/v2/auth",
               params: {
                 prompt: "consent",
                 access_type: "offline",
@@ -106,23 +125,33 @@ export const authConfig: NextAuthConfig = {
       // Handle Google sign-in - register/login with backend
       if (account?.provider === "google" && profile?.email) {
         try {
+          const googleProfile = profile as {
+            sub?: string;
+            name?: string;
+            picture?: string;
+            given_name?: string;
+            family_name?: string;
+          };
+
           const response = await fetch(`${API_URL}/auth/social`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               provider: "google",
+              providerId: googleProfile.sub,
               idToken: account.id_token,
               accessToken: account.access_token,
               email: profile.email,
-              name: profile.name,
-              picture: (profile as { picture?: string }).picture,
+              name: googleProfile.name,
+              firstName: googleProfile.given_name,
+              lastName: googleProfile.family_name,
+              avatar: googleProfile.picture,
             }),
           });
 
           const data = await response.json();
 
           if (!response.ok || !data.success) {
-            // Return error message for error page
             const errorMessage = data.error?.message || "Social authentication failed";
             return `/auth/signin?error=${encodeURIComponent(errorMessage)}`;
           }
@@ -131,24 +160,25 @@ export const authConfig: NextAuthConfig = {
           (user as unknown as Record<string, unknown>).backendData = data.data;
           return true;
         } catch (error) {
-          console.error("Social auth error:", error);
-          return `/auth/signin?error=${encodeURIComponent("Failed to connect to authentication server")}`;
+          log.error("Social auth error:", error);
+          const errorCode = error instanceof Error && error.message.includes("fetch failed")
+            ? "ConnectTimeout"
+            : "NetworkError";
+          return `/auth/signin?error=${encodeURIComponent(errorCode)}`;
         }
       }
       return true;
     },
     async jwt({ token, user, account, trigger }) {
       // Debug logging
-      if (process.env.NODE_ENV === "development") {
-        console.log("[NextAuth JWT] Callback:", {
-          trigger,
-          hasUser: !!user,
-          hasAccount: !!account,
-          provider: account?.provider,
-          userAccessToken: user?.accessToken ? "present" : "missing",
-          tokenAccessToken: token.accessToken ? "present" : "missing",
-        });
-      }
+      log.debug("JWT Callback:", {
+        trigger,
+        hasUser: !!user,
+        hasAccount: !!account,
+        provider: account?.provider,
+        userAccessToken: user?.accessToken ? "present" : "missing",
+        tokenAccessToken: token.accessToken ? "present" : "missing",
+      });
 
       // Initial sign in - user object contains data from authorize callback
       if (user) {
@@ -159,11 +189,9 @@ export const authConfig: NextAuthConfig = {
         token.onboardingStatus = user.onboardingStatus || token.onboardingStatus;
         token.role = (user as { role?: string }).role || token.role || "user"; // Store role in token
 
-        if (process.env.NODE_ENV === "development") {
-          console.log("[NextAuth JWT] Set from user:", {
-            accessToken: token.accessToken ? `${String(token.accessToken).substring(0, 20)}...` : "none",
-          });
-        }
+        log.debug("JWT set from user:", {
+          accessToken: token.accessToken ? `${String(token.accessToken).substring(0, 20)}...` : "none",
+        });
 
         // Handle Google sign-in - get tokens from backendData
         if (account?.provider === "google") {
@@ -179,18 +207,16 @@ export const authConfig: NextAuthConfig = {
             token.onboardingStatus = backendData.user.onboardingStatus;
             token.role = backendData.user.role || token.role || "user"; // Store role from backend
 
-            if (process.env.NODE_ENV === "development") {
-              console.log("[NextAuth JWT] Set from Google backendData:", {
-                accessToken: token.accessToken ? `${String(token.accessToken).substring(0, 20)}...` : "none",
-              });
-            }
+            log.debug("JWT set from Google backendData:", {
+              accessToken: token.accessToken ? `${String(token.accessToken).substring(0, 20)}...` : "none",
+            });
           }
         }
       }
 
       // Ensure accessToken persists between requests
-      if (process.env.NODE_ENV === "development" && !user) {
-        console.log("[NextAuth JWT] Returning existing token:", {
+      if (!user) {
+        log.debug("JWT returning existing token:", {
           hasAccessToken: !!token.accessToken,
           accessToken: token.accessToken ? `${String(token.accessToken).substring(0, 20)}...` : "none",
         });
@@ -200,14 +226,12 @@ export const authConfig: NextAuthConfig = {
     },
     async session({ session, token }) {
       // Debug logging
-      if (process.env.NODE_ENV === "development") {
-        console.log("[NextAuth Session] Callback:", {
-          tokenId: token.id,
-          tokenAccessToken: token.accessToken ? `${String(token.accessToken).substring(0, 20)}...` : "missing",
-          tokenRefreshToken: token.refreshToken ? "present" : "missing",
-          tokenOnboardingStatus: token.onboardingStatus,
-        });
-      }
+      log.debug("Session Callback:", {
+        tokenId: token.id,
+        tokenAccessToken: token.accessToken ? `${String(token.accessToken).substring(0, 20)}...` : "missing",
+        tokenRefreshToken: token.refreshToken ? "present" : "missing",
+        tokenOnboardingStatus: token.onboardingStatus,
+      });
 
       // Always copy token values to session
       session.user.id = token.id as string;
@@ -217,13 +241,11 @@ export const authConfig: NextAuthConfig = {
       // Include role in session user object
       (session.user as { role?: string }).role = (token.role as string) || "user";
 
-      if (process.env.NODE_ENV === "development") {
-        console.log("[NextAuth Session] Returning session:", {
-          userId: session.user.id,
-          hasAccessToken: !!session.accessToken,
-          accessToken: session.accessToken ? `${session.accessToken.substring(0, 20)}...` : "none",
-        });
-      }
+      log.debug("Returning session:", {
+        userId: session.user.id,
+        hasAccessToken: !!session.accessToken,
+        accessToken: session.accessToken ? `${session.accessToken.substring(0, 20)}...` : "none",
+      });
 
       return session;
     },
@@ -238,6 +260,10 @@ export const authConfig: NextAuthConfig = {
     strategy: "jwt",
     maxAge: 3 * 24 * 60 * 60, // 3 days - match JWT_EXPIRES_IN
   },
+  secret:
+    process.env.AUTH_SECRET ||
+    process.env.NEXTAUTH_SECRET ||
+    (process.env.NODE_ENV === "production" ? undefined : "development-secret"),
   cookies: {
     sessionToken: {
       name: process.env.NODE_ENV === "production"

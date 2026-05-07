@@ -300,6 +300,10 @@ export function useOnboardingApi() {
     setError(null);
 
     try {
+      if (goals.length > 3) {
+        throw new Error('Maximum 3 active goals allowed. Please remove one goal to continue.');
+      }
+
       const formattedGoals = goals.map((g) => {
         // Handle both Date objects and ISO strings for startDate/targetDate
         const startDate = g.timeline.startDate instanceof Date

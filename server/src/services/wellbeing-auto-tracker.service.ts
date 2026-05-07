@@ -223,6 +223,15 @@ class WellbeingAutoTrackerService {
    * Extract wellbeing information from user message
    */
   async extractWellbeingInfo(userId: string, message: string): Promise<AutoTrackingResult> {
+    const empty: AutoTrackingResult = { entries: [], suggestions: [] };
+
+    // Skip very short or obviously non-wellbeing messages to avoid wasting LLM calls
+    const trimmed = message.trim();
+    if (trimmed.length < 4 || trimmed.length > 2000) return empty;
+
+    const wellbeingSignals = /\b(feel|felt|mood|tired|exhaust|stress|anxi|sleep|energy|happy|sad|depress|overwhelm|calm|relax|worry|pain|hurt|sick|ill|meditat|journal|grate?ful|breath|cry|angry|frustra|lonely|excite|nervous|burn.?out)\b/i;
+    if (!wellbeingSignals.test(trimmed)) return empty;
+
     try {
       // Use LLM to extract structured data
       const extractionPrompt = `Analyze the following user message and extract any wellbeing-related information.
@@ -282,7 +291,9 @@ Return a JSON object with this structure:
   }
 }
 
-Only include fields where information was detected. Be conservative - only extract if you're reasonably confident.`;
+Only include fields where information was detected. Be conservative - only extract if you're reasonably confident.
+If the message contains NO wellbeing-related information at all, return exactly: {"mood":{"detected":false},"energy":{"detected":false},"stress":{"detected":false},"journal":{"suggested":false},"habits":{"suggested":false},"schedule":{"suggested":false}}
+IMPORTANT: Always respond with valid JSON only. No explanations, no text — just the JSON object.`;
 
       const { result: response, llm: updatedLlm } = await modelFactory.invokeWithFallback(
         this.llm,

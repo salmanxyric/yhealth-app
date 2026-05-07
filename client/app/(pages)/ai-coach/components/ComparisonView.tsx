@@ -31,7 +31,6 @@ export function ComparisonView({ title, headline, items }: ComparisonViewProps) 
 
       <div className="grid grid-cols-2 gap-3">
         {items.map((item, i) => {
-          const delta = item.target ? item.current - item.target : undefined;
           const deltaPct = item.target && item.target !== 0 ? ((item.current - item.target) / item.target) * 100 : undefined;
 
           return (

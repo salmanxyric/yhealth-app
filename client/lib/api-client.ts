@@ -4,20 +4,15 @@ import axios, {
   AxiosRequestConfig,
   AxiosResponse,
 } from "axios";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("API");
 
 // Default to port 5000 if not specified (matches server configuration)
 // To override, set NEXT_PUBLIC_API_URL in your .env.local file
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-// Log the API URL in development for debugging
-if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-  console.log("[API Client] Using API URL:", API_URL);
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    console.log("[API Client] API URL set from NEXT_PUBLIC_API_URL environment variable");
-  } else {
-    console.log("[API Client] Using default API URL (http://localhost:5000/api). To change it, set NEXT_PUBLIC_API_URL in your .env.local file.");
-  } 
-}
+log.debug("Using API URL:", API_URL);
 
 // Cookie utilities
 const COOKIE_NAME = "balencia_access_token";
@@ -76,7 +71,7 @@ export class ApiError extends Error {
     message: string,
     public statusCode: number,
     public code: string,
-    public details?: Record<string, string[]>
+    public details?: unknown
   ) {
     super(message);
     this.name = "ApiError";
@@ -135,15 +130,7 @@ class ApiClient {
         config.url = `${url}${sep}_t=${Date.now()}`;
       }
 
-      if (process.env.NODE_ENV === "development") {
-        console.debug(
-          "[API Client] Request",
-          config.method,
-          config.url,
-          "hasToken:",
-          !!token
-        );
-      }
+      log.debug("Request", config.method, config.url, "hasToken:", !!token);
 
       return config;
     });
@@ -215,13 +202,11 @@ class ApiClient {
               this.setAccessToken(null);
               
               // Log the token expiration
-              if (process.env.NODE_ENV === "development") {
-                console.warn("[API Client] Token expired or invalid. Logging out user.", {
-                  errorCode,
-                  errorMessage,
-                  url: error.config?.url,
-                });
-              }
+              log.warn("Token expired or invalid. Logging out user.", {
+                errorCode,
+                errorMessage,
+                url: error.config?.url,
+              });
 
               // Trigger logout callback if set
               if (this.onTokenExpired) {
@@ -230,7 +215,7 @@ class ApiClient {
                   try {
                     this.onTokenExpired?.();
                   } catch (logoutError) {
-                    console.error("[API Client] Error during logout callback:", logoutError);
+                    log.error("Error during logout callback:", logoutError);
                   } finally {
                     // Reset logout flag after a delay to allow retry if needed
                     setTimeout(() => {
@@ -292,8 +277,8 @@ class ApiClient {
             const baseUrl = actualApiUrl.replace('/api', '');
             
             if (process.env.NODE_ENV === 'development') {
-              console.warn(
-                `[API] ⚠️ Server unreachable at ${actualApiUrl}\n` +
+              log.warn(
+                `Server unreachable at ${actualApiUrl}\n` +
                 `   To fix this:\n` +
                 `   1. Make sure the backend server is running\n` +
                 `   2. Start it with: cd server && bun run dev\n` +
@@ -301,8 +286,8 @@ class ApiClient {
                 `   4. Or set NEXT_PUBLIC_API_URL in .env.local if using a different URL`
               );
             } else {
-              console.warn(
-                `[API] Server unreachable at ${actualApiUrl}. ` +
+              log.warn(
+                `Server unreachable at ${actualApiUrl}. ` +
                 `Please check your network connection or contact support.`
               );
             }
@@ -332,12 +317,7 @@ class ApiClient {
     const cookieToken = getCookie(COOKIE_NAME);
     if (cookieToken) {
       this.accessToken = cookieToken;
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          "[API Client] Token loaded from cookie:",
-          `${cookieToken.substring(0, 20)}...`
-        );
-      }
+      log.debug("Token loaded from cookie:", `${cookieToken.substring(0, 20)}...`);
     }
     this.initialized = true;
   }
@@ -352,12 +332,7 @@ class ApiClient {
       deleteCookie(COOKIE_NAME);
     }
 
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        "[API Client] Token set:",
-        token ? `${token.substring(0, 20)}...` : "null"
-      );
-    }
+    log.debug("Token set:", token ? `${token.substring(0, 20)}...` : "null");
   }
 
   hasToken(): boolean {
@@ -375,12 +350,7 @@ class ApiClient {
     const cookieToken = getCookie(COOKIE_NAME);
     if (cookieToken) {
       this.accessToken = cookieToken;
-      if (process.env.NODE_ENV === "development") {
-        console.log(
-          "[API Client] Token recovered from cookie:",
-          `${cookieToken.substring(0, 20)}...`
-        );
-      }
+      log.debug("Token recovered from cookie:", `${cookieToken.substring(0, 20)}...`);
       return cookieToken;
     }
 
@@ -399,9 +369,7 @@ class ApiClient {
 
     // If this is a GET request and we have a pending identical request, return it
     if (requestKey && this.pendingRequests.has(requestKey)) {
-      if (process.env.NODE_ENV === "development") {
-        console.debug("[API Client] Deduplicating request:", requestKey);
-      }
+      log.debug("Deduplicating request:", requestKey);
       return this.pendingRequests.get(requestKey)! as Promise<ApiResponse<T>>;
     }
 

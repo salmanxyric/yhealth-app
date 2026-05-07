@@ -236,6 +236,13 @@ export const SEO = {
     noIndex: true,
   }),
 
+  quickNotes: createMetadata({
+    title: "Quick Notes - Capture Thoughts Fast | Balencia",
+    description: "Create, organize, pin, archive, and search lightweight personal notes with text, voice capture, colors, and AI coach support.",
+    path: "/quick-notes",
+    noIndex: true,
+  }),
+
   messages: createMetadata({
     title: "Messages - Balencia",
     description: "Connect with your health community, coaches, and support team through secure messaging.",

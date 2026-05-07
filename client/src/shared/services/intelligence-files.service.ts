@@ -21,7 +21,7 @@ import type {
   MemoryStatus,
   CoreSection,
   ArtifactType,
-} from "../../../../shared/types/domain/intelligence-files";
+} from "@shared/types/domain/intelligence-files";
 
 const BASE = "/v1/intelligence/files";
 

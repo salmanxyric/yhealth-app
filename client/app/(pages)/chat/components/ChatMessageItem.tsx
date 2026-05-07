@@ -10,6 +10,7 @@ import { AudioPlayer } from './AudioPlayer';
 import { MessageMenu } from './MessageMenu';
 import { MessageReactions } from './MessageReactions';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { cleanCoachDisplayText } from '@/src/shared/utils/coach-message-display';
 
 export interface ChatMessageItemData {
   id: string;
@@ -85,7 +86,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
   const showAudio = !isViewOnce
     ? (message.mediaUrl && message.mediaType === 'audio')
     : false;
-  const hasTextContent = message.content && message.content.trim().length > 0;
+  const displayContent = !isUser ? cleanCoachDisplayText(message.content) : message.content;
+  const hasTextContent = displayContent && displayContent.trim().length > 0;
   const isSystemMessage = message.contentType === 'system';
 
   const viewOnceLabel = message.mediaType === 'video' ? 'video'
@@ -102,8 +104,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
   };
 
   const handleCopy = () => {
-    if (message.content && !message.isDeleted) {
-      navigator.clipboard.writeText(message.content);
+    if (displayContent && !message.isDeleted) {
+      navigator.clipboard.writeText(displayContent);
     }
   };
 
@@ -145,7 +147,10 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
       {/* Message content */}
       <div
-        className={cn('flex flex-col gap-0.5 max-w-[75%] sm:max-w-[65%]', isUser ? 'items-end' : 'items-start')}
+        className={cn(
+          'flex flex-col gap-0.5',
+          isUser ? 'items-end max-w-[75%] sm:max-w-[65%]' : 'items-start max-w-[88%] sm:max-w-[78%] xl:max-w-[70%]'
+        )}
       >
         {/* Sender name for group chats */}
         {isGroupChat && !isUser && message.senderName && (
@@ -263,7 +268,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             {/* Message bubble */}
             {hasTextContent && (
               <MessageBubble
-                content={message.content}
+                content={displayContent}
                 isOwn={isUser}
                 isDeleted={message.isDeleted}
                 isEdited={message.isEdited}

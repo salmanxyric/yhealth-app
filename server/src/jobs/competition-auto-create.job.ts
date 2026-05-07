@@ -25,6 +25,11 @@ let intervalId: NodeJS.Timeout | null = null;
 
 const DAILY_DURATION = 1;
 const CHALLENGE_DURATIONS = [3, 7, 15];
+const TARGETED_DURATIONS = [3, 7, 14] as const;
+const TARGETED_METRICS = ['workout', 'nutrition', 'wellbeing', 'biometrics', 'engagement', 'total'] as const;
+const TARGETED_AGGREGATIONS = ['total', 'average', 'streak', 'max'] as const;
+type TargetedMetric = (typeof TARGETED_METRICS)[number];
+type TargetedAggregation = (typeof TARGETED_AGGREGATIONS)[number];
 
 // ============================================
 // COMPETITION TEMPLATES
@@ -184,6 +189,12 @@ async function createCompetitionFromTemplate(
   });
 }
 
+function metricForPillar(pillar: string): TargetedMetric {
+  if (pillar === 'nutrition' || pillar === 'wellbeing') return pillar;
+  if (pillar === 'fitness') return 'workout';
+  return 'total';
+}
+
 // ============================================
 // DUAL-TRACK LOGIC
 // ============================================
@@ -317,7 +328,7 @@ async function ensureGoalTargetedCompetition(): Promise<void> {
     const userCluster = await query<{ user_id: string; category: string; title: string }>(
       `SELECT ug.user_id, ug.category, ug.title
        FROM user_goals ug
-       JOIN users u ON u.id = ug.user_id AND u.is_active = true AND u.last_login_at >= NOW() - INTERVAL '7 days'
+       JOIN users u ON u.id = ug.user_id AND u.is_active = true AND u.last_login >= NOW() - INTERVAL '7 days'
        WHERE ug.pillar = $1 AND ug.status = 'active'
        ORDER BY ug.created_at DESC
        LIMIT 50`,
@@ -344,17 +355,41 @@ Make it specific to ${dominant.pillar}. durationDays must be 3, 7, or 14.`;
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      llmCircuitBreaker.recordRateLimitError(new Error('No JSON in LLM response'));
+      logger.warn('[CompetitionAutoCreate] Goal-targeted LLM response did not include JSON');
       return;
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    let parsed: {
+      name?: string;
+      description?: string;
+      metric?: string;
+      aggregation?: string;
+      durationDays?: number;
+      scoringWeights?: CompetitionTemplate['scoringWeights'];
+      badges?: string[];
+    };
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (error) {
+      logger.warn('[CompetitionAutoCreate] Goal-targeted LLM JSON parse failed', {
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return;
+    }
     llmCircuitBreaker.recordSuccess();
     lastTargetedRunMs = Date.now();
 
     const now = new Date();
     const endDate = new Date(now);
-    const days = [3, 7, 14].includes(parsed.durationDays) ? parsed.durationDays : 7;
+    const days = TARGETED_DURATIONS.includes(parsed.durationDays as (typeof TARGETED_DURATIONS)[number])
+      ? parsed.durationDays as (typeof TARGETED_DURATIONS)[number]
+      : 7;
+    const metric = TARGETED_METRICS.includes(parsed.metric as TargetedMetric)
+      ? parsed.metric as TargetedMetric
+      : metricForPillar(dominant.pillar);
+    const aggregation = TARGETED_AGGREGATIONS.includes(parsed.aggregation as TargetedAggregation)
+      ? parsed.aggregation as TargetedAggregation
+      : 'total';
     endDate.setDate(endDate.getDate() + days);
 
     const comp = await competitionService.createCompetition({
@@ -363,7 +398,7 @@ Make it specific to ${dominant.pillar}. durationDays must be 3, 7, or 14.`;
       description: parsed.description || `A ${dominant.pillar}-focused challenge`,
       startDate: now,
       endDate,
-      rules: { metric: parsed.metric || dominant.pillar, aggregation: parsed.aggregation || 'total', min_days: 1 },
+      rules: { metric, aggregation, min_days: 1 },
       eligibility: { groups: [dominant.pillar] },
       scoringWeights: parsed.scoringWeights || { workout: 20, nutrition: 20, wellbeing: 20, biometrics: 10, engagement: 15, consistency: 15 },
       antiCheatPolicy: {},

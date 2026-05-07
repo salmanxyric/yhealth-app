@@ -84,8 +84,18 @@ export function DashboardHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const now = new Date();
+  const greetingHour = now.getHours();
+  const greeting =
+    greetingHour < 12 ? "Good morning" : greetingHour < 18 ? "Good afternoon" : "Good evening";
+  const formattedDate = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 
   const breadcrumbs = getBreadcrumbs(pathname);
+  const firstName = getDisplayName().split(" ")[0] || "";
 
   // Handle scroll
   useEffect(() => {
@@ -136,13 +146,19 @@ export function DashboardHeader() {
             : "none",
         }}
         className={cn(
-          "sticky top-0 z-30 w-full border-b border-slate-800/50 bg-slate-900/95 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-900/80",
+          "sticky top-0 z-30 w-full border-b border-slate-800/50 bg-slate-900/95 backdrop-blur-xl supports-backdrop-filter:bg-slate-900/80",
           "transition-all duration-200"
         )}
       >
         <div className="flex h-16 items-center gap-4 px-4 lg:px-6">
           {/* Left Section */}
           <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="hidden xl:flex flex-col pr-3 mr-1 border-r border-white/10">
+              <span className="text-sm font-semibold text-white leading-tight">
+                {greeting}{firstName ? `, ${firstName}` : ""}
+              </span>
+              <span className="text-xs text-slate-400">{formattedDate}</span>
+            </div>
             {/* Breadcrumbs */}
             <nav className="hidden md:flex items-center gap-2 text-sm text-slate-400">
               <Link
@@ -157,12 +173,12 @@ export function DashboardHeader() {
                   {crumb.href ? (
                     <Link
                       href={crumb.href}
-                      className="hover:text-white transition-colors truncate max-w-[120px]"
+                      className="hover:text-white transition-colors truncate max-w-30"
                     >
                       {crumb.label}
                     </Link>
                   ) : (
-                    <span className="text-white font-medium truncate max-w-[120px]">
+                    <span className="text-white font-medium truncate max-w-30">
                       {crumb.label}
                     </span>
                   )}
@@ -189,7 +205,7 @@ export function DashboardHeader() {
                   </kbd>
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
+              <PopoverContent className="w-100 p-0" align="start">
                 <form onSubmit={handleSearch} className="p-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -224,6 +240,10 @@ export function DashboardHeader() {
 
           {/* Right Section */}
           <div className="flex items-center gap-2">
+            <div className="hidden lg:flex items-center rounded-full border border-emerald-300/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-200">
+              <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              Active
+            </div>
             {/* Notifications */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -281,7 +301,7 @@ export function DashboardHeader() {
                   <div className="flex items-center gap-2.5">
                     <Avatar className="h-8 w-8 ring-2 ring-cyan-500/30">
                       <AvatarImage src={user?.avatarUrl || '/avatar.jpg'} />
-                      <AvatarFallback className="bg-gradient-to-br from-cyan-500 via-teal-500 to-sky-500 text-white text-xs font-semibold">
+                      <AvatarFallback className="bg-linear-to-br from-cyan-500 via-teal-500 to-sky-500 text-white text-xs font-semibold">
                         {getInitials()}
                       </AvatarFallback>
                     </Avatar>

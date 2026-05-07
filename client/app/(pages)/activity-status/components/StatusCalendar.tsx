@@ -94,45 +94,55 @@ export function StatusCalendar({ onDateSelect }: StatusCalendarProps) {
     );
   };
 
+  const dayCellClass =
+    "h-[clamp(44px,5.2vw,72px)] rounded-[8px] border transition-all relative overflow-hidden";
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5 text-[10px] sm:text-[11px] lg:text-xs">
       {/* Calendar Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="bal-surface flex items-center justify-between bg-linear-to-r from-slate-900/70 via-slate-900/45 to-slate-900/70 p-2 shadow-[inset_0_1px_0_rgba(34,211,238,0.08)]">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Button
             variant="outline"
             size="icon"
             onClick={goToPreviousMonth}
-            className="rounded-full"
+            className="h-7 w-7 rounded-full border-cyan-300/20 bg-slate-900/70 text-slate-200 hover:bg-slate-800 sm:h-8 sm:w-8"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <CalendarIcon className="h-5 w-5" />
+          <h2 className="flex min-w-0 items-center gap-2 text-[13px] font-semibold leading-none tracking-tight text-slate-100 sm:text-sm lg:text-[15px]">
+            <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-cyan-300 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
             {monthName}
           </h2>
           <Button
             variant="outline"
             size="icon"
             onClick={goToNextMonth}
-            className="rounded-full"
+            className="h-7 w-7 rounded-full border-cyan-300/20 bg-slate-900/70 text-slate-200 hover:bg-slate-800 sm:h-8 sm:w-8"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <Button variant="outline" onClick={goToToday} className="rounded-full">
+        <Button
+          variant="outline"
+          onClick={goToToday}
+          className="h-7 rounded-full border-cyan-300/30 bg-cyan-500/10 px-3 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-500/20 sm:h-8 sm:text-[11px]"
+        >
           Today
         </Button>
       </div>
 
       {/* Calendar Grid */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+      <div className="bal-surface-elevated relative overflow-hidden rounded-2xl p-2.5 sm:p-3">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(34,211,238,0.16),transparent_42%),radial-gradient(circle_at_88%_30%,rgba(16,185,129,0.12),transparent_35%)]" />
+        <div className="pointer-events-none absolute inset-0 opacity-25 bg-[linear-gradient(rgba(148,163,184,0.15)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.15)_1px,transparent_1px)] bg-size-[44px_44px]" />
+        <div className="relative">
         {/* Weekday Headers */}
-        <div className="grid grid-cols-7 gap-2 mb-2">
+        <div className="mb-1 grid grid-cols-7 gap-1">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
             <div
               key={day}
-              className="text-center text-sm font-semibold text-muted-foreground py-2"
+              className="py-1.5 text-center text-[9px] font-semibold tracking-wide text-cyan-100/70 sm:text-[10px]"
             >
               {day}
             </div>
@@ -141,24 +151,26 @@ export function StatusCalendar({ onDateSelect }: StatusCalendarProps) {
 
         {/* Calendar Days */}
         {isLoading ? (
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1">
             {Array.from({ length: 42 }).map((_, i) => (
               <div
                 key={i}
-                className="aspect-square rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse"
+                className={`${dayCellClass} animate-pulse border-white/5 bg-slate-800/70`}
               />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((day, index) => {
               if (!day) {
-                return <div key={`empty-${index}`} className="aspect-square" />;
+                return <div key={`empty-${index}`} className={dayCellClass} />;
               }
 
               const dayNumber = parseInt(day.date.split("-")[2]);
               const config = day.status ? STATUS_CONFIG[day.status] : null;
-              const todayClass = isToday(dayNumber) ? "ring-2 ring-primary" : "";
+              const todayClass = isToday(dayNumber)
+                ? "ring-2 ring-cyan-300 shadow-[0_0_0_4px_rgba(34,211,238,0.15),0_0_22px_rgba(34,211,238,0.35)]"
+                : "";
 
               return (
                 <motion.button
@@ -166,28 +178,36 @@ export function StatusCalendar({ onDateSelect }: StatusCalendarProps) {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handleDayClick(day)}
-                  className={`aspect-square rounded-lg border-2 transition-all relative overflow-hidden ${todayClass} ${
+                  className={`${dayCellClass} ${todayClass} ${
                     config
-                      ? "border-transparent"
-                      : "border-gray-200 dark:border-gray-700 hover:border-primary/50"
+                      ? "border-transparent shadow-[inset_0_0_20px_rgba(15,23,42,0.3)]"
+                      : "border-white/10 hover:border-cyan-300/50 bg-slate-950/45"
                   }`}
                   style={{
-                    backgroundColor: config ? `${config.color}15` : undefined,
+                    backgroundColor: config ? `${config.color}16` : undefined,
                   }}
                 >
-                  <div className="flex flex-col items-center justify-center h-full p-1">
+                  {config && (
+                    <div
+                      className="absolute -top-6 -right-6 w-12 h-12 rounded-full blur-xl"
+                      style={{ backgroundColor: `${config.color}4D` }}
+                    />
+                  )}
+                  <div className="flex h-full flex-col items-center justify-center p-1">
                     <span
-                      className={`text-sm font-semibold ${
-                        isToday(dayNumber) ? "text-primary" : "text-foreground"
+                      className={`text-[10px] font-semibold sm:text-[11px] lg:text-xs ${
+                        isToday(dayNumber) ? "text-cyan-300" : "text-slate-100"
                       }`}
                     >
                       {dayNumber}
                     </span>
                     {config && (
-                      <span className="text-lg leading-none">{config.icon}</span>
+                      <span className="mt-0.5 text-xs leading-none drop-shadow-[0_0_8px_rgba(255,255,255,0.25)] sm:text-sm">
+                        {config.icon}
+                      </span>
                     )}
                     {day.mood && (
-                      <span className="text-xs leading-none mt-0.5">
+                      <span className="mt-0.5 text-[10px] leading-none opacity-90">
                         {["😞", "😐", "😊", "😄", "🌟"][day.mood - 1]}
                       </span>
                     )}
@@ -197,17 +217,18 @@ export function StatusCalendar({ onDateSelect }: StatusCalendarProps) {
             })}
           </div>
         )}
+        </div>
       </div>
 
       {/* Status Legend */}
-      <div className="flex flex-wrap gap-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+      <div className="bal-surface flex flex-wrap gap-1 p-2">
         {Object.entries(STATUS_CONFIG).map(([status, config]) => (
           <div
             key={status}
-            className="flex items-center gap-2 text-sm"
+            className="bal-chip px-2 py-0.5 text-[9px] font-semibold text-slate-200 sm:text-[10px]"
           >
             <div
-              className="w-4 h-4 rounded-full"
+              className="h-2 w-2 rounded-full"
               style={{ backgroundColor: config.color }}
             />
             <span className="capitalize">{status}</span>
@@ -230,4 +251,3 @@ export function StatusCalendar({ onDateSelect }: StatusCalendarProps) {
     </div>
   );
 }
-

@@ -12,6 +12,8 @@ import {
   ArrowLeft,
   Search,
   Loader2,
+  AlertCircle,
+  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
 import { MemoryCard } from "./MemoryCard";
@@ -20,7 +22,7 @@ import type { useIntelligenceFiles } from "../hooks/useIntelligenceFiles";
 import type {
   IntelligenceFolder,
   FolderSummary,
-} from "../../../../../shared/types/domain/intelligence-files";
+} from "@shared/types/domain/intelligence-files";
 
 const FOLDER_CONFIG: Record<IntelligenceFolder, { icon: LucideIcon; accent: string }> = {
   memories: { icon: Brain, accent: "text-purple-400" },
@@ -101,8 +103,14 @@ export function IntelligenceFilesDrawer({ hook }: IntelligenceFilesDrawerProps) 
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
             </div>
+          ) : hook.error ? (
+            <ErrorState message={hook.error} onRetry={hook.openDrawer} />
           ) : hook.drawer.level === "folders" ? (
-            <FolderGrid folders={hook.folders} onSelect={hook.navigateToFolder} />
+            hook.folders.length === 0 ? (
+              <AnimatedEmptyState />
+            ) : (
+              <FolderGrid folders={hook.folders} onSelect={hook.navigateToFolder} />
+            )
           ) : hook.drawer.level === "list" ? (
             <FolderContent hook={hook} />
           ) : null}
@@ -308,5 +316,49 @@ function EmptyState({ icon: Icon, message, sub }: { icon: LucideIcon; message: s
       <p className="text-sm text-slate-400">{message}</p>
       <p className="text-xs text-slate-600 mt-1 max-w-[240px] mx-auto">{sub}</p>
     </div>
+  );
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="text-center py-16"
+    >
+      <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+        <AlertCircle className="w-6 h-6 text-red-400" />
+      </div>
+      <p className="text-sm font-medium text-slate-300 mb-1">Something went wrong</p>
+      <p className="text-xs text-slate-500 max-w-[280px] mx-auto mb-4">{message}</p>
+      <button
+        onClick={onRetry}
+        className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors px-4 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/15"
+      >
+        Try again
+      </button>
+    </motion.div>
+  );
+}
+
+function AnimatedEmptyState() {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="text-center py-20"
+    >
+      <motion.div
+        animate={{ y: [0, -8, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center mx-auto mb-5"
+      >
+        <FolderOpen className="w-7 h-7 text-slate-500" />
+      </motion.div>
+      <p className="text-sm font-medium text-slate-400 mb-1">No intelligence files yet</p>
+      <p className="text-xs text-slate-600 max-w-[260px] mx-auto leading-relaxed">
+        Chat with your AI coach to start building memories, insights, and personalized plans.
+      </p>
+    </motion.div>
   );
 }

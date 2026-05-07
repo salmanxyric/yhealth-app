@@ -87,6 +87,24 @@ const NEGATIVE_KEYWORDS = /\b(bad|poor|low|worse|decline|drop|concern|worry|stre
 const EMPATHETIC_KEYWORDS = /\b(understand|feel|hear|sorry|tough|hard|struggle|difficult|challenging)\b/i;
 const URGENT_KEYWORDS = /\b(must|need\s+to|right\s+now|immediately|critical|emergency|urgent|asap|cannot\s+ignore)\b/i;
 
+const DIRECT_EMOTION_PATTERNS: Array<{ emotion: string; pattern: RegExp }> = [
+  { emotion: 'fear', pattern: /\b(afraid|scared|fear|panic|unsafe|emergency|danger)\b/i },
+  { emotion: 'embarrassment', pattern: /\b(embarrassed|awkward|ashamed|self-conscious|shy)\b/i },
+  { emotion: 'disgust', pattern: /\b(disgust|gross|unhealthy habit|avoid this|repulsed)\b/i },
+  { emotion: 'confusion', pattern: /\b(confused|unclear|not sure|puzzled|mixed up|don't understand)\b/i },
+  { emotion: 'surprised', pattern: /\b(surprised|unexpected|wow|suddenly|didn't expect)\b/i },
+  { emotion: 'curiosity', pattern: /\b(curious|wonder|explore|question|learn more|tell me more)\b/i },
+  { emotion: 'concern', pattern: /\b(concern|worried|risk|watch|careful|monitor)\b/i },
+  { emotion: 'empathy', pattern: /\b(i understand|i hear you|sorry|that sounds|it makes sense|you're not alone)\b/i },
+  { emotion: 'contemplation', pattern: /\b(reflect|think about|consider|pause|notice|observe)\b/i },
+  { emotion: 'determination', pattern: /\b(commit|focus|push|discipline|plan|next step|we can)\b/i },
+  { emotion: 'excitement', pattern: /\b(excited|amazing|fantastic|breakthrough|celebrate|win)\b/i },
+  { emotion: 'happy', pattern: /\b(happy|glad|great job|well done|nice work|proud)\b/i },
+  { emotion: 'relaxed', pattern: /\b(calm|relax|breathe|gentle|slow|peaceful|easy|tired|rest)\b/i },
+  { emotion: 'sad', pattern: /\b(sad|down|grief|lonely|hurt|disappointed)\b/i },
+  { emotion: 'angry', pattern: /\b(frustrated|angry|unfair|annoying|irritated)\b/i },
+];
+
 // ============================================
 // ANALYSIS FUNCTIONS
 // ============================================
@@ -128,6 +146,22 @@ function classifySentiment(sentence: string): Sentiment {
   if (scores.negative === max) return 'negative';
   if (scores.positive === max) return 'positive';
   return 'neutral';
+}
+
+function classifyDirectEmotion(sentence: string, type: SentenceType): string | null {
+  for (const { emotion, pattern } of DIRECT_EMOTION_PATTERNS) {
+    if (pattern.test(sentence)) return emotion;
+  }
+
+  if (type === 'question') return 'curiosity';
+  if (type === 'empathy') return 'empathy';
+  if (type === 'encouragement') return 'determination';
+  if (type === 'warning') return 'concern';
+  if (type === 'explanation') return 'explaining';
+  if (type === 'agreement') return 'confident';
+  if (type === 'disagreement') return 'disagreeing';
+
+  return null;
 }
 
 function pickRandom<T>(arr: T[]): T {
@@ -183,7 +217,7 @@ export function analyzeResponse(text: string): ConversationDirective[] {
 
     // Pick emotion
     const emotions = SENTIMENT_EMOTION_MAP[sentiment];
-    const emotion = pickRandom(emotions);
+    const emotion = classifyDirectEmotion(sentence, type) ?? pickRandom(emotions);
 
     // Estimate delay from word count
     const wordCount = sentence.split(/\s+/).length;

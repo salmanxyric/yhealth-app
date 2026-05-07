@@ -457,12 +457,14 @@ class TaskService {
    */
   async getTasksNeedingReminders(): Promise<UserTask[]> {
     const result = await query<TaskRow>(
-      `SELECT * FROM user_tasks
-       WHERE status = 'pending'
-       AND reminder_sent_at IS NULL
-       AND scheduled_at - (reminder_minutes_before * INTERVAL '1 minute') <= CURRENT_TIMESTAMP
-       AND scheduled_at > CURRENT_TIMESTAMP
-       ORDER BY scheduled_at ASC`
+      `SELECT t.* FROM user_tasks t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.status = 'pending'
+       AND t.reminder_sent_at IS NULL
+       AND t.scheduled_at - (t.reminder_minutes_before * INTERVAL '1 minute') <= CURRENT_TIMESTAMP
+       AND t.scheduled_at > CURRENT_TIMESTAMP
+       AND u.email NOT LIKE '%@balencia.system'
+       ORDER BY t.scheduled_at ASC`
     );
 
     return result.rows.map(mapTaskRow);

@@ -289,7 +289,7 @@ export function FinanceTab() {
       if (monthlyRes.status === "fulfilled" && monthlyRes.value.data) setMonthlySummary(monthlyRes.value.data);
       if (breakdownRes.status === "fulfilled" && breakdownRes.value.data) setCategoryBreakdown(breakdownRes.value.data);
       if (trendsRes.status === "fulfilled" && trendsRes.value.data) setTrends(trendsRes.value.data);
-      if (txRes.status === "fulfilled" && txRes.value.data) setRecentTransactions((txRes.value.data as any).transactions || []);
+      if (txRes.status === "fulfilled" && txRes.value.data) setRecentTransactions((txRes.value.data as { transactions?: FinanceTransaction[] }).transactions || []);
       if (budgetsRes.status === "fulfilled" && budgetsRes.value.data) setBudgets(budgetsRes.value.data);
       if (goalsRes.status === "fulfilled" && goalsRes.value.data) setGoals(goalsRes.value.data);
       if (insightsRes.status === "fulfilled" && insightsRes.value.data) setInsights(insightsRes.value.data);

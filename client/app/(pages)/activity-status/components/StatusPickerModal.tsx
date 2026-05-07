@@ -66,10 +66,10 @@ export function StatusPickerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden border-white/10 bg-slate-950/95 text-[11px] backdrop-blur-xl sm:text-xs">
         <DialogHeader>
-          <DialogTitle>Set Activity Status</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-sm text-white sm:text-base">Set Activity Status</DialogTitle>
+          <DialogDescription className="text-[11px] text-slate-300 sm:text-xs">
             {new Date(date).toLocaleDateString("en-US", {
               weekday: "long",
               year: "numeric",
@@ -79,31 +79,32 @@ export function StatusPickerModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="max-h-[calc(90vh-10.5rem)] overflow-y-auto pr-1">
+        <div className="space-y-6 py-2">
           {/* Status Selection */}
           <div>
-            <Label className="text-sm font-semibold mb-3 block">Select Status</Label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Label className="mb-3 block text-xs font-semibold text-slate-200">Select Status</Label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {Object.entries(STATUS_CONFIG).map(([status, config]) => (
                 <motion.button
                   key={status}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setSelectedStatus(status as ActivityStatus)}
-                  className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  className={`rounded-xl border-2 p-3 text-left transition-all ${
                     selectedStatus === status
-                      ? "border-primary bg-primary/10 shadow-lg"
-                      : "border-gray-200 dark:border-gray-700 hover:border-primary/50"
+                      ? "border-emerald-400/70 bg-emerald-500/10 shadow-[0_8px_30px_rgba(16,185,129,0.2)]"
+                      : "border-white/10 bg-slate-900/60 hover:border-emerald-300/45"
                   }`}
                   style={{
                     backgroundColor: selectedStatus === status ? `${config.color}15` : undefined,
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">{config.icon}</span>
+                    <span className="text-xl sm:text-2xl">{config.icon}</span>
                     <div>
-                      <div className="font-semibold text-sm capitalize">{status}</div>
-                      <div className="text-xs text-muted-foreground">{config.description}</div>
+                      <div className="text-xs font-semibold capitalize text-slate-100">{status}</div>
+                      <div className="text-[10px] text-slate-300 sm:text-[11px]">{config.description}</div>
                     </div>
                   </div>
                 </motion.button>
@@ -113,8 +114,8 @@ export function StatusPickerModal({
 
           {/* Mood Selection */}
           <div>
-            <Label className="text-sm font-semibold mb-3 block">Mood (Optional)</Label>
-            <div className="flex items-center gap-4">
+            <Label className="mb-3 block text-xs font-semibold text-slate-200">Mood (Optional)</Label>
+            <div className="flex items-center gap-3">
               {MOOD_EMOJIS.map((emoji, index) => {
                 const moodValue = index + 1;
                 return (
@@ -123,7 +124,7 @@ export function StatusPickerModal({
                     whileHover={{ scale: 1.2 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={() => setMood(moodValue)}
-                    className={`text-4xl transition-all ${
+                    className={`text-2xl transition-all sm:text-3xl ${
                       mood === moodValue
                         ? "scale-125 filter drop-shadow-lg"
                         : "opacity-50 hover:opacity-75"
@@ -141,7 +142,7 @@ export function StatusPickerModal({
 
           {/* Notes */}
           <div>
-            <Label htmlFor="notes" className="text-sm font-semibold mb-2 block">
+            <Label htmlFor="notes" className="mb-2 block text-xs font-semibold text-slate-200">
               Notes (Optional)
             </Label>
             <Textarea
@@ -149,34 +150,35 @@ export function StatusPickerModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add any notes about your day..."
-              className="min-h-[100px]"
+              className="min-h-24 border-white/10 bg-slate-900/70 text-xs text-slate-100 placeholder:text-slate-400"
               maxLength={1000}
             />
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="mt-1 text-[10px] text-slate-400">
               {notes.length}/1000 characters
             </p>
           </div>
+        </div>
+        </div>
 
           {/* Actions */}
-          <div className="flex gap-3 justify-end pt-4">
+          <div className="sticky bottom-0 z-20 mt-4 flex gap-3 justify-end border-t border-white/10 bg-[linear-gradient(0deg,rgba(2,6,23,0.98)_0%,rgba(2,6,23,0.92)_100%)] px-1 pt-4 pb-1 backdrop-blur-xl">
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isLoading}
+              className="border-white/15 bg-slate-900/70 text-slate-200 hover:bg-slate-800"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={isLoading}
-              className="bg-gradient-to-r from-primary to-purple-500"
+              className="bg-linear-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-400 hover:to-emerald-500 shadow-[0_8px_24px_rgba(16,185,129,0.35)]"
             >
               {isLoading ? "Saving..." : "Save Status"}
             </Button>
           </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
 }
-

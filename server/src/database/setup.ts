@@ -182,6 +182,8 @@ const TABLE_FILES = [
   '126-competition-invitations.sql',
   // Mental health screening audit (no raw message body)
   '127-mental-health-screening-events.sql',
+  // Quick notes
+  '130-quick-notes.sql',
   // Triggers (must be last)
   '99-triggers.sql',
 ];

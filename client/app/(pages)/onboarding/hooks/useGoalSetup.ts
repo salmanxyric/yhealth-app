@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Goal } from '@/src/types';
 import {
   aiCoachService,
   type GeneratedGoal,
   type AICoachGoalCategory,
 } from '@/src/shared/services/ai-coach.service';
+
+const MAX_CONFIRMED_GOALS = 3;
 
 interface UseGoalSetupOptions {
   selectedGoal: string | null;
@@ -91,14 +93,30 @@ export function useGoalSetup({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+  const inFlightRequestKeyRef = useRef<string | null>(null);
+  const completedRequestKeyRef = useRef<string | null>(null);
 
   // Generate AI-powered goals on mount
   useEffect(() => {
     const generateAIGoals = async () => {
-      if (suggestedGoals.length > 0 || !selectedGoal || isGenerating) {
+      const requestKey = JSON.stringify({
+        selectedGoal,
+        assessmentResponses,
+        bodyStats,
+        customGoalText,
+      });
+
+      if (
+        suggestedGoals.length > 0 ||
+        !selectedGoal ||
+        isGenerating ||
+        inFlightRequestKeyRef.current === requestKey ||
+        completedRequestKeyRef.current === requestKey
+      ) {
         return;
       }
 
+      inFlightRequestKeyRef.current = requestKey;
       setIsGenerating(true);
       setError(null);
 
@@ -130,10 +148,12 @@ export function useGoalSetup({
           confirmGoal(primaryGoal);
           setConfidenceValues({ [primaryGoal.id!]: primaryGoal.confidenceLevel || 7 });
         }
+        completedRequestKeyRef.current = requestKey;
       } catch (err) {
         console.error('Failed to generate goals:', err);
         setError('Failed to generate personalized goals. Please try again.');
       } finally {
+        inFlightRequestKeyRef.current = null;
         setIsGenerating(false);
       }
     };
@@ -150,6 +170,8 @@ export function useGoalSetup({
     confirmedGoals.forEach((g) => removeGoal(g.id!));
     setConfidenceValues({});
     setAiReasoning(null);
+    inFlightRequestKeyRef.current = null;
+    completedRequestKeyRef.current = null;
     setIsGenerating(true);
     setError(null);
 
@@ -209,7 +231,14 @@ export function useGoalSetup({
       const isConfirmed = confirmedGoals.some((g) => g.id && goal.id && g.id === goal.id);
       if (isConfirmed) {
         removeGoal(goal.id);
+        setError(null);
       } else {
+        if (confirmedGoals.length >= MAX_CONFIRMED_GOALS) {
+          setError(`You can select up to ${MAX_CONFIRMED_GOALS} active goals for onboarding.`);
+          return;
+        }
+
+        setError(null);
         confirmGoal(goal);
         setConfidenceValues((prev) => ({ ...prev, [goal.id as string]: goal.confidenceLevel || 7 }));
       }

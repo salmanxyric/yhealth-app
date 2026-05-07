@@ -103,3 +103,29 @@ export {
 
 // Logger
 export { nutritionLogger } from './logger';
+
+// ============================================
+// MACRO HERO CARD
+// ============================================
+
+export { MacroHeroCard } from './MacroHeroCard';
+
+// ============================================
+// MODALS
+// ============================================
+
+export {
+  DeleteConfirmModal,
+  CreatePlanModal,
+  ShoppingItemModal,
+  AIGenerateShoppingModal,
+  ViewAllShoppingModal,
+  CreateMealModal,
+  CreateRecipeModal,
+} from './modals';
+
+// ============================================
+// HOOKS
+// ============================================
+
+export { useNutritionData } from './hooks/useNutritionData';

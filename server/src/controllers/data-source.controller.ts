@@ -39,8 +39,15 @@ export const connectSource = asyncHandler(async (req: AuthenticatedRequest, res:
   if (sourceType === 'prayer_times' && config?.city && config?.country) {
     try {
       await prayerTimesService.syncPrayerTimes(userId, config);
-    } catch {
-      // Non-blocking — initial sync failure shouldn't prevent connection
+      await dataSourceManagerService.markSynced(userId, 'prayer_times');
+    } catch (error) {
+      await dataSourceManagerService.updateConnectionStatus(
+        userId,
+        'prayer_times',
+        'error',
+        error instanceof Error ? error.message : 'Prayer time sync failed',
+      );
+      throw ApiError.badRequest('Unable to fetch prayer times for this location. Check the city, country, and calculation settings.');
     }
   }
 
@@ -90,6 +97,63 @@ export const getPrayerSchedule = asyncHandler(async (req: AuthenticatedRequest, 
   const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
   const prayers = await prayerTimesService.getPrayerSchedule(getUserId(req), date);
   ApiResponse.success(res, { prayers }, 'Prayer schedule retrieved');
+});
+
+export const syncPrayerSchedule = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = getUserId(req);
+  const date = (req.body?.date as string | undefined) || (req.query.date as string | undefined);
+  const connection = await dataSourceManagerService.getConnection(userId, 'prayer_times');
+  if (!connection || connection.status === 'disconnected') {
+    throw ApiError.badRequest('Prayer times are not connected');
+  }
+
+  try {
+    const prayers = await prayerTimesService.syncPrayerTimes(userId, {
+      ...connection.config,
+      ...(date ? { date } : {}),
+    });
+    await dataSourceManagerService.markSynced(userId, 'prayer_times');
+    ApiResponse.success(res, { prayers }, 'Prayer schedule synced');
+  } catch (error) {
+    await dataSourceManagerService.updateConnectionStatus(
+      userId,
+      'prayer_times',
+      'error',
+      error instanceof Error ? error.message : 'Prayer time sync failed',
+    );
+    throw ApiError.badRequest('Unable to sync prayer times. Check the saved city, country, and calculation settings.');
+  }
+});
+
+export const saveManualPrayerTimes = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = getUserId(req);
+  const { date, manualTimes, timezone } = req.body as {
+    date?: string;
+    manualTimes?: Record<string, string>;
+    timezone?: string;
+  };
+
+  if (!manualTimes || typeof manualTimes !== 'object') {
+    throw ApiError.badRequest('manualTimes is required');
+  }
+
+  const targetDate = date || new Date().toISOString().split('T')[0];
+  const connection = await dataSourceManagerService.getConnection(userId, 'prayer_times');
+  const nextConfig = {
+    ...(connection?.config ?? {}),
+    manualTimes,
+    ...(timezone ? { timezone } : {}),
+  };
+
+  const prayers = await prayerTimesService.upsertManualPrayerTimes(
+    userId,
+    targetDate,
+    manualTimes as any,
+    timezone || String(connection?.config.timezone || 'UTC'),
+  );
+
+  await dataSourceManagerService.upsertConnection(userId, 'prayer_times', nextConfig);
+  ApiResponse.success(res, { prayers, config: nextConfig }, 'Manual prayer times saved');
 });
 
 export const markPrayerComplete = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

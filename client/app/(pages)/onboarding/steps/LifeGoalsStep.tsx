@@ -357,7 +357,6 @@ export function LifeGoalsStep() {
   const submitTextAnswer = useCallback(() => {
     if (!currentQuestion || currentQuestion.type !== 'text') return;
     const trimmed = currentInput.trim();
-    if (!trimmed && !currentQuestion.optional) return;
 
     setAnswers((prev) => [...prev, { question: currentQuestion.text, answer: trimmed || '(skipped)' }]);
     setCurrentInput('');
@@ -365,7 +364,7 @@ export function LifeGoalsStep() {
   }, [currentInput, currentQuestion]);
 
   const skipQuestion = useCallback(() => {
-    if (!currentQuestion?.optional) return;
+    if (!currentQuestion) return;
     setAnswers((prev) => [...prev, { question: currentQuestion.text, answer: '(skipped)' }]);
     setCurrentInput('');
     setCurrentQuestionIndex((prev) => prev + 1);
@@ -384,6 +383,13 @@ export function LifeGoalsStep() {
     },
     [currentQuestion],
   );
+
+  const skipMotivation = useCallback(() => {
+    if (!currentQuestion || currentQuestion.type !== 'cards') return;
+    setMotivationTier('medium');
+    setAnswers((prev) => [...prev, { question: currentQuestion.text, answer: '(skipped - medium default)' }]);
+    setCurrentQuestionIndex((prev) => prev + 1);
+  }, [currentQuestion]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -547,7 +553,7 @@ export function LifeGoalsStep() {
             >
               <Sparkles className="w-8 h-8 text-sky-400" />
             </motion.div>
-            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3">
+            <h2 className="text-lg sm:text-xl font-semibold tracking-normal text-white mb-3">
               Preparing your coaching session...
             </h2>
             <p className="text-sm sm:text-base text-white/60 mb-8">
@@ -585,7 +591,7 @@ export function LifeGoalsStep() {
             <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-500/10 flex items-center justify-center">
               <Sparkles className="w-8 h-8 text-red-400" />
             </div>
-            <h2 className="text-xl font-semibold text-white mb-3">
+            <h2 className="text-lg sm:text-xl font-semibold tracking-normal text-white mb-3">
               Couldn&apos;t prepare your coaching session
             </h2>
             <p className="text-sm text-white/60 mb-6">
@@ -605,7 +611,7 @@ export function LifeGoalsStep() {
     }
 
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col h-full min-h-[60vh]">
+      <div className="max-w-[760px] mx-auto px-4 py-8 flex flex-col h-full min-h-[60vh]">
         {/* Header */}
         <motion.div
           className="text-center mb-6"
@@ -620,11 +626,11 @@ export function LifeGoalsStep() {
           >
             <Sparkles className="w-7 h-7 text-white" />
           </motion.div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            Let&apos;s discover your goals
+          <h1 className="text-2xl sm:text-[28px] font-semibold leading-tight tracking-normal text-white mb-2">
+            Let&apos;s discover your goals <span className="text-base font-medium text-slate-500">(optional)</span>
           </h1>
           <p className="text-slate-400 text-sm max-w-md mx-auto">
-            Answer a few quick questions and we&apos;ll create a personalized plan for you.
+            Answer a few quick questions for extra life-goal suggestions, or skip this step.
           </p>
         </motion.div>
 
@@ -642,8 +648,8 @@ export function LifeGoalsStep() {
                 <div className="w-8 h-8 rounded-full bg-sky-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <Sparkles className="w-4 h-4 text-sky-500" />
                 </div>
-                <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-3 max-w-[85%]">
-                  <p className="text-sm text-slate-200">{QUESTIONS[i].text}</p>
+                <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-3 max-w-[min(85%,640px)]">
+                  <p className="text-sm leading-relaxed tracking-normal text-slate-200 break-words">{QUESTIONS[i].text}</p>
                 </div>
               </motion.div>
 
@@ -653,8 +659,8 @@ export function LifeGoalsStep() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
               >
-                <div className="bg-sky-600/20 border border-sky-600/30 rounded-2xl rounded-tr-md px-4 py-3 max-w-[85%]">
-                  <p className="text-sm text-white">{answer.answer}</p>
+                <div className="bg-sky-600/20 border border-sky-600/30 rounded-2xl rounded-tr-md px-4 py-3 max-w-[min(85%,640px)]">
+                  <p className="text-sm leading-relaxed tracking-normal text-white break-words">{answer.answer}</p>
                 </div>
               </motion.div>
             </div>
@@ -686,8 +692,8 @@ export function LifeGoalsStep() {
                   <div className="w-8 h-8 rounded-full bg-sky-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <Sparkles className="w-4 h-4 text-sky-500" />
                   </div>
-                  <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-3 max-w-[85%]">
-                    <p className="text-sm text-slate-200">{currentQuestion.text}</p>
+                  <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-3 max-w-[min(85%,640px)]">
+                    <p className="text-sm leading-relaxed tracking-normal text-slate-200 break-words">{currentQuestion.text}</p>
                   </div>
                 </motion.div>
               ) : null}
@@ -715,29 +721,26 @@ export function LifeGoalsStep() {
                     placeholder={currentQuestion.placeholder}
                     maxLength={200}
                     autoFocus
-                    className="flex-1 px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-700 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/20 transition-colors"
+                    className="min-w-0 flex-1 px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-700 text-white text-sm placeholder:text-slate-600 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/20 transition-colors"
                     aria-label={currentQuestion.text}
                   />
                   <button
                     type="button"
                     onClick={submitTextAnswer}
-                    disabled={!currentInput.trim() && !currentQuestion.optional}
-                    className="px-4 py-3 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-800 disabled:text-slate-600 text-white transition-colors flex items-center justify-center min-w-[48px]"
+                    className="px-4 py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white transition-colors flex items-center justify-center min-w-[48px]"
                     aria-label="Send answer"
                   >
                     <Send className="w-4 h-4" />
                   </button>
                 </div>
-                {currentQuestion.optional && (
-                  <button
-                    type="button"
-                    onClick={skipQuestion}
-                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
-                  >
-                    <SkipForward className="w-3 h-3" />
-                    Skip this question
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={skipQuestion}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
+                >
+                  <SkipForward className="w-3 h-3" />
+                  Skip this question
+                </button>
               </div>
             ) : currentQuestion.type === 'cards' ? (
               <div className="grid grid-cols-3 gap-3">
@@ -748,7 +751,7 @@ export function LifeGoalsStep() {
                     onClick={() => selectMotivation(option.tier)}
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
-                    className="flex flex-col items-center gap-2 p-4 rounded-xl bg-[#02000f] border border-white/24 hover:border-emerald-600/50 hover:bg-emerald-600/5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+                    className="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-xl bg-[#02000f] border border-white/24 hover:border-emerald-600/50 hover:bg-emerald-600/5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                     aria-label={`${option.label} motivation: ${option.description}`}
                   >
                     <span className="text-2xl" role="img" aria-hidden="true">{option.emoji}</span>
@@ -756,6 +759,14 @@ export function LifeGoalsStep() {
                     <span className="text-xs text-slate-400 text-center leading-tight">{option.description}</span>
                   </motion.button>
                 ))}
+                <button
+                  type="button"
+                  onClick={skipMotivation}
+                  className="col-span-3 py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center justify-center gap-1"
+                >
+                  <SkipForward className="w-3 h-3" />
+                  Skip this question
+                </button>
               </div>
             ) : null}
           </motion.div>
@@ -813,7 +824,7 @@ export function LifeGoalsStep() {
           >
             <Sparkles className="w-7 h-7 text-white" />
           </motion.div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+          <h1 className="text-2xl sm:text-[28px] font-semibold leading-tight tracking-normal text-white mb-2">
             Your personalized goals
           </h1>
           <p className="text-slate-400 text-sm max-w-md mx-auto">
@@ -1114,7 +1125,7 @@ export function LifeGoalsStep() {
           <PartyPopper className="w-7 h-7 text-white" />
         </motion.div>
         <motion.h1
-          className="text-2xl sm:text-3xl font-bold text-white mb-2"
+          className="text-2xl sm:text-[28px] font-semibold leading-tight tracking-normal text-white mb-2"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}

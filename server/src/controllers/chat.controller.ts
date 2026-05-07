@@ -45,13 +45,10 @@ export const getChats = asyncHandler(
     const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized();
 
-    const userRole = req.user?.role || 'user';
-    const isAdmin = userRole === 'admin';
-
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
 
-    const chats = await chatService.getUserChats(userId, isAdmin, page, limit);
+    const chats = await chatService.getUserChats(userId, page, limit);
 
     ApiResponse.success(
       res,

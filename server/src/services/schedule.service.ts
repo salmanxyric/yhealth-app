@@ -6,6 +6,7 @@
 import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from './logger.service.js';
+import { googleCalendarService } from './google-calendar.service.js';
 
 // ============================================
 // TYPES
@@ -97,6 +98,7 @@ export interface CreateScheduleItemInput {
   color?: string;
   icon?: string;
   category?: string;
+  shape?: string;
   position: number;
   metadata?: Record<string, unknown>;
 }
@@ -110,6 +112,7 @@ export interface UpdateScheduleItemInput {
   color?: string;
   icon?: string;
   category?: string;
+  shape?: string;
   position?: number;
   metadata?: Record<string, unknown>;
 }
@@ -201,6 +204,19 @@ interface ScheduleLinkRow {
 // ============================================
 
 class ScheduleService {
+  private readonly DEFAULT_ACTIVITY_COLOR = '#10b981';
+  private readonly CATEGORY_COLORS: Record<string, string> = {
+    work: '#3b82f6',
+    exercise: '#6d4bc3',
+    meal: '#c98111',
+    break: '#1595a8',
+    personal: '#b63d3d',
+    study: '#7c3aed',
+    social: '#b83280',
+    health: '#158f83',
+    other: '#10b981',
+  };
+
   /**
    * Get schedule for a specific date.
    * Also triggers an external sync (Google Calendar + prayers) so the returned
@@ -673,15 +689,27 @@ class ScheduleService {
   ): Promise<ScheduleItem> {
     await this.verifyScheduleOwnership(userId, scheduleId);
 
-    // Calculate duration if not provided
     let durationMinutes = input.durationMinutes;
-    if (!durationMinutes && input.endTime) {
+    let endTime = input.endTime;
+    if (!durationMinutes && endTime) {
       const start = this.timeToMinutes(input.startTime);
-      const end = this.timeToMinutes(input.endTime);
+      const end = this.timeToMinutes(endTime);
       durationMinutes = end - start;
     }
+    if (!durationMinutes && !endTime) {
+      durationMinutes = 30;
+    }
+    if (!endTime && durationMinutes) {
+      endTime = this.addMinutesToTime(input.startTime, durationMinutes);
+    }
 
-    const shape = (input.metadata as any)?.shape || 'square';
+    const shape = input.shape || (input.metadata as any)?.shape || 'square';
+    const category = input.category?.toLowerCase();
+    const color = input.color || (category ? this.CATEGORY_COLORS[category] : undefined) || this.DEFAULT_ACTIVITY_COLOR;
+    const metadata = {
+      ...(input.metadata || {}),
+      shape,
+    };
     const result = await query<ScheduleItemRow>(
       `INSERT INTO schedule_items (
         schedule_id, title, description, start_time, end_time, 
@@ -693,18 +721,20 @@ class ScheduleService {
         input.title,
         input.description || null,
         input.startTime,
-        input.endTime || null,
+        endTime || null,
         durationMinutes || null,
-        input.color || null,
+        color,
         input.icon || null,
-        input.category || null,
+        category || null,
         shape,
         input.position,
-        JSON.stringify(input.metadata || {}),
+        JSON.stringify(metadata),
       ]
     );
 
-    return this.mapRowToScheduleItem(result.rows[0]);
+    let item = this.mapRowToScheduleItem(result.rows[0]);
+    item = await this.tryCreateGoogleCalendarEventForManualItem(userId, item);
+    return item;
   }
 
   /**
@@ -740,7 +770,7 @@ class ScheduleService {
       const contentKeys = [
         input.title, input.description, input.startTime, input.endTime,
         input.durationMinutes, input.color, input.icon, input.category,
-        input.position,
+        input.shape, input.position,
       ];
       const touchesContent = contentKeys.some((v) => v !== undefined);
       const metadataKeys = input.metadata ? Object.keys(input.metadata) : [];
@@ -759,6 +789,12 @@ class ScheduleService {
     const updates: string[] = [];
     const values: (string | number | null)[] = [];
     let paramCount = 1;
+    const metadataPatch = input.metadata !== undefined || input.shape !== undefined
+      ? {
+          ...(input.metadata || {}),
+          ...(input.shape !== undefined ? { shape: input.shape || 'square' } : {}),
+        }
+      : undefined;
 
     if (input.title !== undefined) {
       updates.push(`title = $${paramCount++}`);
@@ -800,26 +836,31 @@ class ScheduleService {
       values.push(input.category || null);
     }
 
+    if (input.shape !== undefined) {
+      updates.push(`shape = $${paramCount++}`);
+      values.push(input.shape || 'square');
+    }
+
     if (input.position !== undefined) {
       updates.push(`position = $${paramCount++}`);
       values.push(input.position);
     }
 
-    if (input.metadata !== undefined) {
+    if (metadataPatch !== undefined) {
       // Get existing metadata to merge with new metadata
       const existingItemResult = await query<ScheduleItemRow>(
         `SELECT metadata FROM schedule_items WHERE id = $1`,
         [itemId]
       );
       
-      let mergedMetadata = input.metadata;
+      let mergedMetadata = metadataPatch;
       if (existingItemResult.rows.length > 0 && existingItemResult.rows[0].metadata) {
         const existingMetadata = typeof existingItemResult.rows[0].metadata === 'string'
           ? JSON.parse(existingItemResult.rows[0].metadata)
           : existingItemResult.rows[0].metadata;
         mergedMetadata = {
           ...existingMetadata,
-          ...input.metadata,
+          ...metadataPatch,
         };
       }
       
@@ -827,7 +868,7 @@ class ScheduleService {
       values.push(JSON.stringify(mergedMetadata));
       
       // Handle shape from metadata
-      const shape = (mergedMetadata as any)?.shape;
+      const shape = input.shape === undefined ? (mergedMetadata as any)?.shape : undefined;
       if (shape) {
         updates.push(`shape = $${paramCount++}`);
         values.push(shape);
@@ -1080,6 +1121,85 @@ class ScheduleService {
   private timeToMinutes(time: string): number {
     const [hours, minutes] = time.split(':').map(Number);
     return hours * 60 + minutes;
+  }
+
+  private addMinutesToTime(time: string, minutesToAdd: number): string {
+    const total = (this.timeToMinutes(time) + minutesToAdd) % (24 * 60);
+    const hours = Math.floor(total / 60);
+    const minutes = total % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+
+  private async tryCreateGoogleCalendarEventForManualItem(
+    userId: string,
+    item: ScheduleItem,
+  ): Promise<ScheduleItem> {
+    if (item.source !== 'manual' || !item.endTime) return item;
+
+    try {
+      const scheduleResult = await query<{ schedule_date: string | Date }>(
+        `SELECT schedule_date FROM daily_schedules WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        [item.scheduleId, userId],
+      );
+      const rawDate = scheduleResult.rows[0]?.schedule_date;
+      if (!rawDate) return item;
+
+      const scheduleDate = typeof rawDate === 'string'
+        ? rawDate.split('T')[0]
+        : rawDate.toISOString().split('T')[0];
+      const timezone = await this.getUserTimezone(userId);
+      const googleEvent = await googleCalendarService.createEventForScheduleItem(userId, {
+        title: item.title,
+        description: item.description,
+        date: scheduleDate,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        timezone,
+        scheduleId: item.scheduleId,
+        scheduleItemId: item.id,
+      });
+
+      if (!googleEvent) return item;
+
+      const metadata = {
+        ...(item.metadata || {}),
+        googleCalendar: {
+          provider: 'google',
+          connectionId: googleEvent.connectionId,
+          calendarId: googleEvent.calendarId,
+          eventId: googleEvent.eventId,
+          htmlLink: googleEvent.htmlLink,
+          syncedAt: new Date().toISOString(),
+        },
+      };
+
+      const updateResult = await query<ScheduleItemRow>(
+        `UPDATE schedule_items
+         SET metadata = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2
+         RETURNING *`,
+        [JSON.stringify(metadata), item.id],
+      );
+
+      return updateResult.rows[0] ? this.mapRowToScheduleItem(updateResult.rows[0]) : { ...item, metadata };
+    } catch (error) {
+      logger.warn('[Schedule] Google Calendar create failed for manual schedule item', {
+        userId,
+        scheduleId: item.scheduleId,
+        itemId: item.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        ...item,
+        metadata: {
+          ...(item.metadata || {}),
+          googleCalendarSync: {
+            status: 'failed',
+            failedAt: new Date().toISOString(),
+          },
+        },
+      };
+    }
   }
 
   private mapRowToSchedule(row: DailyScheduleRow): Omit<DailySchedule, 'items' | 'links'> {

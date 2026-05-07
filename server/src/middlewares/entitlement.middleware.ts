@@ -66,6 +66,51 @@ function shouldEnforce(_req: AuthenticatedRequest, bundle: EntitlementBundle | n
     }
 }
 
+let shadowLogTableAvailable: boolean | null = null;
+
+async function hasShadowLogTable(): Promise<boolean> {
+    if (shadowLogTableAvailable !== null) return shadowLogTableAvailable;
+    try {
+        const result = await query<{ table_name: string | null }>(
+            `SELECT to_regclass('public.entitlement_shadow_log')::text AS table_name`
+        );
+        shadowLogTableAvailable = Boolean(result.rows[0]?.table_name);
+    } catch (err) {
+        shadowLogTableAvailable = false;
+        logger.debug('[entitlement] shadow log availability check failed', {
+            error: err instanceof Error ? err.message : 'Unknown error',
+        });
+    }
+    return shadowLogTableAvailable;
+}
+
+async function persistShadowDenial(
+    userId: string,
+    featureKey: string,
+    reason: string,
+    path: string,
+    method: string,
+    extra: Record<string, unknown>
+): Promise<void> {
+    if (!(await hasShadowLogTable())) return;
+    try {
+        await query(
+            `INSERT INTO entitlement_shadow_log (user_id, feature_key, reason, path, method, extra)
+             VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+            [userId, featureKey, reason, path, method, JSON.stringify(extra)]
+        );
+    } catch (err: any) {
+        if (err?.code === '42P01' || String(err?.message || '').includes('entitlement_shadow_log')) {
+            shadowLogTableAvailable = false;
+            logger.debug('[entitlement] shadow log table missing; skipping persistence');
+            return;
+        }
+        logger.warn('[entitlement] failed to persist shadow denial', {
+            error: err instanceof Error ? err.message : 'Unknown error',
+        });
+    }
+}
+
 function logShadowDenial(
     req: AuthenticatedRequest,
     featureKey: string,
@@ -82,6 +127,10 @@ function logShadowDenial(
     });
     // Persist to entitlement_shadow_log for dashboarding (best-effort)
     const userId = req.user?.userId;
+    if (userId) {
+        void persistShadowDenial(userId, featureKey, reason, req.path, req.method, extra);
+        return;
+    }
     if (userId) {
         void query(
             `INSERT INTO entitlement_shadow_log (user_id, feature_key, reason, path, method, extra)

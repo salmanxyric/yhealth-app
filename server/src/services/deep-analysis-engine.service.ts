@@ -9,7 +9,7 @@ import { logger } from './logger.service.js';
 import type {
   AnalysisType,
   AnalysisStep,
-} from '../../../shared/types/domain/intelligence-files.js';
+} from '@shared/types/domain/intelligence-files.js';
 
 type EmitStepFn = (step: AnalysisStep) => void;
 
@@ -49,6 +49,7 @@ interface ComparisonResult {
 }
 
 export interface AnalysisResult {
+  analysisId?: string;
   type: AnalysisType;
   correlation?: CorrelationResult;
   trend?: TrendResult;
@@ -59,6 +60,28 @@ export interface AnalysisResult {
 }
 
 class DeepAnalysisEngineService {
+  private emitStep(
+    emit: EmitStepFn,
+    id: string,
+    label: string,
+    status: AnalysisStep['status'],
+    resultSummary?: string
+  ): void {
+    emit({ id, label, status, resultSummary });
+  }
+
+  private formatMetricLabel(metric: string): string {
+    const labels: Record<string, string> = {
+      sleep_hours: 'Sleep',
+      resting_hr: 'Resting Heart Rate',
+      hrv: 'HRV',
+      daily_steps: 'Activity',
+      workout_intensity: 'Workout Intensity',
+      total_calories: 'Nutrition',
+      recovery_score: 'Recovery',
+    };
+    return labels[metric] || metric.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  }
 
   async runAnalysis(
     userId: string,
@@ -105,6 +128,7 @@ class DeepAnalysisEngineService {
           result = await this.runCorrelation(userId, parameters, emit);
       }
 
+      result.analysisId = analysisId;
       result.steps = steps;
 
       // Persist results
@@ -145,25 +169,25 @@ class DeepAnalysisEngineService {
     const days = (params.days as number) || 60;
 
     // Step 1: Fetch data
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${metricA} data`, status: 'active' });
+    this.emitStep(emit, 'fetch-metric-a', `Analyzing ${this.formatMetricLabel(metricA)} Data`, 'active');
     const dataA = await this.fetchMetricTimeSeries(userId, metricA, days);
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${metricA} data`, status: 'completed', resultSummary: `${dataA.length} data points` });
+    this.emitStep(emit, 'fetch-metric-a', `Analyzing ${this.formatMetricLabel(metricA)} Data`, 'completed', `${dataA.length} data points`);
 
-    emit({ id: `step-2-${Date.now()}`, label: `Fetching ${metricB} data`, status: 'active' });
+    this.emitStep(emit, 'fetch-metric-b', `Analyzing ${this.formatMetricLabel(metricB)} Data`, 'active');
     const dataB = await this.fetchMetricTimeSeries(userId, metricB, days);
-    emit({ id: `step-2-${Date.now()}`, label: `Fetching ${metricB} data`, status: 'completed', resultSummary: `${dataB.length} data points` });
+    this.emitStep(emit, 'fetch-metric-b', `Analyzing ${this.formatMetricLabel(metricB)} Data`, 'completed', `${dataB.length} data points`);
 
     // Step 2: Align dates
-    emit({ id: `step-3-${Date.now()}`, label: 'Aligning time series', status: 'active' });
+    this.emitStep(emit, 'relationship-mapping', 'Mapping Relationships', 'active');
     const aligned = this.alignTimeSeries(dataA, dataB);
-    emit({ id: `step-3-${Date.now()}`, label: 'Aligning time series', status: 'completed', resultSummary: `${aligned.length} matched pairs` });
+    this.emitStep(emit, 'relationship-mapping', 'Mapping Relationships', 'completed', `${aligned.length} matched pairs`);
 
     // Step 3: Compute correlation
-    emit({ id: `step-4-${Date.now()}`, label: 'Computing Pearson correlation', status: 'active' });
+    this.emitStep(emit, 'correlation-analysis', 'Finding Correlations', 'active');
     const valuesA = aligned.map((d) => d.a);
     const valuesB = aligned.map((d) => d.b);
     const correlation = this.pearsonCorrelation(valuesA, valuesB);
-    emit({ id: `step-4-${Date.now()}`, label: 'Computing Pearson correlation', status: 'completed', resultSummary: `r = ${correlation.r.toFixed(3)}` });
+    this.emitStep(emit, 'correlation-analysis', 'Finding Correlations', 'completed', `r = ${correlation.r.toFixed(3)}`);
 
     const narrative = `Correlation between ${metricA} and ${metricB} over ${days} days: r = ${correlation.r.toFixed(3)} (${correlation.interpretation}). Based on ${correlation.n} matched data points.`;
 
@@ -178,15 +202,15 @@ class DeepAnalysisEngineService {
     const metric = (params.metric as string) || 'sleep_hours';
     const days = (params.days as number) || 90;
 
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${metric} data`, status: 'active' });
+    this.emitStep(emit, 'fetch-metric', `Analyzing ${this.formatMetricLabel(metric)} Data`, 'active');
     const data = await this.fetchMetricTimeSeries(userId, metric, days);
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${metric} data`, status: 'completed', resultSummary: `${data.length} data points` });
+    this.emitStep(emit, 'fetch-metric', `Analyzing ${this.formatMetricLabel(metric)} Data`, 'completed', `${data.length} data points`);
 
-    emit({ id: `step-2-${Date.now()}`, label: 'Computing linear regression', status: 'active' });
+    this.emitStep(emit, 'trend-detection', 'Detecting Trends', 'active');
     const values = data.map((d) => d.value);
     const xs = data.map((_, i) => i);
     const trend = this.linearRegression(xs, values);
-    emit({ id: `step-2-${Date.now()}`, label: 'Computing linear regression', status: 'completed', resultSummary: `Slope: ${trend.slope.toFixed(4)}/day` });
+    this.emitStep(emit, 'trend-detection', 'Detecting Trends', 'completed', `Slope: ${trend.slope.toFixed(4)}/day`);
 
     const narrative = `${metric} trend over ${days} days: ${trend.direction}. Change rate: ${trend.changePerWeek.toFixed(2)} per week. ${trend.significanceNote}`;
 
@@ -202,21 +226,21 @@ class DeepAnalysisEngineService {
     const days = (params.days as number) || 60;
     const threshold = (params.threshold as number) || 2.0;
 
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${metric} data`, status: 'active' });
+    this.emitStep(emit, 'fetch-metric', `Analyzing ${this.formatMetricLabel(metric)} Data`, 'active');
     const data = await this.fetchMetricTimeSeries(userId, metric, days);
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${metric} data`, status: 'completed', resultSummary: `${data.length} data points` });
+    this.emitStep(emit, 'fetch-metric', `Analyzing ${this.formatMetricLabel(metric)} Data`, 'completed', `${data.length} data points`);
 
-    emit({ id: `step-2-${Date.now()}`, label: 'Computing baseline statistics', status: 'active' });
+    this.emitStep(emit, 'data-quality-check', 'Analyzing Data Issues', 'active');
     const values = data.map((d) => d.value);
-    const mean = values.reduce((s, v) => s + v, 0) / values.length;
-    const stdDev = Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length);
-    emit({ id: `step-2-${Date.now()}`, label: 'Computing baseline statistics', status: 'completed', resultSummary: `Mean: ${mean.toFixed(1)}, StdDev: ${stdDev.toFixed(1)}` });
+    const mean = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
+    const stdDev = values.length ? Math.sqrt(values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length) : 0;
+    this.emitStep(emit, 'data-quality-check', 'Analyzing Data Issues', 'completed', `Mean: ${mean.toFixed(1)}, StdDev: ${stdDev.toFixed(1)}`);
 
-    emit({ id: `step-3-${Date.now()}`, label: 'Detecting anomalies', status: 'active' });
+    this.emitStep(emit, 'anomaly-detection', 'Identifying Anomalies', 'active');
     const anomalies = data
       .map((d) => ({ date: d.date, value: d.value, zScore: (d.value - mean) / (stdDev || 1), mean, stdDev }))
       .filter((d) => Math.abs(d.zScore) >= threshold);
-    emit({ id: `step-3-${Date.now()}`, label: 'Detecting anomalies', status: 'completed', resultSummary: `${anomalies.length} anomalies found` });
+    this.emitStep(emit, 'anomaly-detection', 'Identifying Anomalies', 'completed', `${anomalies.length} anomalies found`);
 
     const narrative = `Anomaly detection for ${metric} over ${days} days: found ${anomalies.length} anomal${anomalies.length === 1 ? 'y' : 'ies'} (z-score threshold: ${threshold}). Baseline mean: ${mean.toFixed(1)}, std dev: ${stdDev.toFixed(1)}.`;
 
@@ -234,16 +258,16 @@ class DeepAnalysisEngineService {
     const periodALabel = (params.periodALabel as string) || 'This week';
     const periodBLabel = (params.periodBLabel as string) || 'Last week';
 
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${periodALabel} data`, status: 'active' });
+    this.emitStep(emit, 'fetch-period-a', `Analyzing ${periodALabel} Data`, 'active');
     const dataA = await this.fetchMetricTimeSeries(userId, metric, periodADays);
-    emit({ id: `step-1-${Date.now()}`, label: `Fetching ${periodALabel} data`, status: 'completed', resultSummary: `${dataA.length} data points` });
+    this.emitStep(emit, 'fetch-period-a', `Analyzing ${periodALabel} Data`, 'completed', `${dataA.length} data points`);
 
-    emit({ id: `step-2-${Date.now()}`, label: `Fetching ${periodBLabel} data`, status: 'active' });
+    this.emitStep(emit, 'fetch-period-b', `Analyzing ${periodBLabel} Data`, 'active');
     const dataB = await this.fetchMetricTimeSeries(userId, metric, periodADays + periodBDays);
     const periodBData = dataB.slice(0, Math.max(0, dataB.length - periodADays));
-    emit({ id: `step-2-${Date.now()}`, label: `Fetching ${periodBLabel} data`, status: 'completed', resultSummary: `${periodBData.length} data points` });
+    this.emitStep(emit, 'fetch-period-b', `Analyzing ${periodBLabel} Data`, 'completed', `${periodBData.length} data points`);
 
-    emit({ id: `step-3-${Date.now()}`, label: 'Computing comparison metrics', status: 'active' });
+    this.emitStep(emit, 'impact-assessment', 'Analyzing Impact', 'active');
     const statsA = this.computeStats(dataA.map((d) => d.value), periodALabel);
     const statsB = this.computeStats(periodBData.map((d) => d.value), periodBLabel);
 
@@ -251,7 +275,7 @@ class DeepAnalysisEngineService {
     const deltaPercent = statsB.mean !== 0 ? (delta / statsB.mean) * 100 : 0;
     const direction = Math.abs(deltaPercent) < 3 ? 'stable' as const : delta > 0 ? 'improved' as const : 'declined' as const;
 
-    emit({ id: `step-3-${Date.now()}`, label: 'Computing comparison metrics', status: 'completed', resultSummary: `${deltaPercent >= 0 ? '+' : ''}${deltaPercent.toFixed(1)}%` });
+    this.emitStep(emit, 'impact-assessment', 'Analyzing Impact', 'completed', `${deltaPercent >= 0 ? '+' : ''}${deltaPercent.toFixed(1)}%`);
 
     const comparison: ComparisonResult = { periodA: statsA, periodB: statsB, delta, deltaPercent, direction };
     const narrative = `${metric} comparison: ${periodALabel} avg ${statsA.mean.toFixed(1)} vs ${periodBLabel} avg ${statsB.mean.toFixed(1)} (${deltaPercent >= 0 ? '+' : ''}${deltaPercent.toFixed(1)}%, ${direction}).`;
@@ -374,6 +398,55 @@ class DeepAnalysisEngineService {
       },
       recovery_score: {
         sql: `SELECT created_at::date::text as date, recovery_score as value FROM whoop_daily_data WHERE user_id = $1 AND created_at >= CURRENT_DATE - $2::int AND recovery_score IS NOT NULL ORDER BY created_at::date`,
+        dateCol: 'date',
+      },
+      sleep_quality: {
+        sql: `SELECT recorded_at::date::text as date,
+                     AVG(COALESCE((value->>'sleep_quality_score')::numeric, (value->>'sleep_performance_percentage')::numeric)) as value
+              FROM health_data_records
+              WHERE user_id = $1
+                AND data_type = 'sleep'
+                AND recorded_at >= CURRENT_DATE - $2::int
+                AND COALESCE(value->>'sleep_quality_score', value->>'sleep_performance_percentage') IS NOT NULL
+              GROUP BY recorded_at::date
+              ORDER BY recorded_at::date`,
+        dateCol: 'date',
+      },
+      sleep_score: {
+        sql: `SELECT recorded_at::date::text as date,
+                     AVG(COALESCE((value->>'sleep_quality_score')::numeric, (value->>'sleep_performance_percentage')::numeric)) as value
+              FROM health_data_records
+              WHERE user_id = $1
+                AND data_type = 'sleep'
+                AND recorded_at >= CURRENT_DATE - $2::int
+                AND COALESCE(value->>'sleep_quality_score', value->>'sleep_performance_percentage') IS NOT NULL
+              GROUP BY recorded_at::date
+              ORDER BY recorded_at::date`,
+        dateCol: 'date',
+      },
+      cardio_load: {
+        sql: `SELECT metric_date::text as date, strain_score as value
+              FROM daily_health_metrics
+              WHERE user_id = $1 AND metric_date >= CURRENT_DATE - $2::int AND strain_score IS NOT NULL
+              ORDER BY metric_date`,
+        dateCol: 'date',
+      },
+      strain_score: {
+        sql: `SELECT metric_date::text as date, strain_score as value
+              FROM daily_health_metrics
+              WHERE user_id = $1 AND metric_date >= CURRENT_DATE - $2::int AND strain_score IS NOT NULL
+              ORDER BY metric_date`,
+        dateCol: 'date',
+      },
+      active_calories: {
+        sql: `SELECT recorded_at::date::text as date,
+                     AVG(COALESCE((value->>'calories_burned')::numeric, (value->>'active_calories')::numeric, (value->>'calories')::numeric)) as value
+              FROM health_data_records
+              WHERE user_id = $1
+                AND recorded_at >= CURRENT_DATE - $2::int
+                AND COALESCE(value->>'calories_burned', value->>'active_calories', value->>'calories') IS NOT NULL
+              GROUP BY recorded_at::date
+              ORDER BY recorded_at::date`,
         dateCol: 'date',
       },
     };

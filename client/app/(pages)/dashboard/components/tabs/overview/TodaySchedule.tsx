@@ -10,6 +10,11 @@ import {
 import Link from 'next/link';
 import type { TodayData, Plan } from './types';
 import { activityIcons, formatTime } from './constants';
+import { ScheduleItemActions } from './ScheduleItemActions';
+import { EditScheduleItemModal } from './EditScheduleItemModal';
+import { api } from '@/lib/api-client';
+import { confirm } from '@/components/common/ConfirmDialog';
+import toast from 'react-hot-toast';
 
 /* ════════════════════════════════════════════════════════
    INJECTED CSS
@@ -213,10 +218,12 @@ interface CardProps {
   cfg: TC;
   onToggle: () => void;
   onComplete: (e: React.MouseEvent) => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 function ActivityCard({
-  activity, index, isCompleted, isCurrent, isExpanded, cfg, onToggle, onComplete,
+  activity, index, isCompleted, isCurrent, isExpanded, cfg, onToggle, onComplete, onEdit, onDelete,
 }: CardProps) {
   const IconComp = resolveIcon(activity.type, activityIcons?.[activity.type]);
 
@@ -482,6 +489,11 @@ function ActivityCard({
               )}
             </motion.button>
 
+            {/* Edit/Delete actions */}
+            {onEdit && onDelete && (
+              <ScheduleItemActions onEdit={onEdit} onDelete={onDelete} />
+            )}
+
             {/* Chevron toggle */}
             <motion.div
               animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -514,6 +526,37 @@ export function TodaySchedule({
   onRefresh,
 }: TodayScheduleProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingActivity, setEditingActivity] = useState<ActivityItem | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  const handleEdit = (activity: ActivityItem) => {
+    setEditingActivity(activity);
+    setIsEditModalOpen(true);
+  };
+
+  const handleDelete = async (activity: ActivityItem) => {
+    if (!plan) return;
+    const confirmed = await confirm({
+      title: 'Delete Schedule Item',
+      description: `Are you sure you want to delete "${activity.title}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      variant: 'destructive',
+    });
+    if (!confirmed) return;
+    try {
+      const updatedActivities = (plan.activities || []).filter(
+        (a) => a.id !== activity.id,
+      );
+      await api.patch(`/plans/${plan.id}`, {
+        activities: updatedActivities,
+      });
+      toast.success('Schedule item deleted');
+      onRefresh?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete item';
+      toast.error(message);
+    }
+  };
 
   /* ── Detect current activity ──────────────────────── */
   const now = new Date();
@@ -655,7 +698,7 @@ export function TodaySchedule({
             )}
 
             <Link
-              href="/activity"
+              href="/schedule"
               className="flex items-center gap-0.5 px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors"
               style={{
                 background: 'rgba(14,165,233,0.07)',
@@ -778,6 +821,8 @@ export function TodaySchedule({
                         e.stopPropagation();
                         onActivityComplete(activity.id);
                       }}
+                      onEdit={() => handleEdit(activity)}
+                      onDelete={() => handleDelete(activity)}
                     />
                   </div>
                 </div>
@@ -816,6 +861,14 @@ export function TodaySchedule({
         )}
       </div>
 
+      {/* Edit Modal */}
+      <EditScheduleItemModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        activity={editingActivity}
+        plan={plan}
+        onSuccess={() => onRefresh?.()}
+      />
     </div>
   );
 }

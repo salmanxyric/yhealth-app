@@ -17,8 +17,11 @@ import { z } from 'zod';
 import { logger } from './logger.service.js';
 import { query } from '../config/database.config.js';
 import { createSemanticTools } from './langgraph-semantic-tools.service.js';
+import { registerFinanceTools } from './langgraph-tools/domains/finance.js';
+import { registerAnalyticsTools } from './langgraph-tools/domains/analytics.js';
 import { toolRouterService } from './tool-router.service.js';
 import type { ToolTurnContext } from '../types/tool-turn-context.js';
+import type { ToolDefinition } from './langgraph-tools/types.js';
 
 // ============================================
 // ESSENTIAL READ-ONLY TOOLS
@@ -26,7 +29,16 @@ import type { ToolTurnContext } from '../types/tool-turn-context.js';
 // ============================================
 
 function createEssentialReadTools(userId: string): DynamicStructuredTool[] {
+  const definitionToTool = (def: ToolDefinition) => new DynamicStructuredTool({
+    name: def.name,
+    description: def.description,
+    schema: def.schema,
+    func: async (params: unknown) => def.handler(userId, params),
+  });
+
   return [
+    ...registerFinanceTools(userId).map(definitionToTool),
+    ...registerAnalyticsTools(userId).map(definitionToTool),
     // OVERVIEW TOOLS - Critical for context
     new DynamicStructuredTool({
       name: 'getUserActivePlans',

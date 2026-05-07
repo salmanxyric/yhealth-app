@@ -73,7 +73,7 @@ export function HealthScoreCard({
   sleepHours   = 7.2,
 }: HealthScoreCardProps) {
   const clampedScore = Math.max(0, Math.min(100, score));
-  const { color, rgb, label, gradientLight, gradientMid, gradientDark, glowRgb } = useMemo(() => scoreMeta(clampedScore), [clampedScore]);
+  const { color: _color, rgb: _rgb, label: _label, gradientLight, gradientMid, gradientDark, glowRgb: _glowRgb } = useMemo(() => scoreMeta(clampedScore), [clampedScore]);
   const initialFillY = scoreToFillY(clampedScore);
   const normalizedSleep = Math.max(0, Math.min(10, sleepHours));
   const normalizedSteps = Math.max(0, Math.min(14000, steps));

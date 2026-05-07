@@ -16,7 +16,7 @@ import {
 import type {
   FeatureNodeId,
   GraphEvent,
-} from '../../../../shared/types/domain/reasoning-graph.js';
+} from '@shared/types/domain/reasoning-graph.js';
 
 // Debounce: max one state update per feature per user per 30 seconds
 const _recentEvents = new Map<string, number>();

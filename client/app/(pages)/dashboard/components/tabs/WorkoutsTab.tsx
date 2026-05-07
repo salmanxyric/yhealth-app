@@ -28,6 +28,7 @@ import {
   ActiveSessionBanner,
   RestTimerModal,
   WorkoutCompletionModal,
+  WorkoutPlanDetailView,
   TodayView,
   PlanView,
   checkPlanCompletion,
@@ -94,6 +95,8 @@ export function WorkoutsTab() {
   const [editingWorkout, setEditingWorkout] = useState<WorkoutPlan | null>(null);
   const [editingDay, setEditingDay] = useState<{ dayOfWeek: string; workout: DayWorkout | null } | null>(null);
   const [executionDrawerExercise, setExecutionDrawerExercise] = useState<Exercise | null>(null);
+  const [planDetailId, setPlanDetailId] = useState<string | null>(null);
+  const planDetailWorkout = workouts.find((workout) => workout.id === planDetailId) || null;
 
   // ── Bridging: session ↔ data interactions ──────────────────────
 
@@ -141,6 +144,15 @@ export function WorkoutsTab() {
   const handleEditWorkout = useCallback((workout: WorkoutPlan) => {
     setEditingWorkout(workout);
     setShowCreateModal(true);
+  }, []);
+
+  const handleOpenPlanDetail = useCallback((id: string) => {
+    setSelectedWorkoutId(id);
+    setPlanDetailId(id);
+  }, [setSelectedWorkoutId]);
+
+  const handleRequestDeleteWorkout = useCallback((id: string) => {
+    setShowDeleteConfirm(id);
   }, []);
 
   /** Handle workout completion modal "Done" — refresh progress + check plan completion */
@@ -512,13 +524,24 @@ export function WorkoutsTab() {
           />
         )}
 
-        {!isLoadingPlans && activeView === "plan" && (
+        {!isLoadingPlans && activeView === "plan" && planDetailWorkout && (
+          <WorkoutPlanDetailView
+            plan={planDetailWorkout}
+            onBack={() => setPlanDetailId(null)}
+            onEditPlan={handleEditWorkout}
+            onDeletePlan={handleRequestDeleteWorkout}
+            onEditDay={(dayOfWeek, workout) => setEditingDay({ dayOfWeek, workout })}
+            onOpenExercise={(exercise) => setExecutionDrawerExercise(exercise)}
+          />
+        )}
+
+        {!isLoadingPlans && activeView === "plan" && !planDetailWorkout && (
           <PlanView
             workouts={workouts}
             selectedWorkoutId={selectedWorkoutId}
-            onSelectWorkout={(id) => setSelectedWorkoutId(id)}
+            onSelectWorkout={handleOpenPlanDetail}
             onEditWorkout={handleEditWorkout}
-            onDeleteWorkout={(id) => setShowDeleteConfirm(id)}
+            onDeleteWorkout={handleRequestDeleteWorkout}
             onCreateNew={() => setShowCreateModal(true)}
             onReorder={handleDragEnd}
           />
@@ -674,6 +697,7 @@ export function WorkoutsTab() {
       {/* Create/Edit Workout Modal */}
       <CreateWorkoutModal
         isOpen={showCreateModal || !!editingWorkout}
+        editingWorkout={editingWorkout}
         onClose={() => { setShowCreateModal(false); setEditingWorkout(null); }}
         onWorkoutCreated={(workout) => {
           setWorkouts(prev => {
@@ -692,7 +716,13 @@ export function WorkoutsTab() {
       <DeleteConfirmModal
         isOpen={!!showDeleteConfirm}
         workoutName={workouts.find(w => w.id === showDeleteConfirm)?.name || ""}
-        onConfirm={() => { handleDeleteWorkout(showDeleteConfirm!); setShowDeleteConfirm(null); }}
+        onConfirm={() => {
+          if (showDeleteConfirm === planDetailId) {
+            setPlanDetailId(null);
+          }
+          handleDeleteWorkout(showDeleteConfirm!);
+          setShowDeleteConfirm(null);
+        }}
         onCancel={() => setShowDeleteConfirm(null)}
       />
 

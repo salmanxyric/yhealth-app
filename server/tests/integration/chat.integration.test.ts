@@ -46,26 +46,19 @@ describe('Chat API Integration Tests', () => {
   });
 
   describe('POST /api/chats', () => {
-    it('should attempt to create a one-on-one chat', async () => {
-      // Note: createOrGetChat has a transaction isolation issue where getChatById
-      // queries outside the transaction, so newly inserted participants may not be visible.
-      // This may return 200 (success) or 403 (transaction isolation issue).
+    it('should create a one-on-one chat', async () => {
       const response = await request(app)
         .post('/api/chats')
         .set('Authorization', `Bearer ${token1}`)
         .send({
           userId: user2.id,
         })
-        .expect((res) => {
-          expect([200, 403]).toContain(res.status);
-        });
+        .expect(200);
 
-      if (response.status === 200) {
-        expect(response.body.success).toBe(true);
-        expect(response.body.data).toHaveProperty('id');
-        expect(response.body.data).toHaveProperty('participants');
-        expect(response.body.data.participants.length).toBe(2);
-      }
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('id');
+      expect(response.body.data).toHaveProperty('participants');
+      expect(response.body.data.participants.length).toBe(2);
     });
 
     it('should return 401 without authentication', async () => {

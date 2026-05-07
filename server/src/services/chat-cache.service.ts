@@ -18,8 +18,8 @@ const CACHE_TTL = {
  * Cache key generators for chat-related data
  */
 export const chatCacheKeys = {
-  chatList: (userId: string, isAdmin: boolean = false) => 
-    `chat:list:${userId}:${isAdmin ? 'admin' : 'user'}`,
+  chatList: (userId: string) =>
+    `chat:list:${userId}`,
   
   chatDetail: (chatId: string) => 
     `chat:detail:${chatId}`,
@@ -54,11 +54,10 @@ class ChatCacheService {
    */
   public async getOrSetChatList<T>(
     userId: string,
-    isAdmin: boolean,
     factory: () => Promise<T>,
     ttl?: number
   ): Promise<T> {
-    const key = chatCacheKeys.chatList(userId, isAdmin);
+    const key = chatCacheKeys.chatList(userId);
     return cache.getOrSet(key, factory, ttl ?? CACHE_TTL.CHAT_LIST);
   }
 
@@ -104,11 +103,7 @@ class ChatCacheService {
    * Invalidate chat list cache for user(s)
    */
   public invalidateChatList(userIds: string[]): void {
-    const keys: string[] = [];
-    for (const userId of userIds) {
-      keys.push(chatCacheKeys.chatList(userId, false));
-      keys.push(chatCacheKeys.chatList(userId, true));
-    }
+    const keys = userIds.map(userId => chatCacheKeys.chatList(userId));
     const deleted = cache.delete(keys);
     if (deleted > 0) {
       logger.debug('Invalidated chat list cache', { userIds, deleted });

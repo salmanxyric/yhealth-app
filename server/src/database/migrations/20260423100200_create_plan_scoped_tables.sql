@@ -89,6 +89,7 @@ SELECT p.id, fc.feature_key,
        CASE
            WHEN fc.feature_key IN (
                'ai.coach.message', 'ai.coach.start',
+               'ai.coach.goal_generate', 'ai.goals.from_assessment',
                'ai.rag.chat', 'ai.rag.chat_stream',
                'ai.coach.image_analyze', 'ai.coach.chat_with_image',
                'ai.emotion.checkin',
@@ -98,6 +99,7 @@ SELECT p.id, fc.feature_key,
        END AS is_enabled,
        CASE
            WHEN fc.feature_key IN ('ai.coach.message', 'ai.rag.chat') THEN 20
+           WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 3
            WHEN fc.feature_key IN ('ai.coach.image_analyze', 'ai.coach.chat_with_image') THEN 3
            WHEN fc.feature_key = 'ai.emotion.checkin' THEN 1
            ELSE NULL
@@ -105,12 +107,16 @@ SELECT p.id, fc.feature_key,
        CASE
            WHEN fc.feature_key IN (
                'ai.coach.message', 'ai.rag.chat',
+               'ai.coach.goal_generate', 'ai.goals.from_assessment',
                'ai.coach.image_analyze', 'ai.coach.chat_with_image'
            ) THEN 'day'
            WHEN fc.feature_key = 'ai.emotion.checkin' THEN 'day'
            ELSE NULL
        END AS limit_period,
-       NULL AS credit_cost
+       CASE
+           WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 0
+           ELSE NULL
+       END AS credit_cost
   FROM subscription_plans p
   CROSS JOIN feature_catalog fc
  WHERE p.slug = 'free'

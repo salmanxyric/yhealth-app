@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sessionService } from "@/src/shared/services/yoga.service";
-import type { YogaSession, YogaSessionType } from "@shared/types/domain/yoga";
+import type { YogaSession, YogaSessionType, PhaseType, BreathingPattern } from "@shared/types/domain/yoga";
 import DemoVideoModal from "./DemoVideoModal";
 
 /* ------------------------------------------------------------------ */
@@ -639,11 +639,11 @@ function buildFallbackPhases(type: string, durationMins: number) {
   const config = SHORT_SESSIONS[type];
   if (config) {
     return config.phases.map((p) => ({
-      phaseType: p.phaseType as any,
+      phaseType: p.phaseType as PhaseType,
       name: p.name,
       durationSeconds: Math.round(totalSec * p.pct),
       poses: [],
-      breathingPattern: p.breathing as any,
+      breathingPattern: p.breathing as BreathingPattern,
       narrationScript: p.script,
     }));
   }

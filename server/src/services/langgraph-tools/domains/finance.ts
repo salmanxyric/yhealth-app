@@ -49,6 +49,19 @@ const GetMonthComparisonSchema = z.object({});
 
 const GetFinancialForecastSchema = z.object({});
 
+const GetFinancialReportSchema = z.object({
+  month: z.string().optional().describe('Month in YYYY-MM format. Defaults to current month. Use for previous financial report requests by passing the requested month if known.'),
+});
+
+function formatMoney(value: unknown): string {
+  const amount = typeof value === 'number' ? value : Number(value || 0);
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
 const UpdateTransactionSchema = z.object({
   transactionId: z.string().uuid().describe('Transaction ID to update (required).'),
   amount: z.number().optional().describe('Updated amount.'),
@@ -126,6 +139,42 @@ async function getMonthComparison(userId: string): Promise<string> {
 async function getFinancialForecast(userId: string): Promise<string> {
   const forecast = await financeService.getForecast(userId);
   return successResponse({ forecast });
+}
+
+async function getFinancialReport(userId: string, params: z.infer<typeof GetFinancialReportSchema>): Promise<string> {
+  const month = params.month || new Date().toISOString().slice(0, 7);
+  const [summary, breakdown, budgets, goals, comparison, forecast] = await Promise.all([
+    financeService.getMonthlySummary(userId, month),
+    financeService.getCategoryBreakdown(userId, month),
+    financeService.getBudgets(userId, month),
+    financeService.getGoals(userId),
+    financeService.getMonthComparison(userId),
+    financeService.getForecast(userId),
+  ]);
+
+  const hasTrackedData =
+    (summary.totalIncome || 0) > 0 ||
+    (summary.totalExpense || 0) > 0 ||
+    breakdown.length > 0 ||
+    budgets.length > 0 ||
+    goals.length > 0;
+  const message = hasTrackedData
+    ? `Financial report ready for ${month}: ${formatMoney(summary.totalIncome)} income, ${formatMoney(summary.totalExpense)} expenses, ${formatMoney(summary.netSavings)} net cash flow.`
+    : `I don't have tracked finance data yet for ${month}. Log income, expenses, budgets, or saving goals first so I can generate a real financial report.`;
+
+  return successResponse({
+    message,
+    hasTrackedData,
+    report: {
+      month,
+      summary,
+      categoryBreakdown: breakdown,
+      budgets,
+      savingGoals: goals,
+      monthComparison: comparison,
+      forecast,
+    },
+  });
 }
 
 async function getBudgets(userId: string, params: z.infer<typeof GetBudgetsSchema>): Promise<string> {
@@ -270,6 +319,12 @@ export function registerFinanceTools(_userId: string): ToolDefinition[] {
       description: 'Get end-of-month spending forecast based on current daily burn rate, with per-category projections.',
       schema: GetFinancialForecastSchema,
       handler: withErrorHandling('getFinancialForecast', getFinancialForecast),
+    },
+    {
+      name: 'getFinancialReport',
+      description: 'Get a complete saved financial report from the user\'s finance data, including monthly income, expenses, net cash flow, category breakdown, budgets, saving goals, month comparison, and forecast. Use for "financial report", "previous financial report", "share my finance report", or "how are my finances?".',
+      schema: GetFinancialReportSchema,
+      handler: withErrorHandling('getFinancialReport', getFinancialReport),
     },
     {
       name: 'getBudgets',

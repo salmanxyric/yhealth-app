@@ -374,10 +374,48 @@ class WorkoutAlarmService {
       // Get all enabled alarms for debugging
       let allAlarmsCount = 0;
       try {
+        const orphanResult = await pool.query(
+          `DELETE FROM workout_alarms wa
+            WHERE NOT EXISTS (
+              SELECT 1 FROM users u WHERE u.id = wa.user_id
+            )
+            RETURNING wa.id, wa.user_id`
+        );
+
+        if ((orphanResult.rowCount ?? 0) > 0) {
+          logger.warn('[WorkoutAlarm] Removed orphaned workout alarms', {
+            count: orphanResult.rowCount,
+            alarms: orphanResult.rows.map((row: any) => ({
+              id: row.id,
+              userId: row.user_id,
+            })),
+          });
+        }
+
+        const inactiveResult = await pool.query(
+          `UPDATE workout_alarms wa SET is_enabled = false, updated_at = NOW()
+             FROM users u
+            WHERE u.id = wa.user_id AND u.is_active = false AND wa.is_enabled = true
+            RETURNING wa.id, wa.user_id`
+        );
+
+        if ((inactiveResult.rowCount ?? 0) > 0) {
+          logger.warn('[WorkoutAlarm] Disabled alarms for inactive users', {
+            count: inactiveResult.rowCount,
+            alarms: inactiveResult.rows.map((row: any) => ({
+              id: row.id,
+              userId: row.user_id,
+            })),
+          });
+        }
+
         const allAlarmsResult = await pool.query(
-          `SELECT id, user_id, title, alarm_time, days_of_week, next_trigger_at, last_triggered_at, is_enabled 
-           FROM workout_alarms 
-           WHERE is_enabled = true`
+          `SELECT wa.id, wa.user_id, wa.title, wa.alarm_time, wa.days_of_week,
+                  wa.next_trigger_at, wa.last_triggered_at, wa.is_enabled
+             FROM workout_alarms wa
+             JOIN users u ON u.id = wa.user_id
+            WHERE wa.is_enabled = true
+              AND u.is_active = true`
         );
         allAlarmsCount = allAlarmsResult.rows.length;
       } catch (error) {
@@ -391,11 +429,14 @@ class WorkoutAlarmService {
       let _staleAlarmsRecalculated = 0;
       try {
     const staleAlarmsResult = await pool.query(
-          `SELECT id, alarm_time, days_of_week, next_trigger_at, user_id FROM workout_alarms
-       WHERE is_enabled = true
-       AND next_trigger_at IS NOT NULL
-           AND next_trigger_at < NOW() - INTERVAL '1 hour'
-       AND (last_triggered_at IS NULL OR last_triggered_at < next_trigger_at)`
+          `SELECT wa.id, wa.alarm_time, wa.days_of_week, wa.next_trigger_at, wa.user_id
+             FROM workout_alarms wa
+             JOIN users u ON u.id = wa.user_id
+            WHERE wa.is_enabled = true
+              AND u.is_active = true
+              AND wa.next_trigger_at IS NOT NULL
+              AND wa.next_trigger_at < NOW() - INTERVAL '1 hour'
+              AND (wa.last_triggered_at IS NULL OR wa.last_triggered_at < wa.next_trigger_at)`
     );
         
         for (const staleAlarm of staleAlarmsResult.rows) {
@@ -432,17 +473,31 @@ class WorkoutAlarmService {
       let recalculatedCount = 0;
       try {
         const allEnabledAlarmsResult = await pool.query(
-          `SELECT id, user_id, alarm_time, days_of_week, next_trigger_at, last_triggered_at
-           FROM workout_alarms 
-           WHERE is_enabled = true`
+          `SELECT wa.id, wa.user_id, wa.alarm_time, wa.days_of_week,
+                  wa.next_trigger_at, wa.last_triggered_at
+             FROM workout_alarms wa
+             JOIN users u ON u.id = wa.user_id
+            WHERE wa.is_enabled = true
+              AND u.is_active = true`
         );
         
         const nowTime = dbNow?.getTime() || jsNow.getTime();
         
         for (const alarm of allEnabledAlarmsResult.rows) {
           try {
+            // Skip recalculation for recently triggered alarms — markTriggered already
+            // set the correct next_trigger_at. Recalculating can overwrite it and cause
+            // the alarm to re-enter the trigger window (mobile-alarm: once triggered, done).
+            if (alarm.last_triggered_at) {
+              const lastTriggeredTime = new Date(alarm.last_triggered_at).getTime();
+              const minutesSinceTriggered = (nowTime - lastTriggeredTime) / (60 * 1000);
+              if (minutesSinceTriggered < 30) {
+                continue;
+              }
+            }
+
             let timezone = await this.getUserTimezone(alarm.user_id);
-            
+
             // If user timezone is UTC but alarm times suggest a different timezone,
             // try to infer the timezone by comparing alarm time with current UTC time
             if (timezone === 'UTC') {
@@ -504,10 +559,12 @@ class WorkoutAlarmService {
                       );
                       
                       if (userCheck.rows.length === 0) {
-                        logger.warn('[WorkoutAlarm] User not found, skipping timezone update', {
+                        logger.warn('[WorkoutAlarm] User not found, deleting orphaned alarm', {
                           userId: alarm.user_id,
                           alarmId: alarm.id,
                         });
+                        await pool.query('DELETE FROM workout_alarms WHERE id = $1', [alarm.id]);
+                        continue;
                       } else {
                         await pool.query(
                           `INSERT INTO user_preferences (user_id, timezone, updated_at)
@@ -628,55 +685,58 @@ class WorkoutAlarmService {
       }
     
       // Now query for alarms that should trigger
-      // Use NOW() which is timezone-aware (UTC after our timezone fix)
-      // Check for alarms where next_trigger_at has passed or is within the next 5 minutes
-      // This ensures we catch alarms that should trigger now, accounting for:
-      // - 60-second job interval
-      // - Potential delays in job execution
-      // - Timezone conversion issues
-      // We check for alarms that are due (<= NOW() + 5 minutes) and haven't been triggered yet
-      // Also check for alarms that are up to 10 minutes in the past to catch any missed triggers
-      // First, let's check what alarms match the time window without the last_triggered_at condition
-      // Use explicit timestamp comparison to avoid timezone issues
-      const timeWindowStart = new Date((dbNow?.getTime() || jsNow.getTime()) - 10 * 60 * 1000).toISOString();
-      const timeWindowEnd = new Date((dbNow?.getTime() || jsNow.getTime()) + 5 * 60 * 1000).toISOString();
+      // Mobile-alarm behavior: trigger once at the scheduled time, don't re-trigger.
+      // Tight window (-3min to +2min) with 5-minute anti-retrigger cooldown.
+      const timeWindowStart = new Date((dbNow?.getTime() || jsNow.getTime()) - 3 * 60 * 1000).toISOString();
+      const timeWindowEnd = new Date((dbNow?.getTime() || jsNow.getTime()) + 2 * 60 * 1000).toISOString();
       
       const timeWindowCheck = await pool.query(
-        `SELECT id, title, alarm_time, next_trigger_at, last_triggered_at, user_id
-         FROM workout_alarms
-         WHERE is_enabled = true
-         AND next_trigger_at IS NOT NULL
-         AND next_trigger_at <= $1::timestamp
-         AND next_trigger_at >= $2::timestamp
-         ORDER BY next_trigger_at ASC`,
+        `SELECT wa.id, wa.title, wa.alarm_time, wa.next_trigger_at, wa.last_triggered_at, wa.user_id
+           FROM workout_alarms wa
+           JOIN users u ON u.id = wa.user_id
+          WHERE wa.is_enabled = true
+            AND u.is_active = true
+            AND wa.next_trigger_at IS NOT NULL
+            AND wa.next_trigger_at <= $1::timestamp
+            AND wa.next_trigger_at >= $2::timestamp
+          ORDER BY wa.next_trigger_at ASC`,
         [timeWindowEnd, timeWindowStart]
       );
       
-      // Query for alarms that should trigger now
-      // An alarm should trigger if:
-      // 1. It's enabled
-      // 2. next_trigger_at is within the trigger window (2 minutes past to 2 minutes future - narrower window)
-      // 3. It hasn't been triggered for this specific occurrence (last_triggered_at < next_trigger_at OR NULL)
-      // 4. Additional check: last_triggered_at must be NULL or more than 1 minute ago (prevents immediate retrigger)
+      // Trigger query: same tight window, 5-min cooldown prevents re-triggering a dismissed alarm.
       const result = await pool.query(
-        `SELECT * FROM workout_alarms
-         WHERE is_enabled = true
-         AND next_trigger_at IS NOT NULL
-         AND next_trigger_at <= NOW() + INTERVAL '5 minutes'
-         AND next_trigger_at >= NOW() - INTERVAL '10 minutes'
-         AND (last_triggered_at IS NULL OR last_triggered_at < next_trigger_at)
-         AND (last_triggered_at IS NULL OR last_triggered_at < NOW() - INTERVAL '2 minutes')
-         ORDER BY next_trigger_at ASC`
+        `SELECT wa.*
+           FROM workout_alarms wa
+           JOIN users u ON u.id = wa.user_id
+          WHERE wa.is_enabled = true
+            AND u.is_active = true
+            AND wa.next_trigger_at IS NOT NULL
+            AND wa.next_trigger_at <= NOW() + INTERVAL '2 minutes'
+            AND wa.next_trigger_at >= NOW() - INTERVAL '3 minutes'
+            AND (wa.last_triggered_at IS NULL OR wa.last_triggered_at < wa.next_trigger_at)
+            AND (wa.last_triggered_at IS NULL OR wa.last_triggered_at < NOW() - INTERVAL '5 minutes')
+          ORDER BY wa.next_trigger_at ASC`
       );
       
       // Log detailed information about why alarms might not be matching
       if (result.rows.length === 0 && timeWindowCheck.rows.length > 0) {
         // Alarms are in time window but being filtered - check why
+        const diagnosticNow = new Date(dbNow?.getTime() || jsNow.getTime());
+        const cooldownThreshold = new Date(diagnosticNow.getTime() - 5 * 60 * 1000);
         const filteredAlarms = timeWindowCheck.rows.map((r: any) => {
           const nextTrigger = r.next_trigger_at ? new Date(r.next_trigger_at) : null;
           const lastTriggered = r.last_triggered_at ? new Date(r.last_triggered_at) : null;
           const passesLastTriggeredCheck = !lastTriggered || (nextTrigger && lastTriggered < nextTrigger);
-          
+          const passesCooldownCheck = !lastTriggered || lastTriggered < cooldownThreshold;
+
+          let reason = 'should trigger';
+          if (!passesLastTriggeredCheck) {
+            reason = `last_triggered_at (${lastTriggered!.toISOString()}) >= next_trigger_at (${nextTrigger?.toISOString()})`;
+          } else if (!passesCooldownCheck) {
+            const cooldownRemaining = Math.ceil((lastTriggered!.getTime() + 5 * 60 * 1000 - diagnosticNow.getTime()) / 1000);
+            reason = `5-min cooldown: last_triggered_at (${lastTriggered!.toISOString()}) is within 5 min of now, ${cooldownRemaining}s remaining`;
+          }
+
           return {
             id: r.id,
             title: r.title,
@@ -684,9 +744,8 @@ class WorkoutAlarmService {
             nextTriggerAt: r.next_trigger_at?.toISOString(),
             lastTriggeredAt: r.last_triggered_at?.toISOString(),
             passesLastTriggeredCheck,
-            reason: !passesLastTriggeredCheck 
-              ? `last_triggered_at (${r.last_triggered_at?.toISOString()}) >= next_trigger_at (${r.next_trigger_at?.toISOString()})`
-              : 'should trigger',
+            passesCooldownCheck,
+            reason,
           };
         });
         
@@ -698,11 +757,13 @@ class WorkoutAlarmService {
       } else if (result.rows.length === 0 && allAlarmsCount > 0) {
         try {
           await pool.query(
-            `SELECT id, title, alarm_time, next_trigger_at, last_triggered_at, user_id
-             FROM workout_alarms 
-             WHERE is_enabled = true 
-             AND next_trigger_at IS NOT NULL
-             ORDER BY next_trigger_at ASC
+            `SELECT wa.id, wa.title, wa.alarm_time, wa.next_trigger_at, wa.last_triggered_at, wa.user_id
+               FROM workout_alarms wa
+               JOIN users u ON u.id = wa.user_id
+              WHERE wa.is_enabled = true
+                AND u.is_active = true
+                AND wa.next_trigger_at IS NOT NULL
+              ORDER BY wa.next_trigger_at ASC
              LIMIT 10`
           );
           
@@ -936,9 +997,12 @@ class WorkoutAlarmService {
   private calculateNextTrigger(alarmTime: string, daysOfWeek: number[], timezone: string = 'UTC', opts: { strict?: boolean } = {}): string {
     const [hours, minutes] = alarmTime.split(':').map(Number);
     const now = new Date();
-    // When strict=true (called after an alarm just triggered), only return times strictly in the future.
-    // Otherwise allow up to 2 minutes past to tolerate job-interval/clock-skew lookbacks.
-    const pastTolerance = opts.strict ? 0 : -120000;
+    // When strict=true (called after an alarm just triggered), require the next trigger to be
+    // at least 5 min in the future. This prevents returning the SAME occurrence when the alarm
+    // fires slightly early (within the -3 min window), which would deadlock against the
+    // 5-minute anti-retrigger cooldown in getAlarmsToTrigger.
+    // Non-strict: allow up to 2 minutes past to tolerate job-interval/clock-skew lookbacks.
+    const pastTolerance = opts.strict ? 5 * 60 * 1000 : -120000;
 
     try {
       // For UTC timezone, use simple calculation

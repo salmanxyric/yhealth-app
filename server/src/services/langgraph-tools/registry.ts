@@ -26,6 +26,7 @@ import { registerFinanceTools } from './domains/finance.js';
 import { registerFilesTools } from './domains/files.js';
 import { registerStreakTools } from './domains/streak.js';
 import { registerWikiTools } from './domains/wiki.js';
+import { registerQuickNoteTools } from './domains/quick-notes.js';
 
 const TOOLS_TO_EXCLUDE = new Set([
   // Batch delete operations - dangerous and rarely needed
@@ -81,6 +82,7 @@ export function createTools(userId: string): DynamicStructuredTool[] {
   const domainRegisters = [
     registerWorkoutTools,
     registerNutritionTools,
+    registerQuickNoteTools,
     registerWellbeingTools,
     registerHabitTools,
     registerScheduleTools,

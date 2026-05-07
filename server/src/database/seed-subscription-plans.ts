@@ -130,11 +130,12 @@ async function seedSubscriptionPlans(): Promise<void> {
     // ── 3. Seed plan_features ──
     console.log('\n📋 Seeding plan_features…');
 
-    // FREE: basic features only, no AI, no premium
+    // FREE: basic features plus onboarding goal generation; no broad AI/premium access.
     await client.query(
       `INSERT INTO plan_features (plan_id, feature_key, is_enabled, limit_value, limit_period, credit_cost)
        SELECT $1::uuid, fc.feature_key,
               CASE
+                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN true
                 WHEN fc.is_ai = true THEN false
                 WHEN fc.feature_key IN (
                   'voice_assistant.use','competitions.join_premium','analytics.export',
@@ -143,9 +144,20 @@ async function seedSubscriptionPlans(): Promise<void> {
                 ) THEN false
                 ELSE true
               END,
-              CASE WHEN fc.feature_key = 'community.post' THEN 10 ELSE NULL END,
-              CASE WHEN fc.feature_key = 'community.post' THEN 'day' ELSE NULL END,
-              NULL
+              CASE
+                WHEN fc.feature_key = 'community.post' THEN 10
+                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 3
+                ELSE NULL
+              END,
+              CASE
+                WHEN fc.feature_key = 'community.post' THEN 'day'
+                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 'day'
+                ELSE NULL
+              END,
+              CASE
+                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 0
+                ELSE NULL
+              END
          FROM feature_catalog fc`,
       [planIds['free']]
     );

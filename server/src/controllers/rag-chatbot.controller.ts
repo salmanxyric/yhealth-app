@@ -53,10 +53,13 @@ async function routerLlm(prompt: string): Promise<string> {
  * This saves 2-5s and avoids unnecessary OpenAI/Gemini/TensorFlow API calls.
  */
 const ACTION_PATTERNS = /^(play|stop|pause|skip|next|log|add|create|show|open|go to|navigate|set|toggle|refresh|sync|search)\b/i;
+const LOW_SIGNAL_CONVERSATION_PATTERNS = /^(hi|hello|hey|yo|test|testing|can you hear me|are you there|you there|ok|okay|thanks|thank you)\b/i;
 
 function shouldSkipEmotionDetection(message: string): boolean {
   // Very short messages are usually commands, not emotional expressions
   if (message.length < 20) return true;
+  // Greetings/checks don't carry enough emotional signal to justify an LLM call
+  if (LOW_SIGNAL_CONVERSATION_PATTERNS.test(message.trim())) return true;
   // Action-oriented messages
   if (ACTION_PATTERNS.test(message)) return true;
   return false;
@@ -544,6 +547,24 @@ class RAGChatbotController {
     ApiResponse.success(res, conversation, 'Conversation retrieved successfully');
   });
 
+  truncateConversationFromMessage = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw new ApiError(401, 'Authentication required');
+
+    const { conversationId, messageId } = req.params;
+    const result = await ragChatbotService.truncateConversationFromMessage(
+      conversationId,
+      messageId,
+      userId
+    );
+
+    if (result.deletedCount === 0) {
+      throw new ApiError(404, 'User message not found');
+    }
+
+    ApiResponse.success(res, result, 'Conversation rewound successfully');
+  });
+
   getUserConversations = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.userId;
     if (!userId) throw new ApiError(401, 'Authentication required');
@@ -576,6 +597,22 @@ class RAGChatbotController {
     if (!deleted) throw new ApiError(404, 'Conversation not found or already deleted');
 
     ApiResponse.success(res, { deleted: true }, 'Conversation deleted successfully');
+  });
+
+  deleteConversations = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw new ApiError(401, 'Authentication required');
+
+    const { conversationIds } = req.body as { conversationIds: string[] };
+    if (!Array.isArray(conversationIds) || conversationIds.length === 0) {
+      throw new ApiError(400, 'conversationIds must be a non-empty array');
+    }
+    if (conversationIds.length > 50) {
+      throw new ApiError(400, 'Cannot delete more than 50 conversations at once');
+    }
+
+    const deletedCount = await ragChatbotService.deleteConversations(conversationIds, userId);
+    ApiResponse.success(res, { deletedCount }, `${deletedCount} conversation(s) deleted successfully`);
   });
 
   archiveConversation = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

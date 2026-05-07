@@ -11,7 +11,7 @@ import type {
   MemoryReference,
   CoreProfileReference,
   TransparencyData,
-} from '../../../shared/types/domain/intelligence-files.js';
+} from '@shared/types/domain/intelligence-files.js';
 
 interface PreparedContext {
   memoriesForPrompt: string;

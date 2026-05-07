@@ -18,7 +18,7 @@ export async function createTestUser(): Promise<string> {
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
   `, [
     userId,
-    `test-${userId}@example.com`,
+    `test-${userId}@balencia.test`,
     'hashed-password',
     'Test',
     'User',

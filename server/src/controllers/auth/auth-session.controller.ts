@@ -17,6 +17,7 @@ import type {
   ForgotPasswordInput,
   ResetPasswordInput,
   VerifyEmailInput,
+  ChangePasswordInput,
 } from '../../validators/auth.validator.js';
 import { comparePassword, hashPassword } from '@/helper/encryption.js';
 import { type UserRow, mapUserRow, getPublicProfile } from './auth.types.js';
@@ -323,5 +324,55 @@ export const verifyEmail = asyncHandler(
     logger.info('Email verified', { userId: user.id });
 
     ApiResponse.success(res, null, 'Email verified successfully');
+  }
+);
+
+/**
+ * Change Password (authenticated)
+ * POST /api/auth/change-password
+ */
+export const changePassword = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const data = req.body as ChangePasswordInput;
+    const userId = req.user!.userId;
+
+    const userResult = await query<UserRow>(
+      'SELECT * FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      throw ApiError.notFound('User not found');
+    }
+
+    const user = mapUserRow(userResult.rows[0]);
+
+    if (!user.password) {
+      throw ApiError.badRequest(
+        'Your account uses social sign-in and does not have a password. Use the forgot password flow to set one.'
+      );
+    }
+
+    const isMatch = await comparePassword(data.currentPassword, user.password);
+    if (!isMatch) {
+      throw ApiError.unauthorized('Current password is incorrect');
+    }
+
+    const hashedPassword = await hashPassword(data.newPassword);
+
+    await query(
+      `UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [hashedPassword, userId]
+    );
+
+    logger.info('Password changed', { userId });
+
+    try {
+      await emailService.sendPasswordChangedEmail(user.email, user.firstName || 'there');
+    } catch (emailErr) {
+      logger.warn('Failed to send password-changed notification email', { userId, error: emailErr });
+    }
+
+    ApiResponse.success(res, null, 'Password changed successfully');
   }
 );

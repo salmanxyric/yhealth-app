@@ -5,6 +5,7 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
     "outDir": "./dist",
+    "rootDir": ".",
     "strict": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
@@ -40,10 +41,10 @@
       "@utils/*": ["utils/*"],
       "@types/*": ["types/*"],
       "@validators/*": ["validators/*"],
-      "@shared/*": ["../../shared/*"]
+      "@shared/*": ["../shared/*"]
     },
     "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "shared/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

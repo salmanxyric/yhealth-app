@@ -86,7 +86,12 @@ export const getActivePlan = asyncHandler(async (req: AuthenticatedRequest, res:
   );
 
   if (planResult.rows.length === 0) {
-    throw ApiError.notFound('No active plan found');
+    ApiResponse.success(res, {
+      plan: null,
+      todayActivities: [],
+      weekCompletionRate: 0,
+    }, 'No active plan found');
+    return;
   }
 
   const plan = planResult.rows[0];

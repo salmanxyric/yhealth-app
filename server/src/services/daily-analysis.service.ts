@@ -700,16 +700,7 @@ Return ONLY valid JSON array of insights.`;
           ? response.content
           : JSON.stringify(response.content);
 
-      // Extract JSON array from response (handle markdown code blocks)
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
-        logger.warn('[DailyAnalysis] LLM response did not contain valid JSON array', {
-          contentLength: content.length,
-        });
-        return defaults;
-      }
-
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<StructuredInsight>[];
+      const parsed = this.parseStructuredInsightsResponse(content);
 
       if (!Array.isArray(parsed)) {
         logger.warn('[DailyAnalysis] Parsed LLM response is not an array');
@@ -763,6 +754,193 @@ Return ONLY valid JSON array of insights.`;
       });
       return defaults;
     }
+  }
+
+  /**
+   * Parse the LLM response into JSON with defensive repair for common model output
+   * defects. The daily report should still be created if insight enrichment fails.
+   */
+  private parseStructuredInsightsResponse(content: string): Partial<StructuredInsight>[] {
+    const candidates = this.buildJsonArrayCandidates(content);
+    let lastError: Error | null = null;
+
+    for (const candidate of candidates) {
+      try {
+        return JSON.parse(candidate) as Partial<StructuredInsight>[];
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    logger.warn('[DailyAnalysis] Could not parse structured insights JSON, using defaults', {
+      error: lastError?.message ?? 'Unknown parse error',
+      contentLength: content.length,
+      preview: content.slice(0, 300),
+    });
+    return [];
+  }
+
+  private buildJsonArrayCandidates(content: string): string[] {
+    const stripped = this.stripMarkdownFences(content.trim());
+    const extracted = this.extractFirstJsonArray(stripped);
+    const base = extracted ?? stripped;
+    const repaired = this.repairJsonArray(base);
+    const candidates = [base, repaired];
+
+    if (base !== stripped) {
+      candidates.push(this.repairJsonArray(stripped));
+    }
+
+    return [...new Set(candidates.filter((candidate) => candidate.trim().startsWith('[')))];
+  }
+
+  private stripMarkdownFences(content: string): string {
+    return content
+      .replace(/^```(?:json|javascript|ts)?\s*\r?\n?/i, '')
+      .replace(/\r?\n?```\s*$/i, '')
+      .trim();
+  }
+
+  private extractFirstJsonArray(content: string): string | null {
+    const start = content.indexOf('[');
+    if (start === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < content.length; i++) {
+      const ch = content[i];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+
+      if (ch === '[') depth++;
+      if (ch === ']') {
+        depth--;
+        if (depth === 0) {
+          return content.slice(start, i + 1);
+        }
+      }
+    }
+
+    return content.slice(start);
+  }
+
+  private repairJsonArray(json: string): string {
+    let repaired = json.trim();
+
+    // Remove JS-style comments and trailing commas.
+    repaired = this.stripJsonComments(repaired);
+    repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+
+    // Insert commas commonly omitted between object properties or array objects.
+    repaired = repaired.replace(
+      /((?:"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?|true|false|null|\}|\]))(\s*\r?\n\s*)(?="[^"]+"\s*:)/g,
+      '$1,$2'
+    );
+    repaired = repaired.replace(/(\})(\s*\r?\n\s*)(?=\{)/g, '$1,$2');
+
+    // Escape literal line breaks that appear inside strings.
+    repaired = repaired.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (match) =>
+      match.replace(/(?<!\\)\r?\n/g, '\\n')
+    );
+
+    return this.closeJsonDelimiters(repaired);
+  }
+
+  private stripJsonComments(json: string): string {
+    let result = '';
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < json.length; i++) {
+      const ch = json[i];
+      const next = json[i + 1];
+
+      if (escaped) {
+        result += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\' && inString) {
+        result += ch;
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        result += ch;
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString && ch === '/' && next === '/') {
+        while (i < json.length && json[i] !== '\n' && json[i] !== '\r') i++;
+        result += json[i] ?? '';
+        continue;
+      }
+
+      if (!inString && ch === '/' && next === '*') {
+        i += 2;
+        while (i < json.length && !(json[i] === '*' && json[i + 1] === '/')) i++;
+        i++;
+        continue;
+      }
+
+      result += ch;
+    }
+
+    return result;
+  }
+
+  private closeJsonDelimiters(json: string): string {
+    let repaired = json;
+    const stack: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < repaired.length; i++) {
+      const ch = repaired[i];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+
+      if (ch === '[') stack.push(']');
+      if (ch === '{') stack.push('}');
+      if ((ch === ']' || ch === '}') && stack[stack.length - 1] === ch) {
+        stack.pop();
+      }
+    }
+
+    if (inString) repaired += '"';
+    repaired = repaired.replace(/,\s*$/, '');
+    while (stack.length > 0) {
+      repaired += stack.pop();
+    }
+
+    return repaired;
   }
 
   // ============================================

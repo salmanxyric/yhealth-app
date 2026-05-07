@@ -190,6 +190,8 @@ class RAGChatService {
     const response = await api.post<ChatResponse>(`${this.baseUrl}/message`, {
       message: params.message,
       conversationId: params.conversationId,
+    }, {
+      headers: { 'Idempotency-Key': `rag-chat-${Date.now()}-${Math.random().toString(36).substring(2, 10)}` },
     });
     if (!response.success || !response.data) {
       throw new Error('Failed to send message');
@@ -213,10 +215,13 @@ class RAGChatService {
       ? document.cookie.split('; ').find(c => c.startsWith('balencia_access_token='))?.split('=')[1]
       : undefined;
 
+    const idempotencyKey = `rag-stream-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+
     const response = await fetch(`${apiUrl}${this.baseUrl}/message/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
@@ -344,6 +349,33 @@ class RAGChatService {
   }
 
   /**
+   * Rewind a conversation to a user message before resending edited content.
+   */
+  async truncateConversationFromMessage(
+    conversationId: string,
+    messageId: string
+  ): Promise<{ deletedCount: number }> {
+    const response = await api.delete<{ deletedCount: number }>(
+      `${this.baseUrl}/conversations/${conversationId}/messages/${messageId}/after`
+    );
+    if (!response.success || !response.data) {
+      throw new Error('Failed to rewind conversation');
+    }
+    return response.data;
+  }
+
+  /**
+   * Bulk delete multiple conversations
+   */
+  async deleteConversations(conversationIds: string[]): Promise<{ deletedCount: number }> {
+    const response = await api.post<{ deletedCount: number }>(
+      `${this.baseUrl}/conversations/bulk-delete`,
+      { conversationIds }
+    );
+    return response.data ?? { deletedCount: 0 };
+  }
+
+  /**
    * Archive a conversation
    */
   async archiveConversation(conversationId: string): Promise<void> {
@@ -355,7 +387,9 @@ class RAGChatService {
    */
   async generateTitle(conversationId: string): Promise<{ title: string }> {
     const response = await api.post<{ title: string }>(
-      `${this.baseUrl}/conversations/${conversationId}/title`
+      `${this.baseUrl}/conversations/${conversationId}/title`,
+      undefined,
+      { headers: { 'Idempotency-Key': `rag-title-${conversationId}-${Date.now()}` } }
     );
     if (!response.success || !response.data) {
       throw new Error('Failed to generate title');
@@ -368,7 +402,9 @@ class RAGChatService {
    */
   async generateSummary(conversationId: string): Promise<{ summary: string }> {
     const response = await api.post<{ summary: string }>(
-      `${this.baseUrl}/conversations/${conversationId}/summary`
+      `${this.baseUrl}/conversations/${conversationId}/summary`,
+      undefined,
+      { headers: { 'Idempotency-Key': `rag-summary-${conversationId}-${Date.now()}` } }
     );
     if (!response.success || !response.data) {
       throw new Error('Failed to generate summary');
@@ -476,36 +512,55 @@ class RAGChatService {
  *   { error: "..." }
  * This function maps both the legacy format and the new typed format.
  */
-function normalizeSSEEvent(raw: any): StreamEvent | null {
+function normalizeSSEEvent(raw: unknown): StreamEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const event = raw as Record<string, unknown>;
   // Already has a type field — new format
-  if (raw.type) return raw as StreamEvent;
+  if (event.type) {
+    const supportedTypes = new Set([
+      'token',
+      'conversation_id',
+      'done',
+      'error',
+      'thinking_start',
+      'thinking_end',
+      'tool_call',
+      'tool_result',
+      'artifact',
+      'analysis_step',
+    ]);
+    return typeof event.type === 'string' && supportedTypes.has(event.type) ? raw as StreamEvent : null;
+  }
 
   // Legacy: token chunk
-  if ('token' in raw && !raw.done) {
-    return { type: 'token', content: raw.token } as StreamTokenEvent;
+  if ('token' in event && !event.done) {
+    return { type: 'token', content: String(event.token || '') } as StreamTokenEvent;
   }
 
   // Legacy: conversation ID
-  if ('conversationId' in raw && !raw.done) {
-    return { type: 'conversation_id', conversationId: raw.conversationId } as StreamConversationIdEvent;
+  if ('conversationId' in event && !event.done) {
+    return { type: 'conversation_id', conversationId: String(event.conversationId || '') } as StreamConversationIdEvent;
   }
 
   // Legacy: done event
-  if (raw.done) {
+  if (event.done) {
     return {
       type: 'done',
-      message: raw.message || '',
-      conversationId: raw.conversationId || '',
-      messageId: raw.messageId || `resp-${Date.now()}`,
-      agentTurnId: raw.agentTurnId,
-      actions: raw.actions,
-      toolCalls: raw.toolCalls,
+      message: String(event.message || ''),
+      conversationId: String(event.conversationId || ''),
+      messageId: String(event.messageId || `resp-${Date.now()}`),
+      agentTurnId: typeof event.agentTurnId === 'string' ? event.agentTurnId : undefined,
+      actions: event.actions as StreamDoneEvent['actions'],
+      toolCalls: event.toolCalls as StreamDoneEvent['toolCalls'],
     } as StreamDoneEvent;
   }
 
   // Legacy: error
-  if ('error' in raw) {
-    return { type: 'error', error: raw.error || raw.errorMessage || 'Unknown error' } as StreamErrorEvent;
+  if ('error' in event) {
+    const primary = String(event.error || 'Unknown error');
+    const detail = event.errorMessage ? String(event.errorMessage) : '';
+    const combined = detail && detail !== primary ? `${primary}: ${detail}` : primary;
+    return { type: 'error', error: combined } as StreamErrorEvent;
   }
 
   return null;

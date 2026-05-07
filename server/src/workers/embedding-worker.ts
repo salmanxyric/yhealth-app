@@ -75,7 +75,13 @@ async function processEmbeddingJobInner(job: Job<EmbeddingJobData>): Promise<voi
   const content = await fetchRecordContent(sourceType, sourceId);
 
   if (!content) {
-    throw new Error(`Record not found: ${sourceType}/${sourceId}`);
+    logger.debug('[EmbeddingWorker] Record not found, skipping (likely deleted)', {
+      jobId: job.id,
+      sourceType,
+      sourceId,
+      operation,
+    });
+    return;
   }
 
   // Handle create/update operations

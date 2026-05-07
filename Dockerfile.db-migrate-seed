@@ -14,9 +14,6 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy shared types (server references ../../shared)
-COPY shared ./shared
-
 # Copy server package files
 COPY server/package.json server/package-lock.json* ./server/
 
@@ -50,8 +47,8 @@ COPY --from=builder --chown=nodejs:nodejs /app/server/dist ./server/dist
 COPY --from=builder --chown=nodejs:nodejs /app/server/package.json ./server/
 
 # Copy SQL files (schema + migrations)
-COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/tables ./server/dist/server/src/database/tables
-COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/migrations ./server/dist/server/src/database/migrations
+COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/tables ./server/dist/src/database/tables
+COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/migrations ./server/dist/src/database/migrations
 
 USER nodejs
 
@@ -59,4 +56,4 @@ ENV NODE_ENV=production
 
 WORKDIR /app/server
 
-CMD ["node", "dist/server/src/scripts/db-migrate-seed.js"]
+CMD ["node", "dist/src/scripts/db-migrate-seed.js"]

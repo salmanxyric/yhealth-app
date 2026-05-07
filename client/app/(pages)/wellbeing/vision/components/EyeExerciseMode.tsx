@@ -3,12 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Eye, RotateCcw, Focus, Hand, Play, Pause, RotateCw,
+  Eye, RotateCcw, Focus, Hand, Play, Pause,
   Clock, CheckCircle2, ArrowRight, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { eyeExerciseService } from "@/src/shared/services/vision.service";
-import { toast } from "sonner";
 import type { EyeExerciseType } from "@shared/types/domain/vision";
 
 // ─── Exercise Definitions ───────────────────────────────────────────

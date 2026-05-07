@@ -1,13 +1,8 @@
 import type { NextConfig } from "next";
 import path from "path";
-import fs from "fs";
 
-// Dev: shared/ is at ../shared (monorepo root)
-// Docker build: shared/ is copied to ./shared (inside client dir)
-const sharedInside = path.join(__dirname, 'shared');
-const sharedOutside = path.join(__dirname, '..', 'shared');
-const sharedPath = fs.existsSync(sharedInside) ? sharedInside : sharedOutside;
-const turbopackRoot = fs.existsSync(sharedInside) ? __dirname : path.join(__dirname, '..');
+// shared/ lives inside client/ so the client can deploy independently.
+const sharedPath = path.join(__dirname, 'shared');
 
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker optimization
@@ -33,7 +28,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https: http:",
               "media-src 'self' blob: https: http:",
               "connect-src 'self' http://localhost:* ws://localhost:* https: wss:",
-              "frame-src 'self' https://accounts.google.com https://accounts.spotify.com",
+              "frame-src 'self' https://accounts.google.com https://accounts.spotify.com https://www.youtube-nocookie.com https://www.youtube.com",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -50,9 +45,9 @@ const nextConfig: NextConfig = {
     // Optimize package imports to reduce chunk size
     optimizePackageImports: ['@xyflow/react', 'framer-motion', 'gsap', 'lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
   },
-  // Turbopack config: resolves @shared in both dev (outside) and Docker (inside client)
+  // Turbopack config: resolves @shared to the client-local shared package.
   turbopack: {
-    root: turbopackRoot,
+    root: __dirname,
     resolveAlias: {
       '@shared': sharedPath,
     },
@@ -92,6 +87,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '*.tenor.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
       },
     ],
   },

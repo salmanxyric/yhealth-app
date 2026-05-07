@@ -89,7 +89,7 @@ const channelOptions: { id: string; label: string; icon: React.ReactNode; color:
 export function PreferencesStep() {
   const { preferences, updatePreferences, nextStep, prevStep } = useOnboarding();
 
-  const [quietHoursEnabled] = useState(preferences.quietHours.enabled);
+  const [_quietHoursEnabled] = useState(preferences.quietHours.enabled);
 
   const handleStyleSelect = (style: Preferences["coachingStyle"]) => {
     updatePreferences({ coachingStyle: style });
@@ -111,7 +111,7 @@ export function PreferencesStep() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-medium text-white mb-2 sm:mb-3">
+        <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-medium text-white mb-2 sm:mb-3">
           Personalize your experience
         </h1>
         <p className="text-[rgba(239,237,253,0.6)] text-sm sm:text-base max-w-xl mx-auto">
@@ -288,7 +288,6 @@ export function PreferencesStep() {
               }
               className="flex-1 bg-transparent text-white text-sm sm:text-base border-none outline-none min-w-0"
             />
-            <Clock className="w-4 h-4 text-slate-500 shrink-0" />
           </div>
 
           {/* To */}
@@ -304,7 +303,6 @@ export function PreferencesStep() {
               }
               className="flex-1 bg-transparent text-white text-sm sm:text-base border-none outline-none min-w-0"
             />
-            <Clock className="w-4 h-4 text-slate-500 shrink-0" />
           </div>
         </div>
       </motion.section>
@@ -328,7 +326,6 @@ export function PreferencesStep() {
             onChange={(e) => updatePreferences({ preferredCheckInTime: e.target.value })}
             className="flex-1 bg-transparent text-white text-sm sm:text-base border-none outline-none min-w-0"
           />
-          <Clock className="w-4 h-4 text-slate-500 shrink-0" />
         </div>
       </motion.section>
 

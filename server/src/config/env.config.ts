@@ -41,6 +41,9 @@ if (process.env['NODE_ENV'] === 'production') {
   validateEnv();
 }
 
+const smtpPort = parseInt(process.env['SMTP_PORT'] || '587', 10);
+const smtpSecure = process.env['SMTP_SECURE'] === 'true' || smtpPort === 465;
+
 // Type-safe environment configuration
 export const env = {
   // Node environment
@@ -120,8 +123,8 @@ export const env = {
   // Email (SMTP)
   smtp: {
     host: process.env['SMTP_HOST'],
-    port: parseInt(process.env['SMTP_PORT'] || '587', 10),
-    secure: process.env['SMTP_SECURE'] === 'true',
+    port: smtpPort,
+    secure: smtpSecure,
     user: process.env['SMTP_USER'] || process.env['SMTP_FROM'],
     pass: process.env['SMTP_PASS'],
     from: process.env['SMTP_FROM'] || process.env['SMTP_USER'] || 'noreply@balencia.com',
@@ -162,7 +165,9 @@ export const env = {
     apiKey: process.env['GEMINI_API_KEY'],
     model: process.env['GEMINI_MODEL'] || 'gemini-2.5-flash',
     reasoningModel: process.env['GEMINI_REASONING_MODEL'] || 'gemini-2.5-pro',
-    lightModel: process.env['GEMINI_LIGHT_MODEL'] || 'gemini-2.5-flash',
+    lightModel: process.env['GEMINI_LIGHT_MODEL'] || 'gemini-2.5-flash-lite',
+    emotionModel: process.env['GEMINI_EMOTION_MODEL'] || 'gemini-2.5-flash-lite',
+    emotionTimeoutMs: parseInt(process.env['GEMINI_EMOTION_TIMEOUT_MS'] || '8000', 10),
     visionModel: process.env['GEMINI_VISION_MODEL'] || 'gemini-2.5-flash-lite',
   },
 
@@ -201,6 +206,7 @@ export const env = {
   // ElevenLabs (Text-to-Speech)
   elevenlabs: {
     apiKey: process.env['ELEVEN_LAB_API_KEY'],
+    voiceId: process.env['ELEVEN_LAB_VOICE_ID'],
   },
 
   // Google Cloud Text-to-Speech (Chirp 3 HD voices - fallback TTS)

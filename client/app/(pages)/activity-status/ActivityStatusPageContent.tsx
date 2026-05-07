@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Calendar, List, BarChart3, Settings, Plus } from "lucide-react";
+import { Calendar, List, BarChart3, Plus, Activity } from "lucide-react";
 import { StatusIndicator } from "@/app/components/activity/StatusIndicator";
 import { StatusCalendar } from "./components/StatusCalendar";
 import { StatusTimeline } from "./components/StatusTimeline";
@@ -16,7 +16,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardPageSkeleton } from "@/components/loading";
 import { useAuth } from "@/app/context/AuthContext";
 
-type InternalTabType = "calendar" | "timeline" | "stats" | "settings";
+type InternalTabType = "calendar" | "timeline" | "stats";
 
 function ActivityStatusPageInner() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -76,7 +76,6 @@ function ActivityStatusPageInner() {
     { id: "calendar" as InternalTabType, label: "Calendar", icon: Calendar },
     { id: "timeline" as InternalTabType, label: "Timeline", icon: List },
     { id: "stats" as InternalTabType, label: "Statistics", icon: BarChart3 },
-    { id: "settings" as InternalTabType, label: "Settings", icon: Settings },
   ];
 
   if (authLoading) {
@@ -96,39 +95,67 @@ function ActivityStatusPageInner() {
     <DashboardLayout activeTab="activity-status">
       {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-emerald-600/8 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-sky-600/8 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
+        <motion.div
+          className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"
+          animate={{ x: [0, -20, 0], y: [0, 25, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute top-1/3 -left-44 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl"
+          animate={{ x: [0, 30, 0], y: [0, -20, 0] }}
+          transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          className="absolute -bottom-40 right-1/4 w-md h-112 bg-indigo-500/10 rounded-full blur-3xl"
+          animate={{ x: [0, 15, 0], y: [0, -25, 0] }}
+          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+        />
       </div>
 
       <div className="relative min-h-full">
-          <div className="container mx-auto px-4 py-8 max-w-8xl">
+          <div className="container mx-auto max-w-7xl px-2.5 py-3 text-[11px] sm:px-4 sm:py-4 lg:text-xs xl:text-[13px]">
             {/* Header */}
             <motion.div
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-8"
+              className="mb-3 sm:mb-4"
+              transition={{ duration: 0.45 }}
             >
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h1 className="text-3xl font-bold mb-2 text-white">Activity Status</h1>
-                  <p className="text-slate-400">
-                    Track your daily activity status and mood
-                  </p>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="shrink-0 rounded-xl border border-cyan-500/20 bg-cyan-500/15 p-2 sm:p-2.5">
+                    <Activity className="h-4 w-4 text-cyan-300 sm:h-5 sm:w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="truncate text-[13px] font-semibold tracking-tight text-white sm:text-[15px] lg:text-base">
+                      Activity Status
+                    </h1>
+                    <p className="mt-0.5 truncate text-[10px] text-slate-400 sm:text-[11px] lg:text-xs">
+                      Track your daily rhythm, activity, and mood.
+                    </p>
+                  </div>
                 </div>
-                <StatusIndicator showLabel />
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex origin-right scale-90 items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-500/10 px-2 py-1 text-[10px] shadow-[0_0_14px_rgba(16,185,129,0.14)] sm:text-[11px]">
+                    <StatusIndicator showLabel className="text-[10px] sm:text-[11px]" />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                  </div>
+                </div>
               </div>
 
-              <DashboardUnderlineTabs
-                layoutId="activityStatusSubTabUnderline"
-                activeId={activeTab}
-                onTabChange={(id) => setActiveTab(id as InternalTabType)}
-                tabs={tabs.map((t) => ({
-                  id: t.id,
-                  label: t.label,
-                  icon: t.icon,
-                }))}
-              />
+              <div className="bal-surface px-1.5 py-1">
+                <DashboardUnderlineTabs
+                  layoutId="activityStatusSubTabUnderline"
+                  activeId={activeTab}
+                  onTabChange={(id) => setActiveTab(id as InternalTabType)}
+                  className="[&_[role=tab]]:px-3 [&_[role=tab]]:py-2 [&_[role=tab]]:text-[11px] sm:[&_[role=tab]]:px-4 sm:[&_[role=tab]]:text-xs lg:[&_[role=tab]]:text-[13px] [&_svg]:h-3.5 [&_svg]:w-3.5"
+                  tabs={tabs.map((t) => ({
+                    id: t.id,
+                    label: t.label,
+                    icon: t.icon,
+                  }))}
+                />
+              </div>
             </motion.div>
 
             {/* Tab Content */}
@@ -136,19 +163,11 @@ function ActivityStatusPageInner() {
               key={activeTab}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.35 }}
             >
               {activeTab === "calendar" && <StatusCalendar key={refreshKey} />}
               {activeTab === "timeline" && <StatusTimeline key={refreshKey} />}
               {activeTab === "stats" && <StatusStats key={refreshKey} />}
-              {activeTab === "settings" && (
-                <div className="bg-slate-900/80 rounded-xl border border-white/10 p-6">
-                  <h2 className="text-xl font-semibold mb-4 text-white">Settings</h2>
-                  <p className="text-slate-400">
-                    Settings and preferences will be available here.
-                  </p>
-                </div>
-              )}
             </motion.div>
           </div>
 
@@ -162,7 +181,8 @@ function ActivityStatusPageInner() {
             <Button
               onClick={() => setIsNewStatusModalOpen(true)}
               size="lg"
-              className="h-14 w-14 rounded-full bg-gradient-to-r from-emerald-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 shadow-lg shadow-emerald-600/40 hover:shadow-emerald-600/60 transition-all"
+              className="bal-fab"
+              aria-label="Add status"
             >
               <Plus className="h-6 w-6" />
             </Button>

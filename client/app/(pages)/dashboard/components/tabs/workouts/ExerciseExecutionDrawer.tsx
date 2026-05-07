@@ -37,6 +37,47 @@ import { api } from "@/lib/api-client";
 import YouTubeEmbed from "@/app/(pages)/yoga/components/YouTubeEmbed";
 import { DashboardUnderlineTabs } from "../../DashboardUnderlineTabs";
 
+function extractYouTubeVideoId(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    const host = url.hostname.replace(/^www\./, "");
+
+    if (host === "youtu.be") {
+      return url.pathname.split("/").filter(Boolean)[0] || null;
+    }
+
+    if (host === "youtube.com" || host === "youtube-nocookie.com" || host === "m.youtube.com") {
+      const watchId = url.searchParams.get("v");
+      if (watchId) return watchId;
+
+      const parts = url.pathname.split("/").filter(Boolean);
+      const knownPath = parts.findIndex((part) =>
+        ["embed", "shorts", "live", "v"].includes(part)
+      );
+
+      if (knownPath >= 0) {
+        return parts[knownPath + 1] || null;
+      }
+    }
+  } catch {
+    const match = trimmed.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    return match?.[1] ?? null;
+  }
+
+  return null;
+}
+
+function isVideoFileUrl(value: string | null | undefined): boolean {
+  return Boolean(value && /\.(mp4|webm|ogg)(?:[?#].*)?$/i.test(value));
+}
+
 // Difficulty badge config
 const difficultyConfig: Record<string, { label: string; bg: string; text: string; glow: string }> = {
   beginner: { label: "Beginner", bg: "bg-emerald-500/15", text: "text-emerald-400", glow: "shadow-emerald-500/20" },
@@ -73,6 +114,7 @@ export function ExerciseExecutionDrawer({
   // YouTube video
   const [videoId, setVideoId] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
+  const [mediaImageFailed, setMediaImageFailed] = useState(false);
   const videoCache = useRef<Map<string, string | null>>(new Map());
 
   // Tabs
@@ -105,6 +147,7 @@ export function ExerciseExecutionDrawer({
 
     setLoadingLibrary(true);
     setActiveTab("instructions");
+    setMediaImageFailed(false);
 
     exercisesService
       .search({ q: exercise.name, limit: 1 })
@@ -291,8 +334,18 @@ export function ExerciseExecutionDrawer({
   const difficulty = libraryExercise
     ? difficultyConfig[libraryExercise.difficulty_level] || difficultyConfig.beginner
     : null;
-  const isVideo = libraryExercise?.animation_url?.endsWith(".mp4");
-  const hasImage = libraryExercise?.animation_url || libraryExercise?.thumbnail_url;
+  const libraryVideoId =
+    extractYouTubeVideoId(libraryExercise?.video_url) ||
+    extractYouTubeVideoId(libraryExercise?.animation_url);
+  const resolvedVideoId = libraryVideoId || videoId;
+  const animationUrl = libraryExercise?.animation_url || null;
+  const isVideo = isVideoFileUrl(animationUrl);
+  const imageUrl =
+    !isVideo && !extractYouTubeVideoId(animationUrl)
+      ? animationUrl || libraryExercise?.thumbnail_url || null
+      : libraryExercise?.thumbnail_url || null;
+  const hasImage = Boolean(imageUrl && !mediaImageFailed);
+  const hasDirectMedia = isVideo || hasImage;
   const completedSets = sets.filter((s) => s.completed).length;
   const allSetsCompleted = sets.length > 0 && completedSets === sets.length;
   const progressPercent = sets.length > 0 ? (completedSets / sets.length) * 100 : 0;
@@ -404,11 +457,11 @@ export function ExerciseExecutionDrawer({
 
                         {/* Video / Media */}
                         <div className="rounded-2xl overflow-hidden ring-1 ring-white/[0.08] bg-slate-900/40">
-                          {(videoId || videoLoading) ? (
+                          {(resolvedVideoId || videoLoading) ? (
                             <div className="aspect-video">
-                              <YouTubeEmbed videoId={videoId} isLoading={videoLoading} />
+                              <YouTubeEmbed videoId={resolvedVideoId} isLoading={videoLoading} />
                             </div>
-                          ) : hasImage ? (
+                          ) : hasDirectMedia ? (
                             <div className="relative bg-slate-900 aspect-video">
                               {isVideo ? (
                                 <video
@@ -423,8 +476,9 @@ export function ExerciseExecutionDrawer({
                               ) : (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
-                                  src={libraryExercise?.animation_url || libraryExercise?.thumbnail_url || ""}
+                                  src={imageUrl || ""}
                                   alt={exercise.name}
+                                  onError={() => setMediaImageFailed(true)}
                                   className="w-full h-full object-cover"
                                 />
                               )}

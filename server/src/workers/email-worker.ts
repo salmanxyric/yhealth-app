@@ -109,7 +109,19 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
       attempt: attemptNumber,
     });
 
-    // Re-throw so BullMQ can retry
+    // Don't retry template/rendering errors — they'll never succeed
+    const isTemplateError =
+      errorMessage.includes('EJS') ||
+      errorMessage.includes('close tag') ||
+      errorMessage.includes('is not defined') ||
+      errorMessage.includes('Cannot read properties of undefined');
+
+    if (isTemplateError) {
+      logger.error('[EmailWorker] Template error — skipping retries', { template, error: errorMessage });
+      return;
+    }
+
+    // Re-throw so BullMQ can retry (network/SMTP errors)
     throw error;
   }
 }

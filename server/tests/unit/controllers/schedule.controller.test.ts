@@ -442,6 +442,7 @@ describe('addScheduleItem', () => {
           color: '#FF0000',
           icon: 'run',
           category: 'exercise',
+          shape: 'diamond',
           metadata: { intensity: 'high' },
         },
       }
@@ -463,6 +464,7 @@ describe('addScheduleItem', () => {
         color: '#FF0000',
         icon: 'run',
         category: 'exercise',
+        shape: 'diamond',
         position: 0,
         metadata: { intensity: 'high' },
       }

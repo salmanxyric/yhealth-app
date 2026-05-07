@@ -92,34 +92,33 @@ Rules:
 
       try {
         let content: string | null = null;
+        let contentSource: 'gemini' | 'openai' | null = null;
 
         if (this.provider.geminiApiKey) {
           try {
-            content = await this.provider.callGeminiText(mcqSystemPrompt, [{ role: 'user', content: userPrompt }], 500, 0.4, true);
+            content = await this.provider.callGeminiText(mcqSystemPrompt, [{ role: 'user', content: userPrompt }], 900, 0.3, true);
+            contentSource = content ? 'gemini' : null;
           } catch (geminiError: any) {
             logger.warn('[AICoach] Gemini MCQ generation failed, trying OpenAI', { error: geminiError?.message });
           }
         }
 
         if (!content && this.provider.visionClient) {
-          const model = env.openai.model || 'gpt-4o-mini';
-          const tokenLimit = this.provider.isReasoningModel(model) ? 200 : 500;
-          const completion = await this.provider.visionClient.chat.completions.create({
-            model,
-            messages: [
-              { role: 'system', content: mcqSystemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-            ...this.provider.getTemperatureParameter(model, 0.7),
-            ...this.provider.getTokenParameter(model, tokenLimit),
-            ...this.provider.getResponseFormatParameter(model),
-          });
-          content = completion.choices[0]?.message?.content || null;
+          content = await this.generateMCQWithOpenAI(mcqSystemPrompt, userPrompt);
+          contentSource = content ? 'openai' : null;
         }
 
         if (!content || content.trim().length === 0) {
           logger.warn('[AICoach] Empty response from all providers, using fallback');
-          return this.generateFallbackMCQQuestion(goal, phase, language, questionId, previousAnswers);
+          return this.generateFallbackMCQQuestion(
+            goal,
+            phase,
+            language,
+            questionId,
+            previousAnswers,
+            customGoalText,
+            'The AI question generator returned an empty response, so we loaded a safe fallback question.'
+          );
         }
 
         interface ParsedResponse {
@@ -127,21 +126,31 @@ Rules:
           options?: Array<{ text: string; insightValue?: string }>;
         }
 
-        const cleanContent = this.provider.stripMarkdownFences(content);
-
         let parsed: ParsedResponse;
         try {
-          parsed = JSON.parse(cleanContent) as ParsedResponse;
+          parsed = this.parseMCQContent(content) as ParsedResponse;
         } catch (parseError) {
-          const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            parsed = JSON.parse(jsonMatch[0]) as ParsedResponse;
-          } else {
-            logger.warn('[AICoach] Failed to parse JSON from response', {
-              contentPreview: content.substring(0, 200),
+          if (contentSource === 'gemini' && this.provider.visionClient) {
+            logger.warn('[AICoach] Gemini returned malformed MCQ JSON, retrying with OpenAI', {
+              contentPreview: content.substring(0, 300),
               error: parseError instanceof Error ? parseError.message : 'Unknown parse error',
             });
-            throw new Error('Invalid JSON response from AI');
+
+            const openAIContent = await this.generateMCQWithOpenAI(mcqSystemPrompt, userPrompt);
+            if (openAIContent) {
+              content = openAIContent;
+              contentSource = 'openai';
+              parsed = this.parseMCQContent(content) as ParsedResponse;
+            } else {
+              throw parseError;
+            }
+          } else {
+            logger.warn('[AICoach] Failed to parse MCQ JSON from provider response', {
+              provider: contentSource,
+              contentPreview: content.substring(0, 300),
+              error: parseError instanceof Error ? parseError.message : 'Unknown parse error',
+            });
+            throw parseError;
           }
         }
         const questionText = parsed.question || 'How can I help you achieve your goals?';
@@ -195,7 +204,15 @@ Rules:
           error: aiError instanceof Error ? aiError.message : 'Unknown error',
         });
 
-        return this.generateFallbackMCQQuestion(goal, phase, language, questionId, previousAnswers);
+        return this.generateFallbackMCQQuestion(
+          goal,
+          phase,
+          language,
+          questionId,
+          previousAnswers,
+          customGoalText,
+          'The AI question generator returned an invalid response, so we loaded a safe fallback question.'
+        );
       }
     } catch (error) {
       logger.error('[AICoach] Error generating MCQ question', {
@@ -211,9 +228,13 @@ Rules:
     phase: ConversationPhase,
     language: SupportedLanguage,
     questionId: string,
-    previousAnswers: { questionId: string; questionText?: string; selectedOptions: string[] }[] = []
+    previousAnswers: { questionId: string; questionText?: string; selectedOptions: string[] }[] = [],
+    customGoalText?: string,
+    warning?: string
   ): MCQGenerationResponse {
-    const questionPool = getFallbackQuestions(goal, language);
+    const questionPool = goal === 'custom' && this.isRoutineCustomGoal(customGoalText)
+      ? this.getCustomRoutineFallbackQuestions()
+      : getFallbackQuestions(goal, language);
 
     const askedQuestions = new Set(
       previousAnswers.map(a => a.questionText?.toLowerCase().trim()).filter(Boolean)
@@ -247,7 +268,87 @@ Rules:
       progress,
       isComplete,
       insights: [],
+      usedFallback: true,
+      warning: warning || 'AI question generation was unavailable, so we loaded a safe fallback question.',
     };
+  }
+
+  private async generateMCQWithOpenAI(systemPrompt: string, userPrompt: string): Promise<string | null> {
+    if (!this.provider.visionClient) return null;
+
+    const model = env.openai.model || 'gpt-4o-mini';
+    const tokenLimit = this.provider.isReasoningModel(model) ? 700 : 1000;
+    const completion = await this.provider.visionClient.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      ...this.provider.getTemperatureParameter(model, 0.3),
+      ...this.provider.getTokenParameter(model, tokenLimit),
+      ...this.provider.getResponseFormatParameter(model),
+    });
+
+    return completion.choices[0]?.message?.content || null;
+  }
+
+  private parseMCQContent(content: string): { question?: string; options?: Array<{ text: string; insightValue?: string }> } {
+    const cleanContent = this.provider.stripMarkdownFences(content).trim();
+    type MCQResult = { question?: string; options?: Array<{ text: string; insightValue?: string }> };
+
+    try {
+      return JSON.parse(cleanContent) as MCQResult;
+    } catch {
+      const repaired = this.provider.repairJSON(cleanContent);
+      try {
+        return JSON.parse(repaired) as MCQResult;
+      } catch {
+        const start = repaired.indexOf('{');
+        const end = repaired.lastIndexOf('}');
+        if (start === -1 || end === -1 || end <= start) {
+          throw new Error('AI returned incomplete JSON that could not be repaired.');
+        }
+        return JSON.parse(repaired.slice(start, end + 1)) as MCQResult;
+      }
+    }
+  }
+
+  private isRoutineCustomGoal(customGoalText?: string): boolean {
+    if (!customGoalText) return false;
+    return /\b(discipline|career|work|focus|meaningful|relationship|relationships|sleep|routine|consistent|consistency|daily)\b/i.test(customGoalText);
+  }
+
+  private getCustomRoutineFallbackQuestions(): { question: string; options: string[] }[] {
+    return [
+      {
+        question: 'Which part of your daily routine breaks down most often?',
+        options: ['Starting the day', 'Focused work blocks', 'Evening wind-down', 'All of these'],
+      },
+      {
+        question: 'What most often disrupts your sleep consistency?',
+        options: ['Late screens', 'Irregular bedtime', 'Stress or overthinking', 'Work or family demands'],
+      },
+      {
+        question: 'What usually blocks meaningful work each day?',
+        options: ['No clear priority', 'Distractions', 'Low energy', 'Avoiding hard tasks'],
+      },
+      {
+        question: 'Which relationship action is hardest to keep consistent?',
+        options: ['Checking in', 'Quality time', 'Difficult conversations', 'Showing appreciation'],
+      },
+      {
+        question: 'What kind of structure would help your discipline most?',
+        options: ['Morning plan', 'Time blocks', 'Evening review', 'Accountability check-ins'],
+      },
+      {
+        question: 'When would a daily reset be easiest to maintain?',
+        options: ['Right after waking', 'Before work starts', 'After work', 'Before bed'],
+      },
+      {
+        question: 'What usually makes you lose momentum after a good day?',
+        options: ['Poor sleep', 'No next-day plan', 'Social distractions', 'Low confidence'],
+      },
+    ];
   }
 
   async processMCQAnswer(

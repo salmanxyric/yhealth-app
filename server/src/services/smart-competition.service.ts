@@ -93,7 +93,7 @@ class SmartCompetitionService {
         `SELECT pillar, COUNT(*)::int as count
          FROM user_goals
          WHERE status = 'active'
-           AND user_id IN (SELECT id FROM users WHERE is_active = true AND last_login_at >= NOW() - INTERVAL '14 days')
+           AND user_id IN (SELECT id FROM users WHERE is_active = true AND last_login >= NOW() - INTERVAL '14 days')
          GROUP BY pillar
          ORDER BY count DESC`
       );

@@ -83,15 +83,15 @@ export function NumberInput({
 
   // Size variants
   const sizeClasses = {
-    sm: "w-28 px-3 py-2 text-lg",
-    md: "w-40 px-4 py-4 text-2xl",
-    lg: "w-52 px-5 py-5 text-3xl",
+    sm: "w-32 pl-3 pr-10 py-2 text-lg",
+    md: "w-48 pl-5 pr-14 py-4 text-2xl",
+    lg: "w-60 pl-6 pr-16 py-5 text-3xl",
   }[size];
 
   const unitSizeClasses = {
     sm: "right-3 text-sm",
-    md: "right-4 text-base",
-    lg: "right-5 text-lg",
+    md: "right-5 text-base",
+    lg: "right-6 text-lg",
   }[size];
 
   return (
@@ -124,7 +124,7 @@ export function NumberInput({
               sizeClasses,
               "text-center font-bold rounded-xl",
               "bg-white/5 border border-white/10 text-white",
-              "placeholder-slate-500",
+              "placeholder-slate-600 placeholder:font-semibold",
               "focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20",
               // Hide spin buttons
               "[appearance:textfield]",

@@ -236,42 +236,45 @@ const EditModal = ({
     <AnimatePresence>
       {isOpen && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
           <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-[#0f0f18] border border-white/[0.06] rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
+            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 border-b border-slate-700 bg-slate-900">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+                <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
                   <Edit3 className="w-5 h-5 text-emerald-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white">Edit Goal</h3>
+                <div>
+                  <h3 className="text-[16px] sm:text-xl font-bold text-white">Edit Goal</h3>
+                  <p className="text-sm text-slate-400">Modify your goal details</p>
+                </div>
               </div>
-              <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/[0.06] transition-colors cursor-pointer">
-                <X className="w-5 h-5 text-slate-400" />
+              <button onClick={onClose} className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer" aria-label="Close edit goal modal">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Title</label>
                 <input type="text" value={editData.title} onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="Goal title" />
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all" placeholder="Goal title" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
-                <textarea value={editData.description} onChange={(e) => setEditData({ ...editData, description: e.target.value })} rows={3}
-                  className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all resize-none" placeholder="Describe your goal" />
+                <textarea value={editData.description} onChange={(e) => setEditData({ ...editData, description: e.target.value })} rows={6}
+                  className="min-h-[170px] w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all resize-y" placeholder="Describe your goal" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Target Value</label>
                   <input type="number" value={editData.targetValue} onChange={(e) => setEditData({ ...editData, targetValue: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all" />
+                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500/50 transition-all" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Target Date</label>
                   <input type="date" value={editData.targetDate} onChange={(e) => setEditData({ ...editData, targetDate: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] text-white focus:outline-none focus:border-emerald-500/50 transition-all" />
+                    className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500/50 transition-all" />
                 </div>
               </div>
               <div>
@@ -285,7 +288,7 @@ const EditModal = ({
                             : status === 'paused' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                             : status === 'completed' ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
                             : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
-                          : 'bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08]'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
                       }`}>
                       {status.charAt(0).toUpperCase() + status.slice(1)}
                     </button>
@@ -294,13 +297,13 @@ const EditModal = ({
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6 pt-4 border-t border-white/[0.06]">
+            <div className="sticky bottom-0 z-20 grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 sm:p-6 border-t border-slate-700 bg-slate-900">
               <button onClick={onClose} disabled={isLoading}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-white/[0.04] text-white border border-white/[0.06] hover:bg-white/[0.08] transition-colors disabled:opacity-50 cursor-pointer">
+                className="px-4 py-3 rounded-xl bg-slate-800 text-white border border-slate-700 hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer">
                 Cancel
               </button>
               <button onClick={() => onSave(editData)} disabled={isLoading}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer">
+                className="px-4 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20">
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Changes
               </button>

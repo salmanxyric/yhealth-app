@@ -259,8 +259,7 @@ class KnowledgeGraphService {
    */
   private fetchStress: NodeFetcher = async (userId, from, to) => {
     const result = await query(
-      `SELECT id, stress_rating, triggers, final_stress_score,
-              check_in_type, logged_at
+      `SELECT id, stress_rating, triggers, check_in_type, logged_at
        FROM stress_logs
        WHERE user_id = $1 AND logged_at::date BETWEEN $2 AND $3
        ORDER BY logged_at DESC`,
@@ -279,7 +278,6 @@ class KnowledgeGraphService {
         data: {
           stressRating: r.stress_rating,
           triggers: r.triggers ?? [],
-          finalStressScore: r.final_stress_score,
           checkInType: r.check_in_type,
           loggedAt: r.logged_at,
         },

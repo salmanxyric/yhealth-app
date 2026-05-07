@@ -5,7 +5,7 @@
 # the deploy; core migration failure DOES abort startup intentionally.
 set -eu
 
-DIST=dist/server/src/database
+DIST=dist/src/database
 
 log() { printf '\n=== %s ===\n' "$*"; }
 run_migration() { log "migrate: $1"; node "$DIST/$1"; }

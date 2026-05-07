@@ -4,25 +4,36 @@ import type { ToolDefinition } from '../types.js';
 import { withErrorHandling } from '../utils.js';
 import { deepAnalysisEngineService } from '../../deep-analysis-engine.service.js';
 import { getAnalysisStepEmitter } from '../../analysis-step-emitter.store.js';
+import { artifactGenerationService } from '../../artifact-generation.service.js';
 
 const METRIC_ENUM = z.enum([
   'sleep_hours',
+  'sleep_quality',
+  'sleep_score',
   'resting_hr',
   'hrv',
   'daily_steps',
   'workout_intensity',
   'total_calories',
+  'active_calories',
   'recovery_score',
+  'cardio_load',
+  'strain_score',
 ]);
 
 const METRIC_LABELS: Record<string, string> = {
   sleep_hours: 'Sleep Hours',
+  sleep_quality: 'Sleep Quality',
+  sleep_score: 'Sleep Score',
   resting_hr: 'Resting Heart Rate',
   hrv: 'HRV',
   daily_steps: 'Daily Steps',
   workout_intensity: 'Workout Intensity',
   total_calories: 'Total Calories',
+  active_calories: 'Active Calories',
   recovery_score: 'Recovery Score',
+  cardio_load: 'Cardio Load',
+  strain_score: 'Strain Score',
 };
 
 const DEFAULT_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -52,6 +63,74 @@ const DetectAnomaliesSchema = z.object({
   threshold: z.number().optional().describe('Z-score threshold for anomaly detection (default: 2.0)'),
 });
 
+const AnalyzeMultiFactorSchema = z.object({
+  targetMetric: METRIC_ENUM.describe('Metric to explain, such as sleep_quality or recovery_score'),
+  factorMetrics: z.array(METRIC_ENUM).min(2).max(6).describe('Candidate driver metrics to compare against the target'),
+  days: z.number().optional().describe('Number of days to analyze (default: 60)'),
+});
+
+const AnalyzeGoalProgressSchema = z.object({
+  goalId: z.string().uuid().optional().describe('Specific goal id. If omitted, uses the primary active goal.'),
+});
+
+function calculateLinearTrend(data: Array<{ x: number; y: number }>): { slope: number; intercept: number } {
+  const n = data.length;
+  if (n < 2) return { slope: 0, intercept: 0 };
+
+  const meanX = data.reduce((sum, point) => sum + point.x, 0) / n;
+  const meanY = data.reduce((sum, point) => sum + point.y, 0) / n;
+  const numerator = data.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0);
+  const denominator = data.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
+  const slope = denominator === 0 ? 0 : numerator / denominator;
+  return { slope, intercept: meanY - slope * meanX };
+}
+
+function calculatePearson(x: number[], y: number[]): number {
+  const n = Math.min(x.length, y.length);
+  if (n < 3) return 0;
+  const meanX = x.reduce((sum, value) => sum + value, 0) / n;
+  const meanY = y.reduce((sum, value) => sum + value, 0) / n;
+  let numerator = 0;
+  let denomX = 0;
+  let denomY = 0;
+  for (let i = 0; i < n; i += 1) {
+    const dx = x[i] - meanX;
+    const dy = y[i] - meanY;
+    numerator += dx * dy;
+    denomX += dx * dx;
+    denomY += dy * dy;
+  }
+  const denom = Math.sqrt(denomX * denomY);
+  return denom === 0 ? 0 : Math.round((numerator / denom) * 1000) / 1000;
+}
+
+async function saveAnalysisArtifact(
+  userId: string,
+  artifact: Record<string, unknown>,
+  analysisId?: string
+): Promise<Record<string, unknown>> {
+  try {
+    const saved = await artifactGenerationService.saveInlineArtifact({
+      userId,
+      artifact,
+      generatedBy: 'deep_analysis',
+      analysisId,
+      tags: ['ai-coach', 'analysis'],
+    });
+
+    return {
+      ...artifact,
+      artifactId: saved.id,
+      saved: true,
+    };
+  } catch {
+    return {
+      ...artifact,
+      saved: false,
+    };
+  }
+}
+
 async function analyzeCorrelation(
   userId: string,
   params: z.infer<typeof AnalyzeCorrelationSchema>
@@ -72,6 +151,7 @@ async function analyzeCorrelation(
   const scatterData = dataA
     .filter(d => bMap.has(d.date))
     .map(d => ({ x: d.value, y: bMap.get(d.date)!, date: d.date }));
+  const trend = calculateLinearTrend(scatterData);
 
   const artifact = {
     type: 'chart' as const,
@@ -79,12 +159,17 @@ async function analyzeCorrelation(
     title: `${METRIC_LABELS[params.metricA]} vs ${METRIC_LABELS[params.metricB]}`,
     data: scatterData,
     xAxisKey: 'x',
-    dataKeys: [{ key: 'y', label: METRIC_LABELS[params.metricB], color: DEFAULT_COLORS[0] }],
+    xAxisLabel: METRIC_LABELS[params.metricA],
+    dataKeys: [
+      { key: 'x', label: METRIC_LABELS[params.metricA], color: DEFAULT_COLORS[1] },
+      { key: 'y', label: METRIC_LABELS[params.metricB], color: DEFAULT_COLORS[0] },
+    ],
     yAxisLabel: METRIC_LABELS[params.metricB],
     statistics: result.correlation ? {
       r: result.correlation.r,
-      slope: result.correlation.r,
-      intercept: 0,
+      pValue: result.correlation.pValue,
+      slope: trend.slope,
+      intercept: trend.intercept,
     } : undefined,
     annotations: result.correlation ? [
       { label: `r = ${result.correlation.r.toFixed(3)} (${result.correlation.interpretation})`, position: 'top-right' },
@@ -93,7 +178,14 @@ async function analyzeCorrelation(
     insight: result.narrative,
   };
 
-  return JSON.stringify({ success: true, narrative: result.narrative, artifact, steps: result.steps });
+  const savedArtifact = await saveAnalysisArtifact(userId, artifact, result.analysisId);
+  const followUps = [
+    `Show me the trend for ${METRIC_LABELS[params.metricA]}`,
+    'What changed on the outlier days?',
+    `Compare this week to last week for ${METRIC_LABELS[params.metricB]}`,
+  ];
+
+  return JSON.stringify({ success: true, narrative: result.narrative, artifact: savedArtifact, steps: result.steps, followUps });
 }
 
 async function analyzeTrend(
@@ -140,7 +232,14 @@ async function analyzeTrend(
     insight: result.narrative,
   };
 
-  return JSON.stringify({ success: true, narrative: result.narrative, artifact, steps: result.steps });
+  const savedArtifact = await saveAnalysisArtifact(userId, artifact, result.analysisId);
+  const followUps = [
+    `Why is ${METRIC_LABELS[params.metric]} changing?`,
+    `Find anomalies in ${METRIC_LABELS[params.metric]}`,
+    `Compare ${METRIC_LABELS[params.metric]} this week to last week`,
+  ];
+
+  return JSON.stringify({ success: true, narrative: result.narrative, artifact: savedArtifact, steps: result.steps, followUps });
 }
 
 async function compareTimePeriods(
@@ -198,7 +297,14 @@ async function compareTimePeriods(
     insight: result.narrative,
   };
 
-  return JSON.stringify({ success: true, narrative: result.narrative, artifact, steps: result.steps });
+  const savedArtifact = await saveAnalysisArtifact(userId, artifact, result.analysisId);
+  const followUps = [
+    `What drove the ${periodALabel} change?`,
+    `Show me a trend for ${METRIC_LABELS[params.metric]}`,
+    `Find anomalies in ${METRIC_LABELS[params.metric]}`,
+  ];
+
+  return JSON.stringify({ success: true, narrative: result.narrative, artifact: savedArtifact, steps: result.steps, followUps });
 }
 
 async function detectAnomalies(
@@ -243,7 +349,158 @@ async function detectAnomalies(
     insight: result.narrative,
   };
 
-  return JSON.stringify({ success: true, narrative: result.narrative, artifact, steps: result.steps });
+  const savedArtifact = await saveAnalysisArtifact(userId, artifact, result.analysisId);
+  const followUps = [
+    'What happened on those anomaly days?',
+    'Compare anomaly days to normal days',
+    `Show me the ${METRIC_LABELS[params.metric]} trend`,
+  ];
+
+  return JSON.stringify({ success: true, narrative: result.narrative, artifact: savedArtifact, steps: result.steps, followUps });
+}
+
+async function analyzeMultiFactor(
+  userId: string,
+  params: z.infer<typeof AnalyzeMultiFactorSchema>
+): Promise<string> {
+  const days = params.days || 60;
+  const emitter = getAnalysisStepEmitter(userId);
+
+  emitter?.({ id: 'multi-factor-fetch-target', label: `Analyzing ${METRIC_LABELS[params.targetMetric]} Data`, status: 'active' });
+  const targetData = await deepAnalysisEngineService.fetchMetricTimeSeries(userId, params.targetMetric, days);
+  emitter?.({ id: 'multi-factor-fetch-target', label: `Analyzing ${METRIC_LABELS[params.targetMetric]} Data`, status: 'completed', resultSummary: `${targetData.length} data points` });
+
+  const targetMap = new Map(targetData.map((point) => [point.date, point.value]));
+  emitter?.({ id: 'multi-factor-correlations', label: 'Mapping Relationships', status: 'active' });
+
+  const factors = await Promise.all(params.factorMetrics.map(async (metric) => {
+    const factorData = await deepAnalysisEngineService.fetchMetricTimeSeries(userId, metric, days);
+    const aligned = factorData
+      .filter((point) => targetMap.has(point.date))
+      .map((point) => ({ factor: point.value, target: targetMap.get(point.date)! }));
+    const correlation = calculatePearson(aligned.map((point) => point.factor), aligned.map((point) => point.target));
+    return {
+      metric,
+      name: METRIC_LABELS[metric],
+      correlation,
+      importance: Math.round(Math.abs(correlation) * 100),
+      relationship: Math.abs(correlation) < 0.2 ? 'none' : correlation > 0 ? 'positive' : 'negative',
+      dataPoints: aligned.length,
+    };
+  }));
+
+  const sorted = factors.sort((a, b) => b.importance - a.importance);
+  emitter?.({ id: 'multi-factor-correlations', label: 'Mapping Relationships', status: 'completed', resultSummary: `${sorted.length} factors ranked` });
+  emitter?.({ id: 'multi-factor-recommendations', label: 'Generating Recommendations', status: 'completed', resultSummary: 'Driver ranking ready' });
+
+  const top = sorted[0];
+  const narrative = top
+    ? `${METRIC_LABELS[params.targetMetric]} appears most related to ${top.name} over the last ${days} days (r = ${top.correlation.toFixed(3)}, ${top.dataPoints} matched points).`
+    : `I could not find enough matched data to explain ${METRIC_LABELS[params.targetMetric]}.`;
+
+  const artifact = {
+    type: 'chart' as const,
+    chartType: 'radar_multi' as const,
+    title: `${METRIC_LABELS[params.targetMetric]} Driver Analysis`,
+    data: sorted.map((factor) => ({
+      factor: factor.name,
+      importance: factor.importance,
+      correlation: factor.correlation,
+      dataPoints: factor.dataPoints,
+    })),
+    xAxisKey: 'factor',
+    dataKeys: [{ key: 'importance', label: 'Importance', color: DEFAULT_COLORS[0] }],
+    yAxisLabel: 'Relative importance',
+    statistics: { factors: sorted.length },
+    annotations: top ? [{ label: `Top driver: ${top.name}`, color: DEFAULT_COLORS[0] }] : undefined,
+    insight: narrative,
+  };
+
+  const savedArtifact = await saveAnalysisArtifact(userId, artifact);
+  return JSON.stringify({
+    success: true,
+    narrative,
+    artifact: savedArtifact,
+    factors: sorted,
+    followUps: [
+      `Show ${top?.name || 'the top factor'} vs ${METRIC_LABELS[params.targetMetric]}`,
+      `What should I change to improve ${METRIC_LABELS[params.targetMetric]}?`,
+    ],
+  });
+}
+
+async function analyzeGoalProgress(
+  userId: string,
+  params: z.infer<typeof AnalyzeGoalProgressSchema>
+): Promise<string> {
+  const values: Array<string | number | boolean | object | Date | null> = [userId];
+  let where = `user_id = $1 AND status = 'active'`;
+  if (params.goalId) {
+    values.push(params.goalId);
+    where += ` AND id = $2`;
+  } else {
+    where += ` ORDER BY is_primary DESC, updated_at DESC LIMIT 1`;
+  }
+
+  const goalResult = await query(
+    `SELECT id, title, description, target_value, target_unit, current_value, start_value,
+            start_date, target_date, progress, milestones
+     FROM user_goals
+     WHERE ${where}`,
+    values
+  );
+  const goal = goalResult.rows[0];
+
+  if (!goal) {
+    return JSON.stringify({ success: false, narrative: 'No active goal was found to analyze.' });
+  }
+
+  const target = Number(goal.target_value || 0);
+  const current = Number(goal.current_value ?? goal.start_value ?? 0);
+  const progress = Number(goal.progress ?? (target > 0 ? (current / target) * 100 : 0));
+  const today = new Date();
+  const targetDate = new Date(goal.target_date);
+  const startDate = new Date(goal.start_date);
+  const totalDays = Math.max(1, Math.ceil((targetDate.getTime() - startDate.getTime()) / 86400000));
+  const elapsedDays = Math.max(0, Math.ceil((today.getTime() - startDate.getTime()) / 86400000));
+  const daysRemaining = Math.max(0, Math.ceil((targetDate.getTime() - today.getTime()) / 86400000));
+  const expectedProgress = Math.min(100, (elapsedDays / totalDays) * 100);
+  const onTrack = progress + 5 >= expectedProgress;
+  const gap = Math.max(0, expectedProgress - progress);
+
+  const narrative = `${goal.title} is ${Math.round(progress)}% complete with ${daysRemaining} days remaining. ${onTrack ? 'You are on track.' : `You are about ${Math.round(gap)}% behind the expected pace.`}`;
+  const artifact = {
+    type: 'chart' as const,
+    chartType: 'gauge_current' as const,
+    title: `Goal Progress - ${goal.title}`,
+    data: [{ label: goal.title, progress: Math.round(progress), expected: Math.round(expectedProgress), current, target }],
+    xAxisKey: 'label',
+    dataKeys: [{ key: 'progress', label: '%', color: onTrack ? DEFAULT_COLORS[0] : DEFAULT_COLORS[2] }],
+    gaugeMax: 100,
+    statistics: { current, target, daysRemaining, expectedProgress, gap },
+    annotations: [{ label: onTrack ? 'On track' : `${Math.round(gap)}% behind pace`, color: onTrack ? DEFAULT_COLORS[0] : DEFAULT_COLORS[2] }],
+    insight: narrative,
+  };
+
+  const savedArtifact = await saveAnalysisArtifact(userId, artifact);
+  return JSON.stringify({
+    success: true,
+    narrative,
+    artifact: savedArtifact,
+    goal: {
+      id: goal.id,
+      title: goal.title,
+      target,
+      current,
+      unit: goal.target_unit,
+      daysRemaining,
+      onTrack,
+    },
+    followUps: [
+      'What should I do this week to get back on track?',
+      'Show my highest impact next action for this goal',
+    ],
+  });
 }
 
 const GetDashboardSummarySchema = z.object({
@@ -325,7 +582,7 @@ export function registerAnalyticsTools(_userId: string): ToolDefinition[] {
   return [
     {
       name: 'analyzeCorrelation',
-      description: 'Analyze the statistical correlation between two health metrics (e.g., sleep vs HRV, steps vs recovery). Returns a scatter plot chart with correlation coefficient and trend line.',
+      description: 'Analyze the statistical relationship between two health metrics (e.g., sleep quality vs cardio load, HRV vs recovery, steps vs sleep score). Returns and saves a scatter plot artifact with correlation coefficient, p-value, and trend line.',
       schema: AnalyzeCorrelationSchema,
       handler: withErrorHandling('analyzeCorrelation', analyzeCorrelation),
       icon: 'scatter-chart',
@@ -334,7 +591,7 @@ export function registerAnalyticsTools(_userId: string): ToolDefinition[] {
     },
     {
       name: 'analyzeTrend',
-      description: 'Analyze the trend direction of a health metric over time using linear regression. Shows whether a metric is increasing, decreasing, or stable with a time series chart.',
+      description: 'Analyze whether a health metric is improving, declining, or stable over time using linear regression. Returns and saves a time-series artifact with mean and variance bands.',
       schema: AnalyzeTrendSchema,
       handler: withErrorHandling('analyzeTrend', analyzeTrend),
       icon: 'trending-up',
@@ -343,7 +600,7 @@ export function registerAnalyticsTools(_userId: string): ToolDefinition[] {
     },
     {
       name: 'compareTimePeriods',
-      description: 'Compare a health metric between two time periods (e.g., this week vs last week). Shows a comparison card with percentage change and direction.',
+      description: 'Compare a health metric between two time periods (e.g., this week vs last week, this month vs last month, goal vs actual). Returns and saves a comparison artifact with percentage change and direction.',
       schema: CompareTimePeriodsSchema,
       handler: withErrorHandling('compareTimePeriods', compareTimePeriods),
       icon: 'git-compare',
@@ -352,12 +609,30 @@ export function registerAnalyticsTools(_userId: string): ToolDefinition[] {
     },
     {
       name: 'detectAnomalies',
-      description: 'Detect unusual values (anomalies) in a health metric using z-score analysis. Highlights data points that deviate significantly from the baseline.',
+      description: 'Detect unusual values in a health metric using z-score analysis. Returns and saves an anomaly artifact that highlights data points deviating from the baseline.',
       schema: DetectAnomaliesSchema,
       handler: withErrorHandling('detectAnomalies', detectAnomalies),
       icon: 'alert-triangle',
       mutationType: 'read',
       semanticDelta: (params) => `Anomaly detection: ${params.metric}`,
+    },
+    {
+      name: 'analyzeMultiFactor',
+      description: 'Explain why a target metric may be high or low by ranking multiple possible driver metrics. Use for questions like "what is affecting my sleep?", "why is recovery low?", or "what drives my energy?". Saves a multi-factor radar artifact.',
+      schema: AnalyzeMultiFactorSchema,
+      handler: withErrorHandling('analyzeMultiFactor', analyzeMultiFactor),
+      icon: 'network',
+      mutationType: 'read',
+      semanticDelta: (params) => `Multi-factor analysis: ${params.targetMetric}`,
+    },
+    {
+      name: 'analyzeGoalProgress',
+      description: 'Analyze progress for the primary active goal or a specified goal. Use for questions like "how am I doing on my goal?", "am I on track?", or "what is my goal progress?". Saves a goal progress gauge artifact.',
+      schema: AnalyzeGoalProgressSchema,
+      handler: withErrorHandling('analyzeGoalProgress', analyzeGoalProgress),
+      icon: 'target',
+      mutationType: 'read',
+      semanticDelta: () => 'Goal progress analysis',
     },
     {
       name: 'getDashboardSummary',

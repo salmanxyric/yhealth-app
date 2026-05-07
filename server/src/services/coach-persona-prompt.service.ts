@@ -3,8 +3,8 @@
  * Keep in sync with shared `AICoachPersona` values.
  */
 
-import type { AICoachPersona } from '../../../shared/types/domain/coach-persona.js';
-import { normalizePersonaId } from '../../../shared/types/domain/coach-persona.js';
+import type { AICoachPersona } from '@shared/types/domain/coach-persona.js';
+import { normalizePersonaId } from '@shared/types/domain/coach-persona.js';
 
 const PERSONA_BASE = `BASE RULES (always apply regardless of persona): Follow the 6-part response architecture internally. Apply behavioral intelligence rules. Focus on systems over motivation. Prioritize execution clarity over inspiration. Keep outputs minimal, structured, actionable. Never use guilt, shame, or pressure.`;
 

@@ -9,7 +9,7 @@ import type {
   IntelligencePlan,
   CoreProfile,
   LogReference,
-} from "../../../../../shared/types/domain/intelligence-files";
+} from "@shared/types/domain/intelligence-files";
 import * as intelligenceApi from "@/src/shared/services/intelligence-files.service";
 
 type NavigationLevel = "folders" | "list" | "detail";
@@ -36,6 +36,7 @@ export function useIntelligenceFiles() {
   const [coreProfile, setCoreProfile] = useState<CoreProfile | null>(null);
   const [logs, setLogs] = useState<LogReference[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -43,12 +44,15 @@ export function useIntelligenceFiles() {
   const openDrawer = useCallback(async () => {
     setDrawer({ isOpen: true, level: "folders", activeFolder: null, selectedItemId: null });
     setLoading(true);
+    setError(null);
     try {
       const res = await intelligenceApi.getFolders();
       if (res.success && res.data?.folders) {
         setFolders(res.data.folders);
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load intelligence files";
+      setError(message);
       console.error("[Intelligence] Failed to fetch folders:", err);
     } finally {
       setLoading(false);
@@ -63,6 +67,7 @@ export function useIntelligenceFiles() {
   const navigateToFolder = useCallback(async (folder: IntelligenceFolder) => {
     setDrawer((prev) => ({ ...prev, level: "list", activeFolder: folder, selectedItemId: null }));
     setLoading(true);
+    setError(null);
     try {
       switch (folder) {
         case "memories": {
@@ -94,7 +99,9 @@ export function useIntelligenceFiles() {
           // Notes use the existing user_files API — loaded via FilesPanel
           break;
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : `Failed to load ${folder}`;
+      setError(message);
       console.error(`[Intelligence] Failed to fetch ${folder}:`, err);
     } finally {
       setLoading(false);
@@ -190,6 +197,7 @@ export function useIntelligenceFiles() {
     coreProfile,
     logs,
     loading,
+    error,
 
     // Search
     searchQuery,

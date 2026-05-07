@@ -15,7 +15,9 @@ type NotificationType =
   | 'coaching'
   | 'celebration'
   | 'warning'
-  | 'tip';
+  | 'tip'
+  | 'competition'
+  | 'ai_check_in';
 
 type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -85,7 +87,16 @@ class NotificationService {
       });
 
       return result.rows[0] || null;
-    } catch (error) {
+    } catch (error: unknown) {
+      const pgError = error as { code?: string; constraint?: string; message?: string };
+      if (pgError.code === '23503' && pgError.constraint === 'notifications_user_id_fkey') {
+        logger.warn('Skipped notification for missing user', {
+          userId: params.userId,
+          type: params.type,
+        });
+        return null;
+      }
+
       logger.error('Failed to create notification', {
         error: error instanceof Error ? error.message : 'Unknown error',
         params: { userId: params.userId, type: params.type },

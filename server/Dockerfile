@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for yHealth Node.js/Express server
-# Build from root: docker build -t yhealth-server -f server/Dockerfile .
-# Build from server: docker build -t yhealth-server -f Dockerfile .
+# Build context: PRODUCTS/yhealth-app/server/
+# Build: docker build -t yhealth-server .
 # Run: docker run -p 5000:5000 yhealth-server
 
 # -----------------------------------------------------------------------------
@@ -9,11 +9,10 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Copy package files (works from both root and server context)
-COPY server/package.json server/package-lock.json* ./server/
+# Copy package files
+COPY package.json package-lock.json* ./
 
 # Install production dependencies only
-WORKDIR /app/server
 RUN npm ci --legacy-peer-deps --only=production 2>/dev/null || \
     npm install --legacy-peer-deps --only=production
 
@@ -23,21 +22,17 @@ RUN npm ci --legacy-peer-deps --only=production 2>/dev/null || \
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy shared types (needed for TypeScript compilation)
-COPY shared ./shared
-
 # Copy package files
-COPY server/package.json server/package-lock.json* ./server/
-
-WORKDIR /app/server
+COPY package.json package-lock.json* ./
 
 # Install all dependencies (including devDependencies for TypeScript compilation)
 RUN npm ci --legacy-peer-deps 2>/dev/null || \
     npm install --legacy-peer-deps
 
-# Copy server source code
-COPY server/src ./src
-COPY server/tsconfig.json ./tsconfig.json
+# Copy server source code, including server-local shared types
+COPY src ./src
+COPY shared ./shared
+COPY tsconfig.json ./tsconfig.json
 
 # Set build-time environment
 ENV NODE_ENV=production
@@ -58,22 +53,22 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nodejs
 
 # Copy production dependencies
-COPY --from=deps --chown=nodejs:nodejs /app/server/node_modules ./node_modules
+COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
 
 # Copy built application
-COPY --from=builder --chown=nodejs:nodejs /app/server/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/server/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 
 # Copy email templates (EJS files needed at runtime)
-COPY --from=builder --chown=nodejs:nodejs /app/server/src/mails ./src/mails
+COPY --from=builder --chown=nodejs:nodejs /app/src/mails ./src/mails
 
 # Copy database table SQL files (needed by auto-migrate at runtime)
-COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/tables ./dist/server/src/database/tables
-COPY --from=builder --chown=nodejs:nodejs /app/server/src/database/migrations ./dist/server/src/database/migrations
+COPY --from=builder --chown=nodejs:nodejs /app/src/database/tables ./dist/src/database/tables
+COPY --from=builder --chown=nodejs:nodejs /app/src/database/migrations ./dist/src/database/migrations
 
 # Symlink email templates to where compiled JS expects them (__dirname + '../mails')
-RUN mkdir -p dist/server/src && \
-    ln -s /app/src/mails dist/server/src/mails
+RUN mkdir -p dist/src && \
+    ln -s /app/src/mails dist/src/mails
 
 # Switch to non-root user
 USER nodejs
@@ -88,5 +83,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start the server
-CMD ["node", "dist/server/src/index.js"]
+CMD ["node", "dist/src/index.js"]
 

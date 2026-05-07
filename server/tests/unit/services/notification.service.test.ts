@@ -93,6 +93,28 @@ describe('NotificationService', () => {
       expect(mockLogger.error).toHaveBeenCalled();
     });
 
+    it('returns null and warns when the target user no longer exists', async () => {
+      const fkError = Object.assign(new Error('violates foreign key constraint'), {
+        code: '23503',
+        constraint: 'notifications_user_id_fkey',
+      });
+      mockQuery.mockRejectedValueOnce(fkError);
+
+      const result = await notificationService.create({
+        userId: USER_ID,
+        type: 'reminder',
+        title: 'Stale alarm',
+        message: 'This user was deleted',
+      });
+
+      expect(result).toBeNull();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Skipped notification for missing user',
+        { userId: USER_ID, type: 'reminder' }
+      );
+      expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+
     it('passes all optional fields correctly', async () => {
       mockQuery.mockResolvedValueOnce(pgResult([NOTIFICATION_ROW]));
 

@@ -5,7 +5,7 @@
 
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
-import type { CoachingResult, CoachAnalyseResponse, PoseTargets } from '../../../shared/types/domain/yoga.js';
+import type { CoachingResult, CoachAnalyseResponse, PoseTargets } from '@shared/types/domain/yoga.js';
 import { coachResponseSchema } from '../validators/yoga-coach.validator.js';
 
 // ============================================

@@ -24,6 +24,8 @@ router.get('/overview', ds.getOverview);
 
 // Prayer Schedule
 router.get('/prayers', ds.getPrayerSchedule);
+router.post('/prayers/sync', ds.syncPrayerSchedule);
+router.patch('/prayers/manual', ds.saveManualPrayerTimes);
 router.post('/prayers/:id/complete', ds.markPrayerComplete);
 
 // Spending

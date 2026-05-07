@@ -4,7 +4,7 @@
  * which does not equal the user's local hour.
  */
 
-function resolveTimeZone(timezone: string | null | undefined): string {
+export function resolveTimeZone(timezone: string | null | undefined): string {
   const raw = typeof timezone === 'string' ? timezone.trim() : '';
   if (!raw) return 'UTC';
   try {
@@ -50,4 +50,53 @@ export function getUserLocalHour(
   at: Date = new Date()
 ): number {
   return getUserLocalHourAndSunday(timezone, at).hour;
+}
+
+export function getUserLocalDateISO(
+  timezone: string | null | undefined,
+  at: Date = new Date()
+): string {
+  const tz = resolveTimeZone(timezone);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(at);
+
+  const year = parts.find((p) => p.type === 'year')?.value;
+  const month = parts.find((p) => p.type === 'month')?.value;
+  const day = parts.find((p) => p.type === 'day')?.value;
+
+  if (!year || !month || !day) {
+    return at.toISOString().slice(0, 10);
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
+export function addDaysToISODate(dateISO: string, days: number): string {
+  const [year, month, day] = dateISO.split('-').map((part) => parseInt(part, 10));
+  if (!year || !month || !day) return dateISO;
+
+  const utcDate = new Date(Date.UTC(year, month - 1, day + days));
+  return utcDate.toISOString().slice(0, 10);
+}
+
+export function formatUserLocalDateTime(
+  timezone: string | null | undefined,
+  at: Date = new Date()
+): string {
+  const tz = resolveTimeZone(timezone);
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(at);
 }

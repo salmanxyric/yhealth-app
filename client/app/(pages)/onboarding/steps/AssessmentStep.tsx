@@ -22,7 +22,6 @@ export function AssessmentStep() {
     bodyStats,
     completeAssessment,
     prevStep,
-    setAssessmentMode,
     goToStep,
   } = useOnboarding();
 
@@ -72,23 +71,11 @@ export function AssessmentStep() {
     }
   };
 
-  const handlePrev = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex((prev) => prev - 1);
-    } else {
-      prevStep();
-    }
-  };
-
   const handleComplete = async () => {
     setIsCompleting(true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     completeAssessment();
-  };
-
-  const handleSwitchToQuick = () => {
-    setAssessmentMode("quick");
-    goToStep(2);
+    goToStep(3);
   };
 
   const isCurrentAnswered = getCurrentResponse() !== "";
@@ -178,7 +165,7 @@ export function AssessmentStep() {
   if (!currentQuestion) return null;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#02000f]">
+    <div className="min-h-[calc(100vh-198px)] flex flex-col bg-[#02000f]">
       {/* Header — slim bar */}
       <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-white/10">
         <motion.button
@@ -191,25 +178,14 @@ export function AssessmentStep() {
           <span className="font-medium sm:hidden">Back</span>
         </motion.button>
 
-        <motion.button
-          onClick={handleSwitchToQuick}
-          disabled={currentQuestionIndex > 0}
-          className={`
-            flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-sm sm:text-base font-medium transition-all
-            ${currentQuestionIndex > 0
-              ? "bg-slate-800 text-slate-500 cursor-not-allowed opacity-50"
-              : "bg-sky-600 text-white hover:bg-sky-500 shadow-lg shadow-sky-600/20"
-            }
-          `}
-          whileTap={currentQuestionIndex === 0 ? { scale: 0.97 } : undefined}
-        >
+        <div className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-sm sm:text-base font-medium bg-slate-800/70 text-slate-400 border border-white/10">
           <Zap className="w-4 h-4" />
           <span>Quick Mode</span>
-        </motion.button>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 w-full max-w-3xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
+      <div className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-7 sm:py-10">
         {/* Progress Bar */}
         <div className="mb-6 sm:mb-8">
           <div className="flex justify-between text-xs sm:text-sm mb-2">
@@ -236,11 +212,11 @@ export function AssessmentStep() {
             transition={{ duration: 0.25 }}
           >
             {/* Question header — icon + text */}
-            <div className="flex items-center gap-3 mb-6 sm:mb-8">
+            <div className="flex items-start gap-3 sm:gap-4 mb-6 sm:mb-8">
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-fuchsia-500/20 flex items-center justify-center text-purple-400 shrink-0">
                 {getQuestionIcon(currentQuestion.iconName)}
               </div>
-              <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-white leading-snug">
+              <h2 className="text-lg sm:text-xl lg:text-[26px] font-medium text-white leading-snug">
                 {currentQuestion.text}
               </h2>
             </div>
@@ -288,6 +264,9 @@ export function AssessmentStep() {
                   onChange={handleResponse}
                   unit={currentQuestion.unit}
                   placeholder={getNumberPlaceholder(currentQuestion.id)}
+                  min={getNumberMin(currentQuestion.id)}
+                  max={getNumberMax(currentQuestion.id)}
+                  size="lg"
                 />
               )}
             </div>
@@ -345,9 +324,27 @@ export function AssessmentStep() {
 
 function getNumberPlaceholder(questionId: string): string {
   const placeholders: Record<string, string> = {
-    height: "Enter height",
-    weight: "Enter weight",
-    target_weight: "Enter target weight",
+    height: "Height",
+    weight: "Weight",
+    target_weight: "Target",
   };
   return placeholders[questionId] || "Enter value";
+}
+
+function getNumberMin(questionId: string): number | undefined {
+  const mins: Record<string, number> = {
+    height: 90,
+    weight: 25,
+    target_weight: 25,
+  };
+  return mins[questionId];
+}
+
+function getNumberMax(questionId: string): number | undefined {
+  const maxes: Record<string, number> = {
+    height: 250,
+    weight: 350,
+    target_weight: 350,
+  };
+  return maxes[questionId];
 }

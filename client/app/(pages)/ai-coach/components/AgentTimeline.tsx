@@ -20,11 +20,13 @@ import {
   BarChart3,
   GitCompare,
   CalendarRange,
+  CalendarCheck2,
   Pencil,
   Repeat2,
   FileText,
   Music,
   Brain,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
 import type { ToolTimelineEvent } from "../hooks/useAICoach";
@@ -42,16 +44,25 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "bar-chart-3": BarChart3,
   "git-compare": GitCompare,
   "calendar-range": CalendarRange,
+  "calendar-check": CalendarCheck2,
   pencil: Pencil,
   "repeat-2": Repeat2,
   "file-text": FileText,
   music: Music,
   brain: Brain,
+  "wallet-cards": WalletCards,
 };
 
 function getIcon(iconName?: string) {
   if (!iconName) return Utensils;
   return ICON_MAP[iconName] || Utensils;
+}
+
+function formatTimelineDelta(delta?: string) {
+  if (!delta) return "";
+  const trimmed = delta.replace(/\s+/g, " ").trim();
+  if (!trimmed || /^[{\[]/.test(trimmed)) return "";
+  return trimmed.length > 88 ? `${trimmed.slice(0, 85)}...` : trimmed;
 }
 
 interface AgentTimelineProps {
@@ -163,6 +174,7 @@ function ToolResultRow({
   const isUndone = event.status === "undone";
   const isFailed = event.status === "failed";
   const isPending = event.status === "pending";
+  const displayDelta = formatTimelineDelta(event.delta);
 
   return (
     <motion.div
@@ -206,13 +218,14 @@ function ToolResultRow({
         {event.label}
       </span>
 
-      {event.delta && (
+      {displayDelta && (
         <span
-          className={`font-mono shrink-0 ${
+          title={displayDelta}
+          className={`min-w-0 max-w-[22rem] truncate text-right ${
             isUndone ? "line-through text-slate-500" : "text-slate-400"
           }`}
         >
-          {event.delta}
+          {displayDelta}
         </span>
       )}
 

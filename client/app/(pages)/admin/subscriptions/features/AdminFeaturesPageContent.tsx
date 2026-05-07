@@ -14,7 +14,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 
-import { Skeleton } from 'boneyard-js/react';
+import { ContentSkeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/lib/api-client';
 import {
   EntityMatrix,
@@ -238,7 +238,7 @@ export default function AdminFeaturesPageContent() {
         </div>
       )}
 
-      <Skeleton
+      <ContentSkeleton
         name="features-matrix"
         loading={!data && !error}
         animate="shimmer"
@@ -303,7 +303,7 @@ export default function AdminFeaturesPageContent() {
           onUpdate={onMenuUpdate}
         />
       )}
-      </Skeleton>
+      </ContentSkeleton>
     </div>
   );
 }

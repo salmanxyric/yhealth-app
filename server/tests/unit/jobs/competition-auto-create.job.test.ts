@@ -12,7 +12,7 @@ import { setupLoggerMock, setupCacheMock, setupModelFactoryMock } from '../../he
 const { mockQuery } = setupDbMock();
 setupLoggerMock();
 setupCacheMock();
-setupModelFactoryMock();
+const mockModelFactory = setupModelFactoryMock();
 
 const mockCompetitionService = {
   createCompetition: jest.fn<any>().mockResolvedValue({ id: 'comp-1', name: 'Test Competition' }),
@@ -67,6 +67,9 @@ beforeEach(() => {
   mockLlmCircuitBreaker.isCallAllowed.mockReturnValue(true);
   mockLlmCircuitBreaker.getStatus.mockReturnValue({ cooldownRemaining: 0, consecutiveFailures: 0 });
   mockNotificationEngine.send.mockResolvedValue(undefined);
+  mockModelFactory.getModel.mockReturnValue({
+    invoke: jest.fn<any>().mockResolvedValue({ content: 'mock response' }),
+  });
 });
 
 describe('CompetitionAutoCreateJob', () => {
@@ -148,6 +151,36 @@ describe('CompetitionAutoCreateJob', () => {
       mockQuery.mockRejectedValueOnce(new Error('Database down'));
 
       await expect(competitionAutoCreateJob.processNow()).resolves.toBeUndefined();
+    });
+
+    it('should not open the LLM circuit when targeted competition JSON is malformed', async () => {
+      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      mockQuery
+        .mockResolvedValueOnce(
+          pgResult([{ id: 'daily-ok', name: 'Active Daily', status: 'active', end_date: futureDate }]),
+        )
+        .mockResolvedValueOnce(
+          pgResult([{ id: 'challenge-ok', name: 'Active Challenge', status: 'active', end_date: futureDate }]),
+        )
+        .mockResolvedValueOnce(pgResult([{ count: '0' }])) // no active targeted competition
+        .mockResolvedValueOnce(pgResult([
+          { user_id: '11111111-1111-1111-1111-111111111111', category: 'strength', title: 'Lift' },
+          { user_id: '22222222-2222-2222-2222-222222222222', category: 'strength', title: 'Lift' },
+          { user_id: '33333333-3333-3333-3333-333333333333', category: 'strength', title: 'Lift' },
+          { user_id: '44444444-4444-4444-4444-444444444444', category: 'strength', title: 'Lift' },
+          { user_id: '55555555-5555-5555-5555-555555555555', category: 'strength', title: 'Lift' },
+        ]));
+      mockSmartCompetitionService.getGoalDistribution.mockResolvedValueOnce([
+        { pillar: 'fitness', count: 5, percentage: 100 },
+      ]);
+      mockModelFactory.getModel.mockReturnValueOnce({
+        invoke: jest.fn<any>().mockResolvedValue({ content: 'not json' }),
+      });
+
+      await competitionAutoCreateJob.processNow();
+
+      expect(mockLlmCircuitBreaker.recordRateLimitError).not.toHaveBeenCalled();
+      expect(mockLlmCircuitBreaker.recordSuccess).not.toHaveBeenCalled();
     });
   });
 

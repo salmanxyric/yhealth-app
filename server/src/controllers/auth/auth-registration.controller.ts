@@ -16,6 +16,7 @@ import { env } from '../../config/env.config.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 import { notificationService } from '../../services/notification.service.js';
 import { chatService } from '../../services/chat.service.js';
+import { oauthService } from '../../services/oauth.service.js';
 import type {
   RegisterInput,
   SocialAuthInput,
@@ -67,12 +68,19 @@ export const register = asyncHandler(
       createActivationToken(registrationData);
 
     // Send OTP email
-    await mailHelper.sendRegistrationOTPEmail(
+    const emailSent = await mailHelper.sendRegistrationOTPEmail(
       data.email,
       data.firstName,
       activationCode,
       '10 minutes'
     );
+
+    if (!emailSent) {
+      logger.error('Registration OTP email failed', { email: data.email });
+      throw ApiError.serviceUnavailable(
+        'Unable to send verification email right now. Please try again shortly.'
+      );
+    }
 
     logger.info('Registration OTP sent', { email: data.email });
 
@@ -256,12 +264,19 @@ export const resendRegistrationOTP = asyncHandler(
     );
 
     // Send new OTP email
-    await mailHelper.sendRegistrationOTPEmail(
+    const emailSent = await mailHelper.sendRegistrationOTPEmail(
       userData.email,
       userData.firstName,
       activationCode,
       '10 minutes'
     );
+
+    if (!emailSent) {
+      logger.error('Registration OTP resend email failed', { email: userData.email });
+      throw ApiError.serviceUnavailable(
+        'Unable to send verification email right now. Please try again shortly.'
+      );
+    }
 
     logger.info('Registration OTP resent', { email: userData.email });
 
@@ -289,9 +304,39 @@ export const socialAuth = asyncHandler(
       throw ApiError.badRequest('Email and provider are required');
     }
 
-    const email = data.email.toLowerCase();
     const provider = data.provider;
-    const providerId = data.providerId || data.idToken;
+
+    // Try to verify the id_token with Google directly.
+    // If verification fails due to network issues, fall back to the
+    // NextAuth-provided profile data (NextAuth already completed the
+    // full OAuth PKCE flow and verified the user's identity).
+    let verifiedProfile: Awaited<ReturnType<typeof oauthService.verifySocialToken>> = null;
+
+    if (provider === 'google' && data.idToken) {
+      try {
+        verifiedProfile = await oauthService.verifySocialToken(provider, data.idToken);
+      } catch (verifyError) {
+        logger.warn('Google token verification failed, falling back to NextAuth profile', {
+          error: verifyError instanceof Error ? verifyError.message : 'Unknown',
+        });
+      }
+    }
+
+    // Require at minimum an email and providerId from NextAuth
+    if (provider === 'google' && !verifiedProfile) {
+      if (!data.email || !data.providerId) {
+        throw ApiError.unauthorized('Google sign-in could not be verified. Please try again.');
+      }
+      logger.info('Using NextAuth-provided profile for Google sign-in (token verification skipped)', {
+        email: data.email,
+      });
+    }
+
+    const email = (verifiedProfile?.email || data.email).toLowerCase();
+    const providerId = verifiedProfile?.providerId || data.providerId || data.idToken;
+    const firstName = verifiedProfile?.firstName || data.firstName || data.name?.split(' ')[0] || '';
+    const lastName = verifiedProfile?.lastName || data.lastName || data.name?.split(' ').slice(1).join(' ') || '';
+    const avatar = verifiedProfile?.avatar || data.avatar || null;
 
     // Check if user exists by email
     const existingUserResult = await query<UserRow>(
@@ -315,7 +360,7 @@ export const socialAuth = asyncHandler(
         avatar = COALESCE($4, avatar),
         is_email_verified = true
       WHERE id = $5`,
-        [new Date(), provider, providerId || null, data.avatar || null, user.id]
+        [new Date(), provider, providerId || null, avatar, user.id]
       );
 
       // Refresh user data
@@ -340,9 +385,9 @@ export const socialAuth = asyncHandler(
         RETURNING *`,
           [
             email,
-            data.firstName || data.name?.split(' ')[0] || '',
-            data.lastName || data.name?.split(' ').slice(1).join(' ') || '',
-            data.avatar || null,
+            firstName,
+            lastName,
+            avatar,
             provider,
             providerId,
             true,

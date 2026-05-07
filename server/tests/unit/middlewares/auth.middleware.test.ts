@@ -89,27 +89,33 @@ describe('authenticate middleware', () => {
 
   // Token extraction
   describe('token extraction', () => {
-    it('should extract token from Authorization Bearer header', () => {
+    it('should extract token from Authorization Bearer header', async () => {
       const token = signToken({ userId: 'u1', email: 'a@b.com', role: 'user' });
       const req = createReq({
         headers: { authorization: `Bearer ${token}` },
       });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'u1', email: 'a@b.com', is_active: true, role: 'user' }],
+      });
 
-      authenticate(req as Request, res as Response, next);
+      await authenticate(req as Request, res as Response, next);
 
       expect(next).toHaveBeenCalledWith();
       expect((req as any).user).toBeDefined();
       expect((req as any).user.userId).toBe('u1');
     });
 
-    it('should extract token from access_token cookie', () => {
+    it('should extract token from access_token cookie', async () => {
       const token = signToken({ userId: 'u2', email: 'b@c.com', role: 'user' });
       const req = createReq({
         cookies: { access_token: token },
         headers: {},
       });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'u2', email: 'b@c.com', is_active: true, role: 'user' }],
+      });
 
-      authenticate(req as Request, res as Response, next);
+      await authenticate(req as Request, res as Response, next);
 
       expect(next).toHaveBeenCalledWith();
       expect((req as any).user.userId).toBe('u2');
@@ -118,10 +124,10 @@ describe('authenticate middleware', () => {
 
   // Missing token
   describe('missing token', () => {
-    it('should call next with 401 ApiError when no token is provided', () => {
+    it('should call next with 401 ApiError when no token is provided', async () => {
       const req = createReq({ headers: {} });
 
-      authenticate(req as Request, res as Response, next);
+      await authenticate(req as Request, res as Response, next);
 
       expect(next).toHaveBeenCalledTimes(1);
       const error = (next as jest.Mock<any>).mock.calls[0][0];
@@ -133,19 +139,19 @@ describe('authenticate middleware', () => {
 
   // Invalid / expired tokens
   describe('invalid tokens', () => {
-    it('should reject a malformed JWT with 401', () => {
+    it('should reject a malformed JWT with 401', async () => {
       const req = createReq({
         headers: { authorization: 'Bearer not.a.valid.jwt' },
       });
 
-      authenticate(req as Request, res as Response, next);
+      await authenticate(req as Request, res as Response, next);
 
       const error = (next as jest.Mock<any>).mock.calls[0][0];
       expect(error).toBeInstanceOf(ApiError);
       expect(error.statusCode).toBe(401);
     });
 
-    it('should reject an expired JWT with 401', () => {
+    it('should reject an expired JWT with 401', async () => {
       const token = jwt.sign(
         { userId: 'u3', email: 'c@d.com', role: 'user' },
         JWT_SECRET,
@@ -155,7 +161,7 @@ describe('authenticate middleware', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      authenticate(req as Request, res as Response, next);
+      await authenticate(req as Request, res as Response, next);
 
       const error = (next as jest.Mock<any>).mock.calls[0][0];
       expect(error).toBeInstanceOf(ApiError);
@@ -163,7 +169,7 @@ describe('authenticate middleware', () => {
       expect(error.message).toContain('expired');
     });
 
-    it('should reject a token signed with the wrong secret', () => {
+    it('should reject a token signed with the wrong secret', async () => {
       const token = jwt.sign(
         { userId: 'u4', email: 'd@e.com', role: 'user' },
         'wrong-secret',
@@ -173,7 +179,7 @@ describe('authenticate middleware', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      authenticate(req as Request, res as Response, next);
+      await authenticate(req as Request, res as Response, next);
 
       const error = (next as jest.Mock<any>).mock.calls[0][0];
       expect(error.statusCode).toBe(401);
@@ -182,19 +188,54 @@ describe('authenticate middleware', () => {
 
   // Valid token attaches user
   describe('valid token', () => {
-    it('should attach decoded user payload to req.user', () => {
+    it('should attach decoded user payload to req.user', async () => {
       const payload = { userId: 'u5', email: 'e@f.com', role: 'admin' };
       const token = signToken(payload);
       const req = createReq({
         headers: { authorization: `Bearer ${token}` },
       });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'u5', email: 'current@f.com', is_active: true, role: 'admin' }],
+      });
 
-      authenticate(req as Request, res as Response, next);
+      await authenticate(req as Request, res as Response, next);
 
       const user = (req as any).user;
       expect(user.userId).toBe('u5');
-      expect(user.email).toBe('e@f.com');
+      expect(user.email).toBe('current@f.com');
       expect(user.role).toBe('admin');
+    });
+
+    it('should reject a valid token when the user row no longer exists', async () => {
+      const token = signToken({ userId: 'deleted-user', email: 'gone@example.com', role: 'user' });
+      const req = createReq({
+        headers: { authorization: `Bearer ${token}` },
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await authenticate(req as Request, res as Response, next);
+
+      const error = (next as jest.Mock<any>).mock.calls[0][0];
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.statusCode).toBe(401);
+      expect((req as any).user).toBeUndefined();
+    });
+
+    it('should reject a valid token when the user account is inactive', async () => {
+      const token = signToken({ userId: 'blocked-user', email: 'blocked@example.com', role: 'user' });
+      const req = createReq({
+        headers: { authorization: `Bearer ${token}` },
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 'blocked-user', email: 'blocked@example.com', is_active: false, role: 'user' }],
+      });
+
+      await authenticate(req as Request, res as Response, next);
+
+      const error = (next as jest.Mock<any>).mock.calls[0][0];
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error.statusCode).toBe(403);
+      expect((req as any).user).toBeUndefined();
     });
   });
 });
@@ -202,41 +243,60 @@ describe('authenticate middleware', () => {
 // ── optionalAuth ─────────────────────────────────────────
 
 describe('optionalAuth middleware', () => {
-  it('should call next() without error when no token is present', () => {
+  it('should call next() without error when no token is present', async () => {
     const req = createReq({ headers: {} });
     const res = createRes();
     const next = createNext();
 
-    optionalAuth(req as Request, res as Response, next);
+    await optionalAuth(req as Request, res as Response, next);
 
     expect(next).toHaveBeenCalledWith();
     expect((req as any).user).toBeUndefined();
   });
 
-  it('should attach user when a valid token is present', () => {
+  it('should attach user when a valid token is present', async () => {
     const token = signToken({ userId: 'opt1', email: 'o@o.com', role: 'user' });
     const req = createReq({
       headers: { authorization: `Bearer ${token}` },
     });
     const res = createRes();
     const next = createNext();
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 'opt1', email: 'current-opt@example.com', is_active: true, role: 'user' }],
+    });
 
-    optionalAuth(req as Request, res as Response, next);
+    await optionalAuth(req as Request, res as Response, next);
 
     expect((req as any).user.userId).toBe('opt1');
+    expect((req as any).user.email).toBe('current-opt@example.com');
   });
 
-  it('should call next() without error when token is invalid', () => {
+  it('should call next() without error when token is invalid', async () => {
     const req = createReq({
       headers: { authorization: 'Bearer invalid.token.here' },
     });
     const res = createRes();
     const next = createNext();
 
-    optionalAuth(req as Request, res as Response, next);
+    await optionalAuth(req as Request, res as Response, next);
 
     expect(next).toHaveBeenCalledWith();
     // user should NOT be attached
+    expect((req as any).user).toBeUndefined();
+  });
+
+  it('should call next() without attaching user when token subject is missing', async () => {
+    const token = signToken({ userId: 'ghost', email: 'ghost@example.com', role: 'user' });
+    const req = createReq({
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const res = createRes();
+    const next = createNext();
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await optionalAuth(req as Request, res as Response, next);
+
+    expect(next).toHaveBeenCalledWith();
     expect((req as any).user).toBeUndefined();
   });
 });

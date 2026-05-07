@@ -148,6 +148,7 @@ export interface CreateWorkoutPlanInput {
   muscleGroups?: string[];
   exercises?: WorkoutExercise[];
   weeklySchedule?: Record<string, unknown>;
+  scheduleDays?: string[];
   isActive?: boolean;
   startDate?: string; // YYYY-MM-DD — defaults to today on server
 }
@@ -162,6 +163,8 @@ export interface UpdateWorkoutPlanInput {
   workoutsPerWeek?: number;
   scheduledTime?: string;
   weeklySchedule?: Record<string, unknown>;
+  weeks?: Record<string, unknown>;
+  scheduleDays?: string[];
   availableEquipment?: string[];
   workoutLocation?: string;
   status?: string;
@@ -172,7 +175,7 @@ export interface UpdateWorkoutPlanInput {
     sets: number;
     reps: string;
     weight?: string;
-    duration?: number;
+    duration?: string | number;
     restSeconds?: number;
     muscleGroup?: string;
   }>;

@@ -33,8 +33,13 @@ export function useAutoSave({
   const dataRef = useRef(data);
   const onSaveRef = useRef(onSave);
 
-  dataRef.current = data;
-  onSaveRef.current = onSave;
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
   const save = useCallback(async () => {
     const current = dataRef.current;

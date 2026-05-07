@@ -1,17 +1,32 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Clock, Zap, Target, AlertCircle, Sparkles, CheckCircle2 } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  Apple,
+  ArrowRight,
+  Brain,
+  CheckCircle2,
+  Clock,
+  Dumbbell,
+  HeartPulse,
+  MessageCircle,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Zap,
+} from "lucide-react";
 
-export type SessionTypeOption = 
-  | 'quick_checkin'
-  | 'coaching_session'
-  | 'emergency_support'
-  | 'goal_review'
-  | 'health_coach'
-  | 'nutrition'
-  | 'fitness'
-  | 'wellness';
+export type SessionTypeOption =
+  | "quick_checkin"
+  | "coaching_session"
+  | "emergency_support"
+  | "goal_review"
+  | "health_coach"
+  | "nutrition"
+  | "fitness"
+  | "wellness";
 
 interface SessionTypeSelectorProps {
   selectedType?: SessionTypeOption;
@@ -25,72 +40,178 @@ interface SessionTypeSelectorProps {
   showEmergency?: boolean;
 }
 
-const SESSION_TYPES: Array<{
+type SessionTone = "recommended" | "specialist" | "urgent";
+
+interface SessionTypeConfig {
   type: SessionTypeOption;
   label: string;
+  shortLabel: string;
   description: string;
   duration: string;
-  durationMinutes: number; // For auto-close functionality
+  durationMinutes: number;
   icon: typeof Clock;
-  color: string;
-  gradient: string;
-  bgColor: string;
-  borderColor: string;
-  glowColor: string;
-}> = [
+  tone: SessionTone;
+  accent: string;
+  border: string;
+  background: string;
+  text: string;
+  plan: string;
+  outcome: string;
+  signals: string[];
+}
+
+const SESSION_TYPES: SessionTypeConfig[] = [
   {
-    type: 'quick_checkin',
-    label: 'Quick Check-In',
-    description: 'Short questions & answers',
-    duration: '2.5 min',
+    type: "quick_checkin",
+    label: "Quick Check-In",
+    shortLabel: "Check-in",
+    description: "Fast emotional scan, next best action, and a simple reset.",
+    duration: "2.5 min",
     durationMinutes: 2.5,
     icon: Zap,
-    color: 'text-blue-400',
-    gradient: 'from-blue-500 via-cyan-500 to-blue-600',
-    bgColor: 'bg-blue-500/20',
-    borderColor: 'border-blue-500/30',
-    glowColor: 'rgba(59, 130, 246, 0.5)',
+    tone: "recommended",
+    accent: "#22d3ee",
+    border: "border-cyan-300/45",
+    background: "from-cyan-400/18 via-sky-400/8 to-transparent",
+    text: "text-cyan-100",
+    plan: "Mood pulse",
+    outcome: "One clear next step",
+    signals: ["Mood", "Stress", "Energy"],
   },
   {
-    type: 'coaching_session',
-    label: 'Coaching Session',
-    description: '10 minute deep dive',
-    duration: '10 min',
+    type: "coaching_session",
+    label: "Deep Coaching Session",
+    shortLabel: "Deep dive",
+    description: "Structured coaching with context, reflection, and action planning.",
+    duration: "10 min",
     durationMinutes: 10,
     icon: Sparkles,
-    color: 'text-purple-400',
-    gradient: 'from-purple-500 via-pink-500 to-purple-600',
-    bgColor: 'bg-purple-500/20',
-    borderColor: 'border-purple-500/30',
-    glowColor: 'rgba(168, 85, 247, 0.5)',
+    tone: "recommended",
+    accent: "#a78bfa",
+    border: "border-violet-300/45",
+    background: "from-violet-400/18 via-fuchsia-400/8 to-transparent",
+    text: "text-violet-100",
+    plan: "Guided strategy",
+    outcome: "Action plan",
+    signals: ["Goals", "Habits", "Patterns"],
   },
   {
-    type: 'goal_review',
-    label: 'Goal Review',
-    description: '10-minute goal assessment',
-    duration: '10 min',
+    type: "goal_review",
+    label: "Goal Review",
+    shortLabel: "Goals",
+    description: "Review progress, blockers, priorities, and your next milestone.",
+    duration: "10 min",
     durationMinutes: 10,
     icon: Target,
-    color: 'text-green-400',
-    gradient: 'from-green-500 via-emerald-500 to-green-600',
-    bgColor: 'bg-green-500/20',
-    borderColor: 'border-green-500/30',
-    glowColor: 'rgba(34, 197, 94, 0.5)',
+    tone: "recommended",
+    accent: "#34d399",
+    border: "border-emerald-300/45",
+    background: "from-emerald-400/18 via-teal-400/8 to-transparent",
+    text: "text-emerald-100",
+    plan: "Progress audit",
+    outcome: "Sharper milestone",
+    signals: ["Progress", "Blockers", "Focus"],
   },
   {
-    type: 'emergency_support',
-    label: 'Emergency Support',
-    description: 'Immediate crisis help',
-    duration: '15 min',
+    type: "health_coach",
+    label: "Health Coach",
+    shortLabel: "Health",
+    description: "Whole-body coaching across sleep, recovery, activity, and wellbeing.",
+    duration: "20 min",
+    durationMinutes: 20,
+    icon: HeartPulse,
+    tone: "specialist",
+    accent: "#2dd4bf",
+    border: "border-teal-300/40",
+    background: "from-teal-400/16 via-emerald-400/7 to-transparent",
+    text: "text-teal-100",
+    plan: "Health review",
+    outcome: "Balanced protocol",
+    signals: ["Sleep", "Recovery", "Activity"],
+  },
+  {
+    type: "nutrition",
+    label: "Nutrition Coach",
+    shortLabel: "Nutrition",
+    description: "Meal rhythm, cravings, hydration, protein, and practical food choices.",
+    duration: "15 min",
+    durationMinutes: 15,
+    icon: Apple,
+    tone: "specialist",
+    accent: "#fbbf24",
+    border: "border-amber-300/40",
+    background: "from-amber-300/16 via-lime-300/7 to-transparent",
+    text: "text-amber-100",
+    plan: "Food strategy",
+    outcome: "Meal direction",
+    signals: ["Meals", "Hydration", "Cravings"],
+  },
+  {
+    type: "fitness",
+    label: "Fitness Coach",
+    shortLabel: "Fitness",
+    description: "Training guidance, consistency blocks, recovery, and workout focus.",
+    duration: "20 min",
+    durationMinutes: 20,
+    icon: Dumbbell,
+    tone: "specialist",
+    accent: "#fb7185",
+    border: "border-rose-300/40",
+    background: "from-rose-400/16 via-orange-300/7 to-transparent",
+    text: "text-rose-100",
+    plan: "Training plan",
+    outcome: "Workout focus",
+    signals: ["Strength", "Cardio", "Recovery"],
+  },
+  {
+    type: "wellness",
+    label: "Wellness Reset",
+    shortLabel: "Wellness",
+    description: "Stress, mindfulness, motivation, emotional balance, and calm routines.",
+    duration: "15 min",
+    durationMinutes: 15,
+    icon: Brain,
+    tone: "specialist",
+    accent: "#c084fc",
+    border: "border-purple-300/40",
+    background: "from-purple-400/16 via-indigo-300/7 to-transparent",
+    text: "text-purple-100",
+    plan: "Nervous-system reset",
+    outcome: "Calmer rhythm",
+    signals: ["Stress", "Mood", "Mindfulness"],
+  },
+  {
+    type: "emergency_support",
+    label: "Emergency Support",
+    shortLabel: "Emergency",
+    description: "Immediate support flow with crisis-safe pacing and resources.",
+    duration: "15 min",
     durationMinutes: 15,
     icon: AlertCircle,
-    color: 'text-red-400',
-    gradient: 'from-red-500 via-rose-500 to-red-600',
-    bgColor: 'bg-red-500/20',
-    borderColor: 'border-red-500/30',
-    glowColor: 'rgba(239, 68, 68, 0.5)',
+    tone: "urgent",
+    accent: "#f43f5e",
+    border: "border-rose-400/70",
+    background: "from-rose-500/18 via-red-500/8 to-transparent",
+    text: "text-rose-100",
+    plan: "Safety first",
+    outcome: "Stabilize and connect",
+    signals: ["Safety", "Support", "Resources"],
   },
 ];
+
+const TONE_LABELS: Record<SessionTone, string> = {
+  recommended: "Core coaching",
+  specialist: "Specialist modes",
+  urgent: "Safety",
+};
+
+function getSession(type?: SessionTypeOption): SessionTypeConfig {
+  return SESSION_TYPES.find((session) => session.type === type) ?? SESSION_TYPES[1];
+}
+
+function formatDuration(minutes: number): string {
+  return minutes < 10 ? `${minutes} min` : `${Math.round(minutes)} min`;
+}
 
 export function SessionTypeSelector({
   selectedType,
@@ -100,199 +221,223 @@ export function SessionTypeSelector({
 }: SessionTypeSelectorProps) {
   const sessionTypes = showEmergency
     ? SESSION_TYPES
-    : SESSION_TYPES.filter(st => st.type !== 'emergency_support');
+    : SESSION_TYPES.filter((session) => session.type !== "emergency_support");
+  const selectedSession = getSession(selectedType);
+  const recommendedSession = aiSuggestion
+    ? getSession(aiSuggestion.sessionType)
+    : SESSION_TYPES[1];
 
   return (
-    <div className="space-y-6">
-      {/* AI Suggestion */}
-      {aiSuggestion && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative p-5 bg-gradient-to-r from-purple-500/20 via-blue-500/20 to-purple-500/20 backdrop-blur-xl rounded-2xl border border-purple-500/40 overflow-hidden"
-        >
-          {/* Animated background gradient */}
-          <motion.div
-            className="absolute inset-0 opacity-30"
-            animate={{
-              backgroundPosition: ['0% 0%', '100% 100%'],
-            }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              repeatType: 'reverse',
-            }}
-            style={{
-              background: `linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(59, 130, 246, 0.3))`,
-            }}
-          />
-          <div className="relative flex items-start gap-4">
-            <motion.div
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-              className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500/30 to-blue-500/30"
-            >
-              <Sparkles className="w-6 h-6 text-white" />
-            </motion.div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-white mb-1.5 flex items-center gap-2">
-                <span>AI Recommendation</span>
-                <span className="px-2 py-0.5 rounded-full bg-white/10 text-xs font-medium">
-                  {Math.round(aiSuggestion.confidence * 100)}% match
-                </span>
-              </p>
-              <p className="text-xs text-white/80 mb-3 leading-relaxed">{aiSuggestion.reasoning}</p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => onSelect(aiSuggestion.sessionType)}
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 text-white text-xs font-semibold hover:shadow-lg hover:shadow-purple-500/30 transition-all"
+    <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+      <section className="space-y-4">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Modes", value: sessionTypes.length.toString(), icon: Activity },
+            { label: "Depth", value: selectedSession.duration, icon: Clock },
+            { label: "Output", value: "Plan", icon: ShieldCheck },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={item.label}
+                className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2"
               >
-                Select {SESSION_TYPES.find(st => st.type === aiSuggestion.sessionType)?.label}
-              </motion.button>
+                <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">
+                  <Icon className="h-3.5 w-3.5" />
+                  {item.label}
+                </div>
+                <div className="text-sm font-semibold text-white">{item.value}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <motion.button
+          type="button"
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={() => onSelect(recommendedSession.type)}
+          className={`group relative w-full overflow-hidden rounded-lg border ${recommendedSession.border} bg-gradient-to-br ${recommendedSession.background} p-4 text-left shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
+        >
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/55 to-transparent" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/20"
+                style={{ color: recommendedSession.accent }}
+              >
+                <recommendedSession.icon className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70">
+                    Recommended
+                  </span>
+                  {aiSuggestion && (
+                    <span className="text-xs font-medium text-white/55">
+                      {Math.round(aiSuggestion.confidence * 100)}% match
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg font-semibold text-white">{recommendedSession.label}</h3>
+                <p className="mt-1 max-w-xl text-sm leading-5 text-white/65">
+                  {aiSuggestion?.reasoning || recommendedSession.description}
+                </p>
+              </div>
             </div>
+            <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-white/45 transition-transform group-hover:translate-x-1 group-hover:text-white/80" />
           </div>
-        </motion.div>
-      )}
+        </motion.button>
 
-      {/* Session Type Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {sessionTypes.map((session, index) => {
-          const Icon = session.icon;
-          const isSelected = selectedType === session.type;
-          const isEmergency = session.type === 'emergency_support';
+        <div className="grid gap-3 sm:grid-cols-2">
+          {sessionTypes.map((session, index) => {
+            const Icon = session.icon;
+            const isSelected = selectedType === session.type;
+            const isEmergency = session.type === "emergency_support";
 
-          return (
-            <motion.button
-              key={session.type}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              whileHover={{ scale: 1.03, y: -2 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => onSelect(session.type)}
-              className={`group relative p-5 rounded-2xl backdrop-blur-xl border-2 transition-all text-left overflow-hidden ${
-                isSelected
-                  ? `${session.borderColor} border-opacity-100 shadow-2xl`
-                  : 'bg-gradient-to-br from-white/5 to-white/0 border-white/10 hover:border-white/20 hover:bg-white/10'
-              } ${isEmergency ? 'ring-2 ring-red-500/50 shadow-red-500/20' : ''}`}
-              style={{
-                boxShadow: isSelected
-                  ? `0 0 30px ${session.glowColor}, 0 10px 40px rgba(0, 0, 0, 0.3)`
-                  : undefined,
-              }}
-            >
-              {/* Animated gradient background */}
-              {isSelected && (
-                <motion.div
-                  className="absolute inset-0 opacity-20"
-                  animate={{
-                    backgroundPosition: ['0% 0%', '100% 100%'],
-                  }}
-                  transition={{
-                    duration: 3,
-                    repeat: Infinity,
-                    repeatType: 'reverse',
-                  }}
-                  style={{
-                    background: `linear-gradient(135deg, ${session.gradient})`,
-                  }}
-                />
-              )}
-
-              {/* Glow effect */}
-              {isSelected && (
-                <motion.div
-                  className="absolute inset-0 rounded-2xl"
-                  animate={{
-                    opacity: [0.3, 0.6, 0.3],
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                  style={{
-                    background: `radial-gradient(circle at center, ${session.glowColor}, transparent 70%)`,
-                  }}
-                />
-              )}
-
-              <div className="relative flex items-start gap-4">
-                {/* Icon with animated background */}
-                <motion.div
-                  className={`p-3 rounded-xl transition-all ${
-                    isSelected
-                      ? `bg-gradient-to-br ${session.gradient} shadow-lg`
-                      : 'bg-white/5 group-hover:bg-white/10'
-                  }`}
-                  animate={isSelected ? { rotate: [0, 360] } : {}}
-                  transition={isSelected ? { duration: 20, repeat: Infinity, ease: "linear" } : {}}
-                >
-                  <Icon
-                    className={`w-6 h-6 ${
-                      isSelected ? 'text-white' : 'text-white/60 group-hover:text-white/80'
-                    } transition-colors`}
-                  />
-                </motion.div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3
-                      className={`text-base font-bold ${
-                        isSelected ? 'text-white' : 'text-white/90 group-hover:text-white'
-                      } transition-colors`}
-                    >
-                      {session.label}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <Clock className={`w-4 h-4 ${isSelected ? session.color : 'text-white/50'}`} />
-                      <span className={`text-xs font-semibold ${
-                        isSelected ? session.color : 'text-white/60'
-                      }`}>
-                        {session.duration}
-                      </span>
-                    </div>
+            return (
+              <motion.button
+                type="button"
+                key={session.type}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03 }}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.985 }}
+                onClick={() => onSelect(session.type)}
+                className={`group relative min-h-[132px] overflow-hidden rounded-lg border p-4 text-left transition-all ${
+                  isSelected
+                    ? `${session.border} bg-gradient-to-br ${session.background} shadow-[0_18px_60px_rgba(0,0,0,0.32)]`
+                    : "border-white/10 bg-white/[0.035] hover:border-white/22 hover:bg-white/[0.06]"
+                } ${isEmergency ? "ring-1 ring-rose-400/40" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                      isSelected ? "border-white/18 bg-black/20" : "border-white/10 bg-white/[0.04]"
+                    }`}
+                    style={{ color: session.accent }}
+                  >
+                    <Icon className="h-5 w-5" />
                   </div>
-                  <p className={`text-sm ${
-                    isSelected ? 'text-white/90' : 'text-white/70 group-hover:text-white/80'
-                  } transition-colors`}>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-white/55">
+                    <Clock className="h-3.5 w-3.5" />
+                    {session.duration}
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                    {TONE_LABELS[session.tone]}
+                  </div>
+                  <h3 className="text-base font-semibold leading-5 text-white">{session.label}</h3>
+                  <p className="mt-1 line-clamp-2 text-sm leading-5 text-white/58">
                     {session.description}
                   </p>
                 </div>
-              </div>
 
-              {/* Selected indicator */}
-              {isSelected && (
-                <motion.div
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="absolute top-3 right-3"
-                >
-                  <div className="relative">
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                      className="absolute inset-0 rounded-full bg-emerald-400/30 blur-md"
-                    />
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 relative z-10" />
-                  </div>
-                </motion.div>
-              )}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {session.signals.slice(0, 2).map((signal) => (
+                    <span
+                      key={signal}
+                      className="rounded-full border border-white/10 bg-black/15 px-2 py-0.5 text-[11px] font-medium text-white/50"
+                    >
+                      {signal}
+                    </span>
+                  ))}
+                </div>
 
-              {/* Hover glow effect */}
-              {!isSelected && (
-                <motion.div
-                  className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{
-                    background: `radial-gradient(circle at center, ${session.glowColor}20, transparent 70%)`,
-                  }}
-                />
-              )}
-            </motion.button>
-          );
-        })}
-      </div>
+                {isSelected && (
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="absolute bottom-3 right-3"
+                  >
+                    <CheckCircle2 className="h-5 w-5 text-emerald-300" />
+                  </motion.div>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+      </section>
+
+      <aside className="rounded-lg border border-white/10 bg-black/18 p-4">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+              Session intelligence
+            </p>
+            <h3 className="mt-1 text-xl font-semibold text-white">{selectedSession.label}</h3>
+          </div>
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]"
+            style={{ color: selectedSession.accent }}
+          >
+            <selectedSession.icon className="h-6 w-6" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 py-4">
+          <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+            <p className="text-xs text-white/45">Duration</p>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {formatDuration(selectedSession.durationMinutes)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+            <p className="text-xs text-white/45">Mode</p>
+            <p className="mt-1 text-lg font-semibold text-white">{selectedSession.shortLabel}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
+              <MessageCircle className="h-4 w-4" style={{ color: selectedSession.accent }} />
+              Coaching plan
+            </div>
+            <p className="text-sm leading-5 text-white/62">{selectedSession.plan}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white">
+              <Target className="h-4 w-4" style={{ color: selectedSession.accent }} />
+              Expected outcome
+            </div>
+            <p className="text-sm leading-5 text-white/62">{selectedSession.outcome}</p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-white/40">
+            Signals used
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {selectedSession.signals.map((signal) => (
+              <span
+                key={signal}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-medium text-white/62"
+              >
+                {signal}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <motion.button
+          type="button"
+          whileHover={{ y: -1 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={() => onSelect(selectedSession.type)}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+          style={{
+            background: `linear-gradient(135deg, ${selectedSession.accent}33, rgba(255,255,255,0.06))`,
+          }}
+        >
+          Start {selectedSession.shortLabel}
+          <ArrowRight className="h-4 w-4" />
+        </motion.button>
+      </aside>
     </div>
   );
 }
@@ -308,4 +453,3 @@ export const SESSION_DURATIONS: Record<SessionTypeOption, number> = {
   fitness: 20,
   wellness: 15,
 };
-

@@ -19,7 +19,7 @@ describe('Assessment Validators', () => {
   const validGoalCategories = [
     'weight_loss', 'muscle_building', 'sleep_improvement', 'stress_wellness',
     'energy_productivity', 'event_training', 'health_condition', 'habit_building',
-    'overall_optimization', 'custom',
+    'overall_optimization', 'nutrition', 'fitness', 'custom',
   ];
 
   describe('goalDiscoverySchema', () => {
@@ -343,6 +343,15 @@ describe('Assessment Validators', () => {
         goals: [validGoalEntry, validGoalEntry, validGoalEntry],
       });
       expect(result.success).toBe(true);
+    });
+
+    it('should accept broad AI-generated categories supported by the database enum', () => {
+      for (const category of ['fitness', 'nutrition']) {
+        const result = acceptSuggestedGoalsSchema.safeParse({
+          goals: [{ ...validGoalEntry, category }],
+        });
+        expect(result.success).toBe(true);
+      }
     });
 
     it('should reject more than 3 goals', () => {

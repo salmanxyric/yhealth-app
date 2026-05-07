@@ -17,7 +17,7 @@ import type {
   FeatureNodeState,
   FeatureNodeStatus,
   FeatureAlert,
-} from '../../../../shared/types/domain/reasoning-graph.js';
+} from '@shared/types/domain/reasoning-graph.js';
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
 const CACHE_PREFIX = 'rg:state:';

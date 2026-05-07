@@ -2,7 +2,6 @@ import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 
 const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io/v1';
-const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel - friendly female voice
 const DEFAULT_MODEL_ID = 'eleven_multilingual_v2';
 
 export interface ElevenLabsTTSOptions {
@@ -42,7 +41,11 @@ export class ElevenLabsService {
       throw new Error('Text cannot be empty');
     }
 
-    const voiceId = options.voiceId || DEFAULT_VOICE_ID;
+    const voiceId = options.voiceId || env.elevenlabs.voiceId;
+    if (!voiceId) {
+      throw new Error('ElevenLabs voice ID not configured. Set ELEVEN_LAB_VOICE_ID to a voice available to this account.');
+    }
+
     const modelId = options.modelId || DEFAULT_MODEL_ID;
 
     const url = `${ELEVENLABS_API_BASE}/text-to-speech/${voiceId}`;
@@ -86,12 +89,23 @@ export class ElevenLabsService {
           errorMessage = errorText || errorMessage;
         }
 
-        logger.error('[ElevenLabs] API error', {
+        const diagnostics: Record<string, unknown> = {
           status: response.status,
           statusText: response.statusText,
           error: errorMessage,
-        });
+          voiceId,
+          apiKeyPrefix: this.apiKey ? `${this.apiKey.substring(0, 8)}...` : 'NOT_SET',
+        };
 
+        if (response.status === 401) {
+          diagnostics.hint = 'ELEVEN_LAB_API_KEY is invalid or expired — regenerate at elevenlabs.io/api';
+        } else if (response.status === 402) {
+          diagnostics.hint = 'ElevenLabs plan does not support this feature — upgrade subscription or use a different voice/model';
+        } else if (response.status === 429) {
+          diagnostics.hint = 'ElevenLabs rate limit or quota exceeded — check usage at elevenlabs.io';
+        }
+
+        logger.error('[ElevenLabs] API error', diagnostics);
         throw new Error(errorMessage);
       }
 
@@ -131,7 +145,11 @@ export class ElevenLabsService {
       throw new Error('Text cannot be empty');
     }
 
-    const voiceId = options.voiceId || DEFAULT_VOICE_ID;
+    const voiceId = options.voiceId || env.elevenlabs.voiceId;
+    if (!voiceId) {
+      throw new Error('ElevenLabs voice ID not configured. Set ELEVEN_LAB_VOICE_ID to a voice available to this account.');
+    }
+
     const modelId = options.modelId || DEFAULT_MODEL_ID;
 
     const url = `${ELEVENLABS_API_BASE}/text-to-speech/${voiceId}/stream`;
@@ -211,4 +229,3 @@ export class ElevenLabsService {
 }
 
 export const elevenlabsService = new ElevenLabsService();
-

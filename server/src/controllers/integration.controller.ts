@@ -1673,16 +1673,13 @@ export const manageWhoopTokens = asyncHandler(
 );
 
 /**
- * Get WHOOP Tokens (masked for security, or unmasked if requested)
- * GET /api/integrations/whoop/tokens?unmasked=true
+ * Get WHOOP Token metadata (tokens are always masked — never sent to the client)
+ * GET /api/integrations/whoop/tokens
  */
 export const getWhoopTokens = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized();
-
-    // Check if unmasked tokens are requested (for form prefilling)
-    const unmasked = req.query.unmasked === 'true';
 
     const integrationResult = await query<{
       id: string;
@@ -1706,44 +1703,31 @@ export const getWhoopTokens = asyncHandler(
 
     const integration = integrationResult.rows[0];
 
-    // If unmasked is requested, return full tokens (only for the authenticated user)
-    if (unmasked) {
-      // Format token expiry for datetime-local input (YYYY-MM-DDTHH:mm)
-      let tokenExpiryFormatted: string | null = null;
-      if (integration.token_expiry) {
-        const date = new Date(integration.token_expiry);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        tokenExpiryFormatted = `${year}-${month}-${day}T${hours}:${minutes}`;
-      }
-
-      ApiResponse.success(res, {
-        hasTokens: true,
-        accessToken: integration.access_token,
-        refreshToken: integration.refresh_token,
-        tokenExpiry: tokenExpiryFormatted,
-        tokenExpiryISO: integration.token_expiry?.toISOString() || null,
-        status: integration.status,
-        connectedAt: integration.connected_at,
-      });
-      return;
-    }
-
-    // Mask tokens for security (show first 4 and last 4 characters)
     const maskToken = (token: string | null): string | null => {
       if (!token) return null;
       if (token.length <= 8) return '****';
       return `${token.substring(0, 4)}...${token.substring(token.length - 4)}`;
     };
 
+    let tokenExpiryFormatted: string | null = null;
+    if (integration.token_expiry) {
+      const date = new Date(integration.token_expiry);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      tokenExpiryFormatted = `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
     ApiResponse.success(res, {
       hasTokens: true,
+      hasAccessToken: !!integration.access_token,
+      hasRefreshToken: !!integration.refresh_token,
       accessTokenMasked: maskToken(integration.access_token),
       refreshTokenMasked: maskToken(integration.refresh_token),
-      tokenExpiry: integration.token_expiry,
+      tokenExpiry: tokenExpiryFormatted,
+      tokenExpiryISO: integration.token_expiry?.toISOString() || null,
       status: integration.status,
       connectedAt: integration.connected_at,
     });

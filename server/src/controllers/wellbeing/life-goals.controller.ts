@@ -12,7 +12,7 @@ import { lifeGoalsService } from '../../services/wellbeing/life-goals.service.js
 import { motivationTierService } from '../../services/motivation-tier.service.js';
 import { goalDecompositionService } from '../../services/goal-decomposition.service.js';
 import { logger } from '../../services/logger.service.js';
-import type { MotivationTier, GoalActionResponseType } from '../../../../shared/types/domain/wellbeing.js';
+import type { MotivationTier, GoalActionResponseType } from '@shared/types/domain/wellbeing.js';
 
 class LifeGoalsController {
   // ============================================

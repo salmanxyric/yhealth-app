@@ -7,7 +7,7 @@
 import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { memoryEngineService } from '../services/memory-engine.service.js';
-import type { IntelligenceCategory, MemoryEvidence } from '../../../shared/types/domain/intelligence-files.js';
+import type { IntelligenceCategory, MemoryEvidence } from '@shared/types/domain/intelligence-files.js';
 
 const JOB_INTERVAL_MS = 24 * 60 * 60 * 1000; // Daily
 let isRunning = false;

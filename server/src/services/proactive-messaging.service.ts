@@ -19,6 +19,11 @@ import { llmCircuitBreaker } from './llm-circuit-breaker.service.js';
 import { adaptiveCoachingLoopService } from './adaptive-coaching-loop.service.js';
 import { tenorService } from './tenor.service.js';
 import { timingProfileService } from './timing-profile.service.js';
+import {
+  COMPLETE_SENTENCE_END_PATTERN,
+  DATA_GAP_MESSAGE_TYPES,
+  finalizeProactiveCoachMessage,
+} from '../utils/proactive-message-finalizer.js';
 
 
 // ============================================
@@ -3703,6 +3708,10 @@ Let this emotion drive your word choice, energy, and urgency. Don't name the emo
 ${relationship.voiceStyle}
 ` : '';
 
+      const messageCompletenessRule = DATA_GAP_MESSAGE_TYPES.has(context.type)
+        ? 'For this lightweight data-gap check-in, keep it short, but every sentence must be complete. Do not stop mid-thought.'
+        : 'Every message must include three things in natural prose: a brief review of what you noticed, why it matters, and one concrete next action. Every sentence must be complete. Do not stop mid-thought.';
+
       const systemPrompt = `You are ${assistantName}, ${userName || 'your client'}'s personal health & life coach. You text them through a chat app. This is a CONVERSATION, not a report.
 
 You are an ELITE coach — the kind people pay thousands for because you don't just track data, you FEEL it. You review their fitness, nutrition, sleep, recovery, mental health, stress, energy, mood, habits, hydration, journaling, goals, and overall wellbeing EVERY DAY. You know their patterns better than they do. You remember what they promised and whether they delivered.
@@ -3779,7 +3788,8 @@ ${prompt}
 - For users in crisis (very low mood, self-harm mentions): immediately switch to pure empathy and support regardless of all other signals
 
 Write ONLY the message text. No preamble, no labels, no "Here's your message:" wrapper.
-Keep the message between 2-5 sentences. Be punchy and direct — never ramble. End with a complete sentence.`;
+${messageCompletenessRule}
+Keep the message between ${DATA_GAP_MESSAGE_TYPES.has(context.type) ? '1-3' : '2-5'} sentences. Be punchy and direct — never ramble. End with a complete sentence.`;
 
       const messages = [
         new SystemMessage(systemPrompt),
@@ -3804,13 +3814,18 @@ Keep the message between 2-5 sentences. Be punchy and direct — never ramble. E
 
           llmCircuitBreaker.recordSuccess();
 
-          const message = this.sanitizeCoachMessage(rawMessage);
           const fallbackName = userName || 'there';
+          const message = this.finalizeCoachMessage(
+            this.sanitizeCoachMessage(rawMessage),
+            context.type,
+            fallbackName,
+            userId
+          );
 
           // Detect truncation: if message doesn't end with sentence-ending punctuation, use fallback
-          if (message && !/[.!?…"']$/.test(message.trimEnd())) {
+          if (message && !COMPLETE_SENTENCE_END_PATTERN.test(message.trimEnd())) {
             logger.warn('[ProactiveMessaging] Message appears truncated, using fallback', {
-              userId, type: context.type, lastChars: message.slice(-30),
+              userId, messageType: context.type, reason: 'missing_sentence_end',
             });
             return this.getFallbackMessage(context.type, fallbackName);
           }
@@ -3867,6 +3882,14 @@ Keep the message between 2-5 sentences. Be punchy and direct — never ramble. E
    */
   private sanitizeCoachMessage(message: string): string {
     let cleaned = message;
+    const trimmed = cleaned.trim();
+    if (
+      trimmed === '[object Object]' ||
+      ((trimmed.startsWith('{') || trimmed.startsWith('[')) &&
+        /"type"\s*:\s*"(?:functionCall|functionResponse|tool_call|tool_result)"|"functionCall"\s*:|"functionResponse"\s*:|"tool_calls"\s*:|"additional_kwargs"\s*:/i.test(trimmed))
+    ) {
+      return '';
+    }
 
     // Remove emoji section headers like "📊 **Sleep Snapshot**" or "💡 **Key Insight**"
     cleaned = cleaned.replace(/^[^\w\s]*[\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]+\s*\*\*[^*]+\*\*\s*$/gmu, '');
@@ -3895,6 +3918,24 @@ Keep the message between 2-5 sentences. Be punchy and direct — never ramble. E
     cleaned = cleaned.trim();
 
     return cleaned;
+  }
+
+  private finalizeCoachMessage(message: string, type: string, userName: string, userId?: string): string {
+    const result = finalizeProactiveCoachMessage({
+      message,
+      type,
+      fallbackMessage: this.getFallbackMessage(type, userName),
+    });
+
+    if (result.rejectedReason) {
+      logger.warn('[ProactiveMessaging] Rejected generated proactive message', {
+        userId,
+        messageType: type,
+        reason: result.rejectedReason,
+      });
+    }
+
+    return result.message;
   }
 
   /**
@@ -4378,4 +4419,3 @@ Keep the message between 2-5 sentences. Be punchy and direct — never ramble. E
 // Export singleton instance
 export const proactiveMessagingService = new ProactiveMessagingService();
 export default proactiveMessagingService;
-

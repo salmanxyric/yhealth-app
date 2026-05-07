@@ -95,6 +95,10 @@ export const EMOTION_TO_EXPRESSION: Record<string, AvatarExpression> = {
   empathetic: 'empathy',
   contemplative: 'contemplation',
   determined: 'determination',
+  explaining: 'neutral',
+  confident: 'determination',
+  listening: 'empathy',
+  disagreeing: 'confusion',
 };
 
 /** Map backend PersonalityMode to default avatar expression. */

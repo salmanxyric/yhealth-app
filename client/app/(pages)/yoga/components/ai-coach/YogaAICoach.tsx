@@ -57,7 +57,10 @@ export default function YogaAICoach() {
       try {
         const response = await fetch("/api/tts/speak", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": `yoga-tts-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+          },
           body: JSON.stringify({ text, voiceGender: "female" }),
         });
 

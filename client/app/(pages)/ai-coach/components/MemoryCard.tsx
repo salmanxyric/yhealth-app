@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ConfidenceBadge } from "./ConfidenceBadge";
-import type { IntelligenceMemory, MemoryType } from "../../../../../shared/types/domain/intelligence-files";
+import type { IntelligenceMemory, MemoryType } from "@shared/types/domain/intelligence-files";
 
 const MEMORY_TYPE_CONFIG: Record<MemoryType, { icon: LucideIcon; label: string; color: string; bg: string }> = {
   pattern: { icon: Brain, label: "Pattern", color: "text-purple-400", bg: "bg-purple-500/10" },

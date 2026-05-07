@@ -6,6 +6,10 @@
 import { io, Socket } from 'socket.io-client';
 import { api } from './api-client';
 import { env } from '@/config/env';
+import { createLogger } from '@/lib/logger';
+import { transformKeysToCamelCase } from '@/src/shared/utils/case-transform';
+
+const log = createLogger('Socket');
 
 let socketInstance: Socket | null = null;
 
@@ -31,12 +35,12 @@ export function initSocket(): Socket | null {
   // Get token from API client
   const token = api.getAccessToken();
   if (!token) {
-    console.warn('[Socket] No access token available, cannot initialize socket');
+    log.warn('No access token available, cannot initialize socket');
     return null;
   }
 
   const socketUrl = getSocketUrl();
-  console.log('[Socket] Initializing connection to', socketUrl);
+  log.debug('Initializing connection to', socketUrl);
 
   try {
     // Create new socket instance
@@ -53,14 +57,14 @@ export function initSocket(): Socket | null {
 
     // Connection event handlers
     socketInstance.on('connect', () => {
-      console.log('[Socket] ✅ Connected successfully', {
+      log.debug('Connected successfully', {
         socketId: socketInstance?.id,
         transport: socketInstance?.io.engine?.transport?.name,
       });
     });
 
     socketInstance.on('disconnect', (reason) => {
-      console.log('[Socket] ❌ Disconnected', {
+      log.debug('Disconnected', {
         reason,
         socketId: socketInstance?.id,
       });
@@ -76,43 +80,41 @@ export function initSocket(): Socket | null {
       const typePart = error.type ? ` type=${error.type}` : '';
       const descPart = description ? ` description=${description}` : '';
       // Single warn line avoids Next.js error overlay noise; details as strings (objects often render as {} in the overlay)
-      console.warn(
-        `[Socket] connect_error: ${error.message || 'Unknown error'}${typePart}${descPart} | url=${socketUrl} | api=${env.NEXT_PUBLIC_API_URL} | hasToken=${!!token}`,
+      log.warn(
+        `connect_error: ${error.message || 'Unknown error'}${typePart}${descPart} | url=${socketUrl} | api=${env.NEXT_PUBLIC_API_URL} | hasToken=${!!token}`,
       );
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[Socket] connect_error (full):', error);
-      }
+      log.debug('connect_error (full):', error);
       // Socket.IO will automatically attempt reconnection based on configured settings
     });
 
     socketInstance.on('reconnect', (attemptNumber) => {
-      console.log('[Socket] 🔄 Reconnected successfully', {
+      log.debug('Reconnected successfully', {
         attemptNumber,
         socketId: socketInstance?.id,
       });
     });
 
     socketInstance.on('reconnect_attempt', (attemptNumber) => {
-      console.log('[Socket] 🔄 Reconnection attempt', { attemptNumber });
+      log.debug('Reconnection attempt', { attemptNumber });
     });
 
     socketInstance.on('reconnect_error', (error: Error) => {
-      console.warn('[Socket] ⚠️ Reconnection error:', {
+      log.warn('Reconnection error:', {
         message: error.message,
       });
     });
 
     socketInstance.on('reconnect_failed', () => {
-      console.error('[Socket] ❌ Reconnection failed - maximum attempts reached');
+      log.error('Reconnection failed - maximum attempts reached');
     });
 
     socketInstance.on('connected', (data) => {
-      console.log('[Socket] ✅ Connection confirmed by server', data);
+      log.debug('Connection confirmed by server', data);
     });
 
     return socketInstance;
   } catch (error) {
-    console.error('[Socket] ❌ Failed to initialize socket:', error);
+    log.error('Failed to initialize socket:', error);
     socketInstance = null;
     return null;
   }
@@ -165,8 +167,8 @@ export function leaveChat(chatId: string): void {
 export function subscribeToChatEvents(
   chatId: string,
   handlers: {
-    onNewMessage?: (data: { chatId: string; message: any; senderId?: string }) => void;
-    onMessageEdited?: (data: { chatId: string; messageId: string; content: string; message?: any }) => void;
+    onNewMessage?: (data: { chatId: string; message: Record<string, unknown>; senderId?: string }) => void;
+    onMessageEdited?: (data: { chatId: string; messageId: string; content: string; message?: Record<string, unknown> }) => void;
     onMessageDeleted?: (data: { chatId: string; messageId: string }) => void;
     onMessageReaction?: (data: { chatId: string; messageId: string; emoji: string; action?: string; userId?: string; reaction?: unknown }) => void;
     onTyping?: (data: { userId: string; chatId: string }) => void;
@@ -186,12 +188,34 @@ export function subscribeToChatEvents(
   // Join the chat room
   joinChat(chatId);
 
+  // Wrap handlers that carry a `message` object from the server (snake_case DB rows)
+  // so all downstream code receives camelCase keys matching the TypeScript interfaces.
+  const wrappedNewMessage = handlers.onNewMessage
+    ? (data: { chatId: string; message: Record<string, unknown>; senderId?: string }) => {
+        let transformed = data;
+        if (data.message && typeof data.message === 'object') {
+          transformed = { ...data, message: transformKeysToCamelCase(data.message) as Record<string, unknown> };
+        }
+        handlers.onNewMessage!(transformed);
+      }
+    : undefined;
+
+  const wrappedMessageEdited = handlers.onMessageEdited
+    ? (data: { chatId: string; messageId: string; content: string; message?: Record<string, unknown> }) => {
+        let transformed = data;
+        if (data.message && typeof data.message === 'object') {
+          transformed = { ...data, message: transformKeysToCamelCase(data.message) as Record<string, unknown> };
+        }
+        handlers.onMessageEdited!(transformed);
+      }
+    : undefined;
+
   // Set up event listeners
-  if (handlers.onNewMessage) {
-    socket.on('newMessage', handlers.onNewMessage);
+  if (wrappedNewMessage) {
+    socket.on('newMessage', wrappedNewMessage);
   }
-  if (handlers.onMessageEdited) {
-    socket.on('messageEdited', handlers.onMessageEdited);
+  if (wrappedMessageEdited) {
+    socket.on('messageEdited', wrappedMessageEdited);
   }
   if (handlers.onMessageDeleted) {
     socket.on('messageDeleted', handlers.onMessageDeleted);
@@ -226,8 +250,8 @@ export function subscribeToChatEvents(
 
   return () => {
     if (socket) {
-      if (handlers.onNewMessage) socket.off('newMessage', handlers.onNewMessage);
-      if (handlers.onMessageEdited) socket.off('messageEdited', handlers.onMessageEdited);
+      if (wrappedNewMessage) socket.off('newMessage', wrappedNewMessage);
+      if (wrappedMessageEdited) socket.off('messageEdited', wrappedMessageEdited);
       if (handlers.onMessageDeleted) socket.off('messageDeleted', handlers.onMessageDeleted);
       if (handlers.onMessageReaction) socket.off('messageReaction', handlers.onMessageReaction);
       if (handlers.onTyping) socket.off('typing', handlers.onTyping);

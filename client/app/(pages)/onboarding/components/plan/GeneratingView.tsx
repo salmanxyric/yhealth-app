@@ -75,7 +75,7 @@ export function GeneratingView({ phases, currentPhaseIndex }: GeneratingViewProp
 
       {/* ── Title section ── */}
       <motion.h1
-        className="text-xl sm:text-2xl md:text-3xl font-semibold text-white mb-2 text-center relative z-10"
+        className="text-xl sm:text-2xl lg:text-[28px] font-semibold text-white mb-2 text-center relative z-10"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}

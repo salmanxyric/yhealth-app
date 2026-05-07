@@ -16,6 +16,7 @@ import {
   resetPasswordSchema,
   verifyEmailSchema,
   updateProfileSchema,
+  changePasswordSchema,
 } from '../validators/auth.validator.js';
 import {
   // Registration
@@ -31,6 +32,7 @@ import {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  changePassword,
   // Onboarding
   submitConsent,
   enrollWhatsApp,
@@ -160,6 +162,15 @@ router.post(
   '/whatsapp/skip',
   authenticate,
   skipWhatsApp
+);
+
+// Change Password (authenticated user)
+router.post(
+  '/change-password',
+  authenticate,
+  strictLimiter,
+  validate(changePasswordSchema),
+  changePassword
 );
 
 // Logout

@@ -21,7 +21,7 @@ import type {
   GoalProjection,
   FinanceForecast,
   FinanceCategory,
-} from '../../../shared/types/domain/finance.js';
+} from '@shared/types/domain/finance.js';
 
 // ============================================
 // ROW TYPES (snake_case from DB)

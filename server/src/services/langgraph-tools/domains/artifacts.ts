@@ -1,9 +1,28 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../types.js';
 import { withErrorHandling } from '../utils.js';
+import { artifactGenerationService } from '../../artifact-generation.service.js';
 
 const GenerateChartSchema = z.object({
-  chartType: z.enum(['line', 'bar', 'area', 'pie', 'radar']).describe('Type of chart to render'),
+  chartType: z.enum([
+    'line',
+    'bar',
+    'area',
+    'pie',
+    'radar',
+    'scatter',
+    'correlation_scatter',
+    'time_series',
+    'comparison_bar',
+    'distribution_histogram',
+    'heatmap_calendar',
+    'radar_multi',
+    'trend_area',
+    'box_whisker',
+    'funnel_progression',
+    'gauge',
+    'gauge_current',
+  ]).describe('Type of chart to render'),
   title: z.string().min(1).max(200).describe('Chart title displayed above the visualization'),
   data: z.array(z.record(z.unknown())).min(1).describe('Array of data points. Each object is one data point with named keys matching the dataKeys.'),
   xAxisKey: z.string().describe('Key in data objects to use for x-axis labels'),
@@ -13,8 +32,14 @@ const GenerateChartSchema = z.object({
     color: z.string().optional().describe('Hex color for this series (e.g., "#10b981")'),
   })).min(1).describe('Data series to plot'),
   yAxisLabel: z.string().optional().describe('Label for y-axis'),
+  xAxisLabel: z.string().optional().describe('Label for x-axis'),
   stacked: z.boolean().optional().describe('Stack bar/area series'),
   insight: z.string().optional().describe('Brief insight or takeaway to display below the chart'),
+  annotations: z.array(z.object({
+    label: z.string(),
+    color: z.string().optional(),
+  })).optional(),
+  statistics: z.record(z.unknown()).optional(),
 });
 
 const GenerateComparisonSchema = z.object({
@@ -29,7 +54,21 @@ const GenerateComparisonSchema = z.object({
   insight: z.string().optional(),
 });
 
-async function generateChart(_userId: string, params: z.infer<typeof GenerateChartSchema>): Promise<string> {
+async function persistArtifact(userId: string, artifact: Record<string, unknown>): Promise<Record<string, unknown>> {
+  try {
+    const saved = await artifactGenerationService.saveInlineArtifact({
+      userId,
+      artifact,
+      generatedBy: 'chat',
+      tags: ['ai-coach', 'manual-artifact'],
+    });
+    return { ...artifact, artifactId: saved.id, saved: true };
+  } catch {
+    return { ...artifact, saved: false };
+  }
+}
+
+async function generateChart(userId: string, params: z.infer<typeof GenerateChartSchema>): Promise<string> {
   const artifact = {
     type: 'chart' as const,
     chartType: params.chartType,
@@ -42,14 +81,18 @@ async function generateChart(_userId: string, params: z.infer<typeof GenerateCha
       color: dk.color || getDefaultColor(params.dataKeys.indexOf(dk)),
     })),
     yAxisLabel: params.yAxisLabel,
+    xAxisLabel: params.xAxisLabel,
     stacked: params.stacked || false,
     insight: params.insight,
+    annotations: params.annotations,
+    statistics: params.statistics,
   };
 
-  return JSON.stringify({ success: true, artifact });
+  const savedArtifact = await persistArtifact(userId, artifact);
+  return JSON.stringify({ success: true, artifact: savedArtifact });
 }
 
-async function generateComparison(_userId: string, params: z.infer<typeof GenerateComparisonSchema>): Promise<string> {
+async function generateComparison(userId: string, params: z.infer<typeof GenerateComparisonSchema>): Promise<string> {
   const artifact = {
     type: 'comparison' as const,
     title: params.title,
@@ -57,7 +100,8 @@ async function generateComparison(_userId: string, params: z.infer<typeof Genera
     insight: params.insight,
   };
 
-  return JSON.stringify({ success: true, artifact });
+  const savedArtifact = await persistArtifact(userId, artifact);
+  return JSON.stringify({ success: true, artifact: savedArtifact });
 }
 
 const DEFAULT_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
@@ -70,7 +114,7 @@ export function registerArtifactTools(_userId: string): ToolDefinition[] {
   return [
     {
       name: 'generateChart',
-      description: 'Generate an inline chart visualization (line, bar, area, pie, radar) from data. Use when the user asks to see trends, comparisons, or visualizations of their health data.',
+      description: 'Generate and save a chart artifact (line, bar, area, pie, radar, scatter, histogram, heatmap, gauge, funnel, box-whisker) from data. Use when the user asks to see trends, comparisons, distributions, or visualizations of their health data.',
       schema: GenerateChartSchema,
       handler: withErrorHandling('generateChart', generateChart),
       icon: 'bar-chart-3',

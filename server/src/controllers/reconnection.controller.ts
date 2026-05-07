@@ -4,7 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { goalReconnectionService } from '../services/goal-reconnection.service.js';
 import type { AuthenticatedRequest } from '../types/index.js';
-import type { ReconnectionResponse } from '../../../shared/types/domain/reconnection.js';
+import type { ReconnectionResponse } from '@shared/types/domain/reconnection.js';
 
 const VALID_RESPONSES: ReconnectionResponse[] = [
   'committed', 'paused', 'archived', 'snoozed', 'no_response',

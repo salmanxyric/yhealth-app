@@ -167,7 +167,7 @@ class ScheduleController {
     }
 
     const { id } = req.params;
-    const { title, description, start_time, end_time, duration_minutes, color, icon, category, position, metadata } =
+    const { title, description, start_time, end_time, duration_minutes, color, icon, category, shape, position, metadata } =
       req.body;
 
     if (!title || !start_time || position === undefined) {
@@ -183,6 +183,7 @@ class ScheduleController {
       color,
       icon,
       category,
+      shape,
       position,
       metadata,
     });
@@ -220,6 +221,7 @@ class ScheduleController {
       color,
       icon,
       category,
+      shape,
       position,
       metadata,
     } = req.body;
@@ -233,6 +235,7 @@ class ScheduleController {
       color,
       icon,
       category,
+      shape,
       position,
       metadata,
     });
@@ -420,5 +423,4 @@ class ScheduleController {
 
 export const scheduleController = new ScheduleController();
 export default scheduleController;
-
 

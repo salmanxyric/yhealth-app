@@ -83,6 +83,7 @@ CREATE TYPE notification_type AS ENUM (
     'celebration',
     'warning',
     'tip',
+    'competition',
     'ai_check_in'
 );
 CREATE TYPE notification_priority AS ENUM ('low', 'normal', 'high', 'urgent');

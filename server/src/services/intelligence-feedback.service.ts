@@ -10,7 +10,7 @@ import type {
   FeedbackAction,
   IntelligenceFeedback,
   SubmitFeedbackInput,
-} from '../../../shared/types/domain/intelligence-files.js';
+} from '@shared/types/domain/intelligence-files.js';
 
 class IntelligenceFeedbackService {
 

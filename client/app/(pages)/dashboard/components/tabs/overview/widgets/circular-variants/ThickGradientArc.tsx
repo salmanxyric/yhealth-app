@@ -18,7 +18,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 /**
  * Clean thick gradient arc with glow — used for WHOOP Age and as default fallback.
  */
-export function ThickGradientArc({ progress, colors, type, delay, isLoading }: ThickGradientArcProps) {
+export function ThickGradientArc({ progress, colors, type: _type, delay, isLoading }: ThickGradientArcProps) {
   const id = useId();
   const dashOffset = CIRCUMFERENCE - (progress / 100) * CIRCUMFERENCE;
 

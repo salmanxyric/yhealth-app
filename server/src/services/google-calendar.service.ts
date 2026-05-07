@@ -58,6 +58,25 @@ interface GoogleCalendarEvent {
   status?: string;
   transparency?: string; // 'opaque' = busy, 'transparent' = free
   recurrence?: string[];
+  htmlLink?: string;
+}
+
+export interface CreateGoogleCalendarEventInput {
+  title: string;
+  description?: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  scheduleId: string;
+  scheduleItemId: string;
+}
+
+export interface CreatedGoogleCalendarEvent {
+  connectionId: string;
+  calendarId: string;
+  eventId: string;
+  htmlLink?: string;
 }
 
 // ============================================
@@ -67,7 +86,31 @@ interface GoogleCalendarEvent {
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
-const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+].join(' ');
+const FETCH_TIMEOUT_MS = 30_000;
+
+function isTransientError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  const cause = err instanceof Error && 'cause' in err ? String((err as any).cause) : '';
+  const combined = `${message} ${cause}`.toLowerCase();
+  return combined.includes('fetch failed')
+    || combined.includes('econnrefused')
+    || combined.includes('enotfound')
+    || combined.includes('etimedout')
+    || combined.includes('econnreset')
+    || combined.includes('socket hang up')
+    || combined.includes('abort')
+    || combined.includes('network');
+}
+
+function formatError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = 'cause' in err && err.cause instanceof Error ? ` [cause: ${err.cause.message}]` : '';
+  return `${err.message}${cause}`;
+}
 
 /**
  * Default redirect URI used when a user hasn't explicitly entered one.
@@ -287,21 +330,36 @@ class GoogleCalendarService {
       return;
     }
 
-    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id,
-        client_secret,
-        refresh_token: refreshTokenVal,
-        grant_type: 'refresh_token',
-      }),
-    });
+    let tokenResponse: Response;
+    try {
+      tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        body: new URLSearchParams({
+          client_id,
+          client_secret,
+          refresh_token: refreshTokenVal,
+          grant_type: 'refresh_token',
+        }),
+      });
+    } catch (err) {
+      const errMsg = formatError(err);
+      const status = isTransientError(err) ? 'pending' : 'error';
+      logger.warn('[GoogleCalendar] Token refresh network error', { connectionId, error: errMsg, transient: status === 'pending' });
+      await query(
+        `UPDATE calendar_connections SET sync_status = $1, sync_error = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+        [status, `Token refresh failed: ${errMsg}`.substring(0, 1000), connectionId],
+      );
+      return;
+    }
 
     if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text().catch(() => '');
+      const isPermanent = tokenResponse.status === 401 || tokenResponse.status === 403;
       await query(
-        `UPDATE calendar_connections SET sync_status = 'error', sync_error = 'Token refresh failed', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-        [connectionId],
+        `UPDATE calendar_connections SET sync_status = $1, sync_error = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+        [isPermanent ? 'error' : 'pending', `Token refresh failed (${tokenResponse.status}): ${errorText}`.substring(0, 1000), connectionId],
       );
       return;
     }
@@ -372,7 +430,7 @@ class GoogleCalendarService {
       try {
         const response = await fetch(
           `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calId)}/events?${params.toString()}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } },
+          { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
         );
 
         if (!response.ok) {
@@ -437,18 +495,25 @@ class GoogleCalendarService {
           synced++;
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error('[GoogleCalendar] Exception syncing calendar', { userId, connectionId, calendarId: calId, error: message });
+        const message = formatError(err);
+        logger.error('[GoogleCalendar] Exception syncing calendar', { userId, connectionId, calendarId: calId, error: message, transient: isTransientError(err) });
         errors.push({ calendarId: calId, error: message });
       }
     }
 
-    // If every calendar failed, mark connection as error
+    // If every calendar failed, distinguish transient vs permanent
     if (errors.length === calendarsToSync.length) {
       const combinedError = errors.map((e) => `${e.calendarId}: ${e.error}`).join('; ');
+      const allTransient = errors.every((e) => {
+        const combined = e.error.toLowerCase();
+        return combined.includes('fetch failed') || combined.includes('econnrefused')
+          || combined.includes('enotfound') || combined.includes('etimedout')
+          || combined.includes('econnreset') || combined.includes('abort')
+          || combined.includes('network') || combined.includes('socket hang up');
+      });
       await query(
-        `UPDATE calendar_connections SET sync_status = 'error', sync_error = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-        [combinedError.substring(0, 1000), connectionId],
+        `UPDATE calendar_connections SET sync_status = $1, sync_error = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+        [allTransient ? 'pending' : 'error', combinedError.substring(0, 1000), connectionId],
       );
       throw new Error(`All calendars failed to sync: ${combinedError}`);
     }
@@ -465,6 +530,105 @@ class GoogleCalendarService {
 
     logger.info('[GoogleCalendar] Sync completed', { userId, connectionId, eventsSynced: synced, calendarsAttempted: calendarsToSync.length, calendarsFailed: errors.length });
     return synced;
+  }
+
+  /**
+   * Create a Google Calendar event for a Balencia manual schedule item.
+   * Returns null when the user has no active linked Google connection.
+   */
+  async createEventForScheduleItem(
+    userId: string,
+    input: CreateGoogleCalendarEventInput,
+  ): Promise<CreatedGoogleCalendarEvent | null> {
+    const connResult = await query<{
+      id: string;
+      access_token: string;
+      token_expires_at: Date;
+      calendar_ids: string[] | null;
+    }>(
+      `SELECT id, access_token, token_expires_at, calendar_ids
+       FROM calendar_connections
+       WHERE user_id = $1
+         AND provider = 'google'
+         AND sync_enabled = true
+         AND COALESCE(access_token, '') <> ''
+         AND COALESCE(refresh_token, '') <> ''
+         AND sync_status != 'error'
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+
+    if (connResult.rows.length === 0) return null;
+
+    const connection = connResult.rows[0];
+    let accessToken = connection.access_token;
+    if (new Date(connection.token_expires_at) <= new Date()) {
+      await this.refreshToken(connection.id);
+      const refreshed = await query<{ access_token: string }>(
+        'SELECT access_token FROM calendar_connections WHERE id = $1',
+        [connection.id],
+      );
+      accessToken = refreshed.rows[0]?.access_token || accessToken;
+    }
+
+    const calendarIds = Array.isArray(connection.calendar_ids) && connection.calendar_ids.length > 0
+      ? connection.calendar_ids
+      : ['primary'];
+    const calendarId = calendarIds[0] || 'primary';
+
+    const response = await fetch(`${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        summary: input.title,
+        description: input.description || undefined,
+        start: {
+          dateTime: `${input.date}T${input.startTime}:00`,
+          timeZone: input.timezone,
+        },
+        end: {
+          dateTime: `${input.date}T${input.endTime}:00`,
+          timeZone: input.timezone,
+        },
+        extendedProperties: {
+          private: {
+            balenciaScheduleId: input.scheduleId,
+            balenciaScheduleItemId: input.scheduleItemId,
+            source: 'balencia',
+          },
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Google Calendar event create failed (${response.status}): ${errorText}`);
+    }
+
+    const event = await response.json() as GoogleCalendarEvent;
+    if (!event.id) {
+      throw new Error('Google Calendar event create returned no event id');
+    }
+
+    logger.info('[GoogleCalendar] Created event for schedule item', {
+      userId,
+      connectionId: connection.id,
+      calendarId,
+      scheduleId: input.scheduleId,
+      scheduleItemId: input.scheduleItemId,
+      eventId: event.id,
+    });
+
+    return {
+      connectionId: connection.id,
+      calendarId,
+      eventId: event.id,
+      htmlLink: event.htmlLink,
+    };
   }
 
   /**

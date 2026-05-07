@@ -10,7 +10,7 @@
  *
  * Usage:
  *   npx tsx src/database/migrate.ts
- *   node dist/server/src/database/migrate.ts
+ *   node dist/src/database/migrate.ts
  *   npm run db:migrate
  *
  * Environment:

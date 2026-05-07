@@ -244,7 +244,7 @@ export function BodyImageUploadStep() {
           <Camera className="w-7 h-7 text-white" />
         </motion.div>
 
-        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-3">
+        <h1 className="text-2xl sm:text-[28px] font-semibold text-white mb-3">
           Progress Photos
         </h1>
         <p className="text-slate-400 text-sm sm:text-base max-w-md mx-auto">

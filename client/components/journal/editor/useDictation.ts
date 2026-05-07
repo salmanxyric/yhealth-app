@@ -29,14 +29,19 @@ export function useDictation({
   const [status, setStatus] = useState<DictationStatus>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusRef = useRef<DictationStatus>("idle");
   const onTranscriptRef = useRef(onTranscript);
   const onEndRef = useRef(onEnd);
 
-  onTranscriptRef.current = onTranscript;
-  onEndRef.current = onEnd;
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
+
+  useEffect(() => {
+    onEndRef.current = onEnd;
+  }, [onEnd]);
 
   useEffect(() => {
     statusRef.current = status;
@@ -62,13 +67,15 @@ export function useDictation({
   const createRecognition = useCallback(() => {
     if (!isSupported) return null;
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const win = window as unknown as { SpeechRecognition?: { new(): SpeechRecognition }; webkitSpeechRecognition?: { new(): SpeechRecognition } };
+    const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = lang;
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result[0].transcript;
@@ -98,7 +105,7 @@ export function useDictation({
       }
     };
 
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       if (event.error === "not-allowed") {
         setError("Microphone access denied");
       } else {

@@ -205,40 +205,54 @@ export const getActivityStats = asyncHandler(async (req: AuthenticatedRequest, r
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
 
-  const { period = 'week' } = req.query;
+  const { period = 'week', startDate: startDateParam, endDate: endDateParam } = req.query;
 
   const today = new Date();
   today.setHours(23, 59, 59, 999);
 
   let startDate: Date;
+  let endDate: Date;
   let prevStartDate: Date;
   let prevEndDate: Date;
 
-  switch (period) {
-    case 'day':
-      startDate = new Date(today);
-      startDate.setHours(0, 0, 0, 0);
-      prevStartDate = new Date(startDate);
-      prevStartDate.setDate(prevStartDate.getDate() - 1);
-      prevEndDate = new Date(startDate);
-      prevEndDate.setMilliseconds(-1);
-      break;
-    case 'month':
-      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-      prevStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      prevEndDate = new Date(startDate);
-      prevEndDate.setMilliseconds(-1);
-      break;
-    case 'week':
-    default:
-      startDate = new Date(today);
-      startDate.setDate(today.getDate() - today.getDay()); // Sunday
-      startDate.setHours(0, 0, 0, 0);
-      prevStartDate = new Date(startDate);
-      prevStartDate.setDate(prevStartDate.getDate() - 7);
-      prevEndDate = new Date(startDate);
-      prevEndDate.setMilliseconds(-1);
-      break;
+  if (startDateParam && endDateParam) {
+    // Explicit date range provided by client
+    startDate = new Date(startDateParam as string);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(endDateParam as string);
+    endDate.setHours(23, 59, 59, 999);
+    const durationMs = endDate.getTime() - startDate.getTime();
+    prevEndDate = new Date(startDate);
+    prevEndDate.setMilliseconds(-1);
+    prevStartDate = new Date(prevEndDate.getTime() - durationMs);
+  } else {
+    endDate = today;
+    switch (period) {
+      case 'day':
+        startDate = new Date(today);
+        startDate.setHours(0, 0, 0, 0);
+        prevStartDate = new Date(startDate);
+        prevStartDate.setDate(prevStartDate.getDate() - 1);
+        prevEndDate = new Date(startDate);
+        prevEndDate.setMilliseconds(-1);
+        break;
+      case 'month':
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        prevStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        prevEndDate = new Date(startDate);
+        prevEndDate.setMilliseconds(-1);
+        break;
+      case 'week':
+      default:
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - today.getDay()); // Sunday
+        startDate.setHours(0, 0, 0, 0);
+        prevStartDate = new Date(startDate);
+        prevStartDate.setDate(prevStartDate.getDate() - 7);
+        prevEndDate = new Date(startDate);
+        prevEndDate.setMilliseconds(-1);
+        break;
+    }
   }
 
   // Get current period stats from health_data_records
@@ -271,7 +285,7 @@ export const getActivityStats = asyncHandler(async (req: AuthenticatedRequest, r
      WHERE user_id = $1
      AND recorded_at >= $2
      AND recorded_at <= $3`,
-    [userId, startDate, today]
+    [userId, startDate, endDate]
   );
 
   // Get current period stats from activity_logs (completed plan activities)
@@ -287,7 +301,7 @@ export const getActivityStats = asyncHandler(async (req: AuthenticatedRequest, r
      AND status = 'completed'
      AND (completed_at >= $2 OR scheduled_date >= $2::date)
      AND (completed_at <= $3 OR scheduled_date <= $3::date)`,
-    [userId, startDate, today]
+    [userId, startDate, endDate]
   );
 
   // Combine stats
@@ -347,8 +361,9 @@ export const getActivityStats = asyncHandler(async (req: AuthenticatedRequest, r
   const prevDuration = parseInt(prevStats.rows[0]?.total_duration || '0') || 1;
 
   // Calculate completion rate based on expected activities per period
-  const daysInPeriod = period === 'day' ? 1 : period === 'week' ? 7 : 30;
-  const expectedActivities = daysInPeriod * 3; // Assume 3 activities per day target
+  const msDiff = endDate.getTime() - startDate.getTime();
+  const daysInPeriod = Math.max(1, Math.round(msDiff / 86400000) + 1);
+  const expectedActivities = daysInPeriod * 3;
   const currentRate = Math.min(100, Math.round((currentTotal / expectedActivities) * 100));
   const prevRate = Math.min(100, Math.round((prevTotal / expectedActivities) * 100));
 
@@ -363,7 +378,7 @@ export const getActivityStats = asyncHandler(async (req: AuthenticatedRequest, r
     completionRateChange: currentRate - prevRate,
     period,
     startDate: startDate.toISOString().split('T')[0],
-    endDate: today.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0],
   };
 
   ApiResponse.success(res, { stats });
@@ -378,32 +393,40 @@ export const getActivityBreakdown = asyncHandler(async (req: AuthenticatedReques
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
 
-  const { period = 'week' } = req.query;
+  const { period = 'week', startDate: startDateParam, endDate: endDateParam } = req.query;
 
   const today = new Date();
   today.setHours(23, 59, 59, 999);
 
   let startDate: Date;
-  let daysInPeriod: number;
+  let endDate: Date;
 
-  switch (period) {
-    case 'day':
-      startDate = new Date(today);
-      startDate.setHours(0, 0, 0, 0);
-      daysInPeriod = 1;
-      break;
-    case 'month':
-      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-      daysInPeriod = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-      break;
-    case 'week':
-    default:
-      startDate = new Date(today);
-      startDate.setDate(today.getDate() - today.getDay());
-      startDate.setHours(0, 0, 0, 0);
-      daysInPeriod = 7;
-      break;
+  if (startDateParam && endDateParam) {
+    startDate = new Date(startDateParam as string);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(endDateParam as string);
+    endDate.setHours(23, 59, 59, 999);
+  } else {
+    endDate = today;
+    switch (period) {
+      case 'day':
+        startDate = new Date(today);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'month':
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        break;
+      case 'week':
+      default:
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - today.getDay());
+        startDate.setHours(0, 0, 0, 0);
+        break;
+    }
   }
+
+  const msDiff = endDate.getTime() - startDate.getTime();
+  const daysInPeriod = Math.max(1, Math.round(msDiff / 86400000) + 1);
 
   // Get breakdown by data_type from health_data_records
   const healthBreakdownResult = await query<{
@@ -425,7 +448,7 @@ export const getActivityBreakdown = asyncHandler(async (req: AuthenticatedReques
      AND recorded_at <= $3
      GROUP BY data_type
      ORDER BY total DESC`,
-    [userId, startDate, today]
+    [userId, startDate, endDate]
   );
 
   // Get breakdown from activity_logs (plan-based activities)
@@ -455,7 +478,7 @@ export const getActivityBreakdown = asyncHandler(async (req: AuthenticatedReques
      AND al.completed_at <= $3
      GROUP BY activity_type, up.pillar
      ORDER BY total DESC`,
-    [userId, startDate, today]
+    [userId, startDate, endDate]
   );
 
   // Map data types to display info
@@ -521,7 +544,7 @@ export const getActivityBreakdown = asyncHandler(async (req: AuthenticatedReques
     breakdown,
     period,
     startDate: startDate.toISOString().split('T')[0],
-    endDate: today.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0],
   });
 });
 
@@ -534,13 +557,19 @@ export const getCalendarData = asyncHandler(async (req: AuthenticatedRequest, re
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
 
-  const { year, month, week } = req.query;
+  const { year, month, week, startDate: startDateParam, endDate: endDateParam } = req.query;
 
   const today = new Date();
   let startDate: Date;
   let endDate: Date;
 
-  if (week) {
+  if (startDateParam && endDateParam) {
+    // Explicit date range (day view, custom range)
+    startDate = new Date(startDateParam as string);
+    startDate.setHours(0, 0, 0, 0);
+    endDate = new Date(endDateParam as string);
+    endDate.setHours(23, 59, 59, 999);
+  } else if (week) {
     // Week view
     const weekDate = new Date(week as string);
     startDate = new Date(weekDate);
@@ -811,8 +840,15 @@ export const getRecentActivities = asyncHandler(async (req: AuthenticatedRequest
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
 
-  const { limit = '10', type: filterType, pillar: filterPillar } = req.query;
+  const { limit = '10', type: filterType, pillar: filterPillar, startDate: startDateParam, endDate: endDateParam } = req.query;
   const limitNum = Math.min(50, Math.max(1, parseInt(limit as string)));
+
+  // Parse optional date range filters
+  const hasDateRange = startDateParam && endDateParam;
+  const rangeStart = hasDateRange ? new Date(startDateParam as string) : null;
+  const rangeEnd = hasDateRange ? new Date(endDateParam as string) : null;
+  if (rangeStart) rangeStart.setHours(0, 0, 0, 0);
+  if (rangeEnd) rangeEnd.setHours(23, 59, 59, 999);
 
   // Map frontend type filter to data_type values
   const typeToDataTypes: Record<string, string[]> = {
@@ -856,8 +892,15 @@ export const getRecentActivities = asyncHandler(async (req: AuthenticatedRequest
      AND al.status = 'completed'
      AND al.completed_at IS NOT NULL`;
 
-  const activityLogsParams: (string | number)[] = [userId];
+  const activityLogsParams: (string | number | Date)[] = [userId];
   let paramIndex = 2;
+
+  // Apply date range filter
+  if (rangeStart && rangeEnd) {
+    activityLogsQuery += ` AND al.completed_at >= $${paramIndex} AND al.completed_at <= $${paramIndex + 1}`;
+    activityLogsParams.push(rangeStart.toISOString(), rangeEnd.toISOString());
+    paramIndex += 2;
+  }
 
   // Apply pillar filter
   if (filterPillar && filterPillar !== 'all') {
@@ -948,6 +991,13 @@ export const getRecentActivities = asyncHandler(async (req: AuthenticatedRequest
   const healthDataParams: (string | number | string[])[] = [userId];
   let healthParamIndex = 2;
 
+  // Apply date range filter
+  if (rangeStart && rangeEnd) {
+    healthDataQuery += ` AND recorded_at >= $${healthParamIndex} AND recorded_at <= $${healthParamIndex + 1}`;
+    healthDataParams.push(rangeStart.toISOString(), rangeEnd.toISOString());
+    healthParamIndex += 2;
+  }
+
   // Apply type filter
   if (filterType && filterType !== 'all') {
     const dataTypes = typeToDataTypes[filterType as string];
@@ -1006,6 +1056,60 @@ export const getRecentActivities = asyncHandler(async (req: AuthenticatedRequest
   ApiResponse.success(res, { activities: limitedActivities });
 });
 
+const createActivityLog = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) throw new ApiError(401, 'Authentication required');
+
+  const { type, title, description, duration, pillar, completedAt } = req.body;
+
+  if (!type || !title || !pillar) {
+    throw new ApiError(400, 'type, title, and pillar are required');
+  }
+
+  const dataTypeMap: Record<string, string> = {
+    workout: 'workouts',
+    meal: 'nutrition',
+    sleep: 'sleep',
+    mindfulness: 'recovery',
+    recovery: 'recovery',
+    water: 'nutrition',
+    steps: 'steps',
+    check_in: 'heart_rate',
+    habit: 'workouts',
+  };
+  const dataType = dataTypeMap[type] || 'workouts';
+
+  const value = {
+    title,
+    description: description || '',
+    duration_minutes: duration || null,
+    pillar,
+    source: 'manual',
+    activity_type: type,
+  };
+
+  const recordedAt = completedAt ? new Date(completedAt) : new Date();
+
+  const result = await query(
+    `INSERT INTO health_data_records (user_id, provider, data_type, recorded_at, value, unit)
+     VALUES ($1, 'manual', $2, $3, $4, 'count')
+     RETURNING id`,
+    [userId, dataType, recordedAt, JSON.stringify(value)]
+  );
+
+  ApiResponse.success(res, {
+    log: {
+      id: result.rows[0].id,
+      type,
+      title,
+      description: description || '',
+      duration,
+      pillar,
+      completedAt: recordedAt.toISOString(),
+    },
+  }, 'Activity logged successfully', 201);
+});
+
 export default {
   getActivityLogs,
   getActivityStats,
@@ -1014,4 +1118,5 @@ export default {
   completeActivity,
   skipActivity,
   getRecentActivities,
+  createActivityLog,
 };

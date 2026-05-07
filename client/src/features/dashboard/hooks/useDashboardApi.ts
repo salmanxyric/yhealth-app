@@ -30,7 +30,7 @@ export function useDashboardApi() {
       const planResponse = await plansService.getActive();
 
       if (!planResponse.success || !planResponse.data) {
-        throw new ApiError('No active plan found', 404, 'NOT_FOUND');
+        throw new ApiError('Failed to load active plan', 500, 'SERVER_ERROR');
       }
 
       const { plan, weekCompletionRate } = planResponse.data;

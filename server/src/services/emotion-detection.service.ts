@@ -94,6 +94,34 @@ interface EmotionLogRow {
   raw_data: Record<string, unknown>;
 }
 
+type EmotionClassificationResult = {
+  category: string;
+  confidence: number;
+  reasoning?: string;
+};
+
+export function parseEmotionClassification(content: string): EmotionClassificationResult | null {
+  const parsed = parseLlmJson<Partial<EmotionClassificationResult>>(content);
+  if (parsed?.category) {
+    return {
+      category: String(parsed.category),
+      confidence: Number(parsed.confidence) || 50,
+      reasoning: parsed.reasoning ? String(parsed.reasoning) : undefined,
+    };
+  }
+
+  const categoryMatch = content.match(/"category"\s*:\s*"([^"]{2,32})/i);
+  if (!categoryMatch) return null;
+
+  const confidenceMatch = content.match(/"confidence"\s*:\s*(\d{1,3})/i);
+  const reasoningMatch = content.match(/"reasoning"\s*:\s*"([^"]{1,240})/i);
+  return {
+    category: categoryMatch[1],
+    confidence: confidenceMatch ? Number(confidenceMatch[1]) : 50,
+    reasoning: reasoningMatch?.[1],
+  };
+}
+
 // ============================================
 // SERVICE CLASS
 // ============================================
@@ -103,6 +131,8 @@ class EmotionDetectionService {
   private openaiClient: OpenAI | null = null;
   private geminiApiKey: string | null = null;
   private apiLimitLogged = false; // Track if we've already logged API limit warnings
+  private geminiUnavailableUntil = 0;
+  private geminiTransientFailureCount = 0;
   /** Cache user logging permission to avoid repeated DB lookups (5-min TTL) */
   private userLoggingCache: Map<string, { enabled: boolean; expiresAt: number }> = new Map();
 
@@ -156,9 +186,10 @@ class EmotionDetectionService {
     maxTokens: number,
     temperature = 0.3,
     jsonMode = false,
+    timeoutMs = env.gemini.emotionTimeoutMs || 6000,
   ): Promise<string> {
     if (!this.geminiApiKey) throw new Error('Gemini not available');
-    const model = env.gemini.lightModel || 'gemini-2.5-flash';
+    const model = env.gemini.emotionModel || 'gemini-2.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
 
     // Gemini 2.5+ thinking models consume tokens for internal reasoning,
@@ -175,21 +206,78 @@ class EmotionDetectionService {
       generationConfig.responseMimeType = 'application/json';
     }
 
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig,
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let resp: Response;
+
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig,
+        }),
+      });
+    } catch (error) {
+      throw this.enrichGeminiError(error, model, timeoutMs);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
     if (!resp.ok) {
       const errText = await resp.text();
       throw new Error(`Gemini error (${resp.status}): ${errText}`);
     }
     const data = await resp.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  }
+
+  private enrichGeminiError(error: unknown, model: string, timeoutMs: number): Error {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const cause = (err as any).cause;
+
+    if (err.name === 'AbortError') {
+      return new Error(`Gemini ${model} timed out after ${timeoutMs}ms`);
+    }
+
+    const causeCode = cause?.code ? ` cause=${cause.code}` : '';
+    const hostname = cause?.hostname ? ` host=${cause.hostname}` : '';
+    return new Error(`Gemini ${model} request failed: ${err.message}${causeCode}${hostname}`);
+  }
+
+  private isTransientGeminiFailure(error: unknown): boolean {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    return (
+      message.includes('fetch failed') ||
+      message.includes('timed out') ||
+      message.includes('econnreset') ||
+      message.includes('etimedout') ||
+      message.includes('enotfound') ||
+      message.includes('eai_again') ||
+      message.includes('und_err_connect_timeout')
+    );
+  }
+
+  private recordGeminiFailure(error: unknown): void {
+    if (!this.isTransientGeminiFailure(error)) return;
+
+    this.geminiTransientFailureCount += 1;
+    if (this.geminiTransientFailureCount >= 2) {
+      const backoffMs = Math.min(60_000, 10_000 * this.geminiTransientFailureCount);
+      this.geminiUnavailableUntil = Date.now() + backoffMs;
+      logger.warn('[EmotionDetection] Temporarily disabling Gemini emotion classification after transient failures', {
+        backoffMs,
+        failures: this.geminiTransientFailureCount,
+      });
+    }
+  }
+
+  private recordGeminiSuccess(): void {
+    this.geminiTransientFailureCount = 0;
+    this.geminiUnavailableUntil = 0;
   }
 
   /**
@@ -242,11 +330,13 @@ Respond with ONLY a JSON object in this exact format:
       const classSystemPrompt = 'You are an emotion detection expert. Analyze text and classify emotions accurately.';
 
       // Try Gemini first (primary provider, JSON mode to prevent markdown wrapping)
-      if (this.geminiApiKey) {
+      if (this.geminiApiKey && Date.now() >= this.geminiUnavailableUntil) {
         try {
           content = await this.callGemini(classSystemPrompt, classificationPrompt, 200, 0.3, true);
+          this.recordGeminiSuccess();
         } catch (geminiError: any) {
           logger.warn('[EmotionDetection] Gemini classification failed', { error: geminiError?.message });
+          this.recordGeminiFailure(geminiError);
         }
       }
 
@@ -275,7 +365,8 @@ Respond with ONLY a JSON object in this exact format:
       }
 
       if (!content) {
-        throw new Error('All classification providers failed');
+        logger.debug('[EmotionDetection] Classification providers unavailable, using local fallback');
+        return this.fallbackEmotionDetection(text);
       }
 
       let classificationResult: {
@@ -284,9 +375,9 @@ Respond with ONLY a JSON object in this exact format:
         reasoning?: string;
       } | null;
 
-      classificationResult = parseLlmJson(content);
+      classificationResult = parseEmotionClassification(content);
       if (!classificationResult) {
-        logger.warn('[EmotionDetection] Failed to parse response, using fallback', { contentPreview: content.substring(0, 200) });
+        logger.debug('[EmotionDetection] Failed to parse response, using fallback', { contentPreview: content.substring(0, 200) });
         return this.fallbackEmotionDetection(text);
       }
 
@@ -304,12 +395,21 @@ Respond with ONLY a JSON object in this exact format:
         'distressed',
       ];
 
-      if (!validCategories.includes(classificationResult.category as EmotionCategory)) {
-        logger.warn(
-          '[EmotionDetection] Invalid emotion category received, defaulting to neutral',
-          { category: classificationResult.category }
-        );
-        classificationResult.category = 'neutral';
+      const rawCategory = classificationResult.category?.toLowerCase().trim() || '';
+      if (!validCategories.includes(rawCategory as EmotionCategory)) {
+        // Attempt prefix match (e.g. "an" -> "anxious", "str" -> "stressed")
+        const prefixMatch = validCategories.find(c => c.startsWith(rawCategory) && rawCategory.length >= 2);
+        if (prefixMatch) {
+          classificationResult.category = prefixMatch;
+        } else {
+          logger.warn(
+            '[EmotionDetection] Invalid emotion category received, defaulting to neutral',
+            { category: classificationResult.category }
+          );
+          classificationResult.category = 'neutral';
+        }
+      } else {
+        classificationResult.category = rawCategory;
       }
 
       // Enhance with emotional reasoning (Gemini primary, OpenAI fallback)
@@ -327,10 +427,13 @@ Provide a brief, empathetic explanation of why this emotion might be present.`;
           let reasoningContent = '';
 
           // Try Gemini first
-          if (this.geminiApiKey) {
+          if (this.geminiApiKey && Date.now() >= this.geminiUnavailableUntil) {
             try {
-              reasoningContent = await this.callGemini(reasoningSystem, reasoningPrompt, 150, 0.7);
-            } catch { /* fall through */ }
+              reasoningContent = await this.callGemini(reasoningSystem, reasoningPrompt, 150, 0.7, false, 3000);
+              this.recordGeminiSuccess();
+            } catch (geminiError) {
+              this.recordGeminiFailure(geminiError);
+            }
           }
 
           // Fallback to OpenAI

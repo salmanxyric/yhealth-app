@@ -14,8 +14,9 @@ import type { ToolIntent } from '../../../src/services/tool-router.service.js';
 
 const ALL_INTENTS: ToolIntent[] = [
   'meals', 'workouts', 'goals', 'schedules', 'wellbeing', 'progress',
-  'water', 'shopping', 'reminders', 'integrations', 'competitions',
-  'emotional', 'gamification', 'personal', 'music', 'status', 'general',
+  'water', 'shopping', 'reminders', 'notes', 'integrations', 'competitions',
+  'emotional', 'gamification', 'personal', 'music', 'status', 'finance',
+  'analytics', 'general',
 ];
 
 // ============================================
@@ -82,6 +83,11 @@ describe('classifyIntent', () => {
     it('should classify "set a reminder and alarm for me" as reminders', () => {
       const result = classifyIntent('set a reminder and alarm for me');
       expect(result.primary).toBe('reminders');
+    });
+
+    it('should classify "save this as a quick note" as notes', () => {
+      const result = classifyIntent('save this as a quick note');
+      expect(result.primary).toBe('notes');
     });
 
     it('should classify "sync my whoop data" as integrations', () => {
@@ -265,6 +271,17 @@ describe('TOOL_GROUPS', () => {
   describe('music group', () => {
     it('should include musicManager', () => {
       expect(TOOL_GROUPS.music).toContain('musicManager');
+    });
+  });
+
+  describe('notes group', () => {
+    it('should include quick note manager tools', () => {
+      expect(TOOL_GROUPS.notes).toEqual(expect.arrayContaining([
+        'getQuickNotes',
+        'createQuickNote',
+        'updateQuickNote',
+        'deleteQuickNote',
+      ]));
     });
   });
 

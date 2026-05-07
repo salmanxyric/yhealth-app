@@ -26,6 +26,7 @@ import { UserHealthProfileModal } from './UserHealthProfileModal';
 import { chatService, type Chat } from '@/src/shared/services/chat.service';
 import { type ChatMessageItemData } from './ChatMessageItem';
 import { adaptMessageToChatMessageItem } from '../utils/messageAdapter';
+import type { Message } from '@/src/shared/services/chat.service';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/app/context/AuthContext';
@@ -205,14 +206,14 @@ export function MessagesView({
         const messagePayload = data.message as { senderId?: string } | undefined;
         const effectiveSenderId = data.senderId ?? messagePayload?.senderId;
         if (data.message && effectiveSenderId !== user.id) {
-          const adapted = adaptMessageToChatMessageItem(data.message, user.id, isAiChatRef.current);
+          const adapted = adaptMessageToChatMessageItem(data.message as unknown as Message, user.id, isAiChatRef.current);
           setMessages((prev) => {
             if (prev.some((m) => m.id === adapted.id)) return prev;
             return [...prev, adapted];
           });
         } else if (data.message && effectiveSenderId === user.id) {
           // Own message echoed back — update if temp ID differs
-          const adapted = adaptMessageToChatMessageItem(data.message, user.id, isAiChatRef.current);
+          const adapted = adaptMessageToChatMessageItem(data.message as unknown as Message, user.id, isAiChatRef.current);
           setMessages((prev) => {
             if (prev.some((m) => m.id === adapted.id)) return prev;
             return [...prev, adapted];
@@ -220,11 +221,12 @@ export function MessagesView({
         }
       },
       onMessageEdited: (data) => {
-        if (data.messageId && data.content !== undefined) {
+        const content = data.content ?? (data.message as Record<string, unknown> | undefined)?.content as string | undefined;
+        if (data.messageId && content !== undefined) {
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === data.messageId
-                ? { ...msg, content: data.content, isEdited: true }
+                ? { ...msg, content, isEdited: true }
                 : msg
             )
           );

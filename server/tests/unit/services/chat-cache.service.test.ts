@@ -20,11 +20,11 @@ describe('ChatCacheService', () => {
 
       const factory = async () => factoryData;
 
-      const result = await chatCacheService.getOrSetChatList(userId, false, factory);
+      const result = await chatCacheService.getOrSetChatList(userId, factory);
 
       expect(result).toEqual(factoryData);
       // Verify it was cached
-      const cached = cache.get(chatCacheKeys.chatList(userId, false));
+      const cached = cache.get(chatCacheKeys.chatList(userId));
       expect(cached).toEqual(factoryData);
     });
 
@@ -33,10 +33,10 @@ describe('ChatCacheService', () => {
       const cachedData = [{ id: 'chat-1', chat_name: 'Test Chat' }];
       
       // Set cache first
-      cache.set(chatCacheKeys.chatList(userId, false), cachedData);
+      cache.set(chatCacheKeys.chatList(userId), cachedData);
 
       const factory = async () => [{ id: 'chat-2' }];
-      const result = await chatCacheService.getOrSetChatList(userId, false, factory);
+      const result = await chatCacheService.getOrSetChatList(userId, factory);
 
       expect(result).toEqual(cachedData);
     });
@@ -107,14 +107,14 @@ describe('ChatCacheService', () => {
       const userIds = ['user-1', 'user-2'];
       
       // Set some cache values
-      cache.set(chatCacheKeys.chatList(userIds[0], false), []);
-      cache.set(chatCacheKeys.chatList(userIds[1], false), []);
+      cache.set(chatCacheKeys.chatList(userIds[0]), []);
+      cache.set(chatCacheKeys.chatList(userIds[1]), []);
 
       chatCacheService.invalidateChatList(userIds);
 
       // Verify cache is cleared
-      expect(cache.get(chatCacheKeys.chatList(userIds[0], false))).toBeUndefined();
-      expect(cache.get(chatCacheKeys.chatList(userIds[1], false))).toBeUndefined();
+      expect(cache.get(chatCacheKeys.chatList(userIds[0]))).toBeUndefined();
+      expect(cache.get(chatCacheKeys.chatList(userIds[1]))).toBeUndefined();
     });
   });
 
@@ -214,14 +214,12 @@ describe('ChatCacheService', () => {
       const userId = 'user-123';
       
       // Set cache values
-      cache.set(chatCacheKeys.chatList(userId, false), []);
-      cache.set(chatCacheKeys.chatList(userId, true), []);
+      cache.set(chatCacheKeys.chatList(userId), []);
 
       chatCacheService.invalidateUserChatCache(userId);
 
       // Verify cache is cleared
-      expect(cache.get(chatCacheKeys.chatList(userId, false))).toBeUndefined();
-      expect(cache.get(chatCacheKeys.chatList(userId, true))).toBeUndefined();
+      expect(cache.get(chatCacheKeys.chatList(userId))).toBeUndefined();
     });
   });
 
@@ -233,7 +231,7 @@ describe('ChatCacheService', () => {
       // Set cache values
       cache.set(chatCacheKeys.chatDetail(chatId), { id: chatId });
       cache.set(chatCacheKeys.chatParticipants(chatId), []);
-      cache.set(chatCacheKeys.chatList(userIds[0], false), []);
+      cache.set(chatCacheKeys.chatList(userIds[0]), []);
 
       chatCacheService.invalidateChatCache(chatId, userIds);
 
@@ -245,8 +243,7 @@ describe('ChatCacheService', () => {
 
   describe('chatCacheKeys', () => {
     it('should generate correct cache keys', () => {
-      expect(chatCacheKeys.chatList('user-1', false)).toBe('chat:list:user-1:user');
-      expect(chatCacheKeys.chatList('user-1', true)).toBe('chat:list:user-1:admin');
+      expect(chatCacheKeys.chatList('user-1')).toBe('chat:list:user-1');
       expect(chatCacheKeys.chatDetail('chat-1')).toBe('chat:detail:chat-1');
       expect(chatCacheKeys.messages('chat-1', 1, 50)).toBe('messages:chat-1:page:1:limit:50');
       expect(chatCacheKeys.message('msg-1')).toBe('message:msg-1');

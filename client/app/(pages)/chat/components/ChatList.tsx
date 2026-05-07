@@ -25,6 +25,7 @@ import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
 import { subscribeToUserEvents } from '@/lib/socket-client';
 import { JoinGroupDialog } from './JoinGroupDialog';
 import { CreateGroupDialog } from './CreateGroupDialog';
+import { stripMarkdownForPreview } from '@/src/shared/utils/coach-message-display';
 
 interface ChatListProps {
   selectedChatId: string | null;
@@ -343,14 +344,7 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
                       const avatar = getChatAvatar(chat);
                       const isAI = isAICoachChat(chat);
                       const rawLastMessage = chat.latestMessage?.content || '';
-                      const lastMessage = rawLastMessage
-                        .replace(/\*\*([^*]+)\*\*/g, '$1')
-                        .replace(/\*([^*]+)\*/g, '$1')
-                        .replace(/`([^`]+)`/g, '$1')
-                        .replace(/#{1,6}\s/g, '')
-                        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-                        .replace(/\n+/g, ' ')
-                        .trim();
+                      const lastMessage = stripMarkdownForPreview(rawLastMessage).replace(/\n+/g, ' ');
                       const lastMessageTime = chat.updatedAt ? formatLastMessageTime(chat.updatedAt) : '';
 
                       return (

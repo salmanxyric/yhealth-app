@@ -114,7 +114,7 @@ export function AssessmentModeStep() {
           </span>
         </motion.div>
 
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-medium text-white mb-3">
+        <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-medium text-white mb-3">
           How Would You Like to Proceed?
         </h1>
         <p className="text-[rgba(239,237,253,0.7)] text-sm sm:text-base lg:text-lg max-w-2xl mx-auto">

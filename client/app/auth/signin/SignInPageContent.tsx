@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
+import { getFriendlyAuthError } from "@/lib/auth-errors";
 import toast from "react-hot-toast";
 
 const signinSchema = z.object({
@@ -25,13 +26,14 @@ function SignInContent() {
   const { login, loginWithGoogle, isLoading, error } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const searchParams = useSearchParams();
 
   // Handle URL error params (from OAuth redirects)
   useEffect(() => {
     const error = searchParams.get("error");
     if (error) {
-      const decodedError = decodeURIComponent(error);
+      const decodedError = getFriendlyAuthError(error);
       // Defer state update to avoid cascading renders
       setTimeout(() => {
         setErrorMessage(decodedError);
@@ -41,6 +43,33 @@ function SignInContent() {
       window.history.replaceState({}, "", "/auth/signin");
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProviderStatus() {
+      try {
+        const response = await fetch("/api/auth/provider-status", {
+          cache: "no-store",
+        });
+        const payload = await response.json();
+
+        if (!cancelled) {
+          setGoogleEnabled(Boolean(payload?.providers?.google?.enabled));
+        }
+      } catch {
+        if (!cancelled) {
+          setGoogleEnabled(false);
+        }
+      }
+    }
+
+    loadProviderStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Sync auth hook error with local state
   useEffect(() => {
@@ -83,8 +112,8 @@ function SignInContent() {
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium">Authentication Error</p>
-                <p className="text-xs mt-1 opacity-80">{errorMessage}</p>
+                <p className="text-sm font-medium">Sign-in failed</p>
+                <p className="text-xs mt-1 whitespace-pre-line opacity-80">{errorMessage}</p>
               </div>
               <button
                 onClick={dismissError}
@@ -134,7 +163,7 @@ function SignInContent() {
           variant="outline"
           className="w-full h-11 sm:h-12 bg-background/50 border-white/10 hover:bg-white/5 transition-all"
           onClick={loginWithGoogle}
-          disabled={isLoading}
+          disabled={isLoading || googleEnabled !== true}
         >
           <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
             <path
@@ -154,8 +183,13 @@ function SignInContent() {
               fill="#EA4335"
             />
           </svg>
-          Continue with Google
+          {googleEnabled === false ? "Google sign-in unavailable" : "Continue with Google"}
         </Button>
+        {googleEnabled === false && (
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Google sign-in is not configured on this environment. Use email sign-in.
+          </p>
+        )}
       </motion.div>
 
       {/* Divider */}
@@ -233,7 +267,7 @@ function SignInContent() {
 
         <Button
           type="submit"
-          className="w-full h-11 sm:h-12 bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white font-medium shadow-lg shadow-primary/25 transition-all"
+          className="auth-emerald-btn w-full h-11 sm:h-12 font-medium"
           disabled={isLoading}
         >
           {isLoading ? (

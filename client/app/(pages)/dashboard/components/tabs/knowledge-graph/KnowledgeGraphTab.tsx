@@ -36,7 +36,6 @@ export function KnowledgeGraphTab() {
     toggleCategory,
     setSearchQuery,
     setDatePreset,
-    hoveredNodeId,
     hoverNode,
     refetch,
   } = useKnowledgeGraph();

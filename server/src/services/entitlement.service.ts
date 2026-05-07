@@ -295,43 +295,46 @@ export async function getUserEntitlements(userId: string): Promise<EntitlementBu
     const bundle = await computeEntitlements(userId);
 
     // Write-through to L2 and L1. L2 write is best-effort.
-    try {
-        await query(
-            `INSERT INTO user_entitlements_cache
-                (user_id, plan_id, plan_version, etag, features, pages, menus, limits, wallet, plan, subscription, overrides, computed_at, expires_at)
-             VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb, NOW(), NOW() + ($13 || ' milliseconds')::interval)
-             ON CONFLICT (user_id) DO UPDATE SET
-                plan_id = EXCLUDED.plan_id,
-                plan_version = EXCLUDED.plan_version,
-                etag = EXCLUDED.etag,
-                features = EXCLUDED.features,
-                pages = EXCLUDED.pages,
-                menus = EXCLUDED.menus,
-                limits = EXCLUDED.limits,
-                wallet = EXCLUDED.wallet,
-                plan = EXCLUDED.plan,
-                subscription = EXCLUDED.subscription,
-                overrides = EXCLUDED.overrides,
-                computed_at = NOW(),
-                expires_at = NOW() + ($13 || ' milliseconds')::interval`,
-            [
-                userId,
-                bundle.plan.id,
-                bundle.plan.version,
-                bundle.etag,
-                JSON.stringify(bundle.features),
-                JSON.stringify(bundle.pages),
-                JSON.stringify(bundle.menus),
-                JSON.stringify({}),
-                JSON.stringify(bundle.wallet),
-                JSON.stringify(bundle.plan),
-                JSON.stringify(bundle.subscription),
-                JSON.stringify(bundle.overrides),
-                String(L2_TTL_MS),
-            ]
-        );
-    } catch (err) {
-        logger.debug('[entitlement] L2 write skipped', { error: (err as Error).message });
+    // Skip L2 if user has no row in `users` table (FK constraint would reject).
+    if (bundle.userCreatedAt) {
+        try {
+            await query(
+                `INSERT INTO user_entitlements_cache
+                    (user_id, plan_id, plan_version, etag, features, pages, menus, limits, wallet, plan, subscription, overrides, computed_at, expires_at)
+                 VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb, NOW(), NOW() + ($13 || ' milliseconds')::interval)
+                 ON CONFLICT (user_id) DO UPDATE SET
+                    plan_id = EXCLUDED.plan_id,
+                    plan_version = EXCLUDED.plan_version,
+                    etag = EXCLUDED.etag,
+                    features = EXCLUDED.features,
+                    pages = EXCLUDED.pages,
+                    menus = EXCLUDED.menus,
+                    limits = EXCLUDED.limits,
+                    wallet = EXCLUDED.wallet,
+                    plan = EXCLUDED.plan,
+                    subscription = EXCLUDED.subscription,
+                    overrides = EXCLUDED.overrides,
+                    computed_at = NOW(),
+                    expires_at = NOW() + ($13 || ' milliseconds')::interval`,
+                [
+                    userId,
+                    bundle.plan.id,
+                    bundle.plan.version,
+                    bundle.etag,
+                    JSON.stringify(bundle.features),
+                    JSON.stringify(bundle.pages),
+                    JSON.stringify(bundle.menus),
+                    JSON.stringify({}),
+                    JSON.stringify(bundle.wallet),
+                    JSON.stringify(bundle.plan),
+                    JSON.stringify(bundle.subscription),
+                    JSON.stringify(bundle.overrides),
+                    String(L2_TTL_MS),
+                ]
+            );
+        } catch (err) {
+            logger.debug('[entitlement] L2 write skipped', { error: (err as Error).message });
+        }
     }
 
     l1Cache.set(userId, bundle);

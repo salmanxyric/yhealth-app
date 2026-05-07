@@ -19,7 +19,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 /**
  * Thick gradient arc with a pulsing glowing dot at the progress endpoint — used for Calories.
  */
-export function GlowEndpointArc({ progress, colors, type, delay, isLoading }: GlowEndpointArcProps) {
+export function GlowEndpointArc({ progress, colors, type: _type, delay, isLoading }: GlowEndpointArcProps) {
   const id = useId();
   const dashOffset = CIRCUMFERENCE - (progress / 100) * CIRCUMFERENCE;
 

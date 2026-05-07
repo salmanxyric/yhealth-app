@@ -8,10 +8,49 @@ interface YouTubeEmbedProps {
   isLoading?: boolean;
 }
 
+function extractYouTubeVideoId(value: string | null): string | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    const host = url.hostname.replace(/^www\./, "");
+
+    if (host === "youtu.be") {
+      return url.pathname.split("/").filter(Boolean)[0] || null;
+    }
+
+    if (host === "youtube.com" || host === "youtube-nocookie.com" || host === "m.youtube.com") {
+      const watchId = url.searchParams.get("v");
+      if (watchId) return watchId;
+
+      const parts = url.pathname.split("/").filter(Boolean);
+      const knownPath = parts.findIndex((part) =>
+        ["embed", "shorts", "live", "v"].includes(part)
+      );
+
+      if (knownPath >= 0) {
+        return parts[knownPath + 1] || null;
+      }
+    }
+  } catch {
+    const match = trimmed.match(
+      /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    );
+    return match?.[1] ?? null;
+  }
+
+  return null;
+}
+
 export default function YouTubeEmbed({
   videoId,
   isLoading = false,
 }: YouTubeEmbedProps) {
+  const normalizedVideoId = extractYouTubeVideoId(videoId);
+
   if (isLoading) {
     return (
       <div className="aspect-video w-full rounded-xl overflow-hidden bg-white/5 border border-white/10">
@@ -27,7 +66,7 @@ export default function YouTubeEmbed({
     );
   }
 
-  if (!videoId) {
+  if (!normalizedVideoId) {
     return (
       <div
         className={cn(
@@ -47,7 +86,7 @@ export default function YouTubeEmbed({
   return (
     <div className="aspect-video w-full rounded-xl overflow-hidden bg-black border border-white/10">
       <iframe
-        src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`}
+        src={`https://www.youtube-nocookie.com/embed/${normalizedVideoId}?rel=0&modestbranding=1`}
         title="Exercise tutorial"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen

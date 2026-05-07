@@ -321,8 +321,6 @@ export function WorkoutCalendar({
               const isCurrentMonth = new Date(day.date).getMonth() === currentMonth;
               const hasWorkout = !!day.workout && isCurrentMonth;
               const progress = getProgress(day.date, day.isCompleted, day.workout);
-              const isInProgress = progress > 0 && progress < 100;
-
               return (
                 <button
                   key={`${day.date}-${index}`}

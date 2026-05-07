@@ -25,7 +25,7 @@ import {
   searchMemoriesQuerySchema,
   coreSectionEnum,
 } from '../validators/intelligence-files.validator.js';
-import type { CoreSection } from '../../../shared/types/domain/intelligence-files.js';
+import type { CoreSection } from '@shared/types/domain/intelligence-files.js';
 
 class IntelligenceFilesController {
 
@@ -37,33 +37,44 @@ class IntelligenceFilesController {
     const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized('Authentication required');
 
+    const safeCount = async (sql: string, params: (string | number | boolean | object | Date | null)[]) => {
+      try {
+        const result = await query(sql, params);
+        return { count: parseInt(result.rows[0].count), lastModified: result.rows[0].last_modified?.toISOString() || null };
+      } catch (err: unknown) {
+        const code = (err as { code?: string }).code;
+        if (code === '42P01') return { count: 0, lastModified: null };
+        throw err;
+      }
+    };
+
     const [memories, artifacts, plans, core, logs, notes] = await Promise.all([
-      query(
+      safeCount(
         `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
          FROM intelligence_memories WHERE user_id = $1 AND status IN ('active', 'verified')`,
         [userId]
       ),
-      query(
+      safeCount(
         `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
          FROM intelligence_artifacts WHERE user_id = $1 AND NOT is_archived`,
         [userId]
       ),
-      query(
+      safeCount(
         `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
          FROM intelligence_plans WHERE user_id = $1 AND NOT is_archived`,
         [userId]
       ),
-      query(
+      safeCount(
         `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
          FROM intelligence_core_profile WHERE user_id = $1`,
         [userId]
       ),
-      query(
+      safeCount(
         `SELECT COUNT(*) as count, MAX(created_at) as last_modified
          FROM intelligence_log_references WHERE user_id = $1`,
         [userId]
       ),
-      query(
+      safeCount(
         `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
          FROM user_files WHERE user_id = $1 AND NOT is_archived`,
         [userId]
@@ -71,12 +82,12 @@ class IntelligenceFilesController {
     ]);
 
     const folders = [
-      { id: 'memories', label: 'Memories', itemCount: parseInt(memories.rows[0].count), lastModified: memories.rows[0].last_modified?.toISOString() || null },
-      { id: 'notes', label: 'Notes', itemCount: parseInt(notes.rows[0].count), lastModified: notes.rows[0].last_modified?.toISOString() || null },
-      { id: 'artifacts', label: 'Artifacts', itemCount: parseInt(artifacts.rows[0].count), lastModified: artifacts.rows[0].last_modified?.toISOString() || null },
-      { id: 'plans', label: 'Plans', itemCount: parseInt(plans.rows[0].count), lastModified: plans.rows[0].last_modified?.toISOString() || null },
-      { id: 'core', label: 'Core', itemCount: parseInt(core.rows[0].count), lastModified: core.rows[0].last_modified?.toISOString() || null },
-      { id: 'logs', label: 'Logs', itemCount: parseInt(logs.rows[0].count), lastModified: logs.rows[0].last_modified?.toISOString() || null },
+      { id: 'memories', label: 'Memories', itemCount: memories.count, lastModified: memories.lastModified },
+      { id: 'notes', label: 'Notes', itemCount: notes.count, lastModified: notes.lastModified },
+      { id: 'artifacts', label: 'Artifacts', itemCount: artifacts.count, lastModified: artifacts.lastModified },
+      { id: 'plans', label: 'Plans', itemCount: plans.count, lastModified: plans.lastModified },
+      { id: 'core', label: 'Core', itemCount: core.count, lastModified: core.lastModified },
+      { id: 'logs', label: 'Logs', itemCount: logs.count, lastModified: logs.lastModified },
     ];
 
     ApiResponse.success(res, { folders }, 'Folder summaries retrieved', undefined, req);

@@ -8,10 +8,9 @@ import {
   RAGChatMessage,
   ActionCommand,
   StreamEvent,
-  StreamToolCallEvent,
-  StreamToolResultEvent,
 } from "@/src/shared/services/rag-chat.service";
 import { parseActionsFromResponse, executeActions, ActionExecutionResult } from "@/src/shared/services/action-handler.service";
+import { isMCQAnswerMessage } from "@/src/shared/utils/coach-message-display";
 import { api } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import type { RoutingChip as RoutingChipData } from "@/app/(pages)/life-areas/types";
@@ -72,6 +71,8 @@ export function useAICoach() {
   const streamAbortRef = useRef<AbortController | null>(null);
   const [imageModalMode, setImageModalMode] = useState<"camera" | "upload">("upload");
   const [isNewChat, setIsNewChat] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -115,7 +116,11 @@ export function useAICoach() {
     setIsLoading(true);
     try {
       const result = await ragChatService.getConversations({ limit: 50 });
-      setConversations(result.conversations || []);
+      setConversations(
+        (result.conversations || []).filter(
+          (c) => !isMCQAnswerMessage(c.title) && !isMCQAnswerMessage(c.lastMessagePreview)
+        )
+      );
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
     } finally {
@@ -131,7 +136,7 @@ export function useAICoach() {
       setActiveConversationId(conversationId);
       setMessages(
         (result.messages || [])
-          .filter((msg: RAGChatMessage) => (msg.role as string) !== "system")
+          .filter((msg: RAGChatMessage) => (msg.role as string) !== "system" && !isMCQAnswerMessage(msg.content))
           .map((msg: RAGChatMessage) => ({
             id: msg.id,
             role: msg.role,
@@ -324,6 +329,38 @@ export function useAICoach() {
     }
   }, [router, handleNavigate, handleUpdate, handleCreate, handleDelete, handleOpenModal]);
 
+  const reconcileSavedMessageIds = useCallback((conversationId: string) => {
+    window.setTimeout(async () => {
+      try {
+        const result = await ragChatService.getConversation(conversationId, 100);
+        const savedMessages = (result.messages || [])
+          .filter((msg: RAGChatMessage) => (msg.role as string) !== "system" && !isMCQAnswerMessage(msg.content));
+
+        setMessages((prev) => {
+          let cursor = 0;
+          return prev.map((message) => {
+            const matchIndex = savedMessages.findIndex((saved, index) =>
+              index >= cursor &&
+              saved.role === message.role &&
+              saved.content === message.content
+            );
+
+            if (matchIndex < 0) return message;
+            cursor = matchIndex + 1;
+            const saved = savedMessages[matchIndex];
+            return {
+              ...message,
+              id: saved.id,
+              timestamp: new Date(saved.createdAt),
+            };
+          });
+        });
+      } catch {
+        // Keep optimistic temp IDs; copy still works and edit falls back locally.
+      }
+    }, 350);
+  }, []);
+
   const undoTimelineEvent = useCallback(async (messageId: string, operationId: string) => {
     try {
       const result = await ragChatService.undoOperation(operationId);
@@ -372,7 +409,6 @@ export function useAICoach() {
     const artifacts: Artifact[] = [];
     const analysisSteps: AnalysisStepEvent[] = [];
     let conversationId = activeConversationId || undefined;
-    let agentTurnId: string | undefined;
     const streamingMsgId = `streaming-${Date.now()}`;
     let streamingMsgCreated = false;
     let savedThinkingLabel = "";
@@ -489,7 +525,6 @@ export function useAICoach() {
               break;
 
             case "done": {
-              agentTurnId = event.agentTurnId;
               const finalContent = event.message || accumulatedContent;
 
               const assistantMessage: Message = {
@@ -512,6 +547,7 @@ export function useAICoach() {
               } else {
                 setMessages((prev) => [...prev, assistantMessage]);
               }
+              reconcileSavedMessageIds(event.conversationId);
               setLiveTimelineEvents([]);
               setLiveAnalysisSteps([]);
 
@@ -530,16 +566,33 @@ export function useAICoach() {
               break;
             }
 
-            case "error":
+            case "error": {
               console.error("[AI Coach] Stream error:", event.error);
+              const errorContent = "I'm sorry, I encountered an error. Please try again.";
+              if (streamingMsgCreated) {
+                setMessages((prev) => prev.map((m) =>
+                  m.id === streamingMsgId
+                    ? { ...m, content: errorContent }
+                    : m,
+                ));
+              } else {
+                streamingMsgCreated = true;
+                setMessages((prev) => [...prev, {
+                  id: streamingMsgId,
+                  role: "assistant",
+                  content: errorContent,
+                  timestamp: new Date(),
+                }]);
+              }
               break;
+            }
           }
         },
       });
     } catch (error: unknown) {
       if (abortController.signal.aborted) return;
 
-      const status = error && typeof error === "object" && "statusCode" in error ? (error as any).statusCode : 0;
+      const status = error && typeof error === "object" && "statusCode" in error ? (error as unknown as { statusCode: number }).statusCode : 0;
       if (status === 503 && attempt < MAX_RETRIES) {
         const delay = BACKOFF_BASE_MS * Math.pow(2, attempt);
         console.warn(`[AI Coach] Server busy (503), retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`);
@@ -555,7 +608,7 @@ export function useAICoach() {
       await attemptSend(0);
     } catch (error) {
       if (abortController.signal.aborted) return;
-      const isNetworkError = error && typeof error === "object" && "code" in error && (error as any).code === "NETWORK_ERROR";
+      const isNetworkError = error && typeof error === "object" && "code" in error && (error as unknown as { code: string }).code === "NETWORK_ERROR";
       if (!isNetworkError) console.error("Failed to send message:", error);
       setMessages((prev) => [...prev, {
         id: `error-${Date.now()}`,
@@ -585,6 +638,28 @@ export function useAICoach() {
     await sendMessage(userMsg.content);
   }, [messages, isSending, sendMessage]);
 
+  const editUserMessage = useCallback(async (messageId: string, nextContent: string) => {
+    const trimmed = nextContent.trim();
+    if (!trimmed || isSending) return;
+
+    const messageIndex = messages.findIndex((m) => m.id === messageId && m.role === "user");
+    if (messageIndex < 0) return;
+
+    const canPersistRewind = activeConversationId && !messageId.startsWith("temp-");
+    try {
+      if (canPersistRewind) {
+        await ragChatService.truncateConversationFromMessage(activeConversationId, messageId);
+      }
+
+      setMessages((prev) => prev.slice(0, messageIndex));
+      await sendMessage(trimmed);
+    } catch (error) {
+      console.error("Failed to edit message:", error);
+      toast.error("Couldn't edit this message. Please try again.");
+      throw error;
+    }
+  }, [activeConversationId, isSending, messages, sendMessage]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
@@ -603,6 +678,44 @@ export function useAICoach() {
       }
     }
     setDropdownOpen(null);
+  };
+
+  const toggleSelectConversation = (id: string) => {
+    setSelectedConversationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllConversations = () => {
+    setSelectedConversationIds(new Set(conversations.map((c) => c.id)));
+  };
+
+  const deselectAllConversations = () => {
+    setSelectedConversationIds(new Set());
+  };
+
+  const exitMultiSelectMode = () => {
+    setMultiSelectMode(false);
+    setSelectedConversationIds(new Set());
+  };
+
+  const deleteSelectedConversations = async () => {
+    const ids = Array.from(selectedConversationIds);
+    if (ids.length === 0) return;
+    try {
+      await ragChatService.deleteConversations(ids);
+      setConversations((prev) => prev.filter((c) => !selectedConversationIds.has(c.id)));
+      if (activeConversationId && selectedConversationIds.has(activeConversationId)) {
+        setActiveConversationId(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error("Failed to bulk delete conversations:", error);
+    }
+    exitMultiSelectMode();
   };
 
   const archiveConversation = async (conversationId: string) => {
@@ -646,6 +759,7 @@ export function useAICoach() {
     // Actions
     sendMessage,
     regenerateMessage,
+    editUserMessage,
     handleKeyDown,
     startNewConversation,
     loadConversation,
@@ -653,5 +767,14 @@ export function useAICoach() {
     archiveConversation,
     handleImageAnalysisComplete,
     undoTimelineEvent,
+    // Multi-select
+    multiSelectMode,
+    selectedConversationIds,
+    setMultiSelectMode,
+    toggleSelectConversation,
+    selectAllConversations,
+    deselectAllConversations,
+    exitMultiSelectMode,
+    deleteSelectedConversations,
   };
 }

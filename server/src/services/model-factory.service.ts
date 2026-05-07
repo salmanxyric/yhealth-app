@@ -260,7 +260,14 @@ class ModelFactory {
     // Generic provider failure (503, stream parse, etc.)
     if (error instanceof Error) {
       const msg = error.message;
-      if (msg.includes('503') || msg.includes('UNAVAILABLE') || msg.includes('Failed to parse stream') || msg.includes('GoogleGenerativeAI')) {
+      if (
+        msg.includes('503') ||
+        msg.includes('UNAVAILABLE') ||
+        msg.includes('Failed to parse stream') ||
+        msg.includes('GoogleGenerativeAI') ||
+        msg.includes("Cannot read properties of undefined (reading 'parts')") ||
+        (msg.includes('Cannot read properties of undefined') && msg.includes('parts'))
+      ) {
         this.markCurrentProviderRateLimited(5 * 60 * 1000);
         return true;
       }

@@ -138,7 +138,7 @@ class AdaptiveCoachingLoopService {
              d.date::date AS completion_date,
              COUNT(gac.id) AS completed,
              (SELECT COUNT(*) FROM goal_actions ga
-              JOIN life_goals lg ON ga.life_goal_id = lg.id
+              JOIN life_goals lg ON ga.goal_id = lg.id
               WHERE lg.user_id = $1 AND lg.status = 'active' AND ga.is_completed = false
              ) AS total
            FROM generate_series(CURRENT_DATE - INTERVAL '7 days', CURRENT_DATE, '1 day') AS d(date)
@@ -157,10 +157,10 @@ class AdaptiveCoachingLoopService {
 
         // Last interaction (most recent AI coach message)
         query<{ last_at: Date | null }>(
-          `SELECT MAX(created_at) AS last_at
-           FROM rag_conversation_messages rcm
-           JOIN rag_conversations rc ON rcm.conversation_id = rc.id
-           WHERE rc.user_id = $1 AND rcm.role = 'user'`,
+          `SELECT MAX(rm.created_at) AS last_at
+           FROM rag_messages rm
+           JOIN rag_conversations rc ON rm.conversation_id = rc.id
+           WHERE rc.user_id = $1 AND rm.role = 'user'`,
           [userId]
         ),
 

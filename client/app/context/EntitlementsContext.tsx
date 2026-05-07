@@ -173,7 +173,7 @@ export function EntitlementsProvider({ children }: EntitlementsProviderProps) {
     const hydrateWallet = useWalletStore((s) => s.hydrate);
     const resetWallet = useWalletStore((s) => s.reset);
 
-    const [bundle, setBundle] = useState<EntitlementBundle | null>(() => readLocalCache());
+    const [bundle, setBundle] = useState<EntitlementBundle | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isStale, setIsStale] = useState<boolean>(false);
     const [error, setError] = useState<Error | null>(null);
@@ -229,7 +229,8 @@ export function EntitlementsProvider({ children }: EntitlementsProviderProps) {
         [isAuthenticated, hydrateWallet]
     );
 
-    // Initial fetch on auth ready.
+    // Initial fetch on auth ready. Local cache is intentionally read after
+    // hydration so the server render and first client render match.
     useEffect(() => {
         if (authLoading) return;
         if (!isAuthenticated) {
@@ -248,8 +249,23 @@ export function EntitlementsProvider({ children }: EntitlementsProviderProps) {
             }
             return;
         }
+
+        const cached = readLocalCache();
+        if (cached) {
+            setBundle(cached);
+            etagRef.current = cached.etag;
+            hydrateWallet({
+                planCredits: cached.wallet.planCredits,
+                bonusCredits: cached.wallet.bonusCredits,
+                lastResetAt: cached.wallet.lastResetAt,
+                nextResetAt: cached.wallet.nextResetAt,
+            });
+            void fetchBundle({ background: true });
+            return;
+        }
+
         void fetchBundle();
-    }, [authLoading, isAuthenticated, fetchBundle, resetWallet]);
+    }, [authLoading, isAuthenticated, fetchBundle, hydrateWallet, resetWallet]);
 
     // Focus + visibility refetch (throttled).
     useEffect(() => {

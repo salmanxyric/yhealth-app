@@ -251,7 +251,19 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setCustomGoalText = useCallback((text: string) => {
-    setState((prev) => ({ ...prev, customGoalText: text }));
+    setState((prev) => {
+      const customGoalChanged = prev.customGoalText.trim() !== text.trim();
+      return {
+        ...prev,
+        customGoalText: text,
+        ...(customGoalChanged ? {
+          generatedAssessmentQuestions: null,
+          assessmentQuestionsGoalKey: null,
+          generatedLifeCoachQuestions: null,
+          lifeCoachQuestionsGoalKey: null,
+        } : {}),
+      };
+    });
   }, []);
 
   // Step 1: Assessment Mode

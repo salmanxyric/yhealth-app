@@ -37,6 +37,12 @@ function OnboardingContent() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [currentStep]);
 
+  useEffect(() => {
+    if (currentStep === 2 && assessmentMode === "quick" && assessmentComplete) {
+      goToStep(3);
+    }
+  }, [assessmentComplete, assessmentMode, currentStep, goToStep]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
@@ -85,7 +91,9 @@ function OnboardingContent() {
       case 1:
         return <AssessmentModeStep />;
       case 2:
-        if (assessmentComplete) return <LifeGoalsStep />;
+        if (assessmentComplete) {
+          return assessmentMode === "deep" ? <LifeGoalsStep /> : <GoalSetupStep />;
+        }
         return assessmentMode === "deep" ? (
           <DeepAssessmentStep />
         ) : (
@@ -116,7 +124,7 @@ function OnboardingContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="max-w-[1286px] mx-auto px-3 sm:px-4 md:px-6">
+          <div className="max-w-[1500px] mx-auto px-3 sm:px-4 md:px-6">
             {/* Top bar: Back | Logo | Steps counter */}
             <motion.div
               className="relative flex items-center justify-between py-3 sm:py-4 md:py-5"
@@ -152,7 +160,7 @@ function OnboardingContent() {
           </div>
 
           {/* Stepper — below header line */}
-          <div className="max-w-[1286px] mx-auto px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 md:pb-6">
+          <div className="max-w-[1500px] mx-auto px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 md:pb-6">
             <ProgressIndicator
               steps={ONBOARDING_STEPS}
               currentStep={currentStep}

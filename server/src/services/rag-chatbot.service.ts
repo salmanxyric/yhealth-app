@@ -15,6 +15,33 @@ import { embeddingQueueService } from './embedding-queue.service.js';
 import { query } from '../config/database.config.js';
 import { langGraphChatbotService } from './langgraph-chatbot.service.js';
 
+function isToolArtifactLike(value: string): boolean {
+  const text = value.trim();
+  if (!text || (!text.startsWith('{') && !text.startsWith('['))) return false;
+  return /"type"\s*:\s*"(?:functionCall|functionResponse|tool_call|tool_result)"/i.test(text) ||
+    /"functionCall"\s*:|"functionResponse"\s*:|"tool_calls"\s*:|"additional_kwargs"\s*:/i.test(text);
+}
+
+function cleanConversationText(value: string | null | undefined): string {
+  if (!value) return '';
+  const original = value.trim();
+  if (!original || original === '[object Object]' || isToolArtifactLike(original)) return '';
+  return original
+    .replace(/<!--CHECKIN:[\s\S]*?-->/g, '')
+    .replace(/<!--ARTIFACT:[\s\S]*?-->/g, '')
+    .split(/\r?\n/)
+    .filter((line) => !isToolArtifactLike(line))
+    .join(' ')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/["']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Types
 interface RAGChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -373,6 +400,70 @@ class RAGChatbotService {
   }
 
   /**
+   * Remove a user message and every later message so the client can resend an
+   * edited prompt from the same point in the conversation.
+   */
+  async truncateConversationFromMessage(
+    conversationId: string,
+    messageId: string,
+    userId: string
+  ): Promise<{ deletedCount: number }> {
+    try {
+      const targetResult = await query<{ sequence_number: number }>(
+        `SELECT m.sequence_number
+         FROM rag_messages m
+         INNER JOIN rag_conversations c ON c.id = m.conversation_id
+         WHERE m.id = $1
+           AND m.conversation_id = $2
+           AND m.user_id = $3
+           AND c.user_id = $3
+           AND c.status = 'active'
+           AND m.role = 'user'
+         LIMIT 1`,
+        [messageId, conversationId, userId]
+      );
+
+      if (targetResult.rows.length === 0) {
+        return { deletedCount: 0 };
+      }
+
+      const sequenceNumber = targetResult.rows[0].sequence_number;
+      const deleteResult = await query<{ id: string }>(
+        `DELETE FROM rag_messages
+         WHERE conversation_id = $1
+           AND user_id = $2
+           AND sequence_number >= $3
+         RETURNING id`,
+        [conversationId, userId, sequenceNumber]
+      );
+
+      await query(
+        `UPDATE rag_conversations
+         SET message_count = (
+               SELECT COUNT(*)
+               FROM rag_messages
+               WHERE conversation_id = $1
+                 AND role IN ('user', 'assistant')
+             ),
+             last_message_at = COALESCE((
+               SELECT MAX(created_at)
+               FROM rag_messages
+               WHERE conversation_id = $1
+             ), created_at),
+             langgraph_checkpoint = NULL,
+             updated_at = NOW()
+         WHERE id = $1 AND user_id = $2`,
+        [conversationId, userId]
+      );
+
+      return { deletedCount: deleteResult.rows.length };
+    } catch (error) {
+      logger.error('Error truncating conversation from message', { error, conversationId, messageId });
+      throw error;
+    }
+  }
+
+  /**
    * Get user's conversations
    */
   async getUserConversations(params: {
@@ -426,8 +517,16 @@ class RAGChatbotService {
         return 'New Conversation';
       }
 
-      const messageContent = conversation.messages
+      const cleanedMessages = conversation.messages
         .slice(0, 5)
+        .map((m) => ({ role: m.role, content: cleanConversationText(m.content) }))
+        .filter((m) => m.content.length > 0);
+
+      if (cleanedMessages.length === 0) {
+        return 'Health Coaching Session';
+      }
+
+      const messageContent = cleanedMessages
         .map((m) => `${m.role}: ${m.content}`)
         .join('\n');
 
@@ -440,15 +539,19 @@ class RAGChatbotService {
       ]);
 
       const chain = prompt.pipe(this.llm).pipe(new StringOutputParser());
-      const title = await chain.invoke({});
+      const title = cleanConversationText(await chain.invoke({})).slice(0, 60);
+      const fallbackTitle = cleanConversationText(
+        cleanedMessages.find((m) => m.role === 'user')?.content
+      ).slice(0, 60) || 'Health Coaching Session';
+      const finalTitle = title || fallbackTitle;
 
       // Update conversation title
       await query(
         'UPDATE rag_conversations SET title = $1, updated_at = NOW() WHERE id = $2',
-        [title.trim(), conversationId]
+        [finalTitle, conversationId]
       );
 
-      return title.trim();
+      return finalTitle;
     } catch (error) {
       logger.error('Error generating conversation title', {
         error,
@@ -518,6 +621,29 @@ class RAGChatbotService {
       return (result.rows?.length ?? 0) > 0;
     } catch (error) {
       logger.error('Error deleting conversation', { error, conversationId });
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk delete conversations
+   */
+  async deleteConversations(
+    conversationIds: string[],
+    userId: string
+  ): Promise<number> {
+    if (conversationIds.length === 0) return 0;
+    try {
+      const result = await query(
+        `UPDATE rag_conversations
+         SET status = 'deleted', updated_at = NOW()
+         WHERE id = ANY($1::uuid[]) AND user_id = $2 AND status != 'deleted'
+         RETURNING id`,
+        [conversationIds, userId]
+      );
+      return result.rows?.length ?? 0;
+    } catch (error) {
+      logger.error('Error bulk deleting conversations', { error, count: conversationIds.length });
       throw error;
     }
   }

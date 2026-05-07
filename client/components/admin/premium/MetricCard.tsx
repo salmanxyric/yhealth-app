@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { Skeleton } from 'boneyard-js/react';
+import { ContentSkeleton } from '@/components/ui/skeleton';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ACCENT_COLORS, type AccentColor } from '@/lib/admin-tokens';
@@ -190,7 +190,7 @@ export function MetricCard({
   );
 
   return (
-    <Skeleton
+    <ContentSkeleton
       name={`metric-card-${title.toLowerCase().replace(/\s+/g, '-')}`}
       loading={isLoading}
       animate="shimmer"
@@ -304,7 +304,7 @@ export function MetricCard({
         />
       </motion.div>
     </div>
-    </Skeleton>
+    </ContentSkeleton>
   );
 }
 

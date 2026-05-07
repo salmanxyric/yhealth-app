@@ -14,7 +14,7 @@ import type {
   VisionStats,
   VisionClassification,
   SubmitPlateResponseInput,
-} from '../../../../shared/types/domain/vision.js';
+} from '@shared/types/domain/vision.js';
 import type {
   StartVisionTestInput,
   CompleteVisionTestInput,

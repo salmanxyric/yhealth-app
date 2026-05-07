@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Check, Calendar, AlertCircle, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Check, AlertCircle, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 import type { PlanReadyViewProps } from './types';
 import { ActivityCard } from './ActivityCard';
@@ -51,7 +51,7 @@ export function PlanReadyView({
           </div>
         </motion.div>
 
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-medium text-white mb-3">
+        <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-medium text-white mb-3">
           Your Plan is{' '}
           <span className="text-emerald-400">Ready!</span>
         </h1>

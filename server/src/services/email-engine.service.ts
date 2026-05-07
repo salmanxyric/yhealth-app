@@ -70,6 +70,12 @@ class EmailEngine {
       priority = 'normal',
     } = options;
 
+    // Skip system users
+    if (recipient.endsWith('@balencia.system')) {
+      logger.debug('[EmailEngine] Email skipped — system user', { recipient, template });
+      return null;
+    }
+
     // Check preferences for non-transactional emails
     if (userId && category !== 'transactional') {
       const allowed = await this.checkPreferences(userId, category);
@@ -78,6 +84,17 @@ class EmailEngine {
           userId,
           category,
           template,
+        });
+        return null;
+      }
+
+      // Rate limit: max 3 non-transactional emails per user per day
+      const dailyCount = await this.getDailyEmailCount(userId);
+      if (dailyCount >= 3) {
+        logger.debug('[EmailEngine] Email skipped — daily limit reached', {
+          userId,
+          template,
+          dailyCount,
         });
         return null;
       }
@@ -421,6 +438,25 @@ class EmailEngine {
   // ============================================================================
   // Helpers
   // ============================================================================
+
+  /**
+   * Count non-transactional emails sent to a user today
+   */
+  private async getDailyEmailCount(userId: string): Promise<number> {
+    try {
+      const result = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM email_logs
+         WHERE user_id = $1
+         AND category != 'transactional'
+         AND status = 'sent'
+         AND created_at >= CURRENT_DATE`,
+        [userId]
+      );
+      return parseInt(result.rows[0]?.count || '0');
+    } catch {
+      return 0;
+    }
+  }
 
   private resolveSubject(template: string): string {
     const key = template as keyof typeof EMAIL_SUBJECTS;

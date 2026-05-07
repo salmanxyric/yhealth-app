@@ -210,9 +210,8 @@ async function startServer(): Promise<void> {
     // Connect to database
     await database.connect();
 
-    // NOTE: Full auto-migration is disabled on startup to prevent slow deploys.
-    // Run full migrations manually: npm run db:migrate
-    // Lightweight column sync runs automatically below (idempotent, ~2-5s).
+    // Lightweight column sync (idempotent, ~2-5s).
+    // Full migrations: npm run db:migrate
     try {
       const { runColumnSync } = await import('./database/auto-migrate.js');
       await runColumnSync();
@@ -222,68 +221,17 @@ async function startServer(): Promise<void> {
       });
     }
 
-    // Ensure roles table + default 'User' role exist (required for user registration FK)
-    try {
-      await query(`
-        CREATE TABLE IF NOT EXISTS roles (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          name VARCHAR(100) NOT NULL,
-          slug VARCHAR(100) UNIQUE NOT NULL,
-          description TEXT,
-          is_system BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      await query(`
-        INSERT INTO roles (id, name, slug, description, is_system) VALUES
-          ('11111111-1111-1111-1111-111111111101', 'User', 'user', 'Default application user', true),
-          ('11111111-1111-1111-1111-111111111102', 'Admin', 'admin', 'Full administrative access', true),
-          ('11111111-1111-1111-1111-111111111106', 'System', 'system', 'System/internal service accounts', true)
-        ON CONFLICT (slug) DO NOTHING
-      `);
-      logger.info('Default roles ensured');
-    } catch (err) {
-      logger.warn('Failed to ensure default roles (non-fatal)', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+    // Verify required bootstrap data exists (created by migration 20260507000000_bootstrap_required_data.sql)
+    const rolesCheck = await query<{ count: string }>(`SELECT COUNT(*) as count FROM information_schema.tables WHERE table_name = 'roles'`);
+    if (rolesCheck.rows[0]?.count === '0') {
+      logger.error('Required "roles" table missing — run: npm run db:migrate');
     }
 
-    // Ensure streak tables exist (required for streak system)
-    try {
-      const { readFileSync } = await import('fs');
-      const { join } = await import('path');
-      const streakMigrationPath = join(import.meta.dirname, 'database', 'migrations', 'add-streak-tables.sql');
-      const streakSQL = readFileSync(streakMigrationPath, 'utf-8');
-      await query(streakSQL);
-      logger.info('Streak tables ensured');
-    } catch (err) {
-      logger.warn('Failed to ensure streak tables (non-fatal)', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-
-    // Auto-seed subscription plans if table is empty
+    // Auto-seed subscription plans if table is empty (idempotent, read-heavy)
     try {
       await ensureDefaultPlans();
     } catch (err) {
       logger.warn("Failed to auto-seed subscription plans", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-
-    // Ensure AI Coach system user exists (required for proactive messaging)
-    try {
-      const AI_COACH_USER_ID = process.env.AI_COACH_USER_ID || '00000000-0000-0000-0000-000000000001';
-      await query(
-        `INSERT INTO users (id, email, password, first_name, last_name, role_id, auth_provider, onboarding_status, is_email_verified, is_active)
-         VALUES ($1, 'ai-coach@balencia.system', 'SYSTEM_USER_NO_LOGIN', 'AI', 'Coach', '11111111-1111-1111-1111-111111111101', 'local', 'completed', true, true)
-         ON CONFLICT (id) DO NOTHING`,
-        [AI_COACH_USER_ID]
-      );
-      logger.info('AI Coach system user ensured');
-    } catch (err) {
-      logger.warn('Failed to ensure AI Coach user (non-fatal)', {
         error: err instanceof Error ? err.message : String(err),
       });
     }

@@ -9,9 +9,6 @@ FROM node:20-alpine AS server-builder
 
 WORKDIR /app
 
-# Copy shared types (server references ../../shared)
-COPY shared ./shared
-
 # Copy server package files
 COPY server/package.json server/package-lock.json* ./server/
 
@@ -45,14 +42,14 @@ COPY --from=server-builder --chown=nodejs:nodejs /app/server/dist ./server/dist
 COPY --from=server-builder --chown=nodejs:nodejs /app/server/package.json ./server/
 
 # Copy database table SQL files (needed by auto-migrate at runtime)
-COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/database/tables ./server/dist/server/src/database/tables
-COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/database/migrations ./server/dist/server/src/database/migrations
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/database/tables ./server/dist/src/database/tables
+COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/database/migrations ./server/dist/src/database/migrations
 
 # Copy email templates (EJS files needed at runtime)
 COPY --from=server-builder --chown=nodejs:nodejs /app/server/src/mails ./server/src/mails
 # Symlink email templates to where compiled JS expects them
-RUN mkdir -p server/dist/server/src && \
-    ln -sf /app/server/src/mails server/dist/server/src/mails
+RUN mkdir -p server/dist/src && \
+    ln -sf /app/server/src/mails server/dist/src/mails
 
 # Switch to non-root user
 USER nodejs
@@ -68,4 +65,4 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:5000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-CMD ["node", "dist/server/src/index.js"]
+CMD ["node", "dist/src/index.js"]

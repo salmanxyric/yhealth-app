@@ -68,7 +68,7 @@ export function startActivityEventProcessor(): void {
             userId: data.userId,
             error: error instanceof Error ? error.message : 'Unknown error',
           });
-          throw error; // Re-throw to mark job as failed
+          throw error; 
         }
       },
       {

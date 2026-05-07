@@ -12,6 +12,7 @@ import { jest } from '@jest/globals';
 // ============================================
 
 const mockQuery = jest.fn<any>();
+const mockCreateEventForScheduleItem = jest.fn<any>();
 const mockLogger = { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
 
 jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
@@ -32,6 +33,12 @@ jest.unstable_mockModule('../../../src/database/pg.js', () => ({
 
 jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
   logger: mockLogger,
+}));
+
+jest.unstable_mockModule('../../../src/services/google-calendar.service.js', () => ({
+  googleCalendarService: {
+    createEventForScheduleItem: mockCreateEventForScheduleItem,
+  },
 }));
 
 // ============================================
@@ -116,6 +123,7 @@ function makeTemplateRow(overrides: Record<string, unknown> = {}) {
 describe('ScheduleService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCreateEventForScheduleItem.mockResolvedValue(null);
   });
 
   // ------------------------------------------
@@ -273,6 +281,9 @@ describe('ScheduleService', () => {
       mockQuery.mockResolvedValueOnce(pgResult([{ id: SCHEDULE_ID }]));
       // INSERT item
       mockQuery.mockResolvedValueOnce(pgResult([itemRow]));
+      // Google Calendar best-effort sync context
+      mockQuery.mockResolvedValueOnce(pgResult([{ schedule_date: '2026-04-24' }]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ timezone: 'UTC' }]));
 
       const result = await scheduleService.addScheduleItem(USER_ID, SCHEDULE_ID, {
         title: 'Morning Workout',
@@ -290,6 +301,8 @@ describe('ScheduleService', () => {
 
       mockQuery.mockResolvedValueOnce(pgResult([{ id: SCHEDULE_ID }]));
       mockQuery.mockResolvedValueOnce(pgResult([itemRow]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ schedule_date: '2026-04-24' }]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ timezone: 'UTC' }]));
 
       const result = await scheduleService.addScheduleItem(USER_ID, SCHEDULE_ID, {
         title: 'Meeting',
@@ -299,6 +312,148 @@ describe('ScheduleService', () => {
       });
 
       expect(result.durationMinutes).toBe(60);
+    });
+
+    it('persists visual fields and stores shape in metadata', async () => {
+      const itemRow = makeItemRow({
+        title: 'Gym',
+        color: '#123456',
+        icon: '🏋️',
+        category: 'exercise',
+        shape: 'diamond',
+        metadata: { shape: 'diamond', intensity: 'high' },
+      });
+
+      mockQuery.mockResolvedValueOnce(pgResult([{ id: SCHEDULE_ID }]));
+      mockQuery.mockResolvedValueOnce(pgResult([itemRow]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ schedule_date: '2026-04-24' }]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ timezone: 'UTC' }]));
+
+      const result = await scheduleService.addScheduleItem(USER_ID, SCHEDULE_ID, {
+        title: 'Gym',
+        startTime: '09:00',
+        endTime: '10:00',
+        color: '#123456',
+        icon: '🏋️',
+        category: 'exercise',
+        shape: 'diamond',
+        position: 2,
+        metadata: { intensity: 'high' },
+      });
+
+      const insertValues = mockQuery.mock.calls[1][1] as unknown[];
+      expect(insertValues[6]).toBe('#123456');
+      expect(insertValues[7]).toBe('🏋️');
+      expect(insertValues[8]).toBe('exercise');
+      expect(insertValues[9]).toBe('diamond');
+      expect(JSON.parse(insertValues[11] as string)).toEqual({ intensity: 'high', shape: 'diamond' });
+      expect((result as any).shape).toBe('diamond');
+    });
+
+    it('defaults duration, end time, shape, and category color when omitted', async () => {
+      const itemRow = makeItemRow({
+        title: 'Lunch',
+        start_time: '12:00:00',
+        end_time: '12:30:00',
+        duration_minutes: 30,
+        color: '#c98111',
+        category: 'meal',
+        shape: 'square',
+        metadata: { shape: 'square' },
+      });
+
+      mockQuery.mockResolvedValueOnce(pgResult([{ id: SCHEDULE_ID }]));
+      mockQuery.mockResolvedValueOnce(pgResult([itemRow]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ schedule_date: '2026-04-24' }]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ timezone: 'UTC' }]));
+
+      const result = await scheduleService.addScheduleItem(USER_ID, SCHEDULE_ID, {
+        title: 'Lunch',
+        startTime: '12:00',
+        category: 'meal',
+        position: 3,
+      });
+
+      const insertValues = mockQuery.mock.calls[1][1] as unknown[];
+      expect(insertValues[4]).toBe('12:30');
+      expect(insertValues[5]).toBe(30);
+      expect(insertValues[6]).toBe('#c98111');
+      expect(insertValues[9]).toBe('square');
+      expect(JSON.parse(insertValues[11] as string)).toEqual({ shape: 'square' });
+      expect(result.endTime).toBe('12:30');
+      expect(result.durationMinutes).toBe(30);
+    });
+
+    it('stores Google Calendar event metadata when linked sync succeeds', async () => {
+      const itemRow = makeItemRow({ metadata: { shape: 'square' } });
+      const syncedRow = makeItemRow({
+        metadata: {
+          shape: 'square',
+          googleCalendar: {
+            provider: 'google',
+            connectionId: 'conn-1',
+            calendarId: 'primary',
+            eventId: 'event-1',
+            htmlLink: 'https://calendar.google.com/event',
+            syncedAt: '2026-05-06T00:00:00.000Z',
+          },
+        },
+      });
+      mockCreateEventForScheduleItem.mockResolvedValue({
+        connectionId: 'conn-1',
+        calendarId: 'primary',
+        eventId: 'event-1',
+        htmlLink: 'https://calendar.google.com/event',
+      });
+
+      mockQuery.mockResolvedValueOnce(pgResult([{ id: SCHEDULE_ID }]));
+      mockQuery.mockResolvedValueOnce(pgResult([itemRow]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ schedule_date: '2026-04-24' }]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ timezone: 'Asia/Karachi' }]));
+      mockQuery.mockResolvedValueOnce(pgResult([syncedRow]));
+
+      const result = await scheduleService.addScheduleItem(USER_ID, SCHEDULE_ID, {
+        title: 'Morning Workout',
+        startTime: '07:00',
+        endTime: '08:00',
+        position: 0,
+      });
+
+      expect(mockCreateEventForScheduleItem).toHaveBeenCalledWith(USER_ID, {
+        title: 'Morning Workout',
+        description: undefined,
+        date: '2026-04-24',
+        startTime: '07:00',
+        endTime: '08:00',
+        timezone: 'Asia/Karachi',
+        scheduleId: SCHEDULE_ID,
+        scheduleItemId: ITEM_ID,
+      });
+      expect((result.metadata as any).googleCalendar.eventId).toBe('event-1');
+    });
+
+    it('returns local item when Google Calendar event creation fails', async () => {
+      const itemRow = makeItemRow({ metadata: { shape: 'square' } });
+      mockCreateEventForScheduleItem.mockRejectedValue(new Error('Forbidden'));
+
+      mockQuery.mockResolvedValueOnce(pgResult([{ id: SCHEDULE_ID }]));
+      mockQuery.mockResolvedValueOnce(pgResult([itemRow]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ schedule_date: '2026-04-24' }]));
+      mockQuery.mockResolvedValueOnce(pgResult([{ timezone: 'UTC' }]));
+
+      const result = await scheduleService.addScheduleItem(USER_ID, SCHEDULE_ID, {
+        title: 'Morning Workout',
+        startTime: '07:00',
+        endTime: '08:00',
+        position: 0,
+      });
+
+      expect(result.id).toBe(ITEM_ID);
+      expect((result.metadata as any).googleCalendarSync.status).toBe('failed');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        '[Schedule] Google Calendar create failed for manual schedule item',
+        expect.objectContaining({ itemId: ITEM_ID })
+      );
     });
   });
 

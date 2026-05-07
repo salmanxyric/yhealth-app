@@ -221,6 +221,7 @@ router.post(
       muscleGroups = [],
       exercises = [],
       weeklySchedule = {},
+      scheduleDays: requestedScheduleDays,
       isActive = false,
       startDate: clientStartDate,
     } = req.body;
@@ -260,14 +261,19 @@ router.post(
         startDateStr
       );
     }
+    const scheduleDays = Array.isArray(requestedScheduleDays) && requestedScheduleDays.length > 0
+      ? requestedScheduleDays
+      : Object.entries(weeklyScheduleJson)
+          .filter(([, workout]) => Boolean(workout))
+          .map(([day]) => day);
 
     const result = await dbQuery(
       `INSERT INTO workout_plans (
         user_id, name, description, goal_category,
         initial_difficulty_level, duration_weeks, workouts_per_week,
         weekly_schedule, available_equipment, workout_location,
-        start_date, end_date, status, ai_generated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10, $11, $12, $13, $14)
+        start_date, end_date, status, ai_generated, schedule_days
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10, $11, $12, $13, $14, $15::text[])
       RETURNING *`,
       [
         userId,
@@ -284,6 +290,7 @@ router.post(
         formatLocalDate(endDate),
         isActive ? 'active' : 'draft',
         false,
+        scheduleDays,
       ]
     );
 
@@ -318,6 +325,7 @@ router.post(
       isCustom: true,
       status: result.rows[0].status,
       weeklySchedule: storedWeeklySchedule, // Include the weekly schedule in response
+      scheduleDays: result.rows[0].schedule_days || scheduleDays,
       durationWeeks: result.rows[0].duration_weeks,
       workoutsPerWeek: result.rows[0].workouts_per_week,
       startDate: result.rows[0].start_date,
@@ -365,6 +373,8 @@ router.patch(
       durationWeeks: 'duration_weeks',
       workoutsPerWeek: 'workouts_per_week',
       weeklySchedule: 'weekly_schedule',
+      weeks: 'weeks',
+      scheduleDays: 'schedule_days',
       availableEquipment: 'available_equipment',
       workoutLocation: 'workout_location',
       status: 'status',
@@ -380,9 +390,9 @@ router.patch(
       const dbField = fieldMapping[key];
       if (dbField) {
         setClauses.push(`${dbField} = $${paramIndex}`);
-        if (dbField === 'weekly_schedule') {
+        if (dbField === 'weekly_schedule' || dbField === 'weeks') {
           values.push(JSON.stringify(value));
-        } else if (dbField === 'available_equipment') {
+        } else if (dbField === 'available_equipment' || dbField === 'schedule_days') {
           values.push(value as string[]);
         } else {
           values.push(value as string | number | boolean | null);

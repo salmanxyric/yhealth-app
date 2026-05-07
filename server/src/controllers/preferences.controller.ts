@@ -20,7 +20,7 @@ import {
   coachingStyleForPersona,
   personaFromCoachingStyle,
   normalizePersonaId,
-} from '../../../shared/types/domain/coach-persona.js';
+} from '@shared/types/domain/coach-persona.js';
 
 // Type definitions
 type CoachingStyle = 'supportive' | 'direct' | 'analytical' | 'motivational';

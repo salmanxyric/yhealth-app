@@ -27,7 +27,7 @@ describe('Auth API Integration Tests', () => {
 
     it('should start registration and return activation token', async () => {
       const userData = generateUserData({
-        email: `register-${Date.now()}@example.com`,
+        email: `register-${Date.now()}@balencia.test`,
       });
 
       const response = await request(app)
@@ -60,7 +60,7 @@ describe('Auth API Integration Tests', () => {
     it('should return 409 for duplicate email', async () => {
       // Create a user directly in DB first
       const existingUser = await createTestUser({
-        email: `dup-${Date.now()}@example.com`,
+        email: `dup-${Date.now()}@balencia.test`,
       });
 
       // Try to register with the same email
@@ -101,7 +101,7 @@ describe('Auth API Integration Tests', () => {
     let testEmail: string;
 
     beforeAll(async () => {
-      testEmail = `login-${Date.now()}@example.com`;
+      testEmail = `login-${Date.now()}@balencia.test`;
       await createTestUser({
         email: testEmail,
         password: 'SecurePass123!',

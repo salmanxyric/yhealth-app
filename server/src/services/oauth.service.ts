@@ -21,7 +21,8 @@ interface OAuth2ClientInterface {
 interface GoogleTokenPayload {
   sub: string;
   email: string;
-  email_verified: boolean;
+  email_verified: boolean | string;
+  aud?: string;
   name?: string;
   given_name?: string;
   family_name?: string;
@@ -47,9 +48,10 @@ interface SocialProfileData {
 class OAuthService {
   private static instance: OAuthService;
   private googleClient: OAuth2ClientInterface | null = null;
+  private initializationPromise: Promise<void>;
 
   private constructor() {
-    this.initializeClients();
+    this.initializationPromise = this.initializeClients();
   }
 
   public static getInstance(): OAuthService {
@@ -60,7 +62,7 @@ class OAuthService {
   }
 
   private async initializeClients(): Promise<void> {
-    const googleClientId = process.env['GOOGLE_CLIENT_ID'];
+    const googleClientId = this.getGoogleClientId();
     if (googleClientId) {
       try {
         // Dynamically import google-auth-library if available
@@ -68,35 +70,82 @@ class OAuthService {
         this.googleClient = new googleAuth.OAuth2Client(googleClientId);
         logger.info('Google OAuth client initialized');
       } catch {
-        logger.warn('google-auth-library not installed - Google OAuth disabled');
+        logger.warn('google-auth-library not installed - Google OAuth will use tokeninfo fallback');
       }
     } else {
       logger.warn('Google OAuth not configured - GOOGLE_CLIENT_ID missing');
     }
   }
 
+  private getGoogleClientId(): string | undefined {
+    return (
+      process.env['GOOGLE_CLIENT_ID'] ||
+      process.env['AUTH_GOOGLE_ID'] ||
+      process.env['AUTH_GOOGLE_CLIENT_ID']
+    );
+  }
+
+  private getGoogleClientIds(): string[] {
+    const ids = new Set<string>();
+    for (const key of ['GOOGLE_CLIENT_ID', 'AUTH_GOOGLE_ID', 'AUTH_GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_ID_WEB']) {
+      const val = process.env[key];
+      if (val) ids.add(val);
+    }
+    return [...ids];
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    await this.initializationPromise;
+  }
+
   /**
    * Verify Google ID token and extract profile
    */
   public async verifyGoogleToken(idToken: string): Promise<SocialProfileData | null> {
-    if (!this.googleClient) {
-      throw new Error('Google OAuth not configured');
+    await this.ensureInitialized();
+
+    const googleClientId = this.getGoogleClientId();
+    if (!googleClientId) {
+      throw new Error('Google OAuth server configuration is missing');
     }
 
-    try {
-      const ticket = await this.googleClient.verifyIdToken({
-        idToken,
-        audience: process.env['GOOGLE_CLIENT_ID'],
-      });
+    const validAudiences = this.getGoogleClientIds();
 
-      const payload = ticket.getPayload() as GoogleTokenPayload | undefined;
+    try {
+      let payload: GoogleTokenPayload | undefined;
+
+      if (this.googleClient) {
+        // Try each valid audience until one succeeds
+        for (const aud of validAudiences) {
+          try {
+            payload = (await this.googleClient.verifyIdToken({
+              idToken,
+              audience: aud,
+            })).getPayload() as GoogleTokenPayload | undefined;
+            if (payload) break;
+          } catch (audError) {
+            const msg = audError instanceof Error ? audError.message : '';
+            if (msg.includes('audience') || msg.includes('recipient')) {
+              continue;
+            }
+            throw audError;
+          }
+        }
+      } else {
+        payload = await this.verifyGoogleTokenWithTokenInfo(idToken, googleClientId);
+      }
 
       if (!payload) {
         logger.warn('Invalid Google token - no payload');
         return null;
       }
 
-      if (!payload.email_verified) {
+      if (payload.aud && !validAudiences.includes(payload.aud)) {
+        logger.warn('Invalid Google token - audience mismatch', { aud: payload.aud, expected: validAudiences });
+        return null;
+      }
+
+      if (payload.email_verified !== true && payload.email_verified !== 'true') {
         logger.warn('Google email not verified', { email: payload.email });
         return null;
       }
@@ -120,6 +169,32 @@ class OAuthService {
       });
       return null;
     }
+  }
+
+  private async verifyGoogleTokenWithTokenInfo(
+    idToken: string,
+    _googleClientId: string
+  ): Promise<GoogleTokenPayload | undefined> {
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+    );
+
+    if (!response.ok) {
+      logger.warn('Google tokeninfo verification failed', {
+        status: response.status,
+      });
+      return undefined;
+    }
+
+    const payload = (await response.json()) as GoogleTokenPayload;
+
+    const validAudiences = this.getGoogleClientIds();
+    if (payload.aud && !validAudiences.includes(payload.aud)) {
+      logger.warn('Google tokeninfo audience mismatch', { aud: payload.aud, expected: validAudiences });
+      return undefined;
+    }
+
+    return payload;
   }
 
   /**

@@ -201,8 +201,8 @@ export function WaterDetailCard({
   targetGlasses,
   mlConsumed,
   targetMl,
-  streak          = 4,
-  lastDrinkMinutes = 14,
+  streak: _streak          = 4,
+  lastDrinkMinutes: _lastDrinkMinutes = 14,
   onAddGlass,
   onRemoveGlass,
   isUpdating = false,
@@ -214,7 +214,7 @@ export function WaterDetailCard({
   const progress   = Math.min((mlConsumed / targetMl) * 100, 100);
   const isGoalMet  = glasses >= targetGlasses;
   const pct        = Math.round((glasses / targetGlasses) * 100);
-  const remaining  = Math.max(0, targetMl - mlConsumed);
+  const _remaining  = Math.max(0, targetMl - mlConsumed);
 
   const { badgeColor, badgeRgb, badgeLabel } = useMemo(() => {
     if (isGoalMet)              return { badgeColor: '#10b981', badgeRgb: '16,185,129',  badgeLabel: 'Goal Met!'       };

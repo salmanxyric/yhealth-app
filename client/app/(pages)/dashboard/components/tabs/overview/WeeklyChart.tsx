@@ -320,10 +320,6 @@ export function WeeklyChart({ weeklyActivity, selectedWeek, onWeekChange }: Week
       isToday: false,
     }));
 
-  const totalCompleted = days.reduce((s, d) => s + d.completed, 0);
-  const totalActivities = days.reduce((s, d) => s + d.total, 0);
-  const successRate = totalActivities > 0 ? Math.round((totalCompleted / totalActivities) * 100) : 0;
-
   const isLoading = weeklyActivity === null;
 
   return (

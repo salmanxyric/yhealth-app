@@ -6,7 +6,7 @@
  *              visualization node types, and parent in the hierarchy.
  */
 
-import type { FeatureNodeDefinition, FeatureNodeId } from '../../../../shared/types/domain/reasoning-graph.js';
+import type { FeatureNodeDefinition, FeatureNodeId } from '@shared/types/domain/reasoning-graph.js';
 
 // ============================================
 // FULL REGISTRY (29 nodes)

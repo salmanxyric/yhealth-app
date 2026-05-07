@@ -8,6 +8,10 @@ import { faker } from '@faker-js/faker';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+function generateTestEmail(): string {
+  return `test-${faker.string.uuid()}@balencia.test`;
+}
+
 export interface TestUser {
   id: string;
   email: string;
@@ -42,7 +46,7 @@ export async function createTestUser(overrides: Partial<{
   role: string;
   isEmailVerified: boolean;
 }> = {}): Promise<TestUser> {
-  const email = overrides.email || faker.internet.email().toLowerCase();
+  const email = overrides.email || generateTestEmail();
   const password = overrides.password || 'TestPassword123!';
   const hashedPassword = await bcrypt.hash(password, 12);
 

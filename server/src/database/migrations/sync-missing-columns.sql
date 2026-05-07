@@ -1013,6 +1013,7 @@ END $$;
 -- ============================================
 ALTER TYPE integration_provider ADD VALUE IF NOT EXISTS 'spotify';
 ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'ai_check_in';
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'competition';
 ALTER TYPE goal_category ADD VALUE IF NOT EXISTS 'nutrition';
 ALTER TYPE goal_category ADD VALUE IF NOT EXISTS 'fitness';
 

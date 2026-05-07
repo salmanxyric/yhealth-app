@@ -15,7 +15,7 @@ import type {
   UserTimingProfile,
   TimingHistogram,
   TimingProfileStatus,
-} from '../../../shared/types/domain/timing.js';
+} from '@shared/types/domain/timing.js';
 
 // ============================================
 // Constants

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -40,6 +40,7 @@ interface CreateWorkoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   onWorkoutCreated: (workout: WorkoutPlan) => void;
+  editingWorkout?: WorkoutPlan | null;
 }
 
 type CreationMode = "manual" | "ai";
@@ -73,10 +74,15 @@ const initialAIFormData: AIGenerationFormData = {
   startDate: getTodayDateStr(),
 };
 
+function isValidUUID(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export function CreateWorkoutModal({
   isOpen,
   onClose,
   onWorkoutCreated,
+  editingWorkout = null,
 }: CreateWorkoutModalProps) {
   const [mode, setMode] = useState<CreationMode>("ai");
   const [formData, setFormData] = useState<CreateWorkoutFormData>(initialFormData);
@@ -87,6 +93,7 @@ export function CreateWorkoutModal({
   const [generatedSchedule, setGeneratedSchedule] = useState<Record<string, DayWorkout | null> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
+  const isEditing = Boolean(editingWorkout);
 
   // Reset form
   const resetForm = useCallback(() => {
@@ -97,6 +104,33 @@ export function CreateWorkoutModal({
     setError(null);
     setMode("ai");
   }, []);
+
+  useEffect(() => {
+    if (!isOpen || !editingWorkout) return;
+
+    const selectedDays =
+      editingWorkout.scheduleDays && editingWorkout.scheduleDays.length > 0
+        ? editingWorkout.scheduleDays
+        : Object.entries(editingWorkout.weeklySchedule || {})
+            .filter(([, workout]) => Boolean(workout))
+            .map(([day]) => day);
+
+    setMode("manual");
+    setFormData({
+      name: editingWorkout.name,
+      description: editingWorkout.description || "",
+      muscleGroups: editingWorkout.muscleGroups || [],
+      difficulty: editingWorkout.difficulty,
+      scheduledTime: editingWorkout.scheduledTime || "07:00",
+      exercises: editingWorkout.exercises || [],
+      useAI: false,
+      aiPrompt: "",
+      workoutsPerWeek: selectedDays.length || editingWorkout.scheduleDays?.length || 3,
+      selectedDays: selectedDays.length > 0 ? selectedDays : ["monday", "wednesday", "friday"],
+      startDate: editingWorkout.startDate || getTodayDateStr(),
+    });
+    setError(null);
+  }, [isOpen, editingWorkout]);
 
   // Handle close
   const handleClose = useCallback(() => {
@@ -415,7 +449,7 @@ export function CreateWorkoutModal({
     setIsCreating(true);
     setError(null);
 
-    workoutLogger.info('Creating workout plan', {
+    workoutLogger.info(isEditing ? 'Updating workout plan' : 'Creating workout plan', {
       component: 'CreateWorkoutModal',
       name: formData.name,
       exerciseCount: formData.exercises.length,
@@ -461,7 +495,7 @@ export function CreateWorkoutModal({
         };
       });
 
-      const response = await workoutsService.createPlan({
+      const planPayload = {
         name: formData.name,
         description: formData.description || undefined,
         fitnessLevel: formData.difficulty,
@@ -469,25 +503,37 @@ export function CreateWorkoutModal({
         muscleGroups: formData.muscleGroups,
         exercises: formData.exercises,
         weeklySchedule,
-        workoutsPerWeek: workoutsPerWeek,
-        isActive: true,
-        startDate: formData.startDate,
-      });
+        scheduleDays: selectedDays,
+        workoutsPerWeek,
+      };
 
-      if (response.data?.plan) {
+      const response = isEditing && editingWorkout && isValidUUID(editingWorkout.id)
+        ? await workoutsService.updatePlan(editingWorkout.id, planPayload)
+        : await workoutsService.createPlan({
+            ...planPayload,
+            isActive: true,
+            startDate: formData.startDate,
+          });
+
+      if (response.data?.plan || (isEditing && editingWorkout)) {
+        const responsePlan = response.data?.plan;
+        const workoutId = isEditing && editingWorkout ? editingWorkout.id : responsePlan!.id;
         const newWorkout: WorkoutPlan = {
-          id: response.data.plan.id,
-          name: response.data.plan.name,
+          ...(editingWorkout || {}),
+          id: workoutId,
+          name: responsePlan?.name || formData.name,
           description: formData.description,
           muscleGroups: formData.muscleGroups,
           exercises: formData.exercises,
           duration: formData.exercises.length * 8,
           scheduledTime: formData.scheduledTime,
           difficulty: formData.difficulty,
-          isCustom: true,
+          isCustom: editingWorkout?.isCustom ?? true,
+          weeklySchedule: weeklySchedule as WorkoutPlan["weeklySchedule"],
+          scheduleDays: selectedDays,
         };
 
-        workoutLogger.logAPI('create', 'workout_plan', {
+        workoutLogger.logAPI(isEditing ? 'update' : 'create', 'workout_plan', {
           success: true,
           planId: newWorkout.id,
           name: newWorkout.name,
@@ -497,10 +543,10 @@ export function CreateWorkoutModal({
         handleClose();
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create workout plan';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save workout plan';
       setError(errorMessage);
 
-      workoutLogger.logAPI('create', 'workout_plan', {
+      workoutLogger.logAPI(isEditing ? 'update' : 'create', 'workout_plan', {
         success: false,
         error: errorMessage,
         name: formData.name,
@@ -508,7 +554,8 @@ export function CreateWorkoutModal({
 
       // Create locally as fallback
       const fallbackWorkout: WorkoutPlan = {
-        id: `local-${Date.now()}`,
+        ...(editingWorkout || {}),
+        id: editingWorkout?.id || `local-${Date.now()}`,
         name: formData.name || "Custom Workout",
         description: formData.description,
         muscleGroups: formData.muscleGroups,
@@ -516,7 +563,7 @@ export function CreateWorkoutModal({
         duration: formData.exercises.length * 8,
         scheduledTime: formData.scheduledTime,
         difficulty: formData.difficulty,
-        isCustom: true,
+        isCustom: editingWorkout?.isCustom ?? true,
       };
 
       onWorkoutCreated(fallbackWorkout);
@@ -524,7 +571,7 @@ export function CreateWorkoutModal({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, handleClose, onWorkoutCreated]);
+  }, [editingWorkout, formData, handleClose, isEditing, onWorkoutCreated]);
 
   if (!isOpen) return null;
 
@@ -546,7 +593,9 @@ export function CreateWorkoutModal({
         >
           {/* Modal Header */}
           <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-700">
-            <h3 className="text-[16px] sm:text-xl font-bold text-white">Create New Workout</h3>
+            <h3 className="text-[16px] sm:text-xl font-bold text-white">
+              {isEditing ? "Edit Workout Plan" : "Create New Workout"}
+            </h3>
             <button
               onClick={handleClose}
               className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
@@ -1155,7 +1204,7 @@ export function CreateWorkoutModal({
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                {isCreating ? 'Creating...' : 'Create Workout'}
+                {isCreating ? 'Saving...' : isEditing ? 'Save Workout' : 'Create Workout'}
               </button>
             )}
           </div>

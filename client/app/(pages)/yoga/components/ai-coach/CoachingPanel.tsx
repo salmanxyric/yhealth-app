@@ -15,7 +15,6 @@ import {
   Sparkles,
   PartyPopper,
   Smile,
-  Swords,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CoachingResult, CoachEmotion } from "@shared/types/domain/yoga";

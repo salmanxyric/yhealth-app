@@ -13,7 +13,7 @@ export interface PlanGenerateResponse {
 }
 
 export interface ActivePlanResponse {
-  plan: Plan;
+  plan: Plan | null;
   todayActivities: Activity[];
   weekCompletionRate: number;
 }

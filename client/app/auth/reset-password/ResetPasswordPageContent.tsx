@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Lock, ArrowRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Lock, ArrowRight, Loader2, CheckCircle2, AlertCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,10 @@ const resetPasswordSchema = z
       .regex(
         /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
         "Password must contain uppercase, lowercase, and number"
+      )
+      .regex(
+        /[^A-Za-z0-9]/,
+        "Password must contain at least one special character"
       ),
     confirmPassword: z.string(),
   })
@@ -34,10 +38,12 @@ type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams?.get("token") ?? null;
-  const { resetPassword, isLoading } = useAuth();
+  const { resetPassword, isLoading, error } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
+  const visibleError = error && dismissedError !== error ? error : null;
 
   const {
     register,
@@ -88,7 +94,7 @@ function ResetPasswordContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <Button asChild className="w-full h-12">
+          <Button asChild className="auth-emerald-btn w-full h-12">
             <Link href="/auth/forgot-password">
               Request New Link
             </Link>
@@ -127,7 +133,7 @@ function ResetPasswordContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <Button asChild className="w-full h-12">
+          <Button asChild className="auth-emerald-btn w-full h-12">
             <Link href="/auth/signin">
               <ArrowRight className="mr-2 h-4 w-4" />
               Continue to Sign In
@@ -140,6 +146,29 @@ function ResetPasswordContent() {
 
   return (
     <div className="space-y-6">
+      {visibleError && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Password Update Error</p>
+              <p className="mt-1 whitespace-pre-line text-xs opacity-80">{visibleError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissedError(visibleError)}
+              className="rounded-lg p-1 transition-colors hover:bg-destructive/10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Header */}
       <div className="text-center space-y-2">
         <motion.h1
@@ -225,7 +254,7 @@ function ResetPasswordContent() {
           )}
         </div>
 
-        <Button type="submit" className="w-full h-12" disabled={isLoading}>
+        <Button type="submit" className="auth-emerald-btn w-full h-12" disabled={isLoading}>
           {isLoading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (

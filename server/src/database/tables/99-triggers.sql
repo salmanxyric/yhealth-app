@@ -129,4 +129,7 @@ CREATE TRIGGER update_competition_entries_updated_at BEFORE UPDATE ON competitio
 DROP TRIGGER IF EXISTS update_data_source_connections_updated_at ON data_source_connections;
 CREATE TRIGGER update_data_source_connections_updated_at BEFORE UPDATE ON data_source_connections FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_quick_notes_updated_at ON quick_notes;
+CREATE TRIGGER update_quick_notes_updated_at BEFORE UPDATE ON quick_notes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Note: new_table trigger removed (67-new-table.sql is a placeholder template)

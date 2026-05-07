@@ -49,14 +49,46 @@ function verifyToken(token: string): IJwtPayload {
   }
 }
 
+async function loadAuthenticatedUser(decoded: IJwtPayload): Promise<IJwtPayload> {
+  const userResult = await query<{
+    id: string;
+    email: string;
+    is_active: boolean;
+    role: UserRole | null;
+  }>(
+    `SELECT u.id, u.email, u.is_active, r.slug as role
+       FROM users u
+       LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = $1`,
+    [decoded.userId]
+  );
+
+  if (userResult.rows.length === 0) {
+    throw ApiError.unauthorized('User account no longer exists. Please log in again.');
+  }
+
+  const user = userResult.rows[0];
+  if (!user.is_active) {
+    throw ApiError.forbidden(
+      'Your account has been blocked. Please contact our help center for assistance.'
+    );
+  }
+
+  return {
+    ...decoded,
+    email: user.email,
+    role: user.role ?? decoded.role,
+  };
+}
+
 /**
  * Authentication middleware - requires valid JWT
  */
-export function authenticate(
+export async function authenticate(
   req: Request,
   _res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   try {
     const token = extractToken(req);
 
@@ -65,7 +97,7 @@ export function authenticate(
     }
 
     const decoded = verifyToken(token);
-    (req as AuthenticatedRequest).user = decoded;
+    (req as AuthenticatedRequest).user = await loadAuthenticatedUser(decoded);
 
     next();
   } catch (error) {
@@ -76,17 +108,17 @@ export function authenticate(
 /**
  * Optional authentication - attaches user if token present, but doesn't require it
  */
-export function optionalAuth(
+export async function optionalAuth(
   req: Request,
   _res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   try {
     const token = extractToken(req);
 
     if (token) {
       const decoded = verifyToken(token);
-      (req as AuthenticatedRequest).user = decoded;
+      (req as AuthenticatedRequest).user = await loadAuthenticatedUser(decoded);
     }
 
     next();

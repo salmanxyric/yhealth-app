@@ -4,8 +4,8 @@ services:
   # Next.js Client Service
   client:
     build:
-      context: .
-      dockerfile: client/Dockerfile
+      context: ./client
+      dockerfile: Dockerfile
     container_name: balencia-client
     ports:
       - "3000:3000"
@@ -27,8 +27,8 @@ services:
   # Node.js/Express Server Service
   server:
     build:
-      context: .
-      dockerfile: server/Dockerfile
+      context: ./server
+      dockerfile: Dockerfile
     container_name: balencia-server
     ports:
       - "5000:5000"

@@ -34,6 +34,8 @@ class TTSController extends BaseController {
       throw ApiError.badRequest('Text is required and cannot be empty');
     }
 
+    const providerErrors: Array<{ provider: string; error: string; status?: number }> = [];
+
     // Try Google Cloud TTS first (Chirp 3 HD)
     if (googleCloudTTSService.isAvailable()) {
       try {
@@ -51,11 +53,12 @@ class TTSController extends BaseController {
         res.send(audioBuffer);
         return;
       } catch (error) {
-        logger.warn('[TTS] Google Cloud TTS failed, falling back to ElevenLabs', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Fall through to ElevenLabs
+        const msg = error instanceof Error ? error.message : String(error);
+        providerErrors.push({ provider: 'google-cloud', error: msg });
+        logger.warn('[TTS] Google Cloud TTS failed, falling back to ElevenLabs', { error: msg });
       }
+    } else {
+      providerErrors.push({ provider: 'google-cloud', error: 'API key not configured (GOOGLE_CLOUD_VOICE_API_KEY)' });
     }
 
     // Fallback: ElevenLabs
@@ -105,17 +108,25 @@ class TTSController extends BaseController {
           return;
         }
       } catch (error) {
-        logger.warn('[TTS] ElevenLabs failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Fall through to error
+        const msg = error instanceof Error ? error.message : String(error);
+        providerErrors.push({ provider: 'elevenlabs', error: msg });
+        logger.warn('[TTS] ElevenLabs failed', { error: msg });
       }
+    } else {
+      providerErrors.push({ provider: 'elevenlabs', error: 'API key not configured (ELEVEN_LAB_API_KEY)' });
     }
 
-    // No TTS provider available - client will use browser speechSynthesis
-    throw ApiError.serviceUnavailable(
-      'All TTS providers unavailable. Please use browser speech synthesis.'
-    );
+    // No TTS provider available - log full diagnostics and tell client to use browser speechSynthesis
+    logger.error('[TTS] All providers failed', {
+      providerErrors,
+      googleConfigured: googleCloudTTSService.isAvailable(),
+      elevenlabsConfigured: elevenlabsService.isAvailable(),
+    });
+
+    throw new ApiError(503, 'All TTS providers unavailable. Please use browser speech synthesis.', {
+      code: 'TTS_ALL_PROVIDERS_FAILED',
+      details: providerErrors.map(e => ({ code: e.provider, message: e.error, field: 'provider' })),
+    });
   });
 
   /**

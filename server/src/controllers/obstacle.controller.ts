@@ -4,7 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { obstacleService } from '../services/obstacle.service.js';
 import type { AuthenticatedRequest } from '../types/index.js';
-import type { ObstacleUserResponse } from '../../../shared/types/domain/obstacle.js';
+import type { ObstacleUserResponse } from '@shared/types/domain/obstacle.js';
 
 class ObstacleController extends BaseController {
   constructor() {

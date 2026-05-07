@@ -25,7 +25,7 @@ import type {
   ObstacleDiagnosisBlock,
   ObstacleUserResponse,
   SuggestedAdjustment,
-} from '../../../shared/types/domain/obstacle.js';
+} from '@shared/types/domain/obstacle.js';
 
 // ============================================
 // Constants

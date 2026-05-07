@@ -55,7 +55,7 @@ export function CompletionView({ insights, onComplete }: CompletionViewProps) {
 
       {/* Text */}
       <div className="text-center">
-        <h3 className="text-2xl sm:text-3xl md:text-4xl font-medium text-white mb-3">
+        <h3 className="text-2xl sm:text-3xl lg:text-[32px] font-medium text-white mb-3">
           Assessment Complete
         </h3>
         <p className="text-[rgba(239,237,253,0.7)] text-sm sm:text-base max-w-md mx-auto">

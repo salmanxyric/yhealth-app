@@ -14,8 +14,8 @@ import { aiScoringService } from './ai-scoring.service.js';
 import { cache } from './cache.service.js';
 import { dailyAnalysisService } from './daily-analysis.service.js';
 import { motivationTierService } from './motivation-tier.service.js';
-import type { MotivationTier } from '../../../shared/types/domain/wellbeing.js';
-import { personaFromCoachingStyle } from '../../../shared/types/domain/coach-persona.js';
+import type { MotivationTier } from '@shared/types/domain/wellbeing.js';
+import { personaFromCoachingStyle } from '@shared/types/domain/coach-persona.js';
 import { buildPersonaDirectiveBlock } from './coach-persona-prompt.service.js';
 import type { ActivityStatusContext, StatusPattern } from '../types/activity-status.types.js';
 

@@ -1,4 +1,4 @@
-import { Users, UserPlus, UserCheck, Clock, Heart, Dumbbell, Brain, Flame } from "lucide-react";
+import { Heart, Dumbbell, Brain } from "lucide-react";
 
 export const statusColors: Record<string, { color: string; bg: string }> = {
   pending: { color: "text-amber-400", bg: "bg-amber-500/10" },

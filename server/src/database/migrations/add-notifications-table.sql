@@ -20,7 +20,8 @@ DO $$ BEGIN
         'coaching',         -- AI coaching message
         'celebration',      -- Celebration/milestone
         'warning',          -- Warning notification
-        'tip'               -- Health tip
+        'tip',              -- Health tip
+        'competition'       -- Competition/challenge notification
     );
 EXCEPTION
     WHEN duplicate_object THEN null;

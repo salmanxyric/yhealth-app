@@ -42,6 +42,60 @@ export class AIProvider {
     return trimmed;
   }
 
+  repairJSON(text: string): string {
+    let s = text;
+    // Strip comments
+    s = s.replace(/\/\/[^\n]*/g, '');
+    s = s.replace(/\/\*[\s\S]*?\*\//g, '');
+    // Remove trailing commas
+    s = s.replace(/,\s*([}\]])/g, '$1');
+    // Fix unescaped newlines inside strings
+    s = s.replace(/"([^"\\]*(?:\\.[^"\\]*)*)"/g, (match) => {
+      return match.replace(/(?<!\\)\n/g, '\\n');
+    });
+
+    // Close unclosed strings, then close brackets/braces for truncated JSON
+    const stack: string[] = [];
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\' && inStr) { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{' || ch === '[') stack.push(ch);
+      else if (ch === '}' || ch === ']') stack.pop();
+    }
+
+    if (inStr || stack.length > 0) {
+      // Close an unclosed string
+      if (inStr) s += '"';
+      // Remove trailing partial element after last complete value
+      s = s.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, '');
+      s = s.replace(/,\s*\{[^}]*$/, '');
+      s = s.replace(/,\s*$/, '');
+      // Recount after trimming
+      const closeStack: string[] = [];
+      let inStr2 = false;
+      let esc2 = false;
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (esc2) { esc2 = false; continue; }
+        if (ch === '\\' && inStr2) { esc2 = true; continue; }
+        if (ch === '"') { inStr2 = !inStr2; continue; }
+        if (inStr2) continue;
+        if (ch === '{') closeStack.push('}');
+        else if (ch === '[') closeStack.push(']');
+        else if (ch === '}' || ch === ']') closeStack.pop();
+      }
+      if (inStr2) s += '"';
+      while (closeStack.length > 0) s += closeStack.pop();
+    }
+
+    return s;
+  }
+
   requiresMaxCompletionTokens(model: string): boolean {
     const modelLower = model.toLowerCase();
     return (
@@ -112,7 +166,7 @@ export class AIProvider {
       inlineData = { mimeType: contentType, data: buf.toString('base64') };
     }
 
-    const body = {
+    const body: Record<string, unknown> = {
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{
         parts: [
@@ -124,6 +178,7 @@ export class AIProvider {
         maxOutputTokens: maxTokens,
         temperature: 0.4,
         ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
@@ -151,7 +206,7 @@ export class AIProvider {
 
       const data = await resp.json() as {
         candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
+          content?: { parts?: Array<{ text?: string; thought?: boolean }> };
           finishReason?: string;
         }>;
         promptFeedback?: { blockReason?: string };
@@ -168,7 +223,7 @@ export class AIProvider {
         throw new Error('Gemini vision response blocked by safety filter');
       }
 
-      const text = candidate?.content?.parts?.map(p => p.text || '').join('').trim();
+      const text = (candidate?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('').trim();
       if (!text) {
         logger.warn('[AICoach] Gemini vision returned empty content', {
           hasCandidates: !!data.candidates?.length,
@@ -199,13 +254,14 @@ export class AIProvider {
       parts: [{ text: m.content }],
     }));
 
-    const body = {
+    const body: Record<string, unknown> = {
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents,
       generationConfig: {
         ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
         temperature,
         ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
 
@@ -221,9 +277,11 @@ export class AIProvider {
     }
 
     const data = await resp.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
     };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const textParts = parts.filter(p => !p.thought && p.text);
+    const text = textParts.map(p => p.text).join('');
     if (!text) throw new Error('Gemini text returned empty response');
     return text;
   }

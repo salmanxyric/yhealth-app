@@ -20,7 +20,7 @@ import type {
   CreateWikiLinkInput,
   CreateWikiPageSourceInput,
   WikiLogOperation,
-} from '../../../shared/types/domain/wiki.js';
+} from '@shared/types/domain/wiki.js';
 
 type QueryParam = string | number | boolean | null | Date | object;
 

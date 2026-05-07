@@ -7,7 +7,7 @@
  *
  * Usage:
  *   npx tsx src/scripts/db-migrate-seed.ts
- *   node dist/server/src/scripts/db-migrate-seed.ts
+ *   node dist/src/scripts/db-migrate-seed.ts
  *
  * Environment:
  *   DATABASE_URL  - Full PostgreSQL connection string (preferred)

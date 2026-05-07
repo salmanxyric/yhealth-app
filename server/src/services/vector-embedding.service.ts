@@ -6,6 +6,33 @@ import { logger } from './logger.service.js';
 import { query } from '../config/database.config.js';
 import { redisCacheService } from './redis-cache.service.js';
 
+function isToolArtifactLike(value: string): boolean {
+  const text = value.trim();
+  if (!text || (!text.startsWith('{') && !text.startsWith('['))) return false;
+  return /"type"\s*:\s*"(?:functionCall|functionResponse|tool_call|tool_result)"/i.test(text) ||
+    /"functionCall"\s*:|"functionResponse"\s*:|"tool_calls"\s*:|"additional_kwargs"\s*:/i.test(text);
+}
+
+function cleanConversationDisplayText(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const original = value.trim();
+  if (!original || original === '[object Object]' || isToolArtifactLike(original)) return '';
+
+  return original
+    .replace(/<!--CHECKIN:[\s\S]*?-->/g, '')
+    .replace(/<!--ARTIFACT:[\s\S]*?-->/g, '')
+    .split(/\r?\n/)
+    .filter((line) => !isToolArtifactLike(line))
+    .join(' ')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * Thrown when an embedding provider returns an authentication error (401/403).
  * Signals to BullMQ worker that retries are pointless.
@@ -1527,13 +1554,13 @@ class VectorEmbeddingService {
 
     return result.rows.map((row) => ({
       id: row.id,
-      title: row.title,
+      title: cleanConversationDisplayText(row.title) || null,
       sessionType: row.session_type,
       status: row.status,
       messageCount: row.message_count,
       lastMessageAt: row.last_message_at,
       createdAt: row.created_at,
-      lastMessagePreview: row.last_message_preview ? String(row.last_message_preview).slice(0, 80) : null,
+      lastMessagePreview: cleanConversationDisplayText(row.last_message_preview).slice(0, 80) || null,
       lastMessageRole: row.last_message_role || null,
     }));
   }

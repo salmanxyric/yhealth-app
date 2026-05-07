@@ -8,10 +8,80 @@ import type { GenerateGoalsRequest, GenerateGoalsResponse } from '../types/index
 export class GoalGeneratorService {
   constructor(private provider: AIProvider) {}
 
+  private buildFallbackGoals(request: GenerateGoalsRequest): GenerateGoalsResponse {
+    const { goalCategory, customGoalText } = request;
+    const categoryName = goalCategoryNames[goalCategory] || goalCategory;
+    const theme = (customGoalText || categoryName || 'personal growth').trim();
+
+    const targetByCategory: Record<string, { value: number; unit: string; weeks: number }> = {
+      weight_loss: { value: 1, unit: 'pounds per week', weeks: 12 },
+      muscle_building: { value: 3, unit: 'strength sessions per week', weeks: 12 },
+      sleep_improvement: { value: 7, unit: 'hours per night', weeks: 6 },
+      stress_wellness: { value: 10, unit: 'minutes per day', weeks: 6 },
+      energy_productivity: { value: 5, unit: 'focused sessions per week', weeks: 8 },
+      event_training: { value: 4, unit: 'training sessions per week', weeks: 10 },
+      health_condition: { value: 5, unit: 'check-ins per week', weeks: 8 },
+      habit_building: { value: 5, unit: 'days per week', weeks: 8 },
+      nutrition: { value: 5, unit: 'planned meals per week', weeks: 8 },
+      fitness: { value: 4, unit: 'workouts per week', weeks: 8 },
+      custom: { value: 3, unit: 'focused actions per week', weeks: 8 },
+    };
+
+    const target = targetByCategory[goalCategory] || {
+      value: 3,
+      unit: 'focused actions per week',
+      weeks: 8,
+    };
+
+    return {
+      goals: [
+        {
+          title: `Build consistency around ${theme}`,
+          description: `Create a repeatable weekly routine for ${theme}. Start small, track completion, and adjust the target only after the habit feels stable.`,
+          targetValue: target.value,
+          targetUnit: target.unit,
+          timeline: { durationWeeks: target.weeks },
+          motivation: `A clear routine makes ${theme} easier to act on even when motivation changes.`,
+          milestones: [
+            { week: 2, target: Math.max(1, Math.ceil(target.value / 2)), description: 'Complete the routine at a reduced target.' },
+            { week: 4, target: target.value, description: 'Reach the full weekly target at least once.' },
+            { week: target.weeks, target: target.value, description: 'Sustain the routine and review what worked.' },
+          ],
+        },
+        {
+          title: `Track progress for ${theme}`,
+          description: `Log each completed action and one short note about what helped or blocked you. Review the notes weekly to make the next week easier.`,
+          targetValue: 1,
+          targetUnit: 'weekly review',
+          timeline: { durationWeeks: target.weeks },
+          motivation: 'Visible progress turns a vague goal into a practical system you can improve.',
+          milestones: [
+            { week: 1, target: 1, description: 'Set up the tracker and complete the first review.' },
+            { week: 4, target: 4, description: 'Complete four weekly reviews.' },
+          ],
+        },
+        {
+          title: `Remove one blocker for ${theme}`,
+          description: `Identify the most common obstacle and create a simple backup plan. Keep the backup plan small enough to do on a busy day.`,
+          targetValue: 1,
+          targetUnit: 'backup plan',
+          timeline: { durationWeeks: 4 },
+          motivation: 'A backup plan protects the goal from missed days and keeps momentum intact.',
+          milestones: [
+            { week: 1, target: 1, description: 'Name the blocker and write the backup action.' },
+            { week: 4, target: 1, description: 'Use or refine the backup plan after real-world testing.' },
+          ],
+        },
+      ],
+      reasoning: `Generated from the local goal template because external AI providers were unavailable. The goals are aligned to ${categoryName}${customGoalText ? ` and "${customGoalText}"` : ''}.`,
+      source: 'fallback',
+    };
+  }
+
   async generateGoals(request: GenerateGoalsRequest): Promise<GenerateGoalsResponse> {
-    if (!this.provider.visionClient) {
-      logger.error('[AICoach] Vision client not initialized for goal generation');
-      throw ApiError.internal('AI Coach is not available. Please check OpenAI API configuration.');
+    if (!this.provider.visionClient && !this.provider.geminiApiKey) {
+      logger.warn('[AICoach] No AI provider configured for goal generation, using fallback goals');
+      return this.buildFallbackGoals(request);
     }
 
     try {
@@ -126,8 +196,8 @@ IMPORTANT:
       }
 
       if (!content || content.trim().length === 0) {
-        logger.error('[AICoach] All providers failed for goal generation');
-        throw ApiError.internal('Failed to generate goals. Please try again.');
+        logger.error('[AICoach] All providers failed for goal generation, using fallback goals');
+        return this.buildFallbackGoals(request);
       }
 
       const cleanContent = this.provider.stripMarkdownFences(content);
@@ -135,21 +205,26 @@ IMPORTANT:
       try {
         result = JSON.parse(cleanContent);
       } catch {
-        const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          logger.error('[AICoach] No JSON found in goal generation response', {
-            contentPreview: content.substring(0, 200),
-          });
-          throw ApiError.internal('Invalid response format from goal generation service.');
-        }
+        const repaired = this.provider.repairJSON(cleanContent);
         try {
-          result = JSON.parse(jsonMatch[0]);
-        } catch (innerError) {
-          logger.error('[AICoach] Failed to parse goal generation response', {
-            error: innerError instanceof Error ? innerError.message : 'Unknown parse error',
-            contentPreview: content.substring(0, 500),
-          });
-          throw ApiError.internal('Failed to parse goal generation response. Please try again.');
+          result = JSON.parse(repaired);
+        } catch {
+          const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) {
+            logger.error('[AICoach] No JSON found in goal generation response', {
+              contentPreview: content.substring(0, 200),
+            });
+            throw ApiError.internal('Invalid response format from goal generation service.');
+          }
+          try {
+            result = JSON.parse(jsonMatch[0]);
+          } catch (innerError) {
+            logger.error('[AICoach] Failed to parse goal generation response', {
+              error: innerError instanceof Error ? innerError.message : 'Unknown parse error',
+              contentPreview: content.substring(0, 500),
+            });
+            throw ApiError.internal('Failed to parse goal generation response. Please try again.');
+          }
         }
       }
 

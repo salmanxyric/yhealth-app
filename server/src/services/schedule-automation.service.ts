@@ -61,7 +61,7 @@ const AI_COACH_USER_ID = process.env.AI_COACH_USER_ID || '00000000-0000-0000-000
 
 class ScheduleAutomationService {
   // AI message generation (multi-provider via modelFactory)
-  private llm = modelFactory.getModel({ tier: 'default', temperature: 0.7, maxTokens: 500 });
+  private llm = modelFactory.getModel({ tier: 'light', temperature: 0.7, maxTokens: 500 });
   private rateLimitMap = new Map<string, { count: number; resetAt: number }>();
   private static RATE_LIMIT = parseInt(process.env.SCHEDULE_AI_RATE_LIMIT || '5', 10);
   private static AI_MESSAGE_CACHE_TTL = 3600; // 1 hour
@@ -507,7 +507,7 @@ Return ONLY the message text.`;
           new SystemMessage(systemPrompt),
           new HumanMessage(prompt),
         ]),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('LLM timeout')), 8000)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('LLM timeout')), 12000)),
       ]);
 
       const aiMessage = typeof response.content === 'string'

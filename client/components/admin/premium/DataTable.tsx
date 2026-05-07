@@ -18,7 +18,7 @@ import {
   Columns3,
   X,
 } from 'lucide-react';
-import { Skeleton } from 'boneyard-js/react';
+import { ContentSkeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -269,7 +269,7 @@ export function DataTable<TData>({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <Skeleton
+        <ContentSkeleton
           name={`datatable-${tableId ?? 'default'}`}
           loading={isLoading}
           animate="shimmer"
@@ -360,7 +360,7 @@ export function DataTable<TData>({
             </TableBody>
           </Table>
         )}
-        </Skeleton>
+        </ContentSkeleton>
       </div>
 
       {/* Pagination */}

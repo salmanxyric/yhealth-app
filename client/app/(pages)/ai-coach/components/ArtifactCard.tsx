@@ -39,7 +39,9 @@ export interface ChartArtifact {
   type: "chart";
   chartType: "line" | "bar" | "area" | "pie" | "radar"
     | "scatter" | "correlation_scatter" | "time_series"
-    | "comparison_bar" | "gauge";
+    | "comparison_bar" | "distribution_histogram" | "heatmap_calendar"
+    | "radar_multi" | "trend_area" | "box_whisker" | "funnel_progression"
+    | "gauge" | "gauge_current";
   title: string;
   data: Record<string, unknown>[];
   xAxisKey: string;
@@ -52,6 +54,8 @@ export interface ChartArtifact {
   annotations?: Array<{ label: string; color?: string }>;
   statistics?: { mean?: number; stdDev?: number; r?: number; slope?: number; intercept?: number; pValue?: number };
   gaugeMax?: number;
+  artifactId?: string;
+  saved?: boolean;
 }
 
 export interface ComparisonMetric {
@@ -110,6 +114,11 @@ export function ArtifactCard({ artifact }: ArtifactCardProps) {
 
 function ChartCard({ artifact }: { artifact: ChartArtifact }) {
   const chart = useMemo(() => {
+    if (!artifact.data?.length || !artifact.dataKeys?.length) {
+      return <EmptyChartState />;
+    }
+
+    const chartType = artifact.chartType;
     const commonProps = {
       data: artifact.data,
     };
@@ -119,7 +128,7 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
       fill: "#94a3b8",
     };
 
-    switch (artifact.chartType) {
+    switch (chartType) {
       case "line":
         return (
           <LineChart {...commonProps}>
@@ -147,6 +156,7 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
         );
 
       case "area":
+      case "trend_area":
         return (
           <AreaChart {...commonProps}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -162,7 +172,7 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
       case "pie":
         return (
           <PieChart>
-            <Pie data={artifact.data} dataKey={artifact.dataKeys[0]?.key || "value"} nameKey={artifact.xAxisKey} cx="50%" cy="50%" outerRadius={80} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+            <Pie data={artifact.data} dataKey={artifact.dataKeys[0]?.key || "value"} nameKey={artifact.xAxisKey} cx="50%" cy="50%" outerRadius={80} label={({ name, percent }: { name?: string; percent?: number }) => `${name || ""} ${((percent || 0) * 100).toFixed(0)}%`} labelLine={false}>
               {artifact.data.map((_, i) => (
                 <Cell key={i} fill={artifact.dataKeys[i % artifact.dataKeys.length]?.color || "#64748b"} />
               ))}
@@ -172,6 +182,7 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
         );
 
       case "radar":
+      case "radar_multi":
         return (
           <RadarChart cx="50%" cy="50%" outerRadius={80} data={artifact.data}>
             <PolarGrid stroke="rgba(255,255,255,0.1)" />
@@ -185,8 +196,8 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
 
       case "scatter":
       case "correlation_scatter": {
-        const xKey = artifact.dataKeys[0]?.key || "x";
-        const yKey = artifact.dataKeys[1]?.key || "y";
+        const xKey = artifact.xAxisKey || "x";
+        const yKey = artifact.dataKeys.find((dk) => dk.key !== xKey)?.key || "y";
         return (
           <ScatterChart>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -271,6 +282,7 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
         );
 
       case "comparison_bar":
+      case "distribution_histogram":
         return (
           <BarChart {...commonProps}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -283,6 +295,15 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
             <Legend wrapperStyle={{ fontSize: 10 }} />
           </BarChart>
         );
+
+      case "heatmap_calendar":
+        return <CalendarHeatmap artifact={artifact} />;
+
+      case "box_whisker":
+        return <BoxWhisker artifact={artifact} />;
+
+      case "funnel_progression":
+        return <FunnelProgression artifact={artifact} />;
 
       case "gauge": {
         const value = Number(artifact.data[0]?.[artifact.dataKeys[0]?.key || "value"] ?? 0);
@@ -318,6 +339,44 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
           </PieChart>
         );
       }
+
+      case "gauge_current": {
+        const value = Number(artifact.data[0]?.[artifact.dataKeys[0]?.key || "value"] ?? 0);
+        const max = artifact.gaugeMax || 100;
+        const pct = Math.min(value / max, 1);
+        const gaugeColor = artifact.dataKeys[0]?.color || "#10b981";
+        const gaugeData = [
+          { name: "value", value: pct * 100 },
+          { name: "remaining", value: (1 - pct) * 100 },
+        ];
+        return (
+          <PieChart>
+            <Pie
+              data={gaugeData}
+              startAngle={180}
+              endAngle={0}
+              cx="50%"
+              cy="85%"
+              innerRadius={60}
+              outerRadius={80}
+              dataKey="value"
+              stroke="none"
+            >
+              <Cell fill={gaugeColor} />
+              <Cell fill="rgba(255,255,255,0.05)" />
+            </Pie>
+            <text x="50%" y="75%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 20, fontWeight: 600, fill: "#e2e8f0" }}>
+              {value}{artifact.dataKeys[0]?.label ? ` ${artifact.dataKeys[0].label}` : ""}
+            </text>
+            <text x="50%" y="90%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 10, fill: "#64748b" }}>
+              of {max}
+            </text>
+          </PieChart>
+        );
+      }
+
+      default:
+        return <UnsupportedChartState chartType={artifact.chartType} />;
     }
   }, [artifact]);
 
@@ -330,6 +389,11 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
       <div className="flex items-center gap-2">
         <BarChart3 className="w-4 h-4 text-cyan-400" />
         <span className="text-sm font-medium text-slate-200">{artifact.title}</span>
+        {artifact.saved && (
+          <span className="ml-auto rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+            Saved
+          </span>
+        )}
       </div>
       <div className="w-full h-48">
         <ResponsiveContainer width="100%" height="100%">
@@ -367,6 +431,114 @@ function ChartCard({ artifact }: { artifact: ChartArtifact }) {
       )}
     </motion.div>
   );
+}
+
+function EmptyChartState() {
+  return (
+    <div className="flex h-full items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02] text-xs text-slate-500">
+      No data points available for this artifact.
+    </div>
+  );
+}
+
+function UnsupportedChartState({ chartType }: { chartType: string }) {
+  return (
+    <div className="flex h-full items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 text-center text-xs text-amber-200">
+      Unsupported artifact chart type: {chartType}
+    </div>
+  );
+}
+
+function CalendarHeatmap({ artifact }: { artifact: ChartArtifact }) {
+  const valueKey = artifact.dataKeys[0]?.key || "value";
+  const values = artifact.data.map((point) => Number(point[valueKey] ?? 0));
+  const max = Math.max(...values, 1);
+
+  return (
+    <div className="grid h-full grid-cols-7 content-center gap-1.5 p-2">
+      {artifact.data.slice(-42).map((point, index) => {
+        const value = Number(point[valueKey] ?? 0);
+        const opacity = Math.max(0.14, Math.min(value / max, 1));
+        return (
+          <div
+            key={`${String(point[artifact.xAxisKey] ?? index)}-${index}`}
+            title={`${String(point[artifact.xAxisKey] ?? "")}: ${value}`}
+            className="aspect-square rounded-[4px] border border-white/5"
+            style={{ backgroundColor: `rgba(16, 185, 129, ${opacity})` }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function BoxWhisker({ artifact }: { artifact: ChartArtifact }) {
+  const valueKey = artifact.dataKeys[0]?.key || "value";
+  const values = artifact.data.map((point) => Number(point[valueKey] ?? 0)).filter(Number.isFinite).sort((a, b) => a - b);
+  const min = values[0] ?? 0;
+  const max = values[values.length - 1] ?? 0;
+  const q1 = percentile(values, 0.25);
+  const median = percentile(values, 0.5);
+  const q3 = percentile(values, 0.75);
+  const range = max - min || 1;
+  const pos = (value: number) => `${((value - min) / range) * 100}%`;
+
+  return (
+    <div className="flex h-full flex-col justify-center gap-5 px-5">
+      <div className="relative h-16">
+        <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-600" />
+        <div className="absolute top-5 h-6 rounded-md border border-cyan-400/50 bg-cyan-400/15" style={{ left: pos(q1), right: `${100 - Number(pos(q3).replace("%", ""))}%` }} />
+        {[min, q1, median, q3, max].map((value, index) => (
+          <div key={index} className="absolute top-3 h-10 w-px bg-cyan-300" style={{ left: pos(value) }} />
+        ))}
+      </div>
+      <div className="grid grid-cols-5 gap-2 text-center text-[10px] text-slate-400">
+        <span>Min {min.toFixed(1)}</span>
+        <span>Q1 {q1.toFixed(1)}</span>
+        <span>Med {median.toFixed(1)}</span>
+        <span>Q3 {q3.toFixed(1)}</span>
+        <span>Max {max.toFixed(1)}</span>
+      </div>
+    </div>
+  );
+}
+
+function FunnelProgression({ artifact }: { artifact: ChartArtifact }) {
+  const valueKey = artifact.dataKeys[0]?.key || "value";
+  const max = Math.max(...artifact.data.map((point) => Number(point[valueKey] ?? 0)), 1);
+
+  return (
+    <div className="flex h-full flex-col justify-center gap-2 p-2">
+      {artifact.data.slice(0, 6).map((point, index) => {
+        const value = Number(point[valueKey] ?? 0);
+        const width = Math.max(18, (value / max) * 100);
+        return (
+          <div key={index} className="space-y-1">
+            <div className="flex items-center justify-between text-[10px] text-slate-400">
+              <span>{String(point[artifact.xAxisKey] ?? `Stage ${index + 1}`)}</span>
+              <span>{value}</span>
+            </div>
+            <div className="h-5 rounded-full bg-white/5">
+              <div
+                className="mx-auto h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                style={{ width: `${width}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const index = (values.length - 1) * p;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return values[lower] ?? 0;
+  const weight = index - lower;
+  return (values[lower] ?? 0) * (1 - weight) + (values[upper] ?? 0) * weight;
 }
 
 function ComparisonCard({ artifact }: { artifact: ComparisonArtifact }) {

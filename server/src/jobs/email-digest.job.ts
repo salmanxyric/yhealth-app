@@ -108,20 +108,20 @@ async function processReEngagement(): Promise<number> {
   // Find inactive users (>7 days) who haven't received re-engagement in 30 days
   const result = await query<{ user_id: string; email: string; first_name: string; days_away: number }>(
     `SELECT u.id as user_id, u.email, u.first_name,
-            EXTRACT(DAY FROM NOW() - COALESCE(u.last_login_at, u.created_at))::int as days_away
+            EXTRACT(DAY FROM NOW() - COALESCE(u.last_login, u.created_at))::int as days_away
      FROM users u
      LEFT JOIN email_preferences ep ON u.id = ep.user_id AND ep.category = 'engagement'
      WHERE u.is_active = true
        AND u.is_email_verified = true
        AND (ep.enabled IS NULL OR ep.enabled = true)
-       AND COALESCE(u.last_login_at, u.created_at) < NOW() - INTERVAL '7 days'
+       AND COALESCE(u.last_login, u.created_at) < NOW() - INTERVAL '7 days'
        AND NOT EXISTS (
          SELECT 1 FROM email_logs el
          WHERE el.user_id = u.id
            AND el.template = 'reEngagement'
            AND el.created_at >= NOW() - INTERVAL '30 days'
        )
-     ORDER BY u.last_login_at ASC NULLS FIRST
+     ORDER BY u.last_login ASC NULLS FIRST
      LIMIT 20`
   );
 

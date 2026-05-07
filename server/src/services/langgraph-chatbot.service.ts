@@ -5221,7 +5221,11 @@ I'm listening. What's happening right now?`;
                 // Collect artifacts: single `artifact` or `artifacts` array
                 const rawArtifacts: Record<string, unknown>[] = [];
                 if (parsed.artifact) rawArtifacts.push(parsed.artifact);
-                if (Array.isArray(parsed.artifacts)) rawArtifacts.push(...parsed.artifacts);
+                if (Array.isArray(parsed.artifacts)) {
+                  rawArtifacts.push(...parsed.artifacts.filter(
+                    (a: unknown): a is Record<string, unknown> => a !== null && typeof a === 'object'
+                  ));
+                }
 
                 for (const raw of rawArtifacts) {
                   let artifact = raw;

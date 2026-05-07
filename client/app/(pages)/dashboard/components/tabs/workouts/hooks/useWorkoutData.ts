@@ -731,16 +731,47 @@ export function useWorkoutData(): UseWorkoutDataReturn {
         >;
         const updatedSchedule = { ...currentSchedule };
         updatedSchedule[dayOfWeek] = updatedWorkout;
+        const scheduleDays = Object.entries(updatedSchedule)
+          .filter(([, workout]) => Boolean(workout))
+          .map(([day]) => day);
+
+        const currentWeek = selectedWorkout.currentWeek || 1;
+        const weekKey = `week_${currentWeek}`;
+        const updatedWeeks = selectedWorkout.weeks
+          ? { ...selectedWorkout.weeks }
+          : undefined;
+
+        if (updatedWeeks) {
+          const existingWeek = updatedWeeks[weekKey];
+          const existingWeekDays =
+            existingWeek?.days ||
+            ((existingWeek || {}) as unknown as Record<string, DayWorkout | null>);
+
+          updatedWeeks[weekKey] = {
+            weekNumber: existingWeek?.weekNumber || currentWeek,
+            multiplier: existingWeek?.multiplier || 1,
+            isDeloadWeek: existingWeek?.isDeloadWeek,
+            notes: existingWeek?.notes,
+            days: {
+              ...existingWeekDays,
+              [dayOfWeek]: updatedWorkout,
+            },
+          };
+        }
 
         if (isValidUUID(selectedWorkout.id)) {
           await workoutsService.updatePlan(selectedWorkout.id, {
             weeklySchedule: updatedSchedule,
+            ...(updatedWeeks ? { weeks: updatedWeeks } : {}),
+            scheduleDays,
           });
         }
 
         const updatedWorkoutPlan: WorkoutPlan = {
           ...selectedWorkout,
           weeklySchedule: updatedSchedule,
+          ...(updatedWeeks ? { weeks: updatedWeeks } : {}),
+          scheduleDays,
         };
 
         setWorkouts((prev) =>

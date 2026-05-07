@@ -13,7 +13,7 @@ import {
   getJamendoRecommendations,
   isJamendoConfigured,
 } from './jamendo.service.js';
-import type { SpotifyActivityCategory, AudioFeatureProfile, SpotifyTrack, SpotifyPlaylist } from '../../../shared/types/domain/spotify.js';
+import type { SpotifyActivityCategory, AudioFeatureProfile, SpotifyTrack, SpotifyPlaylist } from '@shared/types/domain/spotify.js';
 
 // ============================================
 // 403 CIRCUIT BREAKER

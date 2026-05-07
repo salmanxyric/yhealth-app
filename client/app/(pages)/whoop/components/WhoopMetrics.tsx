@@ -3,8 +3,7 @@
 import { useFetch } from '@/hooks/use-fetch';
 import { useApiMutation } from '@/hooks/use-api-mutation';
 import { useEffect } from 'react';
-import { Heart, Moon, Activity, Loader2, AlertCircle, RefreshCw, Download, TrendingUp, Thermometer, Droplet } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Zap, HeartPulse, Droplet, Loader2, AlertCircle, RefreshCw, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
@@ -205,274 +204,107 @@ export function WhoopMetrics() {
     );
   }
 
-  const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleDateString('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
+  const heartRate = strain?.avgHeartRate || recovery?.rhr;
 
-  const MetricCard = ({ 
-    icon: Icon, 
-    title, 
-    value, 
-    details, 
-    gradient, 
-    iconColor,
-    isEmpty = false 
+  const MetricCard = ({
+    label,
+    value,
+    icon,
+    sparkPath,
+    sparkFillId,
+    sparkColor,
+    isEmpty = false,
   }: {
-    icon: typeof Heart;
-    title: string;
-    value: string | number;
-    details?: React.ReactNode;
-    gradient: string;
-    iconColor: string;
+    label: string;
+    value: string;
+    icon: React.ReactNode;
+    sparkPath: string;
+    sparkFillId: string;
+    sparkColor: string;
     isEmpty?: boolean;
   }) => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02 }}
-      className={`relative overflow-hidden rounded-xl bg-gradient-to-br ${gradient} backdrop-blur-sm border border-white/10 p-4 sm:p-6 transition-all duration-300 ${
+    <div
+      className={`relative h-[192px] overflow-hidden rounded-[32px] border border-white/10 ${
         isEmpty ? 'opacity-60' : ''
       }`}
+      style={{ backgroundColor: '#080615' }}
     >
-      <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-white/20`}>
-          <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${iconColor}`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[13px] sm:text-[14px] font-medium text-white/90">{title}</p>
-          <p className="text-[18px] sm:text-2xl font-bold text-white mt-0.5 sm:mt-1 truncate">
+      <div className="absolute top-[17px] left-[20px] right-[20px] flex items-center justify-between">
+        <div className="flex flex-col gap-[5px]">
+          <p className="font-normal text-[15.8px] leading-none text-white opacity-50 tracking-[0.33px]">
+            {label}
+          </p>
+          <p className="font-semibold text-[26.3px] leading-none text-white tracking-[0.33px] whitespace-nowrap">
             {isEmpty ? '--' : value}
           </p>
         </div>
-      </div>
-      {details && (
-        <div className="space-y-1 sm:space-y-1.5 text-[13px] text-white/80 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-white/10">
-          {details}
+        <div className="w-8 h-8 flex items-center justify-center shrink-0">
+          {icon}
         </div>
-      )}
-    </motion.div>
+      </div>
+      {/* Sparkline fills bottom */}
+      <svg
+        className="absolute left-0 right-0 bottom-0 w-full h-[88px]"
+        viewBox="0 0 400 88"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id={sparkFillId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={sparkColor} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={sparkColor} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${sparkPath} L 400 88 L 0 88 Z`} fill={`url(#${sparkFillId})`} />
+        <path d={sparkPath} fill="none" stroke={sparkColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
   );
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-[32px]">
       {/* Recovery */}
       <MetricCard
-        icon={Heart}
-        title="Recovery"
-        value={recovery?.score ?? '--'}
-        gradient="from-red-500/20 via-rose-500/20 to-red-500/20"
-        iconColor="text-red-400"
+        label="Recovery"
+        value={recovery?.score != null ? String(recovery.score) : '--'}
+        icon={<Zap className="w-7 h-7 fill-[#f59e0b] text-[#f59e0b]" />}
+        sparkPath="M 0 58 C 40 54, 60 62, 100 56 S 160 48, 200 50 S 280 44, 320 46 S 380 40, 400 42"
+        sparkFillId="spark-recovery"
+        sparkColor="#f59e0b"
         isEmpty={!recovery}
-        details={recovery ? (
-          <>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">HRV:</span>
-              <span className="font-semibold text-white">{recovery.hrv.toFixed(2)}ms</span>
-            </p>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">RHR:</span>
-              <span className="font-semibold text-white">{recovery.rhr} bpm</span>
-            </p>
-            {recovery.spo2 && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">SPO2:</span>
-                <span className="font-semibold text-white">{recovery.spo2}%</span>
-              </p>
-            )}
-            {recovery.skinTemp && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">Temp:</span>
-                <span className="font-semibold text-white">{recovery.skinTemp.toFixed(1)}°C</span>
-              </p>
-            )}
-            <p className="text-white/50 text-[10px] mt-2 pt-2 border-t border-white/5">
-              {formatDate(recovery.timestamp)}
-            </p>
-          </>
-        ) : (
-          <p className="text-white/50">No recovery data</p>
-        )}
-      />
-
-      {/* Sleep */}
-      <MetricCard
-        icon={Moon}
-        title="Sleep"
-        value={sleep ? `${Math.round(sleep.duration / 60)}h` : '--'}
-        gradient="from-blue-500/20 via-cyan-500/20 to-blue-500/20"
-        iconColor="text-blue-400"
-        isEmpty={!sleep}
-        details={sleep ? (
-          <>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">Quality:</span>
-              <span className="font-semibold text-white">{sleep.quality}%</span>
-            </p>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">Efficiency:</span>
-              <span className="font-semibold text-white">{sleep.efficiency.toFixed(1)}%</span>
-            </p>
-            <p className="text-white/50 text-[10px] mt-2 pt-2 border-t border-white/5">
-              {formatDate(sleep.timestamp)}
-            </p>
-          </>
-        ) : (
-          <p className="text-white/50">No sleep data</p>
-        )}
-      />
-
-      {/* Strain */}
-      <MetricCard
-        icon={Activity}
-        title="Strain"
-        value={strain?.score ?? '--'}
-        gradient="from-purple-500/20 via-violet-500/20 to-purple-500/20"
-        iconColor="text-purple-400"
-        isEmpty={!strain}
-        details={strain ? (
-          <>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">Normalized:</span>
-              <span className="font-semibold text-white">{strain.normalized.toFixed(0)}%</span>
-            </p>
-            {strain.avgHeartRate && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">Avg HR:</span>
-                <span className="font-semibold text-white">{strain.avgHeartRate} bpm</span>
-              </p>
-            )}
-            {strain.maxHeartRate && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">Max HR:</span>
-                <span className="font-semibold text-white">{strain.maxHeartRate} bpm</span>
-              </p>
-            )}
-            {strain.calories && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">Calories:</span>
-                <span className="font-semibold text-white">{Math.round(strain.calories)}</span>
-              </p>
-            )}
-            <p className="text-white/50 text-[10px] mt-2 pt-2 border-t border-white/5">
-              {formatDate(strain.timestamp)}
-            </p>
-          </>
-        ) : (
-          <p className="text-white/50">No strain data</p>
-        )}
       />
 
       {/* Heart Rate */}
       <MetricCard
-        icon={Heart}
-        title="Heart Rate"
-        value={strain?.avgHeartRate || recovery?.rhr ? `${strain?.avgHeartRate || recovery?.rhr} bpm` : '--'}
-        gradient="from-pink-500/20 via-rose-500/20 to-pink-500/20"
-        iconColor="text-pink-400"
-        isEmpty={!strain?.avgHeartRate && !recovery?.rhr}
-        details={(strain?.avgHeartRate || recovery?.rhr) ? (
-          <>
-            {strain?.avgHeartRate && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">Average:</span>
-                <span className="font-semibold text-white">{strain.avgHeartRate} bpm</span>
-              </p>
-            )}
-            {strain?.maxHeartRate && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">Maximum:</span>
-                <span className="font-semibold text-white">{strain.maxHeartRate} bpm</span>
-              </p>
-            )}
-            {recovery?.rhr && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">Resting:</span>
-                <span className="font-semibold text-white">{recovery.rhr} bpm</span>
-              </p>
-            )}
-          </>
-        ) : (
-          <p className="text-white/50">No heart rate data</p>
-        )}
+        label="Heart Rate"
+        value={heartRate ? `${heartRate} bpm` : '--'}
+        icon={<HeartPulse className="w-7 h-7 text-[#10b981]" />}
+        sparkPath="M 0 60 C 30 56, 50 48, 90 50 S 150 62, 190 54 S 250 42, 290 50 S 350 58, 400 52"
+        sparkFillId="spark-hr"
+        sparkColor="#10b981"
+        isEmpty={!heartRate}
       />
 
       {/* HRV */}
       <MetricCard
-        icon={TrendingUp}
-        title="HRV"
+        label="HRV"
         value={recovery?.hrv ? `${recovery.hrv.toFixed(2)}ms` : '--'}
-        gradient="from-emerald-500/20 via-green-500/20 to-emerald-500/20"
-        iconColor="text-emerald-400"
+        icon={<Zap className="w-7 h-7 fill-[#a855f7] text-[#a855f7]" />}
+        sparkPath="M 0 62 C 40 60, 80 58, 120 60 S 200 62, 240 60 S 320 58, 360 60 S 400 58, 400 58"
+        sparkFillId="spark-hrv"
+        sparkColor="#a855f7"
         isEmpty={!recovery?.hrv}
-        details={recovery?.hrv ? (
-          <>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">RMSSD:</span>
-              <span className="font-semibold text-white">{recovery.hrv.toFixed(2)}ms</span>
-            </p>
-            {recovery.rhr && (
-              <p className="flex items-center justify-between">
-                <span className="text-white/70">RHR:</span>
-                <span className="font-semibold text-white">{recovery.rhr} bpm</span>
-              </p>
-            )}
-            <p className="text-white/50 text-[10px] mt-2 pt-2 border-t border-white/5">
-              {formatDate(recovery.timestamp)}
-            </p>
-          </>
-        ) : (
-          <p className="text-white/50">No HRV data</p>
-        )}
-      />
-
-      {/* Temperature */}
-      <MetricCard
-        icon={Thermometer}
-        title="Temperature"
-        value={recovery?.skinTemp ? `${recovery.skinTemp.toFixed(1)}°C` : '--'}
-        gradient="from-orange-500/20 via-amber-500/20 to-orange-500/20"
-        iconColor="text-orange-400"
-        isEmpty={!recovery?.skinTemp}
-        details={recovery?.skinTemp ? (
-          <>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">Skin Temp:</span>
-              <span className="font-semibold text-white">{recovery.skinTemp.toFixed(1)}°C</span>
-            </p>
-            <p className="text-white/50 text-[10px] mt-2 pt-2 border-t border-white/5">
-              {formatDate(recovery.timestamp)}
-            </p>
-          </>
-        ) : (
-          <p className="text-white/50">No temperature data</p>
-        )}
       />
 
       {/* SPO2 */}
       <MetricCard
-        icon={Droplet}
-        title="SPO2"
+        label="SPO2"
         value={recovery?.spo2 ? `${recovery.spo2}%` : '--'}
-        gradient="from-cyan-500/20 via-blue-500/20 to-cyan-500/20"
-        iconColor="text-cyan-400"
+        icon={<Droplet className="w-7 h-7 fill-[#06b6d4] text-[#06b6d4]" />}
+        sparkPath="M 0 52 C 20 36, 40 68, 60 52 S 100 30, 120 50 S 160 68, 180 48 S 220 28, 240 48 S 280 66, 300 50 S 340 32, 360 48 S 400 62, 400 50"
+        sparkFillId="spark-spo2"
+        sparkColor="#06b6d4"
         isEmpty={!recovery?.spo2}
-        details={recovery?.spo2 ? (
-          <>
-            <p className="flex items-center justify-between">
-              <span className="text-white/70">Oxygen:</span>
-              <span className="font-semibold text-white">{recovery.spo2}%</span>
-            </p>
-            <p className="text-white/50 text-[10px] mt-2 pt-2 border-t border-white/5">
-              {formatDate(recovery.timestamp)}
-            </p>
-          </>
-        ) : (
-          <p className="text-white/50">No SPO2 data</p>
-        )}
       />
     </div>
   );

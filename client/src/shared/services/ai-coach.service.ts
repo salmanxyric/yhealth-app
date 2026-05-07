@@ -197,6 +197,7 @@ export interface GenerateGoalsRequest {
 export interface GenerateGoalsResponse {
   goals: GeneratedGoal[];
   reasoning: string;
+  source?: 'ai' | 'fallback';
 }
 
 // ============================================================================
@@ -235,6 +236,8 @@ export interface MCQGenerationResponse {
   progress: number;
   isComplete: boolean;
   insights: ExtractedInsight[];
+  usedFallback?: boolean;
+  warning?: string;
 }
 
 export interface MCQAnswerRequest {
@@ -510,6 +513,8 @@ class AICoachServiceClient {
       assessmentResponses: request.assessmentResponses,
       bodyStats: request.bodyStats,
       customGoalText: request.customGoalText,
+    }, {
+      headers: { 'Idempotency-Key': `goal-gen-${request.goalCategory}-${Date.now()}` },
     });
 
     if (!response.success || !response.data) {

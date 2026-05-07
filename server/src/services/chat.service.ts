@@ -119,9 +119,9 @@ class ChatService {
       }
     }
 
-    // Create new chat
-    return await transaction(async (client) => {
-      // Create chat
+    // Create new chat — getChatById must run AFTER transaction commits
+    // so the pool-level query can see the inserted participants
+    const chatId = await transaction(async (client) => {
       const chatResult = await client.query<ChatRow>(
         `INSERT INTO chats (chat_name, is_group_chat, is_community, avatar, group_admin)
          VALUES ($1, $2, $3, $4, $5)
@@ -154,8 +154,10 @@ class ChatService {
       // Invalidate cache
       chatCacheService.invalidateChatList(participantIds);
 
-      return await this.getChatById(chat.id, userId);
+      return chat.id;
     });
+
+    return await this.getChatById(chatId, userId);
   }
 
   /**
@@ -186,20 +188,20 @@ class ChatService {
    * Get chat by ID with participants
    */
   async getChatById(chatId: string, userId: string): Promise<ChatWithParticipants> {
+    // Authorization check — always runs, never cached
+    const participantCheck = await query<ChatParticipantRow>(
+      `SELECT * FROM chat_participants
+       WHERE chat_id = $1 AND user_id = $2 AND left_at IS NULL`,
+      [chatId, userId]
+    );
+
+    if (participantCheck.rows.length === 0) {
+      throw ApiError.forbidden('You are not a participant of this chat');
+    }
+
     return await chatCacheService.getOrSetChatDetail(
       chatId,
       async () => {
-        // Verify user is participant
-        const participantCheck = await query<ChatParticipantRow>(
-          `SELECT * FROM chat_participants
-           WHERE chat_id = $1 AND user_id = $2 AND left_at IS NULL`,
-          [chatId, userId]
-        );
-
-        if (participantCheck.rows.length === 0) {
-          throw ApiError.forbidden('You are not a participant of this chat');
-        }
-
         // Get chat
         const chatResult = await query<ChatRow>(
           `SELECT * FROM chats WHERE id = $1`,
@@ -284,31 +286,23 @@ class ChatService {
    */
   async getUserChats(
     userId: string,
-    isAdmin: boolean = false,
     page: number = 1,
     limit: number = 50
   ): Promise<ChatWithParticipants[]> {
     return await chatCacheService.getOrSetChatList(
       userId,
-      isAdmin,
       async () => {
         const offset = (page - 1) * limit;
 
-        const queryText = isAdmin
-          ? `SELECT DISTINCT c.*
-             FROM chats c
-             INNER JOIN chat_participants cp ON c.id = cp.chat_id
-             WHERE cp.left_at IS NULL
-             ORDER BY c.updated_at DESC
-             LIMIT $1 OFFSET $2`
-          : `SELECT DISTINCT c.*
+        // Always filter by userId — admin privilege is for moderation, not listing all system chats
+        const queryText = `SELECT DISTINCT c.*
              FROM chats c
              INNER JOIN chat_participants cp ON c.id = cp.chat_id
              WHERE cp.user_id = $1 AND cp.left_at IS NULL
              ORDER BY c.updated_at DESC
              LIMIT $2 OFFSET $3`;
 
-        const params = isAdmin ? [limit, offset] : [userId, limit, offset];
+        const params = [userId, limit, offset];
         const result = await query<ChatRow>(queryText, params);
 
         // Get full chat details with participants

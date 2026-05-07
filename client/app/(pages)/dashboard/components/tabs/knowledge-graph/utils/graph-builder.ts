@@ -18,8 +18,6 @@ import {
 } from '../constants/graph-config';
 import type {
   ReasoningOverlayData,
-  ReasoningOverlayNode,
-  ReasoningOverlayEdge,
 } from '@/src/shared/services/knowledge-graph.service';
 
 // ============================================

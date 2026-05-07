@@ -44,6 +44,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { LogActivityModal } from "./activity/LogActivityModal";
+import { DayDetailSheet } from "./activity/DayDetailSheet";
 
 // Types
 interface ActivityLog {
@@ -295,7 +297,7 @@ function CalendarDayCard({
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: 0.05 * index }}
       onClick={onClick}
-      className={`relative text-center p-3 rounded-xl transition-all cursor-pointer ${
+      className={`relative text-center p-3 rounded-xl transition-all cursor-pointer min-w-[72px] sm:min-w-0 snap-center flex-shrink-0 sm:flex-shrink ${
         day.isToday
           ? "bg-gradient-to-br from-sky-500/20 to-sky-600/20 border-2 border-sky-500/40 shadow-lg shadow-sky-500/10"
           : day.hasActivity
@@ -711,6 +713,9 @@ export function ActivityTab() {
   const [viewMode, setViewMode] = useState<"day" | "week" | "month" | "custom">("week");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [selectedDayDetail, setSelectedDayDetail] = useState<CalendarDay | null>(null);
+  const [isDaySheetOpen, setIsDaySheetOpen] = useState(false);
 
   // Custom date range state
   const [customStart, setCustomStart] = useState("");
@@ -762,18 +767,44 @@ export function ActivityTab() {
       const filterQuery = filterParams.toString() ? `&${filterParams.toString()}` : "";
 
       // Determine period param: for custom mode, pass date range
-      const isCustomReady = viewMode === "custom" && customStart && customEnd;
       const periodParam = viewMode === "custom" ? "custom" : viewMode;
-      const customDateQuery = isCustomReady
-        ? `&startDate=${customStart}&endDate=${customEnd}`
-        : "";
+      // Build calendar query based on view mode
+      let calendarQuery: string;
+      if (viewMode === "month") {
+        calendarQuery = `/activity/calendar?year=${selectedDate.getFullYear()}&month=${selectedDate.getMonth() + 1}`;
+      } else if (viewMode === "day") {
+        const dayStr = selectedDate.toISOString().split("T")[0];
+        calendarQuery = `/activity/calendar?startDate=${dayStr}&endDate=${dayStr}`;
+      } else if (viewMode === "custom" && customStart && customEnd) {
+        calendarQuery = `/activity/calendar?startDate=${customStart}&endDate=${customEnd}`;
+      } else {
+        calendarQuery = `/activity/calendar?week=${weekStr}`;
+      }
+
+      // Build date range for recent activities
+      let recentDateQuery = "";
+      if (viewMode === "custom" && customStart && customEnd) {
+        recentDateQuery = `&startDate=${customStart}&endDate=${customEnd}`;
+      } else if (viewMode === "day") {
+        const dayStr = selectedDate.toISOString().split("T")[0];
+        recentDateQuery = `&startDate=${dayStr}&endDate=${dayStr}`;
+      } else if (viewMode === "month") {
+        const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+        recentDateQuery = `&startDate=${monthStart.toISOString().split("T")[0]}&endDate=${monthEnd.toISOString().split("T")[0]}`;
+      } else {
+        recentDateQuery = `&startDate=${weekStr}&endDate=${new Date(new Date(weekStr).getTime() + 6 * 86400000).toISOString().split("T")[0]}`;
+      }
+
+      // Build date query for stats/breakdown (use recentDateQuery which covers all modes)
+      const statsDateQuery = recentDateQuery;
 
       // Fetch all data in parallel
       const [statsRes, activitiesRes, breakdownRes, calendarRes] = await Promise.all([
-        api.get<{ stats: ActivityStats }>(`/activity/stats?period=${periodParam}${customDateQuery}`),
-        api.get<{ activities: ActivityLog[] }>(`/activity/recent?limit=15${filterQuery}${customDateQuery}`),
-        api.get<{ breakdown: ActivityBreakdown[] }>(`/activity/breakdown?period=${periodParam}${customDateQuery}`),
-        api.get<{ days: CalendarDay[] }>(`/activity/calendar?week=${weekStr}`),
+        api.get<{ stats: ActivityStats }>(`/activity/stats?period=${periodParam}${statsDateQuery}`),
+        api.get<{ activities: ActivityLog[] }>(`/activity/recent?limit=50${filterQuery}${recentDateQuery}`),
+        api.get<{ breakdown: ActivityBreakdown[] }>(`/activity/breakdown?period=${periodParam}${statsDateQuery}`),
+        api.get<{ days: CalendarDay[] }>(calendarQuery),
       ]);
 
       if (statsRes.data) setStats(statsRes.data.stats);
@@ -953,9 +984,9 @@ export function ActivityTab() {
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                className={`px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all cursor-pointer ${
                   viewMode === mode
-                    ? "bg-gradient-to-r from-amber-600 to-sky-600 text-white shadow-lg shadow-amber-500/20"
+                    ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/20"
                     : "text-slate-400 hover:text-white hover:bg-white/5"
                 }`}
               >
@@ -1005,7 +1036,7 @@ export function ActivityTab() {
                 className={cn(
                   "px-5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer",
                   customStart && customEnd
-                    ? "bg-gradient-to-r from-amber-600 to-sky-600 text-white shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30"
+                    ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"
                     : "bg-white/5 text-slate-500 cursor-not-allowed"
                 )}
               >
@@ -1017,10 +1048,12 @@ export function ActivityTab() {
       </motion.div>
 
       {/* 3. Activity Trend Chart */}
-      <ActivityTrendChart calendarDays={calendarDays} />
+      <div className="overflow-x-auto scrollbar-hide">
+        <ActivityTrendChart calendarDays={calendarDays} />
+      </div>
 
-      {/* 4. Week View Calendar */}
-      {viewMode === "week" && (
+      {/* 4. Calendar Overview */}
+      {viewMode !== "custom" && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1030,7 +1063,7 @@ export function ActivityTab() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-white flex items-center gap-2">
               <Calendar className="w-5 h-5 text-sky-400" />
-              Weekly Overview
+              {viewMode === "day" ? "Today" : viewMode === "month" ? "Monthly Overview" : "Weekly Overview"}
             </h3>
             <motion.div
               className="px-3 py-1 rounded-full bg-sky-500/20 text-sky-400 text-xs font-medium"
@@ -1042,7 +1075,14 @@ export function ActivityTab() {
             </motion.div>
           </div>
 
-          <div className="grid grid-cols-7 gap-3">
+          <div className={cn(
+            "gap-2 sm:gap-3 pb-2 sm:pb-0",
+            viewMode === "month"
+              ? "grid grid-cols-7"
+              : viewMode === "day"
+              ? "flex justify-center"
+              : "flex overflow-x-auto sm:grid sm:grid-cols-7 snap-x snap-mandatory scrollbar-hide"
+          )}>
             {calendarDays.length > 0 ? (
               calendarDays.map((day, i) => (
                 <CalendarDayCard
@@ -1050,28 +1090,15 @@ export function ActivityTab() {
                   day={day}
                   index={i}
                   onClick={() => {
-                    setSelectedDate(new Date(day.date));
-                    setViewMode("day");
+                    setSelectedDayDetail(day);
+                    setIsDaySheetOpen(true);
                   }}
                 />
               ))
             ) : (
-              // Placeholder for week days
-              Array.from({ length: 7 }, (_, i) => {
-                const date = new Date(selectedDate);
-                date.setDate(date.getDate() - date.getDay() + i);
-                return (
-                  <div
-                    key={i}
-                    className="text-center p-3 rounded-xl bg-white/5 border border-white/5"
-                  >
-                    <p className="text-xs text-slate-500 mb-1">
-                      {date.toLocaleDateString("en-US", { weekday: "short" })}
-                    </p>
-                    <p className="text-lg font-semibold text-slate-500">{date.getDate()}</p>
-                  </div>
-                );
-              })
+              <div className="col-span-7 text-center py-8">
+                <p className="text-sm text-slate-500">No data for this period</p>
+              </div>
             )}
           </div>
         </motion.div>
@@ -1287,8 +1314,8 @@ export function ActivityTab() {
           />
         </div>
 
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="relative z-10 flex flex-col sm:flex-row items-center sm:justify-between gap-4 text-center sm:text-left">
+          <div className="flex flex-col sm:flex-row items-center gap-4">
             <motion.div
               className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-sky-500 flex items-center justify-center"
               animate={{ rotate: [0, 5, -5, 0] }}
@@ -1307,13 +1334,29 @@ export function ActivityTab() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-sky-500 text-white font-medium shadow-lg shadow-amber-500/25 flex items-center gap-2 cursor-pointer"
+            onClick={() => setIsLogModalOpen(true)}
+            className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-medium shadow-lg shadow-emerald-500/25 flex items-center gap-2 cursor-pointer"
           >
             <Play className="w-4 h-4" />
             Log Activity
           </motion.button>
         </div>
       </motion.div>
+
+      {/* Log Activity Modal */}
+      <LogActivityModal
+        open={isLogModalOpen}
+        onOpenChange={setIsLogModalOpen}
+        onSuccess={fetchData}
+      />
+
+      {/* Day Detail Sheet */}
+      <DayDetailSheet
+        open={isDaySheetOpen}
+        onOpenChange={setIsDaySheetOpen}
+        day={selectedDayDetail}
+        onRefresh={fetchData}
+      />
     </div>
   );
 }

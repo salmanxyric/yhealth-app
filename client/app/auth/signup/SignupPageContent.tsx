@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
+import { getFriendlyAuthError } from "@/lib/auth-errors";
 import toast from "react-hot-toast";
 
 const signupSchema = z
@@ -28,6 +29,10 @@ const signupSchema = z
       .regex(
         /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
         "Password must contain uppercase, lowercase, and number"
+      )
+      .regex(
+        /[^A-Za-z0-9]/,
+        "Password must contain at least one special character"
       ),
     confirmPassword: z.string(),
   })
@@ -74,6 +79,7 @@ function PasswordRequirements({ password }: { password: string }) {
     { label: "Contains uppercase letter", met: /[A-Z]/.test(password) },
     { label: "Contains lowercase letter", met: /[a-z]/.test(password) },
     { label: "Contains number", met: /\d/.test(password) },
+    { label: "Contains special character", met: /[^A-Za-z0-9]/.test(password) },
   ];
 
   return (
@@ -107,8 +113,10 @@ function SignUpContent() {
   const [activationToken, setActivationToken] = useState<string>("");
   const [otpValues, setOtpValues] = useState<string[]>(["", "", "", ""]);
   const [userEmail, setUserEmail] = useState("");
+  const [userPassword, setUserPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const searchParams = useSearchParams();
 
@@ -124,12 +132,39 @@ function SignUpContent() {
   useEffect(() => {
     const error = searchParams.get("error");
     if (error) {
-      const decodedError = decodeURIComponent(error);
+      const decodedError = getFriendlyAuthError(error);
       setErrorMessage(decodedError);
       toast.error(decodedError, { duration: 5000 });
       window.history.replaceState({}, "", "/auth/signup");
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProviderStatus() {
+      try {
+        const response = await fetch("/api/auth/provider-status", {
+          cache: "no-store",
+        });
+        const payload = await response.json();
+
+        if (!cancelled) {
+          setGoogleEnabled(Boolean(payload?.providers?.google?.enabled));
+        }
+      } catch {
+        if (!cancelled) {
+          setGoogleEnabled(false);
+        }
+      }
+    }
+
+    loadProviderStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Sync auth hook error with local state
   useEffect(() => {
@@ -159,6 +194,7 @@ function SignUpContent() {
   const onSubmit = async (data: SignupFormData) => {
     setErrorMessage(null);
     setUserEmail(data.email);
+    setUserPassword(data.password);
     const result = await registerUser({
       email: data.email,
       password: data.password,
@@ -217,6 +253,8 @@ function SignUpContent() {
     await verifyRegistration({
       activationToken,
       activationCode: code,
+      email: userEmail,
+      password: userPassword,
     });
   };
 
@@ -247,7 +285,7 @@ function SignUpContent() {
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium">Registration Error</p>
-                <p className="text-xs mt-1 opacity-80">{errorMessage}</p>
+                <p className="text-xs mt-1 whitespace-pre-line opacity-80">{errorMessage}</p>
               </div>
               <button
                 onClick={dismissError}
@@ -306,7 +344,7 @@ function SignUpContent() {
                 variant="outline"
                 className="w-full h-11 bg-background/50 border-white/10 hover:bg-white/5 transition-all"
                 onClick={loginWithGoogle}
-                disabled={isLoading}
+                disabled={isLoading || googleEnabled !== true}
               >
                 <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
                   <path
@@ -326,8 +364,13 @@ function SignUpContent() {
                     fill="#EA4335"
                   />
                 </svg>
-                Continue with Google
+                {googleEnabled === false ? "Google sign-in unavailable" : "Continue with Google"}
               </Button>
+              {googleEnabled === false && (
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  Google sign-in is not configured on this environment. Use email registration.
+                </p>
+              )}
             </motion.div>
 
             {/* Divider */}
@@ -555,7 +598,7 @@ function SignUpContent() {
 
               <Button
                 type="submit"
-                className="w-full h-11 bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white font-medium shadow-lg shadow-primary/25 transition-all"
+                className="auth-emerald-btn w-full h-11 font-medium"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -684,7 +727,7 @@ function SignUpContent() {
               transition={{ delay: 0.5 }}
             >
               <Button
-                className="w-full h-12 bg-gradient-to-r from-primary to-purple-500 hover:from-primary/90 hover:to-purple-500/90 text-white font-medium shadow-lg shadow-primary/25 transition-all rounded-xl"
+                className="auth-emerald-btn w-full h-12 font-medium rounded-xl"
                 onClick={handleVerifyOtp}
                 disabled={isLoading || otpValues.join("").length !== 4}
               >

@@ -5,12 +5,13 @@
  */
 
 import { query } from '../config/database.config.js';
+import { logger } from './logger.service.js';
 import type {
   CoreSection,
   IntelligenceSource,
   CoreProfileEntry,
   CoreProfile,
-} from '../../../shared/types/domain/intelligence-files.js';
+} from '@shared/types/domain/intelligence-files.js';
 
 const EXPECTED_FIELDS: Array<{ section: CoreSection; key: string; impact: 'low' | 'medium' | 'high' }> = [
   { section: 'biometrics', key: 'resting_hr', impact: 'high' },
@@ -49,12 +50,55 @@ function mapRow(row: Record<string, unknown>): CoreProfileEntry {
 }
 
 class CoreProfileKernelService {
+  private tableExistsCache: boolean | null = null;
+
+  private async hasCoreProfileTable(): Promise<boolean> {
+    if (this.tableExistsCache !== null) return this.tableExistsCache;
+    const result = await query<{ exists: boolean }>(
+      `SELECT to_regclass('public.intelligence_core_profile') IS NOT NULL AS exists`,
+      []
+    );
+    this.tableExistsCache = Boolean(result.rows[0]?.exists);
+    return this.tableExistsCache;
+  }
+
+  private emptyProfile(): CoreProfile {
+    return {
+      biometrics: [],
+      targets: [],
+      constraints: [],
+      preferences: [],
+      medical: [],
+      lifestyle: [],
+      missingFields: EXPECTED_FIELDS.map(f => ({ section: f.section, key: f.key, impact: f.impact })),
+    };
+  }
+
+  private isMissingTableError(error: unknown): boolean {
+    return error instanceof Error && (
+      error.message.includes('intelligence_core_profile') ||
+      (error as Error & { code?: string }).code === '42P01'
+    );
+  }
 
   async getProfile(userId: string): Promise<CoreProfile> {
-    const result = await query(
-      `SELECT * FROM intelligence_core_profile WHERE user_id = $1 ORDER BY section, key`,
-      [userId]
-    );
+    if (!(await this.hasCoreProfileTable())) {
+      return this.emptyProfile();
+    }
+
+    let result;
+    try {
+      result = await query(
+        `SELECT * FROM intelligence_core_profile WHERE user_id = $1 ORDER BY section, key`,
+        [userId]
+      );
+    } catch (error) {
+      if (this.isMissingTableError(error)) {
+        logger.warn('[CoreProfile] Table missing, returning empty profile', { userId });
+        return this.emptyProfile();
+      }
+      throw error;
+    }
 
     const entries = result.rows.map(mapRow);
     const grouped: CoreProfile = {
@@ -80,21 +124,41 @@ class CoreProfileKernelService {
   }
 
   async getProfileSection(userId: string, section: CoreSection): Promise<CoreProfileEntry[]> {
-    const result = await query(
-      `SELECT * FROM intelligence_core_profile WHERE user_id = $1 AND section = $2 ORDER BY key`,
-      [userId, section]
-    );
+    if (!(await this.hasCoreProfileTable())) {
+      return [];
+    }
+
+    let result;
+    try {
+      result = await query(
+        `SELECT * FROM intelligence_core_profile WHERE user_id = $1 AND section = $2 ORDER BY key`,
+        [userId, section]
+      );
+    } catch (error) {
+      if (this.isMissingTableError(error)) return [];
+      throw error;
+    }
     return result.rows.map(mapRow);
   }
 
   async getProfileSummary(userId: string): Promise<string> {
-    const result = await query(
-      `SELECT section, key, value, unit, confidence
-       FROM intelligence_core_profile
-       WHERE user_id = $1 AND confidence >= 0.3
-       ORDER BY section, key`,
-      [userId]
-    );
+    if (!(await this.hasCoreProfileTable())) {
+      return '(No core profile data available yet)';
+    }
+
+    let result;
+    try {
+      result = await query(
+        `SELECT section, key, value, unit, confidence
+         FROM intelligence_core_profile
+         WHERE user_id = $1 AND confidence >= 0.3
+         ORDER BY section, key`,
+        [userId]
+      );
+    } catch (error) {
+      if (this.isMissingTableError(error)) return '(No core profile data available yet)';
+      throw error;
+    }
 
     if (result.rows.length === 0) {
       return '(No core profile data available yet)';

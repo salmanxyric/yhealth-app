@@ -410,6 +410,14 @@ class LifeHistoryEmbeddingService {
         logger.warn('[LifeHistory] user_life_history table not found — returning empty results');
         return [];
       }
+      if (
+        error?.code === '42704' ||
+        String(error?.message || '').includes('vector') ||
+        String(error?.message || '').includes('operator does not exist')
+      ) {
+        logger.debug('[LifeHistory] Vector search unavailable; returning empty semantic results');
+        return [];
+      }
       throw error;
     }
   }

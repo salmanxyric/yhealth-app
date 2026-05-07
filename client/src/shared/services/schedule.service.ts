@@ -105,6 +105,7 @@ export interface CreateScheduleItemRequest {
   color?: string;
   icon?: string;
   category?: string;
+  shape?: 'square' | 'circle' | 'rounded' | 'diamond' | 'hexagon';
   position: number;
   metadata?: Record<string, unknown>;
 }

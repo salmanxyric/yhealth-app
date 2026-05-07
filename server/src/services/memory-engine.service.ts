@@ -5,6 +5,7 @@
  */
 
 import { query } from '../config/database.config.js';
+import { logger } from './logger.service.js';
 import type {
   IntelligenceMemory,
   IntelligenceCategory,
@@ -13,12 +14,30 @@ import type {
   IntelligenceSource,
   MemoryEvidence,
   CreateMemoryInput,
-} from '../../../shared/types/domain/intelligence-files.js';
+} from '@shared/types/domain/intelligence-files.js';
 
 const MIN_EVIDENCE_AI = 3;
 const MIN_EVIDENCE_USER = 1;
 const DEFAULT_DECAY_RATE = 0.01;
 const MAX_CONTEXT_MEMORIES = 20;
+let memoryTableExistsCache: boolean | null = null;
+
+async function hasMemoryTable(): Promise<boolean> {
+  if (memoryTableExistsCache !== null) return memoryTableExistsCache;
+  const result = await query<{ exists: boolean }>(
+    `SELECT to_regclass('public.intelligence_memories') IS NOT NULL AS exists`,
+    []
+  );
+  memoryTableExistsCache = Boolean(result.rows[0]?.exists);
+  return memoryTableExistsCache;
+}
+
+function isMissingMemoryTable(error: unknown): boolean {
+  return error instanceof Error && (
+    error.message.includes('intelligence_memories') ||
+    (error as Error & { code?: string }).code === '42P01'
+  );
+}
 
 interface MemoryFilter {
   category?: IntelligenceCategory;
@@ -144,23 +163,35 @@ class MemoryEngineService {
     limit: number = 10
   ): Promise<IntelligenceMemory[]> {
     const effectiveLimit = Math.min(limit, MAX_CONTEXT_MEMORIES);
+    if (!(await hasMemoryTable())) {
+      return [];
+    }
 
-    const result = await query(
-      `SELECT *,
-        (
-          confidence
-          * GREATEST(0.1, 1.0 - EXTRACT(EPOCH FROM (NOW() - last_accessed_at)) / 86400.0 * decay_rate)
-          * (CASE WHEN title ILIKE $3 OR description ILIKE $3 THEN 1.5 ELSE 1.0 END)
-          * (1.0 + LEAST(access_count, 50) * 0.005)
-        ) AS relevance_score
-       FROM intelligence_memories
-       WHERE user_id = $1
-         AND status IN ('active', 'verified')
-         AND confidence >= 0.2
-       ORDER BY relevance_score DESC
-       LIMIT $2`,
-      [userId, effectiveLimit, `%${userMessage.substring(0, 100)}%`]
-    );
+    let result;
+    try {
+      result = await query(
+        `SELECT *,
+          (
+            confidence
+            * GREATEST(0.1, 1.0 - EXTRACT(EPOCH FROM (NOW() - last_accessed_at)) / 86400.0 * decay_rate)
+            * (CASE WHEN title ILIKE $3 OR description ILIKE $3 THEN 1.5 ELSE 1.0 END)
+            * (1.0 + LEAST(access_count, 50) * 0.005)
+          ) AS relevance_score
+         FROM intelligence_memories
+         WHERE user_id = $1
+           AND status IN ('active', 'verified')
+           AND confidence >= 0.2
+         ORDER BY relevance_score DESC
+         LIMIT $2`,
+        [userId, effectiveLimit, `%${userMessage.substring(0, 100)}%`]
+      );
+    } catch (error) {
+      if (isMissingMemoryTable(error)) {
+        logger.warn('[MemoryEngine] Table missing, continuing without memory context', { userId });
+        return [];
+      }
+      throw error;
+    }
 
     // Record access for all returned memories
     if (result.rows.length > 0) {

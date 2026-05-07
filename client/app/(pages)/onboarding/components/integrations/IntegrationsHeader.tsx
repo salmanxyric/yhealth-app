@@ -28,7 +28,7 @@ export function IntegrationsHeader() {
         <span className="text-sm font-medium text-cyan-400">Sync your health data</span>
       </motion.div>
 
-      <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
+      <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-semibold text-white mb-3 leading-tight">
         Connect Your{' '}
         <span className="bg-linear-to-r from-blue-400 via-cyan-400 to-teal-400 bg-clip-text text-transparent">
           Devices & Apps

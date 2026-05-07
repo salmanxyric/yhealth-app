@@ -96,10 +96,12 @@ class TTSService {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
       const url = `${apiUrl}${this.baseUrl}/speak`;
+      const idempotencyKey = `tts-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
           ...(typeof document !== 'undefined' && document.cookie.includes('balencia_access_token')
             ? {
                 Authorization: `Bearer ${this.getAuthToken()}`,

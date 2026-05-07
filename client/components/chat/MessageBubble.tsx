@@ -47,12 +47,12 @@ export function MessageBubble({
         'relative break-words px-3.5 py-2.5 text-[14px] min-w-fit leading-relaxed',
         isOwn
           ? 'bg-emerald-600 text-white rounded-2xl rounded-br-md shadow-md shadow-emerald-600/20'
-          : 'bg-slate-100 dark:bg-white/8 text-slate-900 dark:text-slate-100 rounded-2xl rounded-bl-md border border-transparent dark:border-white/5',
+          : 'bg-slate-100 dark:bg-white/8 text-slate-900 dark:text-white rounded-2xl rounded-bl-md border border-transparent dark:border-white/5',
         className
       )}
     >
       {markdown ? (
-        <div className={cn('prose prose-sm max-w-none', isOwn && 'prose-invert')}>
+        <div className={cn('prose prose-sm max-w-none dark:prose-invert', isOwn && 'prose-invert')}>
           <ReactMarkdown
             components={{
               p: ({ children }) => <p className="mb-1.5 last:mb-0 text-[14px] leading-relaxed">{children}</p>,

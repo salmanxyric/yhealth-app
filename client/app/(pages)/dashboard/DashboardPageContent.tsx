@@ -39,7 +39,6 @@ import {
 } from "./components";
 import { DashboardLayout } from "@/components/layout";
 import { SubscriptionAccessProvider } from "@/app/context/SubscriptionAccessContext";
-import { TrialCountdownBanner } from "@/components/subscription/TrialCountdownBanner";
 import { ObstacleCard } from "./components/ObstacleCard";
 import { ReconnectionCard } from "./components/ReconnectionCard";
 import dynamic from "next/dynamic";
@@ -285,7 +284,7 @@ function DashboardContent() {
     try {
       // Fetch active plan
       const planResponse = await api.get<{
-        plan: Plan;
+        plan: Plan | null;
         todayActivities: ActivityData[];
         weekCompletionRate: number;
       }>("/plans/active");
@@ -293,6 +292,9 @@ function DashboardContent() {
       if (planResponse.success && planResponse.data) {
         setPlan(planResponse.data.plan);
         setWeekCompletionRate(planResponse.data.weekCompletionRate);
+        if (!planResponse.data.plan) {
+          setError("no_plan");
+        }
       }
 
       // Fetch today's activities
@@ -521,10 +523,6 @@ function DashboardContent() {
         </div>
 
         <div className="relative max-w-8xl mx-auto px-3 sm:px-6 lg:px-8 py-2">
-          {/* Trial banner when in free trial */}
-          <div className="mb-4">
-            <TrialCountdownBanner />
-          </div>
           {/* Obstacle diagnosis invitations (proactive coach) */}
           <div className="mb-4">
             <ObstacleCard />

@@ -13,7 +13,7 @@
 import { logger } from '../services/logger.service.js';
 import { goalReconnectionService } from '../services/goal-reconnection.service.js';
 import { proactiveMessagingService } from '../services/proactive-messaging.service.js';
-import type { ReconnectionTier } from '../../../shared/types/domain/reconnection.js';
+import type { ReconnectionTier } from '@shared/types/domain/reconnection.js';
 
 const JOB_INTERVAL_MS = process.env.GOAL_RECONNECTION_JOB_INTERVAL_MS
   ? parseInt(process.env.GOAL_RECONNECTION_JOB_INTERVAL_MS, 10)

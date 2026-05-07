@@ -408,7 +408,7 @@ Rules:
    */
   async refreshAllSuggestions(): Promise<{ processed: number }> {
     const users = await query<{ id: string }>(
-      `SELECT id FROM users WHERE is_active = true AND last_login_at >= NOW() - INTERVAL '14 days' LIMIT 500`
+      `SELECT id FROM users WHERE is_active = true AND last_login >= NOW() - INTERVAL '14 days' LIMIT 500`
     );
 
     let processed = 0;

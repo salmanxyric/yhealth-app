@@ -11,6 +11,7 @@ import { mailHelper } from "../helper/mail.js";
 import { env } from "../config/env.config.js";
 import type { AuthenticatedRequest } from "../types/index.js";
 import { notificationService } from "../services/notification.service.js";
+import { oauthService } from "../services/oauth.service.js";
 import type {
   RegisterInput,
   LoginInput,
@@ -192,12 +193,19 @@ export const register = asyncHandler(
       createActivationToken(registrationData);
 
     // Send OTP email
-    await mailHelper.sendRegistrationOTPEmail(
+    const emailSent = await mailHelper.sendRegistrationOTPEmail(
       data.email,
       data.firstName,
       activationCode,
       "10 minutes"
     );
+
+    if (!emailSent) {
+      logger.error("Registration OTP email failed", { email: data.email });
+      throw ApiError.serviceUnavailable(
+        "Unable to send verification email right now. Please try again shortly."
+      );
+    }
 
     logger.info("Registration OTP sent", { email: data.email });
 
@@ -344,9 +352,24 @@ export const socialAuth = asyncHandler(
       throw ApiError.badRequest("Email and provider are required");
     }
 
-    const email = data.email.toLowerCase();
     const provider = data.provider;
-    const providerId = data.providerId || data.idToken;
+    if (provider === "google" && !data.idToken) {
+      throw ApiError.badRequest("Google sign-in did not include an identity token. Please try again.");
+    }
+
+    const verifiedProfile = provider === "google"
+      ? await oauthService.verifySocialToken(provider, data.idToken!)
+      : null;
+
+    if (provider === "google" && !verifiedProfile) {
+      throw ApiError.unauthorized("Google sign-in could not be verified. Please try again.");
+    }
+
+    const email = (verifiedProfile?.email || data.email).toLowerCase();
+    const providerId = verifiedProfile?.providerId || data.providerId || data.idToken;
+    const firstName = verifiedProfile?.firstName || data.firstName || data.name?.split(" ")[0] || "";
+    const lastName = verifiedProfile?.lastName || data.lastName || data.name?.split(" ").slice(1).join(" ") || "";
+    const avatar = verifiedProfile?.avatar || data.avatar || null;
 
     // Check if user exists by email
     const existingUserResult = await query<UserRow>(
@@ -370,7 +393,7 @@ export const socialAuth = asyncHandler(
         avatar = COALESCE($4, avatar),
         is_email_verified = true
       WHERE id = $5`,
-        [new Date(), provider, providerId || null, data.avatar || null, user.id]
+        [new Date(), provider, providerId || null, avatar, user.id]
       );
 
       // Refresh user data
@@ -395,9 +418,9 @@ export const socialAuth = asyncHandler(
         RETURNING *`,
           [
             email,
-            data.firstName || data.name?.split(" ")[0] || "",
-            data.lastName || data.name?.split(" ").slice(1).join(" ") || "",
-            data.avatar || null,
+            firstName,
+            lastName,
+            avatar,
             provider,
             providerId,
             true,
@@ -1156,12 +1179,19 @@ export const resendRegistrationOTP = asyncHandler(
     );
 
     // Send new OTP email
-    await mailHelper.sendRegistrationOTPEmail(
+    const emailSent = await mailHelper.sendRegistrationOTPEmail(
       userData.email,
       userData.firstName,
       activationCode,
       "10 minutes"
     );
+
+    if (!emailSent) {
+      logger.error("Registration OTP resend email failed", { email: userData.email });
+      throw ApiError.serviceUnavailable(
+        "Unable to send verification email right now. Please try again shortly."
+      );
+    }
 
     logger.info("Registration OTP resent", { email: userData.email });
 

@@ -47,6 +47,7 @@ export interface GenerateGoalsRequest {
 export interface GenerateGoalsResponse {
   goals: GeneratedGoal[];
   reasoning?: string;
+  source?: 'ai' | 'fallback';
 }
 
 export interface DietPlanRequest {

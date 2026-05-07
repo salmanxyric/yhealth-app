@@ -37,7 +37,7 @@ async function processCorrelationCompute(): Promise<void> {
        FROM data_source_signals dss
        WHERE dss.signal_date = $1
          AND NOT EXISTS (
-           SELECT 1 FROM daily_correlations dc
+           SELECT 1 FROM user_daily_correlations dc
            WHERE dc.user_id = dss.user_id
              AND dc.correlation_date = $1
              AND dc.computed_at > NOW() - INTERVAL '${CORRELATION_COOLDOWN_MIN} minutes'

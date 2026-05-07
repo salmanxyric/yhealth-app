@@ -47,6 +47,10 @@ export function DayWorkoutEditModal({
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [workoutName, setWorkoutName] = useState("");
   const [focusArea, setFocusArea] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [estimatedDuration, setEstimatedDuration] = useState(45);
+  const [estimatedCalories, setEstimatedCalories] = useState(150);
+  const [notes, setNotes] = useState("");
   const [selectedMuscleGroups, setSelectedMuscleGroups] = useState<string[]>([]);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,6 +73,10 @@ export function DayWorkoutEditModal({
       );
       setWorkoutName(workout.workoutName || planName);
       setFocusArea(workout.focusArea || "");
+      setScheduledTime(workout.scheduledTime || "");
+      setEstimatedDuration(workout.estimatedDuration || Math.max(15, workout.exercises.length * 8));
+      setEstimatedCalories(workout.estimatedCalories || Math.max(50, workout.exercises.length * 25));
+      setNotes(workout.notes || "");
       // Extract muscle groups from focus area
       const groups = workout.focusArea
         ? workout.focusArea.split(",").map((g) => g.trim())
@@ -79,6 +87,10 @@ export function DayWorkoutEditModal({
       setExercises([]);
       setWorkoutName(planName);
       setFocusArea("");
+      setScheduledTime("");
+      setEstimatedDuration(45);
+      setEstimatedCalories(150);
+      setNotes("");
       setSelectedMuscleGroups([]);
     }
   }, [isOpen, workout, planName]);
@@ -176,8 +188,10 @@ export function DayWorkoutEditModal({
           muscleGroup: ex.muscleGroup,
           weight: ex.weight,
         })),
-        estimatedDuration: exercises.length * 8, // ~8 min per exercise
-        estimatedCalories: exercises.length * 25, // ~25 cal per exercise
+        estimatedDuration: estimatedDuration || exercises.length * 8,
+        estimatedCalories: estimatedCalories || exercises.length * 25,
+        scheduledTime: scheduledTime || undefined,
+        notes: notes || undefined,
       };
 
       await onSave(dayOfWeek, updatedWorkout);
@@ -195,6 +209,10 @@ export function DayWorkoutEditModal({
     workoutName,
     planName,
     focusArea,
+    estimatedDuration,
+    estimatedCalories,
+    scheduledTime,
+    notes,
     selectedMuscleGroups,
     onSave,
     onClose,
@@ -335,6 +353,57 @@ export function DayWorkoutEditModal({
                 onChange={(e) => setFocusArea(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
                 placeholder="Or enter custom focus area"
+              />
+            </div>
+
+            {/* Schedule Details */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Start Time
+                </label>
+                <input
+                  type="time"
+                  value={scheduledTime}
+                  onChange={(e) => setScheduledTime(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Duration (minutes)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  value={estimatedDuration}
+                  onChange={(e) => setEstimatedDuration(parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Calories
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={estimatedCalories}
+                  onChange={(e) => setEstimatedCalories(parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Day Notes
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="min-h-20 w-full resize-none rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
+                placeholder="Add warmup, form cues, or progression notes"
               />
             </div>
 

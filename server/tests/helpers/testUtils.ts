@@ -13,6 +13,10 @@ import type { IJwtPayload, UserRole } from '../../src/types/index.js';
 const JWT_SECRET = process.env['JWT_SECRET'] || 'test-jwt-secret';
 const JWT_REFRESH_SECRET = process.env['JWT_REFRESH_SECRET'] || 'test-jwt-refresh-secret';
 
+function generateTestEmail(): string {
+  return `test-${faker.string.uuid()}@balencia.test`;
+}
+
 /**
  * Test user shape returned from PostgreSQL
  */
@@ -39,7 +43,7 @@ export function generateUserData(overrides: Partial<{
   gender: 'male' | 'female' | 'non_binary' | 'prefer_not_to_say';
 }> = {}) {
   return {
-    email: faker.internet.email().toLowerCase(),
+    email: generateTestEmail(),
     password: 'TestPassword123!',
     firstName: faker.person.firstName(),
     lastName: faker.person.lastName(),

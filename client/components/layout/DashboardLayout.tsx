@@ -60,6 +60,7 @@ export function DashboardLayout({
     if (pathname === "/ai-coach") return "ai-coach";
     if (pathname === "/chat") return "chat";
     if (pathname === "/notifications") return "notifications";
+    if (pathname === "/quick-notes") return "quick-notes";
     if (pathname === "/settings") return "settings";
     if (pathname === "/profile") return "profile";
     if (pathname === "/preferences") return "preferences";
@@ -88,7 +89,7 @@ export function DashboardLayout({
         router.push(tab);
       } else if (tab === "overview") {
         router.push("/dashboard");
-      } else if (["workouts", "exercises", "nutrition", "progress", "activity", "achievements", "leaderboard", "competitions", "contracts", "community", "chat-history", "webinars"].includes(tab)) {
+      } else if (["workouts", "exercises", "nutrition", "progress", "activity", "achievements", "leaderboard", "competitions", "contracts", "community", "chat-history", "webinars", "quick-notes"].includes(tab)) {
         // Navigate to separate pages for these tabs
         router.push(`/${tab}`);
       } else {

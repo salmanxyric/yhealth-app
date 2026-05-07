@@ -26,7 +26,7 @@ import {
   getRecentlyPlayed,
 } from '../services/spotify-playlist.service.js';
 import { isJamendoConfigured } from '../services/jamendo.service.js';
-import type { SpotifyActivityCategory, SpotifyPlaybackState } from '../../../shared/types/domain/spotify.js';
+import type { SpotifyActivityCategory, SpotifyPlaybackState } from '@shared/types/domain/spotify.js';
 
 class SpotifyController extends BaseController {
   constructor() {

@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Next.js client (standalone output)
-# Build context: PRODUCTS/yhealth-app/ (the root, NOT client/)
-# Build: docker build -t yhealth-client -f client/Dockerfile .
+# Build context: PRODUCTS/yhealth-app/client/
+# Build: docker build -t yhealth-client .
 # Run:   docker run -p 3000:3000 yhealth-client
 
 # -----------------------------------------------------------------------------
@@ -10,10 +10,9 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 
 # Copy package files
-COPY client/package.json client/package-lock.json ./client/
+COPY package.json package-lock.json ./
 
 # Install all dependencies (devDependencies needed for build in next stage)
-WORKDIR /app/client
 RUN npm ci
 
 # -----------------------------------------------------------------------------
@@ -23,24 +22,16 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
-COPY --from=deps /app/client/node_modules ./client/node_modules
+COPY --from=deps /app/node_modules ./node_modules
 
-# Copy client source
-COPY client/ ./client/
-
-# Copy shared types INSIDE client/ so Turbopack can resolve them
-# (Turbopack has limited support for tsconfig paths outside project root)
-COPY shared/ ./client/shared/
-
-# Rewrite tsconfig paths: @shared/* -> ./shared/* (inside client dir)
-RUN sed -i 's|"\.\./shared/\*"|"./shared/*"|g' ./client/tsconfig.json
+# Copy client source, including client-local shared types
+COPY . .
 
 # Accept build-time environment variables (NEXT_PUBLIC_* are baked into the bundle)
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # Build Next.js with standalone output
-WORKDIR /app/client
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
@@ -60,17 +51,13 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nodejs
 
 # Copy standalone output
-# Next.js standalone preserves the monorepo directory structure:
-#   .next/standalone/client/server.js   (entry point)
-#   .next/standalone/client/.next/      (server chunks)
-#   .next/standalone/node_modules/      (traced root deps)
-COPY --from=builder --chown=nodejs:nodejs /app/client/.next/standalone ./
+COPY --from=builder --chown=nodejs:nodejs /app/.next/standalone ./
 
 # Copy static assets (not included in standalone output)
-COPY --from=builder --chown=nodejs:nodejs /app/client/.next/static ./.next/static
+COPY --from=builder --chown=nodejs:nodejs /app/.next/static ./.next/static
 
 # Copy public assets
-COPY --from=builder --chown=nodejs:nodejs /app/client/public ./public
+COPY --from=builder --chown=nodejs:nodejs /app/public ./public
 
 USER nodejs
 

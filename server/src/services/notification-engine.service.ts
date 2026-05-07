@@ -284,9 +284,9 @@ class NotificationEngine {
 
       await emailEngine.send({
         userId,
-        template: 'taskReminder',
+        template: 'coachingInsight',
         recipient: result.rows[0].email,
-        data: { title, message, appUrl: process.env['APP_URL'] || 'https://balencia.app' },
+        data: { firstName: title, body: message, appUrl: process.env['APP_URL'] || 'https://balencia.app' },
         category: 'engagement',
         priority: priority === 'urgent' ? 'high' : 'normal',
       });

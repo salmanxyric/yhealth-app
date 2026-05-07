@@ -14,7 +14,7 @@ import {
 import type {
   FeatureNodeId,
   FeatureNodeState,
-} from '../../../../shared/types/domain/reasoning-graph.js';
+} from '@shared/types/domain/reasoning-graph.js';
 
 const CACHE_TTL_SECONDS = 300;
 const CACHE_PREFIX = 'rg:nba:';

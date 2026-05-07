@@ -102,6 +102,7 @@ describe('leaderboardMaterializationJob.processNow', () => {
     mockGetActiveCompetitions.mockResolvedValue({
       competitions: [{ id: competitionId, name: 'Spring Challenge' }],
     });
+    mockQuery.mockResolvedValueOnce(pgResult([{ count: '2' }]));
     // competition_entries query
     mockQuery.mockResolvedValueOnce(
       pgResult([
@@ -139,6 +140,9 @@ describe('leaderboardMaterializationJob.processNow', () => {
         { id: 'comp-2', name: 'B' },
       ],
     });
+    mockQuery
+      .mockResolvedValueOnce(pgResult([{ count: '1' }]))
+      .mockResolvedValueOnce(pgResult([{ count: '1' }]));
     // comp-1 fails on updateCompetitionScores
     mockUpdateCompetitionScores.mockRejectedValueOnce(new Error('comp-1 error'));
     // comp-2 succeeds
@@ -150,6 +154,23 @@ describe('leaderboardMaterializationJob.processNow', () => {
 
     // comp-2 should still be processed
     expect(mockUpdateCompetitionScores).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips competition materialization when there are no active entrants', async () => {
+    mockGetActiveCompetitions.mockResolvedValue({
+      competitions: [{ id: 'comp-empty', name: 'Empty' }],
+    });
+    mockQuery.mockResolvedValueOnce(pgResult([{ count: '0' }]));
+
+    await leaderboardMaterializationJob.processNow();
+
+    expect(mockUpdateCompetitionScores).not.toHaveBeenCalled();
+    expect(mockMaterializeLeaderboard).not.toHaveBeenCalledWith(
+      'competition',
+      expect.any(String),
+      100,
+      'comp-empty',
+    );
   });
 
   it('handles global leaderboard failure for one date without stopping the other', async () => {

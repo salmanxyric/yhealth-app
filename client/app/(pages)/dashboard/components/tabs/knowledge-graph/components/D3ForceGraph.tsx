@@ -31,7 +31,7 @@ interface D3ForceGraphProps {
 
 export function D3ForceGraph({
   data,
-  selectedNodeId,
+  selectedNodeId: _selectedNodeId,
   onNodeClick,
   onNodeHover,
   isFullscreen,
@@ -100,7 +100,8 @@ export function D3ForceGraph({
       zoomIdentity.translate(width / 2, height / 2).scale(isMobile ? 0.45 : 0.65).translate(-width / 2, -height / 2)
     );
 
-    (svg as any).__resetZoom = () => {
+    // Store reset function on the SVG element for external access
+    (svg as SVGSVGElement & { __resetZoom?: () => void }).__resetZoom = () => {
       root.transition().duration(600).call(
         zoomBehavior.transform,
         zoomIdentity.translate(width / 2, height / 2).scale(isMobile ? 0.45 : 0.65).translate(-width / 2, -height / 2)
@@ -111,15 +112,17 @@ export function D3ForceGraph({
     const chargeStrength = isArchitecture ? -40 : (isMobile ? -12 : -18);
     const linkDistMult = isArchitecture ? 2.5 : 1.8;
     const linkDistBase = isArchitecture ? 60 : 30;
+    type ResolvedLink = SimulationLinkDatum<D3Node> & D3Link;
     const sim = forceSimulation<D3Node>(nodes)
-      .force('link', forceLink<D3Node, SimulationLinkDatum<D3Node> & D3Link>(links as any)
-        .id((d: any) => d.id)
-        .distance((d: any) => {
-          const s = nodes.find((n) => n.id === ((d.source as any).id || d.source));
-          const t = nodes.find((n) => n.id === ((d.target as any).id || d.target));
+      .force('link', forceLink<D3Node, ResolvedLink>(links as ResolvedLink[])
+        .id((d) => (d as D3Node).id)
+        .distance((d) => {
+          const link = d as ResolvedLink;
+          const s = nodes.find((n) => n.id === ((link.source as D3Node).id || link.source));
+          const t = nodes.find((n) => n.id === ((link.target as D3Node).id || link.target));
           return ((s?.r || 10) + (t?.r || 10)) * linkDistMult + linkDistBase;
         })
-        .strength((d: any) => d.value * 0.06)
+        .strength((d) => (d as ResolvedLink).value * 0.06)
       )
       .force('charge', forceManyBody<D3Node>().strength((d) => d.r * chargeStrength))
       .force('center', forceCenter(width / 2, height / 2).strength(0.05))
@@ -316,8 +319,8 @@ export function D3ForceGraph({
     node.on('mouseenter', function (event, d) {
       const connected = new Set<string>();
       links.forEach((l) => {
-        const sId = typeof l.source === 'string' ? l.source : (l.source as any).id;
-        const tId = typeof l.target === 'string' ? l.target : (l.target as any).id;
+        const sId = typeof l.source === 'string' ? l.source : (l.source as D3Node).id;
+        const tId = typeof l.target === 'string' ? l.target : (l.target as D3Node).id;
         if (sId === d.id) connected.add(tId);
         if (tId === d.id) connected.add(sId);
       });
@@ -330,22 +333,22 @@ export function D3ForceGraph({
         .transition().duration(150)
         .attr('opacity', (n: D3Node) => connected.has(n.id) ? 1 : 0.04);
       link.transition().duration(150)
-        .attr('stroke-opacity', (l: any) => {
-          const sId = typeof l.source === 'string' ? l.source : l.source.id;
-          const tId = typeof l.target === 'string' ? l.target : l.target.id;
+        .attr('stroke-opacity', (l: ResolvedLink) => {
+          const sId = typeof l.source === 'string' ? l.source : (l.source as D3Node).id;
+          const tId = typeof l.target === 'string' ? l.target : (l.target as D3Node).id;
           return (sId === d.id || tId === d.id) ? 0.6 : 0.02;
         })
-        .attr('stroke-width', (l: any) => {
-          const sId = typeof l.source === 'string' ? l.source : l.source.id;
-          const tId = typeof l.target === 'string' ? l.target : l.target.id;
+        .attr('stroke-width', (l: ResolvedLink) => {
+          const sId = typeof l.source === 'string' ? l.source : (l.source as D3Node).id;
+          const tId = typeof l.target === 'string' ? l.target : (l.target as D3Node).id;
           return (sId === d.id || tId === d.id) ? Math.max(2, l.value * 2) : Math.max(0.5, l.value);
         });
 
       // Show edge labels for connected links
       edgeLabel.transition().duration(200)
-        .attr('opacity', (l: any) => {
-          const sId = typeof l.source === 'string' ? l.source : l.source.id;
-          const tId = typeof l.target === 'string' ? l.target : l.target.id;
+        .attr('opacity', (l: ResolvedLink) => {
+          const sId = typeof l.source === 'string' ? l.source : (l.source as D3Node).id;
+          const tId = typeof l.target === 'string' ? l.target : (l.target as D3Node).id;
           return (sId === d.id || tId === d.id) ? 0.7 : 0;
         });
 
@@ -365,7 +368,7 @@ export function D3ForceGraph({
         .attr('opacity', (d: D3Node) => d.forceLabel ? 1 : (d.r >= 8 ? 0.8 : 0));
       link.transition().duration(250)
         .attr('stroke-opacity', 0.12)
-        .attr('stroke-width', (d: any) => Math.max(1, d.value * 1.5));
+        .attr('stroke-width', (d: ResolvedLink) => Math.max(1, d.value * 1.5));
       edgeLabel.transition().duration(200).attr('opacity', 0);
 
       hoveredIdRef.current = null;
@@ -379,21 +382,21 @@ export function D3ForceGraph({
     // Tick
     sim.on('tick', () => {
       link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+        .attr('x1', (d: ResolvedLink) => (d.source as D3Node).x!)
+        .attr('y1', (d: ResolvedLink) => (d.source as D3Node).y!)
+        .attr('x2', (d: ResolvedLink) => (d.target as D3Node).x!)
+        .attr('y2', (d: ResolvedLink) => (d.target as D3Node).y!);
 
       edgeLabel
-        .attr('x', (d: any) => ((d.source as any).x + (d.target as any).x) / 2)
-        .attr('y', (d: any) => ((d.source as any).y + (d.target as any).y) / 2)
-        .attr('transform', (d: any) => {
-          const dx = (d.target as any).x - (d.source as any).x;
-          const dy = (d.target as any).y - (d.source as any).y;
+        .attr('x', (d: ResolvedLink) => ((d.source as D3Node).x! + (d.target as D3Node).x!) / 2)
+        .attr('y', (d: ResolvedLink) => ((d.source as D3Node).y! + (d.target as D3Node).y!) / 2)
+        .attr('transform', (d: ResolvedLink) => {
+          const dx = (d.target as D3Node).x! - (d.source as D3Node).x!;
+          const dy = (d.target as D3Node).y! - (d.source as D3Node).y!;
           let angle = Math.atan2(dy, dx) * (180 / Math.PI);
           if (angle > 90 || angle < -90) angle += 180;
-          const mx = ((d.source as any).x + (d.target as any).x) / 2;
-          const my = ((d.source as any).y + (d.target as any).y) / 2;
+          const mx = ((d.source as D3Node).x! + (d.target as D3Node).x!) / 2;
+          const my = ((d.source as D3Node).y! + (d.target as D3Node).y!) / 2;
           return `rotate(${angle}, ${mx}, ${my})`;
         });
 
@@ -404,8 +407,8 @@ export function D3ForceGraph({
   }, [data, dimensions, onNodeClick, onNodeHover, mode, reasoningGraphData]);
 
   const handleReset = useCallback(() => {
-    const svg = svgRef.current;
-    if (svg && (svg as any).__resetZoom) (svg as any).__resetZoom();
+    const svg = svgRef.current as (SVGSVGElement & { __resetZoom?: () => void }) | null;
+    if (svg && svg.__resetZoom) svg.__resetZoom();
   }, []);
 
   return (

@@ -19,7 +19,7 @@ import type {
   ReasoningEdgeType,
   GraphValidationIssue,
   GraphValidationReport,
-} from '../../../../shared/types/domain/reasoning-graph.js';
+} from '@shared/types/domain/reasoning-graph.js';
 
 class GraphValidationService {
   /**

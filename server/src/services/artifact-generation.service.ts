@@ -6,7 +6,7 @@
 
 import { query } from '../config/database.config.js';
 import type { AnalysisResult } from './deep-analysis-engine.service.js';
-import type { IntelligenceArtifact, ArtifactType, DataSourceReference } from '../../../shared/types/domain/intelligence-files.js';
+import type { IntelligenceArtifact, ArtifactType, DataSourceReference } from '@shared/types/domain/intelligence-files.js';
 
 function mapRow(row: Record<string, unknown>): IntelligenceArtifact {
   return {
@@ -33,6 +33,75 @@ function mapRow(row: Record<string, unknown>): IntelligenceArtifact {
 }
 
 class ArtifactGenerationService {
+  async saveInlineArtifact(params: {
+    userId: string;
+    artifact: Record<string, unknown>;
+    generatedBy?: string;
+    conversationId?: string;
+    analysisId?: string;
+    tags?: string[];
+  }): Promise<IntelligenceArtifact> {
+    const artifact = params.artifact;
+    const rawType = typeof artifact.type === 'string' ? artifact.type : 'report';
+    const artifactType: ArtifactType = rawType === 'comparison'
+      ? 'comparison'
+      : rawType === 'chart'
+        ? this.mapChartArtifactType(String(artifact.chartType || artifact.chart_type || 'chart'))
+        : 'report';
+
+    const title = String(artifact.title || 'AI Coach Artifact').slice(0, 255);
+    const description = typeof artifact.insight === 'string'
+      ? artifact.insight
+      : typeof artifact.description === 'string'
+        ? artifact.description
+        : null;
+    const data = Array.isArray(artifact.data)
+      ? artifact.data as Record<string, unknown>[]
+      : Array.isArray((artifact.config as Record<string, unknown> | undefined)?.data)
+        ? (artifact.config as Record<string, unknown>).data as Record<string, unknown>[]
+        : [];
+    const chartConfig = {
+      ...artifact,
+      data: undefined,
+      insight: undefined,
+    };
+    const tags = Array.from(new Set([
+      rawType,
+      String(artifact.chartType || artifact.comparisonType || artifactType),
+      ...(params.tags || []),
+    ].filter(Boolean)));
+
+    const dbResult = await query(
+      `INSERT INTO intelligence_artifacts
+       (user_id, artifact_type, title, description, chart_config, data, insight,
+        generated_by, conversation_id, analysis_id, tags)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING *`,
+      [
+        params.userId,
+        artifactType,
+        title,
+        description,
+        JSON.stringify(chartConfig),
+        JSON.stringify(data),
+        description,
+        params.generatedBy || 'chat',
+        params.conversationId || null,
+        params.analysisId || null,
+        tags,
+      ]
+    );
+
+    return mapRow(dbResult.rows[0]);
+  }
+
+  private mapChartArtifactType(chartType: string): ArtifactType {
+    if (chartType.includes('scatter')) return 'scatter';
+    if (chartType.includes('heatmap')) return 'heatmap';
+    if (chartType.includes('gauge')) return 'gauge';
+    if (chartType.includes('timeline') || chartType.includes('time_series') || chartType.includes('trend')) return 'timeline';
+    return 'chart';
+  }
 
   async generateFromAnalysis(
     userId: string,

@@ -52,15 +52,12 @@ export function MultiRingArc({ progress, colors, delay, isLoading, extraData }: 
   return (
     <svg className="w-full h-full -rotate-90" viewBox="0 0 200 200" aria-hidden="true">
       <defs>
-        {rings.map((ring, i) => {
-          const circ = 2 * Math.PI * ring.radius;
-          return (
+        {rings.map((ring, i) => (
             <linearGradient key={`grad-${i}`} id={`mra-grad-${id}-${i}`} x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor={ring.color} />
               <stop offset="100%" stopColor={ring.color} stopOpacity="0.6" />
             </linearGradient>
-          );
-        })}
+        ))}
         <filter id={`mra-glow-${id}`} x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="2.5" result="blur" />
           <feComposite in="SourceGraphic" in2="blur" operator="over" />

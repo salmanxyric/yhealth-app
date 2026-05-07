@@ -946,9 +946,16 @@ class AICoachController extends BaseController {
       };
     });
 
+    if (result.source === 'fallback') {
+      await req.creditContext?.settle(0, {
+        provider: 'local_fallback',
+      });
+    }
+
     this.success(res, {
       goals: enrichedGoals,
       reasoning: result.reasoning,
+      source: result.source || 'ai',
     }, 'Goals generated successfully');
   });
 

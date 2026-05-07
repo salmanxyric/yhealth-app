@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { signIn, signOut, getSession } from "next-auth/react";
-import { api, ApiError } from "@/lib/api-client";
+import { signIn, signOut, getSession, getProviders } from "next-auth/react";
+import { api } from "@/lib/api-client";
+import { getAuthFlowErrorMessage } from "@/lib/auth-errors";
 import toast from "react-hot-toast";
 
 interface RegisterData {
@@ -18,6 +19,8 @@ interface RegisterData {
 interface VerifyRegistrationData {
   activationToken: string;
   activationCode: string;
+  email?: string;
+  password?: string;
 }
 
 interface LoginData {
@@ -65,10 +68,7 @@ export function useAuth() {
           };
         }
       } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : "Registration failed. Please try again.";
+        const message = getAuthFlowErrorMessage(err, "register");
         setError(message);
         toast.error(message);
       } finally {
@@ -102,22 +102,26 @@ export function useAuth() {
             api.setAccessToken(accessToken);
           }
 
-          // Sign in with NextAuth to create session
-          const _signInResult = await signIn("credentials", {
-            email: response.data.user.email,
-            // Use a special marker that the backend can recognize
-            redirect: false,
-          });
+          if (data.email && data.password) {
+            const signInResult = await signIn("credentials", {
+              email: data.email,
+              password: data.password,
+              redirect: false,
+            });
+
+            if (signInResult?.error) {
+              throw new Error(
+                "Your email was verified, but we could not create a browser session. Please sign in with your email and password."
+              );
+            }
+          }
 
           toast.success("Account created successfully! Welcome to Balencia!");
           router.push("/dashboard");
           return true;
         }
       } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : "Verification failed. Please try again.";
+        const message = getAuthFlowErrorMessage(err, "verifyRegistration");
         setError(message);
         toast.error(message);
       } finally {
@@ -135,6 +139,19 @@ export function useAuth() {
       setError(null);
 
       try {
+        const loginResponse = await api.post<{
+          user: { email: string };
+          tokens: {
+            accessToken: string;
+            refreshToken: string;
+          };
+        }>("/auth/login", data);
+
+        const accessToken = loginResponse.data?.tokens?.accessToken;
+        if (loginResponse.success && accessToken) {
+          api.setAccessToken(accessToken);
+        }
+
         const result = await signIn("credentials", {
           email: data.email,
           password: data.password,
@@ -142,10 +159,17 @@ export function useAuth() {
         });
 
         if (result?.error) {
-          const errorMsg = result.code === "credentials" || result.error === "CredentialsSignin"
-            ? "Invalid email or password"
-            : result.error;
-          throw new Error(errorMsg);
+          const errorMsg =
+            result.code === "credentials" ||
+            result.error === "CredentialsSignin" ||
+            result.error === "Configuration"
+              ? "Invalid email or password"
+              : result.error;
+          throw new Error(
+            errorMsg === "Invalid email or password"
+              ? "Your credentials were accepted, but the browser session could not be created. Please try again."
+              : errorMsg
+          );
         }
 
         if (result?.ok) {
@@ -158,36 +182,6 @@ export function useAuth() {
             if (process.env.NODE_ENV === "development") {
               console.log("[useAuth] Got accessToken from NextAuth session");
             }
-          } else {
-            // Fallback: call backend login directly to get token
-            // (NextAuth session may not always expose accessToken on the client)
-            if (process.env.NODE_ENV === "development") {
-              console.log(
-                "[useAuth] No accessToken in session, fetching from backend"
-              );
-            }
-            try {
-              const loginResponse = await api.post<{
-                user: { email: string };
-                tokens: {
-                  accessToken: string;
-                  refreshToken: string;
-                };
-              }>("/auth/login", data);
-
-              // Backend returns { user, tokens: { accessToken, refreshToken } }
-              const accessToken = loginResponse.data?.tokens?.accessToken;
-              if (loginResponse.success && accessToken) {
-                api.setAccessToken(accessToken);
-              }
-            } catch (tokenError) {
-              // If this fails, we still keep the user logged in via NextAuth,
-              // but API calls requiring Authorization may fail.
-              console.error(
-                "Failed to obtain API access token after login:",
-                tokenError
-              );
-            }
           }
 
           toast.success("Welcome back!");
@@ -195,8 +189,7 @@ export function useAuth() {
           return true;
         }
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Invalid credentials";
+        const message = getAuthFlowErrorMessage(err, "login");
         setError(message);
         toast.error(message);
       } finally {
@@ -213,11 +206,41 @@ export function useAuth() {
     setError(null);
 
     try {
-      await signIn("google", { callbackUrl: "/dashboard" });
+      const providers = await getProviders();
+
+      if (!providers?.google) {
+        const message = getAuthFlowErrorMessage(
+          "Google sign-in is not configured for this environment. Use email sign-in or contact support.",
+          "google"
+        );
+        setError(message);
+        toast.error(message);
+        return false;
+      }
+
+      const result = await signIn("google", {
+        callbackUrl: "/dashboard",
+        redirect: false,
+      });
+
+      if (result?.error) {
+        const message = getAuthFlowErrorMessage(result.error, "google");
+        setError(message);
+        toast.error(message);
+        return false;
+      }
+
+      if (result?.url) {
+        window.location.href = result.url;
+      }
+
+      return true;
     } catch (_err) {
-      const message = "Google sign in failed. Please try again.";
+      const message = getAuthFlowErrorMessage(_err, "google");
       setError(message);
       toast.error(message);
+      return false;
+    } finally {
       setIsLoading(false);
     }
   }, []);
@@ -229,7 +252,7 @@ export function useAuth() {
       await signOut({ callbackUrl: "/" });
       toast.success("Signed out successfully");
     } catch (_err) {
-      toast.error("Failed to sign out");
+      toast.error(getAuthFlowErrorMessage(_err, "logout"));
     } finally {
       setIsLoading(false);
     }
@@ -247,10 +270,7 @@ export function useAuth() {
         return true;
       }
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : "Failed to send reset email. Please try again.";
+      const message = getAuthFlowErrorMessage(err, "forgotPassword");
       setError(message);
       toast.error(message);
     } finally {
@@ -272,14 +292,11 @@ export function useAuth() {
           toast.success("Password reset successfully! Please sign in.");
           router.push("/auth/signin");
           return true;
-        }
-      } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : "Failed to reset password. Please try again.";
-        setError(message);
-        toast.error(message);
+      }
+    } catch (err) {
+      const message = getAuthFlowErrorMessage(err, "resetPassword");
+      setError(message);
+      toast.error(message);
       } finally {
         setIsLoading(false);
       }
@@ -301,14 +318,11 @@ export function useAuth() {
           toast.success("Email verified! You can now sign in.");
           router.push("/auth/signin");
           return true;
-        }
-      } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : "Verification failed. Please try again.";
-        setError(message);
-        toast.error(message);
+      }
+    } catch (err) {
+      const message = getAuthFlowErrorMessage(err, "verifyEmail");
+      setError(message);
+      toast.error(message);
       } finally {
         setIsLoading(false);
       }
@@ -330,10 +344,7 @@ export function useAuth() {
         return true;
       }
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : "Failed to resend email. Please try again.";
+      const message = getAuthFlowErrorMessage(err, "verifyEmail");
       setError(message);
       toast.error(message);
     } finally {
@@ -364,10 +375,7 @@ export function useAuth() {
           };
         }
       } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.message
-            : "Failed to resend code. Please try again.";
+        const message = getAuthFlowErrorMessage(err, "resendRegistrationOTP");
         setError(message);
         toast.error(message);
       } finally {
@@ -375,6 +383,31 @@ export function useAuth() {
       }
 
       return { success: false };
+    },
+    []
+  );
+
+  const changePassword = useCallback(
+    async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await api.post("/auth/change-password", data);
+
+        if (response.success) {
+          toast.success("Password changed successfully!");
+          return true;
+        }
+      } catch (err) {
+        const message = getAuthFlowErrorMessage(err, "resetPassword");
+        setError(message);
+        toast.error(message);
+      } finally {
+        setIsLoading(false);
+      }
+
+      return false;
     },
     []
   );
@@ -390,6 +423,7 @@ export function useAuth() {
     logout,
     forgotPassword,
     resetPassword,
+    changePassword,
     verifyEmail,
     resendVerification,
   };

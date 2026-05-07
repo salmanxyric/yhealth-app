@@ -69,7 +69,7 @@ function VerifyContent() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <Button asChild className="w-full h-12">
+          <Button asChild className="auth-emerald-btn w-full h-12">
             <Link href="/auth/signin">
               <ArrowRight className="mr-2 h-4 w-4" />
               Continue to Sign In

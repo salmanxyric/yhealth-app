@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, X, PanelLeftOpen, PanelLeftClose, FolderOpen } from "lucide-react";
+import { Mic, X, PanelLeftOpen, FolderOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 

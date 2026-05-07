@@ -24,6 +24,7 @@ export type ToolIntent =
   | 'water'        // Water intake tracking
   | 'shopping'     // Shopping lists
   | 'reminders'    // Scheduled reminders
+  | 'notes'        // Quick notes and sticky notes
   | 'integrations' // Third-party integrations (Whoop, etc.)
   | 'competitions' // Competitions, challenges, leaderboards
   | 'emotional'    // Emotional check-ins, mental recovery
@@ -32,6 +33,7 @@ export type ToolIntent =
   | 'music'        // Music playback, playlists, Spotify/Pulse
   | 'status'       // Activity status (sick, traveling, injured, etc.)
   | 'finance'      // Budget, spending, income, savings, transactions
+  | 'analytics'    // Correlations, trends, comparisons, anomalies, deep analysis
   | 'general';     // Profile, preferences, general queries
 
 // ============================================
@@ -128,6 +130,14 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'getUserTasks',
   ],
 
+  notes: [
+    'getQuickNotes',
+    'getQuickNoteById',
+    'createQuickNote',
+    'updateQuickNote',
+    'deleteQuickNote',
+  ],
+
   integrations: [
     'getUserIntegrations',
     'whoopAnalyticsManager',
@@ -175,6 +185,7 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'getUserGoals',
     'getUserMoodTrends',
     'getUserTasks',
+    'getQuickNotes',
     'getScheduleByDate',
     'getDashboardSummary',
     'scheduleManager', // Always available — system prompt references it for many scenarios
@@ -194,6 +205,7 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
     'getSpendingTrends',
     'getMonthComparison',
     'getFinancialForecast',
+    'getFinancialReport',
     'getBudgets',
     'getBudgetAlerts',
     'getSavingGoals',
@@ -211,6 +223,15 @@ export const TOOL_GROUPS: Record<ToolIntent, string[]> = {
 
   music: [
     'musicManager',
+  ],
+
+  analytics: [
+    'analyzeCorrelation',
+    'analyzeTrend',
+    'compareTimePeriods',
+    'detectAnomalies',
+    'analyzeMultiFactor',
+    'analyzeGoalProgress',
   ],
 };
 
@@ -276,6 +297,12 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
     'reminder', 'remind', 'alert', 'notification', 'notify', 'alarm',
   ],
 
+  notes: [
+    'note', 'notes', 'sticky note', 'quick note', 'remember this',
+    'save this', 'jot down', 'write this down', 'capture this',
+    'pin this', 'archive note',
+  ],
+
   integrations: [
     'whoop', 'fitbit', 'apple health', 'garmin', 'strava', 'integration',
     'connect', 'sync', 'import', 'device', 'wearable', 'watch',
@@ -324,7 +351,22 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
   finance: [
     'finance', 'financial', 'money', 'income', 'expense', 'expenses', 'budget',
     'savings', 'saving', 'spending', 'transaction', 'transactions', 'salary',
-    'financial report', 'cash flow', 'net worth', 'forecast', 'category breakdown',
+    'financial report', 'finance report', 'previous financial report', 'prev financial report',
+    'cash flow', 'net worth', 'forecast', 'category breakdown',
+  ],
+
+  analytics: [
+    'correlation', 'correlate', 'relationship between',
+    'trend', 'trending', 'over time',
+    'anomaly', 'anomalies', 'unusual', 'outlier',
+    'compare', 'comparison',
+    'what affects', 'what drives', 'what influences',
+    'analyze', 'analysis', 'deep analysis',
+    'chart', 'graph', 'visualize', 'visualization',
+    'pattern', 'patterns',
+    'goal progress', 'on track',
+    'factor', 'factors',
+    'scatter', 'histogram',
   ],
 
   general: [], // Fallback - no specific keywords
@@ -346,6 +388,7 @@ export function classifyIntent(message: string): { primary: ToolIntent; secondar
     water: 0,
     shopping: 0,
     reminders: 0,
+    notes: 0,
     integrations: 0,
     competitions: 0,
     emotional: 0,
@@ -354,6 +397,7 @@ export function classifyIntent(message: string): { primary: ToolIntent; secondar
     music: 0,
     status: 0,
     finance: 0,
+    analytics: 0,
     general: 0,
   };
 

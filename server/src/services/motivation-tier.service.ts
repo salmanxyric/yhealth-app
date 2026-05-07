@@ -7,7 +7,7 @@
 
 import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
-import type { MotivationTier, UserMotivationProfile } from '../../../shared/types/domain/wellbeing.js';
+import type { MotivationTier, UserMotivationProfile } from '@shared/types/domain/wellbeing.js';
 
 // ============================================
 // HELPERS

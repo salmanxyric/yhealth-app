@@ -9,6 +9,9 @@ import compression from "compression";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+
+import { pool } from "./config/database.config.js";
 
 import { env } from "./config/env.config.js";
 import { logger } from "./services/logger.service.js";
@@ -84,10 +87,17 @@ export function createApp(): Application {
       allowedHeaders: [
         "Content-Type",
         "Authorization",
+        "If-None-Match",
+        "If-Modified-Since",
+        "Idempotency-Key",
+        "X-Idempotency-Key",
+        "Cache-Control",
+        "Pragma",
         "X-Request-ID",
         "X-Requested-With",
       ],
       exposedHeaders: [
+        "ETag",
         "X-Request-ID",
         "X-RateLimit-Limit",
         "X-RateLimit-Remaining",
@@ -141,9 +151,14 @@ export function createApp(): Application {
   // Cookie parser
   app.use(cookieParser(env.session.secret));
 
-  // Session configuration (using memory store for now, consider connect-pg-simple for production)
+  const PgStore = connectPgSimple(session);
   app.use(
     session({
+      store: new PgStore({
+        pool,
+        tableName: 'user_sessions',
+        createTableIfMissing: true,
+      }),
       secret: env.session.secret,
       name: env.session.name,
       resave: false,

@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
-import type { AnalysisStep } from "../../../../../shared/types/domain/intelligence-files";
+import type { AnalysisStep } from "@shared/types/domain/intelligence-files";
 
 interface DeepAnalysisTimelineProps {
   steps: AnalysisStep[];

@@ -16,7 +16,7 @@ import type {
   GoalReconnection,
   ReconnectionResponse,
   ReconnectionTier,
-} from '../../../shared/types/domain/reconnection.js';
+} from '@shared/types/domain/reconnection.js';
 
 // ============================================
 // Config

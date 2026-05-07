@@ -7,18 +7,18 @@ import { existsSync } from 'fs';
 import { env } from '../config/env.config.js';
 import { logger } from '../services/logger.service.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const currentFile = fileURLToPath(import.meta.url);
+const currentDir = dirname(currentFile);
 
 // Path to EJS templates - check multiple locations for Docker compatibility
-// In Docker: compiled JS is at /app/dist/server/src/helper/ but templates are at /app/src/mails/
+// In Docker: compiled JS is at /app/dist/src/helper/ but templates are at /app/src/mails/
 function resolveTemplatesPath(): string {
   // Explicit env var takes precedence (set in Docker/Railway)
   if (process.env['EMAIL_TEMPLATES_PATH']) {
     return process.env['EMAIL_TEMPLATES_PATH'];
   }
   const candidates = [
-    join(__dirname, '../mails'),       // relative to compiled JS (works in dev and if templates copied to dist/)
+    join(currentDir, '../mails'),       // relative to compiled JS (works in dev and if templates copied to dist/)
     join(process.cwd(), 'src/mails'),  // relative to working dir (Docker: /app/src/mails)
     join(process.cwd(), 'server/src/mails'), // from project root (dev mode)
   ];
@@ -29,6 +29,39 @@ function resolveTemplatesPath(): string {
 }
 const TEMPLATES_PATH = resolveTemplatesPath();
 logger.info(`[Mail] Templates path resolved to: ${TEMPLATES_PATH}`);
+
+function isGmailSmtpHost(): boolean {
+  return (env.smtp.host || '').toLowerCase().includes('gmail.com');
+}
+
+function getSmtpPassword(): string {
+  const password = env.smtp.pass || '';
+
+  // Gmail app passwords are displayed in grouped chunks. Nodemailer must send
+  // the raw 16-character value, so remove copied whitespace for Gmail only.
+  if (isGmailSmtpHost()) {
+    return password.replace(/\s+/g, '');
+  }
+
+  return password;
+}
+
+function isSmtpTimeout(errorMessage: string, errorCode: unknown): boolean {
+  return (
+    errorCode === 'ETIMEDOUT' ||
+    errorCode === 'ECONNECTION' ||
+    errorCode === 'ESOCKET' ||
+    errorMessage.toLowerCase().includes('timeout')
+  );
+}
+
+function getSmtpConnectionHint(): string {
+  if (isGmailSmtpHost() && env.smtp.port === 587 && !env.smtp.secure) {
+    return 'Connection timed out before authentication. Check firewall/ISP/VPN outbound SMTP access, or try Gmail SMTP_PORT=465 with SMTP_SECURE=true.';
+  }
+
+  return 'Connection timed out before authentication. Check SMTP host, port, network firewall, VPN, and outbound SMTP access.';
+}
 
 /**
  * Email subject lines for each template type
@@ -165,6 +198,7 @@ class MailHelper {
   private transporter: Transporter | null = null;
   private readonly isConfigured: boolean;
   private readonly appUrl: string;
+  private readonly smtpTimeoutMs = parseInt(process.env['SMTP_TIMEOUT_MS'] || '20000', 10);
 
   private constructor() {
     this.isConfigured = !!(env.smtp.host && env.smtp.user && env.smtp.pass);
@@ -193,22 +227,28 @@ class MailHelper {
    */
   private createTransporter(): void {
     try {
+      const normalizedPass = getSmtpPassword();
+
       this.transporter = nodemailer.createTransport({
         host: env.smtp.host,
         port: env.smtp.port,
         secure: env.smtp.secure,
         auth: {
           user: env.smtp.user,
-          pass: env.smtp.pass,
+          pass: normalizedPass,
+        },
+        requireTLS: env.smtp.port === 587 && !env.smtp.secure,
+        tls: {
+          servername: env.smtp.host,
         },
         pool: true,
         maxConnections: 5,
         maxMessages: 100,
         rateLimit: 10,
         // Add connection timeout and retry options
-        connectionTimeout: 10000, // 10 seconds
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
+        connectionTimeout: this.smtpTimeoutMs,
+        greetingTimeout: this.smtpTimeoutMs,
+        socketTimeout: this.smtpTimeoutMs,
       });
 
       logger.info('Mail transporter created', {
@@ -216,6 +256,7 @@ class MailHelper {
         port: env.smtp.port,
         secure: env.smtp.secure,
         user: env.smtp.user ? `${env.smtp.user.substring(0, 3)}***` : 'not set',
+        appPasswordWhitespaceNormalized: isGmailSmtpHost() && normalizedPass !== env.smtp.pass,
       });
 
       // Verify connection asynchronously in production only.
@@ -236,6 +277,23 @@ class MailHelper {
       logger.error('Failed to create mail transporter', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+    }
+  }
+
+  private resetTransporter(): void {
+    if (this.transporter) {
+      try {
+        (this.transporter as Transporter & { close?: () => void }).close?.();
+      } catch (error) {
+        logger.warn('Failed to close SMTP transporter before retry', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    this.transporter = null;
+    if (this.isConfigured) {
+      this.createTransporter();
     }
   }
 
@@ -290,6 +348,15 @@ class MailHelper {
                 'Check SMTP_USER and SMTP_PASS environment variables. ' +
                 'See: https://support.google.com/accounts/answer/185833',
         });
+      } else if (isSmtpTimeout(errorMessage, errorCode)) {
+        logger.error('Mail service verification failed - SMTP connection timeout', {
+          error: errorMessage,
+          errorCode,
+          smtpHost: env.smtp.host,
+          smtpPort: env.smtp.port,
+          secure: env.smtp.secure,
+          hint: getSmtpConnectionHint(),
+        });
       } else {
         logger.error('Mail service verification failed', {
           error: errorMessage,
@@ -306,7 +373,7 @@ class MailHelper {
   /**
    * Send email - Core method
    */
-  public async send(options: SendMailOptions): Promise<boolean> {
+  public async send(options: SendMailOptions, retryOnTimeout = true): Promise<boolean> {
     if (!this.transporter || !this.isConfigured) {
       logger.warn('Email not sent - service not configured', {
         to: options.email,
@@ -382,6 +449,21 @@ class MailHelper {
         errorCode === 'EAUTH' ||
         errorCode === 535;
 
+      if (isSmtpTimeout(errorMessage, errorCode) && retryOnTimeout) {
+        logger.warn('SMTP send timed out, retrying once with a fresh transporter', {
+          error: errorMessage,
+          errorCode,
+          smtpHost: env.smtp.host,
+          smtpPort: env.smtp.port,
+          secure: env.smtp.secure,
+          to: options.email,
+          subject: options.subject,
+          template: options.template,
+        });
+        this.resetTransporter();
+        return this.send(options, false);
+      }
+
       if (isAuthError) {
         logger.error('SMTP authentication failed - check credentials', {
           error: errorMessage,
@@ -392,6 +474,18 @@ class MailHelper {
           subject: options.subject,
           template: options.template,
           hint: 'For Gmail: Use App Password if 2FA is enabled. Check SMTP_USER and SMTP_PASS environment variables.',
+        });
+      } else if (isSmtpTimeout(errorMessage, errorCode)) {
+        logger.error('Failed to send email - SMTP connection timeout', {
+          error: errorMessage,
+          errorCode,
+          smtpHost: env.smtp.host,
+          smtpPort: env.smtp.port,
+          secure: env.smtp.secure,
+          to: options.email,
+          subject: options.subject,
+          template: options.template,
+          hint: getSmtpConnectionHint(),
         });
       } else {
         logger.error('Failed to send email', {

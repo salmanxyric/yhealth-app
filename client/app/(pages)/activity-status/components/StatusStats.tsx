@@ -42,7 +42,7 @@ export function StatusStats() {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="h-32 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse"
+            className="bal-skeleton h-32"
           />
         ))}
       </div>
@@ -61,21 +61,22 @@ export function StatusStats() {
   const mostCommonConfig = STATUS_CONFIG[stats.mostCommonStatus];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 text-[11px] sm:text-xs lg:text-[13px]">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+          whileHover={{ y: -4, scale: 1.01 }}
+          className="bal-kpi p-4 sm:p-5"
         >
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Calendar className="h-6 w-6 text-primary" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 ring-1 ring-cyan-300/20 sm:h-10 sm:w-10">
+              <Calendar className="h-5 w-5 text-cyan-300" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{stats.totalDays}</p>
-              <p className="text-sm text-muted-foreground">Days Tracked</p>
+              <p className="text-lg font-bold text-white sm:text-xl">{stats.totalDays}</p>
+              <p className="text-[10px] text-slate-300 sm:text-[11px]">Days Tracked</p>
             </div>
           </div>
         </motion.div>
@@ -84,18 +85,19 @@ export function StatusStats() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+          whileHover={{ y: -4, scale: 1.01 }}
+          className="bal-kpi p-4 sm:p-5"
         >
           <div className="flex items-center gap-3">
             <div
-              className="w-12 h-12 rounded-full flex items-center justify-center text-2xl"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-lg ring-1 sm:h-10 sm:w-10 sm:text-xl"
               style={{ backgroundColor: `${mostCommonConfig.color}20`, color: mostCommonConfig.color }}
             >
               {mostCommonConfig.icon}
             </div>
             <div>
-              <p className="text-2xl font-bold capitalize">{stats.mostCommonStatus}</p>
-              <p className="text-sm text-muted-foreground">Most Common</p>
+              <p className="text-lg font-bold capitalize text-white sm:text-xl">{stats.mostCommonStatus}</p>
+              <p className="text-[10px] text-slate-300 sm:text-[11px]">Most Common</p>
             </div>
           </div>
         </motion.div>
@@ -105,15 +107,16 @@ export function StatusStats() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+            whileHover={{ y: -4, scale: 1.01 }}
+            className="bal-kpi p-4 sm:p-5"
           >
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                <Smile className="h-6 w-6 text-yellow-500" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 ring-1 ring-amber-300/20 sm:h-10 sm:w-10">
+                <Smile className="h-5 w-5 text-amber-300" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.averageMood.toFixed(1)}</p>
-                <p className="text-sm text-muted-foreground">Avg Mood</p>
+                <p className="text-lg font-bold text-white sm:text-xl">{stats.averageMood.toFixed(1)}</p>
+                <p className="text-[10px] text-slate-300 sm:text-[11px]">Avg Mood</p>
               </div>
             </div>
           </motion.div>
@@ -123,23 +126,24 @@ export function StatusStats() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+          whileHover={{ y: -4, scale: 1.01 }}
+          className="bal-kpi p-4 sm:p-5"
         >
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-emerald-500" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 ring-1 ring-emerald-300/20 sm:h-10 sm:w-10">
+              <TrendingUp className="h-5 w-5 text-emerald-300" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{stats.streakDays}</p>
-              <p className="text-sm text-muted-foreground">Day Streak</p>
+              <p className="text-lg font-bold text-white sm:text-xl">{stats.streakDays}</p>
+              <p className="text-[10px] text-slate-300 sm:text-[11px]">Day Streak</p>
             </div>
           </div>
         </motion.div>
       </div>
 
       {/* Status Distribution */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold mb-4">Status Distribution</h3>
+      <div className="bal-surface p-4 shadow-[0_14px_34px_rgba(2,6,23,0.42)] sm:p-5">
+        <h3 className="mb-4 text-sm font-semibold text-white sm:text-base">Status Distribution</h3>
         <div className="space-y-3">
           {Object.entries(stats.statusDistribution)
             .filter(([_, count]) => count > 0)
@@ -152,19 +156,19 @@ export function StatusStats() {
                 <div key={status} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-xl">{config.icon}</span>
-                      <span className="font-medium capitalize">{status}</span>
+                      <span className="text-base sm:text-lg">{config.icon}</span>
+                      <span className="text-[11px] font-medium capitalize text-white sm:text-xs">{status}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">{count} days</span>
-                      <span className="text-sm font-semibold">{percentage.toFixed(1)}%</span>
+                      <span className="text-[10px] text-slate-300 sm:text-[11px]">{count} days</span>
+                      <span className="text-[10px] font-semibold text-white sm:text-[11px]">{percentage.toFixed(1)}%</span>
                     </div>
                   </div>
-                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${percentage}%` }}
-                      transition={{ duration: 0.5, delay: 0.1 }}
+                      transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
                       className="h-full rounded-full"
                       style={{ backgroundColor: config.color }}
                     />
@@ -177,4 +181,3 @@ export function StatusStats() {
     </div>
   );
 }
-

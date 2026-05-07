@@ -35,7 +35,6 @@ import type {
   AchievementCategory,
 } from "./achievements/types";
 import {
-  rarityGradients,
   rarityHexColors,
   categoryConfig,
   staggerChildren,

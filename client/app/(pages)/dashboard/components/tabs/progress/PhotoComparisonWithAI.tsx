@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Loader2,
   Calendar,
-  ArrowRight,
   Target,
   Zap,
   Heart,

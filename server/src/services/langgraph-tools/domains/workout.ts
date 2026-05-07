@@ -98,6 +98,31 @@ const DeleteWorkoutAlarmSchema = z.object({
   alarmId: z.string().describe('Alarm ID to delete (required)'),
 });
 
+const GetAllAlarmsSchema = z.object({
+  enabledOnly: z.boolean().optional().describe('If true, only return enabled/active alarms'),
+});
+
+const GetAlarmByIdSchema = z.object({
+  alarmId: z.string().describe('Alarm ID to retrieve (required)'),
+});
+
+const GetAlarmsByDaySchema = z.object({
+  dayOfWeek: z.number().describe('Day of week (0=Sunday, 1=Monday, ..., 6=Saturday). Required.'),
+});
+
+const GetTodayAlarmsSchema = z.object({});
+
+const GetAlarmSummarySchema = z.object({});
+
+const ToggleAlarmSchema = z.object({
+  alarmId: z.string().describe('Alarm ID to toggle (required)'),
+});
+
+const SnoozeAlarmSchema = z.object({
+  alarmId: z.string().describe('Alarm ID to snooze (required)'),
+  minutes: z.number().optional().describe('Snooze duration in minutes (default: alarm snooze setting or 10)'),
+});
+
 const CreateWorkoutLogSchema = z.object({
   workoutPlanId: z.string().optional().describe('Associated workout plan ID'),
   scheduledDate: z.string().describe('Scheduled date in ISO format (YYYY-MM-DD) (required)'),
@@ -617,6 +642,175 @@ async function deleteWorkoutAlarm(userId: string, params: z.infer<typeof DeleteW
   });
 }
 
+async function getAllAlarms(userId: string, params: z.infer<typeof GetAllAlarmsSchema>): Promise<string> {
+  const alarms = params.enabledOnly
+    ? await workoutAlarmService.getEnabledAlarms(userId)
+    : await workoutAlarmService.getAlarms(userId);
+
+  if (alarms.length === 0) {
+    return JSON.stringify({ message: 'No alarms found', alarms: [], count: 0 });
+  }
+
+  const formatted = alarms.map(a => ({
+    id: a.id,
+    title: a.title,
+    message: a.message,
+    alarmTime: a.alarmTime,
+    daysOfWeek: a.daysOfWeek,
+    daysFormatted: workoutAlarmService.formatDaysOfWeek(a.daysOfWeek, true),
+    isEnabled: a.isEnabled,
+    soundFile: a.soundFile,
+    soundEnabled: a.soundEnabled,
+    vibrationEnabled: a.vibrationEnabled,
+    snoozeMinutes: a.snoozeMinutes,
+    notificationType: a.notificationType,
+    nextTriggerAt: a.nextTriggerAt,
+    workoutPlanId: a.workoutPlanId,
+  }));
+
+  return JSON.stringify({ alarms: formatted, count: formatted.length }, null, 2);
+}
+
+async function getAlarmById(userId: string, params: z.infer<typeof GetAlarmByIdSchema>): Promise<string> {
+  const alarm = await workoutAlarmService.getAlarm(userId, params.alarmId);
+
+  if (!alarm) {
+    return JSON.stringify({ success: false, error: 'Alarm not found or access denied' });
+  }
+
+  return JSON.stringify({
+    success: true,
+    alarm: {
+      id: alarm.id,
+      title: alarm.title,
+      message: alarm.message,
+      alarmTime: alarm.alarmTime,
+      daysOfWeek: alarm.daysOfWeek,
+      daysFormatted: workoutAlarmService.formatDaysOfWeek(alarm.daysOfWeek, true),
+      isEnabled: alarm.isEnabled,
+      soundFile: alarm.soundFile,
+      soundEnabled: alarm.soundEnabled,
+      vibrationEnabled: alarm.vibrationEnabled,
+      snoozeMinutes: alarm.snoozeMinutes,
+      notificationType: alarm.notificationType,
+      nextTriggerAt: alarm.nextTriggerAt,
+      lastTriggeredAt: alarm.lastTriggeredAt,
+      workoutPlanId: alarm.workoutPlanId,
+      createdAt: alarm.createdAt,
+    },
+  }, null, 2);
+}
+
+async function getAlarmsByDay(userId: string, params: z.infer<typeof GetAlarmsByDaySchema>): Promise<string> {
+  const allAlarms = await workoutAlarmService.getAlarms(userId);
+  const filtered = allAlarms.filter(a => a.daysOfWeek.includes(params.dayOfWeek));
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayName = dayNames[params.dayOfWeek] || `Day ${params.dayOfWeek}`;
+
+  if (filtered.length === 0) {
+    return JSON.stringify({ message: `No alarms scheduled for ${dayName}`, alarms: [], count: 0 });
+  }
+
+  const formatted = filtered.map(a => ({
+    id: a.id,
+    title: a.title,
+    alarmTime: a.alarmTime,
+    isEnabled: a.isEnabled,
+    soundFile: a.soundFile,
+    notificationType: a.notificationType,
+    nextTriggerAt: a.nextTriggerAt,
+  }));
+
+  return JSON.stringify({ day: dayName, alarms: formatted, count: formatted.length }, null, 2);
+}
+
+async function getTodayAlarms(userId: string): Promise<string> {
+  const alarms = await workoutAlarmService.getTodayAlarms(userId);
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const today = new Date();
+  const dayName = dayNames[today.getDay()];
+
+  if (alarms.length === 0) {
+    return JSON.stringify({ message: `No active alarms for today (${dayName})`, alarms: [], count: 0 });
+  }
+
+  const formatted = alarms.map(a => ({
+    id: a.id,
+    title: a.title,
+    alarmTime: a.alarmTime,
+    soundFile: a.soundFile,
+    notificationType: a.notificationType,
+    nextTriggerAt: a.nextTriggerAt,
+    snoozeMinutes: a.snoozeMinutes,
+  }));
+
+  return JSON.stringify({ day: dayName, alarms: formatted, count: formatted.length }, null, 2);
+}
+
+async function getAlarmSummary(userId: string): Promise<string> {
+  const summary = await workoutAlarmService.getScheduleSummary(userId);
+
+  return JSON.stringify({
+    success: true,
+    summary: {
+      totalAlarms: summary.totalAlarms,
+      enabledAlarms: summary.enabledAlarms,
+      disabledAlarms: summary.totalAlarms - summary.enabledAlarms,
+      todayAlarmsCount: summary.todayAlarms.length,
+      todayAlarms: summary.todayAlarms.map(a => ({
+        id: a.id,
+        title: a.title,
+        alarmTime: a.alarmTime,
+      })),
+      nextAlarm: summary.nextAlarm
+        ? {
+            id: summary.nextAlarm.id,
+            title: summary.nextAlarm.title,
+            alarmTime: summary.nextAlarm.alarmTime,
+            nextTriggerAt: summary.nextAlarm.nextTriggerAt,
+            daysFormatted: workoutAlarmService.formatDaysOfWeek(summary.nextAlarm.daysOfWeek, true),
+          }
+        : null,
+    },
+  }, null, 2);
+}
+
+async function toggleAlarm(userId: string, params: z.infer<typeof ToggleAlarmSchema>): Promise<string> {
+  const alarm = await workoutAlarmService.toggleAlarm(userId, params.alarmId);
+
+  if (!alarm) {
+    return JSON.stringify({ success: false, error: 'Alarm not found or access denied' });
+  }
+
+  return JSON.stringify({
+    success: true,
+    message: `Alarm "${alarm.title}" ${alarm.isEnabled ? 'enabled' : 'disabled'} successfully`,
+    data: { id: alarm.id, title: alarm.title, isEnabled: alarm.isEnabled },
+  });
+}
+
+async function snoozeAlarm(userId: string, params: z.infer<typeof SnoozeAlarmSchema>): Promise<string> {
+  const existing = await workoutAlarmService.getAlarm(userId, params.alarmId);
+  if (!existing) {
+    return JSON.stringify({ success: false, error: 'Alarm not found or access denied' });
+  }
+
+  const minutes = params.minutes ?? existing.snoozeMinutes ?? 10;
+  const alarm = await workoutAlarmService.snoozeAlarm(userId, params.alarmId, minutes);
+
+  if (!alarm) {
+    return JSON.stringify({ success: false, error: 'Failed to snooze alarm' });
+  }
+
+  return JSON.stringify({
+    success: true,
+    message: `Alarm "${alarm.title}" snoozed for ${minutes} minutes`,
+    data: { id: alarm.id, title: alarm.title, nextTriggerAt: alarm.nextTriggerAt },
+  });
+}
+
 /**
  * Get workout log by ID
  */
@@ -1065,6 +1259,55 @@ export function registerWorkoutTools(_userId: string): ToolDefinition[] {
       description: 'Delete a workout alarm. Use when user asks to remove, delete, or cancel a workout alarm/reminder. Requires the alarm ID.',
       schema: DeleteWorkoutAlarmSchema,
       handler: withErrorHandling('deleteWorkoutAlarm', (uid, params) => deleteWorkoutAlarm(uid, params)),
+    },
+    {
+      name: 'getAllAlarms',
+      description: "Get all the user's alarms/reminders. Use when user asks to see, list, show, or view all their alarms. Can filter to only enabled alarms.",
+      schema: GetAllAlarmsSchema,
+      handler: withErrorHandling('getAllAlarms', (uid, params) => getAllAlarms(uid, params)),
+      mutationType: 'read',
+    },
+    {
+      name: 'getAlarmById',
+      description: 'Get details of a specific alarm by ID. Use when user asks about a particular alarm or wants to see its full settings.',
+      schema: GetAlarmByIdSchema,
+      handler: withErrorHandling('getAlarmById', (uid, params) => getAlarmById(uid, params)),
+      mutationType: 'read',
+    },
+    {
+      name: 'getAlarmsByDay',
+      description: 'Get alarms scheduled for a specific day of the week. Use when user asks what alarms are set for Monday, Tuesday, etc. Days: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.',
+      schema: GetAlarmsByDaySchema,
+      handler: withErrorHandling('getAlarmsByDay', (uid, params) => getAlarmsByDay(uid, params)),
+      mutationType: 'read',
+    },
+    {
+      name: 'getTodayAlarms',
+      description: "Get today's active alarms. Use when user asks what alarms they have today, what's coming up today, or their today's alarm schedule.",
+      schema: GetTodayAlarmsSchema,
+      handler: withErrorHandling('getTodayAlarms', (uid) => getTodayAlarms(uid)),
+      mutationType: 'read',
+    },
+    {
+      name: 'getAlarmSummary',
+      description: 'Get alarm schedule summary including total count, active/inactive counts, next upcoming alarm, and today\'s alarms. Use when user asks for alarm overview, summary, or stats.',
+      schema: GetAlarmSummarySchema,
+      handler: withErrorHandling('getAlarmSummary', (uid) => getAlarmSummary(uid)),
+      mutationType: 'read',
+    },
+    {
+      name: 'toggleAlarm',
+      description: 'Toggle an alarm on or off (enable/disable). Use when user asks to turn on, turn off, enable, disable, activate, or deactivate an alarm. Requires alarm ID.',
+      schema: ToggleAlarmSchema,
+      handler: withErrorHandling('toggleAlarm', (uid, params) => toggleAlarm(uid, params)),
+      mutationType: 'update',
+    },
+    {
+      name: 'snoozeAlarm',
+      description: 'Snooze an alarm for a specified number of minutes. Use when user asks to snooze, delay, or postpone an alarm. Defaults to the alarm\'s configured snooze time or 10 minutes.',
+      schema: SnoozeAlarmSchema,
+      handler: withErrorHandling('snoozeAlarm', (uid, params) => snoozeAlarm(uid, params)),
+      mutationType: 'update',
     },
     {
       name: 'getWorkoutLogById',

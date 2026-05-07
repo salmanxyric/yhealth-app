@@ -67,12 +67,20 @@ function AICoachLayout() {
         isLoading={coach.isLoading}
         dropdownOpen={coach.dropdownOpen}
         showSidebar={coach.showSidebar}
+        multiSelectMode={coach.multiSelectMode}
+        selectedConversationIds={coach.selectedConversationIds}
         onSelectConversation={coach.loadConversation}
         onNewChat={coach.startNewConversation}
         onDeleteConversation={coach.deleteConversation}
         onArchiveConversation={coach.archiveConversation}
         onSetDropdownOpen={coach.setDropdownOpen}
         onCloseSidebar={() => coach.setShowSidebar(false)}
+        onSetMultiSelectMode={coach.setMultiSelectMode}
+        onToggleSelectConversation={coach.toggleSelectConversation}
+        onSelectAll={coach.selectAllConversations}
+        onDeselectAll={coach.deselectAllConversations}
+        onDeleteSelected={coach.deleteSelectedConversations}
+        onExitMultiSelect={coach.exitMultiSelectMode}
       />
 
       {/* Main area */}
@@ -89,8 +97,18 @@ function AICoachLayout() {
                 "linear-gradient(173.75deg, rgba(2, 132, 199, 0) 2.64%, rgba(2, 132, 199, 0.1) 98.73%)",
             }}
           >
-            {/* Content: Welcome or Messages */}
-            {coach.messages.length === 0 ? (
+            {/* Content: Welcome, Skeleton, or Messages */}
+            {coach.isLoading && coach.messages.length === 0 && coach.activeConversationId ? (
+              <AICoachMessages
+                messages={[]}
+                isSending={false}
+                isLoadingConversation
+                executingActions={coach.executingActions}
+                actionResults={coach.actionResults}
+                messagesEndRef={coach.messagesEndRef}
+                onRegenerateMessage={coach.regenerateMessage}
+              />
+            ) : coach.messages.length === 0 ? (
               <div className="flex-1 overflow-y-auto">
                 <AICoachWelcome onSuggestionClick={(text) => coach.sendMessage(text)} />
               </div>
@@ -102,6 +120,7 @@ function AICoachLayout() {
                 actionResults={coach.actionResults}
                 messagesEndRef={coach.messagesEndRef}
                 onRegenerateMessage={coach.regenerateMessage}
+                onEditUserMessage={coach.editUserMessage}
                 isThinking={coach.isThinking}
                 thinkingLabel={coach.thinkingLabel}
                 liveTimelineEvents={coach.liveTimelineEvents}

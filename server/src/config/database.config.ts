@@ -143,17 +143,16 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
           delay,
           error: errorMessage,
           errorCode,
-          text: text.substring(0, 100),
+          queryPrefix: text.substring(0, 80),
         });
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
 
       logger.error('Query error', {
-        text: text.substring(0, 200),
+        queryPrefix: text.substring(0, 80),
         error: errorMessage,
         errorCode,
-        fullQuery: text,
         attempt: attempt + 1,
         poolStats: getPoolStats(),
       });

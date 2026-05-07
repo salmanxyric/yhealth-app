@@ -19,6 +19,7 @@ export function DrawingCanvasModal({
   initialFabricJson,
 }: DrawingCanvasModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Fabric.js Canvas type is dynamically imported and not available at ref declaration
   const fabricCanvasRef = useRef<any>(null);
   const [activeTool, setActiveTool] = useState<CanvasTool>("pen");
   const [strokeWidth, setStrokeWidth] = useState(3);
@@ -87,14 +88,14 @@ export function DrawingCanvasModal({
         canvas.renderAll();
       };
       window.addEventListener("resize", handleResize);
-      (canvas as any).__resizeHandler = handleResize;
+      (canvas as unknown as Record<string, unknown>).__resizeHandler = handleResize;
     })();
 
     return () => {
       mounted = false;
       const c = fabricCanvasRef.current;
       if (c) {
-        const handler = (c as any).__resizeHandler;
+        const handler = (c as unknown as Record<string, unknown>).__resizeHandler as (() => void) | undefined;
         if (handler) window.removeEventListener("resize", handler);
         c.dispose();
       }
@@ -171,11 +172,11 @@ export function DrawingCanvasModal({
     const canvas = fabricCanvasRef.current;
     if (!canvas || !fabricLoaded) return;
 
-    const handleMouseDown = async (opt: any) => {
+    const handleMouseDown = async (opt: { e: MouseEvent }) => {
       if (["rect", "circle", "triangle", "line", "arrow", "text"].includes(activeTool)) {
         const fabricModule = await import("fabric");
         const pointer = canvas.getScenePoint(opt.e);
-        let obj: any;
+        let obj: InstanceType<typeof fabricModule.FabricObject> | undefined;
 
         switch (activeTool) {
           case "rect":
@@ -241,7 +242,7 @@ export function DrawingCanvasModal({
       if (e.key === "Delete" || e.key === "Backspace") {
         const canvas = fabricCanvasRef.current;
         const active = canvas?.getActiveObject();
-        if (active && !(active as any).isEditing) {
+        if (active && !(active as unknown as { isEditing?: boolean }).isEditing) {
           canvas.remove(active);
           canvas.renderAll();
         }

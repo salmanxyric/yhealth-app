@@ -32,6 +32,8 @@ export interface MCQGenerationResponse {
   progress: number;
   isComplete?: boolean;
   insights?: ExtractedInsight[];
+  usedFallback?: boolean;
+  warning?: string;
 }
 
 export interface BatchMCQRequest {

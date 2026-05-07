@@ -184,8 +184,8 @@ function FileCard({
   onTogglePin: () => void;
 }) {
   const summary =
-    (file.content as any).summary ||
-    (file.content as any).description ||
+    (file.content.summary as string) ||
+    (file.content.description as string) ||
     "";
 
   return (

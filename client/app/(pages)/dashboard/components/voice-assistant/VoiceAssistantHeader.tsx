@@ -33,8 +33,6 @@ export function VoiceAssistantHeader({
   onToggleCamera,
 }: VoiceAssistantHeaderProps) {
   const router = useRouter();
-  const userName = user?.firstName || null;
-  const userInitials = getInitials();
 
   return (
     <motion.div 

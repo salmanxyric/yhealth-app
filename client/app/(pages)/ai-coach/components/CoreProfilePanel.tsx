@@ -20,8 +20,7 @@ import type {
   CoreProfile,
   CoreProfileEntry,
   CoreSection,
-} from "../../../../../shared/types/domain/intelligence-files";
-import * as intelligenceApi from "@/src/shared/services/intelligence-files.service";
+} from "@shared/types/domain/intelligence-files";
 
 const SECTION_CONFIG: Record<CoreSection, { icon: LucideIcon; label: string; accent: string }> = {
   biometrics: { icon: Heart, label: "Biometrics", accent: "text-rose-400" },

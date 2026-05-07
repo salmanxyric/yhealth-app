@@ -65,7 +65,7 @@ export function MindCore({ cx, cy }: Props) {
         }}
       />
 
-      {/* Glass sphere */}
+      {/* Glass sphere — bright solid purple */}
       <div
         className="absolute rounded-full overflow-hidden"
         style={{
@@ -75,18 +75,19 @@ export function MindCore({ cx, cy }: Props) {
           top: "50%",
           transform: "translate(-50%, -50%)",
           background:
-            "radial-gradient(circle at 30% 28%, rgba(99, 102, 241, 0.35) 0%, rgba(88, 28, 135, 0.55) 55%, rgba(15, 5, 35, 0.95) 100%)",
-          border: "1px solid rgba(168, 85, 247, 0.5)",
+            "radial-gradient(circle at 38% 32%, rgba(192, 132, 252, 0.95) 0%, rgba(147, 51, 234, 0.92) 40%, rgba(126, 34, 206, 0.88) 70%, rgba(107, 33, 168, 0.85) 100%)",
+          border: "1.5px solid rgba(216, 180, 254, 0.6)",
           boxShadow: [
-            "inset 0 0 40px rgba(168, 85, 247, 0.25)",
-            "inset 2px 3px 16px rgba(255, 255, 255, 0.08)",
-            "inset -3px -4px 20px rgba(0, 0, 0, 0.5)",
-            "0 0 40px rgba(168, 85, 247, 0.65)",
-            "0 0 72px rgba(139, 92, 246, 0.28)",
+            "inset 0 0 30px rgba(192, 132, 252, 0.5)",
+            "inset 2px 3px 12px rgba(255, 255, 255, 0.15)",
+            "inset -2px -3px 14px rgba(88, 28, 135, 0.4)",
+            "0 0 50px rgba(168, 85, 247, 0.8)",
+            "0 0 90px rgba(139, 92, 246, 0.45)",
+            "0 0 130px rgba(147, 51, 234, 0.2)",
           ].join(", "),
         }}
       >
-        {/* Inner flowing blobs — purple / violet / indigo */}
+        {/* Inner luminous blobs */}
         <div
           className="absolute rounded-full"
           style={{
@@ -95,7 +96,7 @@ export function MindCore({ cx, cy }: Props) {
             left: "15%",
             top: "18%",
             background:
-              "radial-gradient(circle, rgba(168, 85, 247, 0.85) 0%, rgba(168, 85, 247, 0.3) 45%, transparent 75%)",
+              "radial-gradient(circle, rgba(216, 180, 254, 0.7) 0%, rgba(192, 132, 252, 0.4) 45%, transparent 75%)",
             filter: "blur(14px)",
             mixBlendMode: "screen",
             animation: anim("mind-blob-drift-a 14s ease-in-out infinite"),
@@ -109,7 +110,7 @@ export function MindCore({ cx, cy }: Props) {
             left: "22%",
             top: "26%",
             background:
-              "radial-gradient(circle, rgba(139, 92, 246, 0.75) 0%, rgba(139, 92, 246, 0.25) 50%, transparent 75%)",
+              "radial-gradient(circle, rgba(192, 132, 252, 0.65) 0%, rgba(168, 85, 247, 0.3) 50%, transparent 75%)",
             filter: "blur(12px)",
             mixBlendMode: "screen",
             animation: anim("mind-blob-drift-b 16s ease-in-out infinite"),
@@ -125,7 +126,7 @@ export function MindCore({ cx, cy }: Props) {
             top: "10%",
             left: "16%",
             background:
-              "radial-gradient(ellipse at center, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)",
+              "radial-gradient(ellipse at center, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.15) 40%, transparent 70%)",
             filter: "blur(5px)",
             animation: anim("mind-spec-shift 7s ease-in-out infinite"),
           }}
@@ -134,14 +135,14 @@ export function MindCore({ cx, cy }: Props) {
         {/* Brain icon */}
         <div
           className="absolute inset-0 flex items-center justify-center"
-          style={{ color: "#e9d5ff" }}
+          style={{ color: "#ffffff" }}
         >
           <Brain
             style={{
               width: 36,
               height: 36,
               filter:
-                "drop-shadow(0 0 10px rgba(233, 213, 255, 0.95)) drop-shadow(0 0 20px rgba(192, 132, 252, 0.55))",
+                "drop-shadow(0 0 8px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 18px rgba(216, 180, 254, 0.7))",
             }}
             strokeWidth={1.75}
           />

@@ -28,6 +28,11 @@ const DEFAULT_LANGUAGE = 'en-US';
 
 export type VoiceGender = 'male' | 'female';
 
+interface ResolvedVoice {
+  voiceName: string;
+  languageCode: string;
+}
+
 export interface GoogleCloudTTSOptions {
   languageCode?: string;
   voiceGender?: VoiceGender;
@@ -63,14 +68,14 @@ export class GoogleCloudTTSService {
 
     const languageCode = options.languageCode || DEFAULT_LANGUAGE;
     const gender = options.voiceGender || 'female';
-    const voiceName = this.getVoiceName(languageCode, gender);
+    const { voiceName, languageCode: resolvedLanguageCode } = this.resolveVoice(languageCode, gender);
 
     const url = `${GOOGLE_TTS_API_BASE}/text:synthesize?key=${this.apiKey}`;
 
     const requestBody = {
       input: { text: text.trim() },
       voice: {
-        languageCode: this.normalizeLanguageCode(languageCode),
+        languageCode: resolvedLanguageCode,
         name: voiceName,
       },
       audioConfig: {
@@ -84,7 +89,8 @@ export class GoogleCloudTTSService {
     try {
       logger.debug('[GoogleCloudTTS] Requesting TTS', {
         voiceName,
-        languageCode,
+        languageCode: resolvedLanguageCode,
+        requestedLanguageCode: languageCode,
         gender,
         textLength: text.length,
       });
@@ -133,11 +139,34 @@ export class GoogleCloudTTSService {
 
       return buffer;
     } catch (error) {
-      logger.error('[GoogleCloudTTS] TTS request failed', {
-        error: error instanceof Error ? error.message : String(error),
+      const err = error instanceof Error ? error : new Error(String(error));
+      const cause = (err as any).cause;
+      const errorCode = cause?.code || (err as any).code || 'UNKNOWN';
+      const diagnostics: Record<string, unknown> = {
+        errorCode,
+        error: err.message,
         voiceName,
-        languageCode,
-      });
+        languageCode: resolvedLanguageCode,
+        requestedLanguageCode: languageCode,
+        apiKeyPrefix: this.apiKey ? `${this.apiKey.substring(0, 8)}...` : 'NOT_SET',
+      };
+
+      if (errorCode === 'ENOTFOUND' || errorCode === 'EAI_AGAIN') {
+        diagnostics.hint = 'DNS resolution failed — check internet connection or firewall/proxy settings';
+      } else if (errorCode === 'ETIMEDOUT' || errorCode === 'UND_ERR_CONNECT_TIMEOUT') {
+        diagnostics.hint = 'Connection timed out — Google TTS API may be blocked by firewall or proxy';
+      } else if (errorCode === 'ECONNREFUSED') {
+        diagnostics.hint = 'Connection refused — check if a proxy is required';
+      } else if (errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+        diagnostics.hint = 'TLS certificate error — check system clock or corporate SSL inspection proxy';
+      } else if (err.message.includes('API key not valid')) {
+        diagnostics.hint = 'GOOGLE_CLOUD_VOICE_API_KEY is invalid — regenerate at console.cloud.google.com';
+      } else if (err.message === 'fetch failed') {
+        diagnostics.hint = 'Network-level failure — check internet, DNS, firewall, or proxy. See cause code above.';
+        if (cause) diagnostics.cause = { code: cause.code, message: cause.message, hostname: cause.hostname };
+      }
+
+      logger.error('[GoogleCloudTTS] TTS request failed', diagnostics);
       throw error;
     }
   }
@@ -145,23 +174,25 @@ export class GoogleCloudTTSService {
   /**
    * Get the voice name for a language and gender
    */
-  private getVoiceName(languageCode: string, gender: VoiceGender): string {
+  private resolveVoice(languageCode: string, gender: VoiceGender): ResolvedVoice {
+    const normalizedLanguageCode = this.normalizeLanguageCode(languageCode);
+
     // Try exact match first
-    const voices = VOICES[languageCode];
+    const voices = VOICES[normalizedLanguageCode];
     if (voices?.[gender]) {
-      return voices[gender];
+      return { voiceName: voices[gender], languageCode: normalizedLanguageCode };
     }
 
     // Try base language (e.g., 'en' from 'en-US')
-    const baseLang = languageCode.split('-')[0];
+    const baseLang = normalizedLanguageCode.split('-')[0];
     for (const [key, val] of Object.entries(VOICES)) {
       if (key.startsWith(baseLang) && val[gender]) {
-        return val[gender];
+        return { voiceName: val[gender], languageCode: key };
       }
     }
 
     // Fallback to default English
-    return VOICES[DEFAULT_LANGUAGE][gender];
+    return { voiceName: VOICES[DEFAULT_LANGUAGE][gender], languageCode: DEFAULT_LANGUAGE };
   }
 
   /**

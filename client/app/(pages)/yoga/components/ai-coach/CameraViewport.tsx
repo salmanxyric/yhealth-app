@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, CameraOff, Loader2, AlertCircle } from "lucide-react";
+import { Camera, Loader2, AlertCircle } from "lucide-react";
 import ScoreRing from "./ScoreRing";
 import type { JointScore } from "../../utils/poses";
 
@@ -40,7 +40,7 @@ export default function CameraViewport({
   overallScore,
   cameraError,
   onStartCamera,
-  onStopCamera,
+  onStopCamera: _onStopCamera,
 }: CameraViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

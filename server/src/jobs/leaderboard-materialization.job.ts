@@ -80,6 +80,20 @@ async function materializeLeaderboards(): Promise<void> {
 
       for (const competition of activeCompetitions) {
         try {
+          const activeEntrantsResult = await query<{ count: string }>(
+            `SELECT COUNT(*)::text AS count
+             FROM competition_entries
+             WHERE competition_id = $1 AND status = 'active'`,
+            [competition.id]
+          );
+          const activeEntrants = Number(activeEntrantsResult.rows[0]?.count || 0);
+          if (activeEntrants === 0) {
+            logger.debug('[LeaderboardMaterialization] Skipping competition with no active entrants', {
+              competitionId: competition.id,
+            });
+            continue;
+          }
+
           // Update scores and ranks for this competition
           await competitionService.updateCompetitionScores(competition.id);
 

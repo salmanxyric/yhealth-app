@@ -6,9 +6,18 @@ import { logger } from './logger.service.js';
 // ============================================
 
 interface PrayerConfig {
-  city: string;
-  country: string;
+  city?: string;
+  country?: string;
+  state?: string;
   method?: number;
+  school?: number;
+  latitudeAdjustmentMethod?: number;
+  midnightMode?: number;
+  adjustment?: number;
+  timezone?: string;
+  offsets?: Partial<Record<PrayerName, number>>;
+  manualTimes?: Partial<Record<PrayerName, string>>;
+  includeTahajjud?: boolean;
   date?: string;
 }
 
@@ -45,6 +54,7 @@ interface AladhanResponse {
 }
 
 const PRAYER_NAMES = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha', 'tahajjud'] as const;
+export type PrayerName = typeof PRAYER_NAMES[number];
 
 const ALADHAN_KEY_MAP: Record<string, string> = {
   fajr: 'Fajr',
@@ -67,15 +77,15 @@ class PrayerTimesService {
     userId: string,
     config: PrayerConfig,
   ): Promise<PrayerScheduleRow[]> {
-    const method = config.method ?? 2;
-    const dateStr = config.date ?? this.todayDDMMYYYY();
+    const normalized = this.normalizeConfig(config);
+    const dateStr = this.dateToDDMMYYYY(normalized.date ?? this.todayDDMMYYYY());
+    const isoDate = this.dateToISO(dateStr);
 
-    const url =
-      `https://api.aladhan.com/v1/timingsByCity/${dateStr}` +
-      `?city=${encodeURIComponent(config.city)}` +
-      `&country=${encodeURIComponent(config.country)}` +
-      `&method=${method}`;
+    if (!normalized.city || !normalized.country) {
+      throw new Error('Prayer times require both city and country');
+    }
 
+    const url = this.buildAladhanUrl(dateStr, normalized);
     logger.info('[PrayerTimes] Fetching from Aladhan', { userId, url });
 
     const res = await fetch(url);
@@ -87,28 +97,56 @@ class PrayerTimesService {
 
     const json = (await res.json()) as AladhanResponse;
     const timings = json.data.timings;
-    const tz = json.data.meta.timezone;
-
-    const isoDate = this.ddmmyyyyToISO(dateStr);
+    const tz = normalized.timezone || json.data.meta.timezone;
 
     const rows: PrayerScheduleRow[] = [];
-    for (const name of PRAYER_NAMES) {
-      const hhmm = this.resolveTime(name, timings);
+    for (const name of this.getEnabledPrayerNames(normalized)) {
+      const hhmm = normalized.manualTimes?.[name] || this.resolveTime(name, timings);
       const scheduledTime = this.toTimestamptz(isoDate, hhmm, tz);
+      const source = normalized.manualTimes?.[name] ? 'manual' : 'api';
 
       const result = await query<PrayerScheduleRow>(
         `INSERT INTO prayer_schedules (user_id, prayer_date, prayer_name, scheduled_time, source)
-         VALUES ($1, $2::date, $3, $4, 'api')
+         VALUES ($1, $2::date, $3, $4, $5)
          ON CONFLICT (user_id, prayer_date, prayer_name)
-         DO UPDATE SET scheduled_time = $4
+         DO UPDATE SET scheduled_time = $4, source = $5
          RETURNING *`,
-        [userId, isoDate, name, scheduledTime],
+        [userId, isoDate, name, scheduledTime, source],
       );
 
       if (result.rows[0]) rows.push(result.rows[0]);
     }
 
     logger.info('[PrayerTimes] Synced prayers', { userId, date: isoDate, count: rows.length });
+    return rows;
+  }
+
+  async upsertManualPrayerTimes(
+    userId: string,
+    date: string,
+    manualTimes: Partial<Record<PrayerName, string>>,
+    timezone = 'UTC',
+  ): Promise<PrayerScheduleRow[]> {
+    const isoDate = this.dateToISO(date);
+    const rows: PrayerScheduleRow[] = [];
+
+    for (const [name, hhmm] of Object.entries(manualTimes) as Array<[PrayerName, string]>) {
+      if (!PRAYER_NAMES.includes(name) || !hhmm) continue;
+      if (!this.isValidHHMM(hhmm)) throw new Error(`Invalid time for ${name}`);
+
+      const result = await query<PrayerScheduleRow>(
+        `INSERT INTO prayer_schedules (user_id, prayer_date, prayer_name, scheduled_time, source)
+         VALUES ($1, $2::date, $3, $4, 'manual')
+         ON CONFLICT (user_id, prayer_date, prayer_name)
+         DO UPDATE SET scheduled_time = $4, source = 'manual'
+         RETURNING *`,
+        [userId, isoDate, name, this.toTimestamptz(isoDate, hhmm, timezone)],
+      );
+
+      if (result.rows[0]) rows.push(result.rows[0]);
+    }
+
+    logger.info('[PrayerTimes] Saved manual prayer times', { userId, date: isoDate, count: rows.length });
     return rows;
   }
 
@@ -245,9 +283,108 @@ class PrayerTimesService {
     return `${dd}-${mm}-${d.getFullYear()}`;
   }
 
-  private ddmmyyyyToISO(ddmmyyyy: string): string {
-    const [dd, mm, yyyy] = ddmmyyyy.split('-');
+  private dateToISO(date: string): string {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+    const [dd, mm, yyyy] = date.split('-');
     return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private dateToDDMMYYYY(date: string): string {
+    if (/^\d{2}-\d{2}-\d{4}$/.test(date)) return date;
+    const [yyyy, mm, dd] = date.split('-');
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  private buildAladhanUrl(dateStr: string, config: PrayerConfig): string {
+    const params = new URLSearchParams({
+      city: config.city || '',
+      country: config.country || '',
+      method: String(config.method ?? 1),
+    });
+
+    if (config.state) params.set('state', config.state);
+    if (config.school !== undefined) params.set('school', String(config.school));
+    if (config.latitudeAdjustmentMethod !== undefined) {
+      params.set('latitudeAdjustmentMethod', String(config.latitudeAdjustmentMethod));
+    }
+    if (config.midnightMode !== undefined) params.set('midnightMode', String(config.midnightMode));
+    if (config.adjustment !== undefined) params.set('adjustment', String(config.adjustment));
+    if (config.timezone) params.set('timezonestring', config.timezone);
+
+    const tune = this.buildTuneString(config.offsets);
+    if (tune) params.set('tune', tune);
+
+    return `https://api.aladhan.com/v1/timingsByCity/${dateStr}?${params.toString()}`;
+  }
+
+  private normalizeConfig(config: PrayerConfig): PrayerConfig {
+    const manualTimes = this.normalizeManualTimes(config.manualTimes);
+    return {
+      ...config,
+      city: config.city?.trim(),
+      country: config.country?.trim(),
+      state: config.state?.trim(),
+      method: Number.isFinite(config.method) ? config.method : 1,
+      school: config.school === 1 ? 1 : 0,
+      includeTahajjud: config.includeTahajjud !== false,
+      offsets: this.normalizeOffsets(config.offsets),
+      manualTimes,
+    };
+  }
+
+  private normalizeManualTimes(times?: Partial<Record<PrayerName, string>>): Partial<Record<PrayerName, string>> {
+    const normalized: Partial<Record<PrayerName, string>> = {};
+    if (!times) return normalized;
+
+    for (const name of PRAYER_NAMES) {
+      const value = times[name]?.trim();
+      if (!value) continue;
+      if (!this.isValidHHMM(value)) throw new Error(`Invalid manual prayer time for ${name}`);
+      normalized[name] = value;
+    }
+
+    return normalized;
+  }
+
+  private normalizeOffsets(offsets?: Partial<Record<PrayerName, number>>): Partial<Record<PrayerName, number>> {
+    const normalized: Partial<Record<PrayerName, number>> = {};
+    if (!offsets) return normalized;
+
+    for (const name of PRAYER_NAMES) {
+      const value = offsets[name];
+      if (value === undefined || value === null) continue;
+      const minutes = Number(value);
+      if (!Number.isFinite(minutes)) continue;
+      normalized[name] = Math.max(-60, Math.min(60, Math.trunc(minutes)));
+    }
+
+    return normalized;
+  }
+
+  private buildTuneString(offsets?: Partial<Record<PrayerName, number>>): string | null {
+    if (!offsets || Object.keys(offsets).length === 0) return null;
+    const values = [
+      0,
+      offsets.fajr ?? 0,
+      0,
+      offsets.dhuhr ?? 0,
+      offsets.asr ?? 0,
+      offsets.maghrib ?? 0,
+      0,
+      offsets.isha ?? 0,
+      0,
+    ];
+    return values.join(',');
+  }
+
+  private getEnabledPrayerNames(config: PrayerConfig): PrayerName[] {
+    return config.includeTahajjud === false
+      ? PRAYER_NAMES.filter(name => name !== 'tahajjud')
+      : [...PRAYER_NAMES];
+  }
+
+  private isValidHHMM(value: string): boolean {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
   }
 
   /**

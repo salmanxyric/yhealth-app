@@ -45,9 +45,9 @@ import {
   RiWalletFill,
   RiVipCrownFill,
   RiHistoryFill,
-  RiGroupFill,
   RiFileList3Fill,
   RiAdminFill,
+  RiStickyNoteFill,
 } from "react-icons/ri";
 import Image from "next/image";
 import { useAuth } from "@/app/context/AuthContext";
@@ -109,6 +109,7 @@ const sections: NavSection[] = [
     label: "Wellness",
     items: [
       { id: "wellbeing", label: "Wellbeing", icon: <RiFlowerFill className={S18} />, href: "/wellbeing" },
+      { id: "quick-notes", label: "Quick Notes", icon: <RiStickyNoteFill className={S18} />, href: "/quick-notes", badge: "NEW" },
       { id: "journal", label: "Journal", icon: <RiBookReadFill className={S18} />, href: "/wellbeing/journal" },
       { id: "mood", label: "Mood", icon: <RiEmotionHappyFill className={S18} />, href: "/wellbeing/mood" },
       { id: "insights", label: "Insights", icon: <RiLightbulbFill className={S18} />, href: "/wellbeing/insights" },
@@ -124,7 +125,6 @@ const sections: NavSection[] = [
       { id: "life-areas", label: "Life Areas", icon: <RiCompassFill className={S18} />, href: "/life-areas" },
       { id: "leaderboard", label: "Leaderboard", icon: <RiMedalFill className={S18} />, href: "/leaderboard" },
       { id: "competitions", label: "Competitions", icon: <RiTeamFill className={S18} />, href: "/competitions" },
-      { id: "community", label: "Community", icon: <RiGroupFill className={S18} />, href: "/community" },
       { id: "knowledge-graph", label: "Knowledge Graph", icon: <RiMindMap className={S18} />, href: "/knowledge-graph" },
       { id: "contracts", label: "Contracts", icon: <RiFileList3Fill className={S18} />, href: "/contracts" },
     ],
@@ -205,6 +205,7 @@ function resolveActiveId(pathname: string): string | null {
   if (pathname.startsWith("/wellbeing")) return "wellbeing";
   if (pathname.startsWith("/yoga")) return "yoga";
   if (pathname.startsWith("/notifications")) return "notifications";
+  if (pathname.startsWith("/quick-notes")) return "quick-notes";
   if (pathname.startsWith("/settings/billing")) return "billing";
   if (pathname.startsWith("/upgrade")) return "upgrade";
   if (pathname.startsWith("/settings")) return "settings";
@@ -220,7 +221,6 @@ function resolveActiveId(pathname: string): string | null {
   if (pathname.startsWith("/profile")) return "profile";
   if (pathname.startsWith("/preferences")) return "preferences";
   if (pathname.startsWith("/contracts")) return "contracts";
-  if (pathname.startsWith("/community")) return "community";
   if (pathname.startsWith("/chat-history")) return "chat-history";
   if (pathname.startsWith("/webinars")) return "webinars";
   if (pathname.startsWith("/subscription")) return "subscription";

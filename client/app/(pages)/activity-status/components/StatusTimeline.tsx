@@ -97,7 +97,7 @@ export function StatusTimeline() {
         {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
-            className="h-20 bg-gray-100 dark:bg-gray-800 rounded-xl animate-pulse"
+            className="bal-skeleton h-24"
           />
         ))}
       </div>
@@ -107,10 +107,10 @@ export function StatusTimeline() {
   // Ensure statuses is always an array
   if (!statuses || statuses.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <p className="text-muted-foreground">No status history yet</p>
-        <p className="text-sm text-muted-foreground mt-2">
+      <div className="bal-empty-state py-12">
+        <Calendar className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+        <p className="text-slate-200">No status history yet</p>
+        <p className="text-sm text-slate-400 mt-2">
           Start tracking your activity status to see your history here
         </p>
       </div>
@@ -118,7 +118,7 @@ export function StatusTimeline() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5 text-[11px] sm:text-xs lg:text-[13px]">
       {(statuses || []).map((status, index) => {
         const config = STATUS_CONFIG[status.activity_status];
         const date = new Date(status.status_date);
@@ -135,14 +135,14 @@ export function StatusTimeline() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ scale: 1.01, y: -2 }}
             onClick={() => handleStatusClick(status)}
-            className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 cursor-pointer hover:border-primary/50 transition-all"
+            className="bal-surface cursor-pointer p-3 transition-all hover:border-cyan-400/45 hover:shadow-[0_14px_34px_rgba(8,47,73,0.42)] sm:p-3.5"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {/* Status Icon */}
               <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg sm:h-10 sm:w-10 sm:text-xl"
                 style={{ backgroundColor: `${config.color}20`, color: config.color }}
               >
                 {config.icon}
@@ -151,25 +151,25 @@ export function StatusTimeline() {
               {/* Status Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold capitalize">{status.activity_status}</h3>
+                  <h3 className="text-[12px] font-semibold capitalize text-white sm:text-[13px]">{status.activity_status}</h3>
                   <span
-                    className="text-xs px-2 py-0.5 rounded-full"
+                    className="rounded-full px-2 py-0.5 text-[9px] font-medium sm:text-[10px]"
                     style={{ backgroundColor: `${config.color}20`, color: config.color }}
                   >
                     {config.description}
                   </span>
                 </div>
-                <p className="text-sm text-muted-foreground">{formattedDate}</p>
+                <p className="text-[10px] text-slate-300 sm:text-[11px]">{formattedDate}</p>
                 {status.mood && (
                   <div className="flex items-center gap-1 mt-1">
-                    <span className="text-sm">
+                    <span className="text-xs">
                       {["😞", "😐", "😊", "😄", "🌟"][status.mood - 1]}
                     </span>
-                    <span className="text-xs text-muted-foreground">Mood: {status.mood}/5</span>
+                    <span className="text-[10px] text-slate-300">Mood: {status.mood}/5</span>
                   </div>
                 )}
                 {status.notes && (
-                  <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                  <p className="mt-2 line-clamp-2 text-[11px] text-slate-300 sm:text-xs">
                     {status.notes}
                   </p>
                 )}
@@ -200,7 +200,7 @@ export function StatusTimeline() {
                 )}
               </div>
 
-              <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+              <ChevronRight className="h-5 w-5 text-slate-400 shrink-0" />
             </div>
           </motion.div>
         );
@@ -221,4 +221,3 @@ export function StatusTimeline() {
     </div>
   );
 }
-

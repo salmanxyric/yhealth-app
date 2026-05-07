@@ -10,4 +10,18 @@ function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-export { Skeleton }
+interface ContentSkeletonProps {
+  loading: boolean;
+  fixture: React.ReactNode;
+  children: React.ReactNode;
+  name?: string;
+  animate?: string;
+  darkColor?: string;
+  className?: string;
+}
+
+function ContentSkeleton({ loading, fixture, children }: ContentSkeletonProps) {
+  return <>{loading ? fixture : children}</>
+}
+
+export { Skeleton, ContentSkeleton }

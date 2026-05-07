@@ -11,7 +11,7 @@ import { featureStateService } from './feature-state.service.js';
 import { graphContextService } from './graph-context.service.js';
 import { nextBestActionService } from './next-best-action.service.js';
 import { STATIC_CROSS_EDGES, getDirectChildrenOf } from './feature-node-registry.js';
-import type { FeatureNodeId } from '../../../../shared/types/domain/reasoning-graph.js';
+import type { FeatureNodeId } from '@shared/types/domain/reasoning-graph.js';
 
 const DEBOUNCE_KEY_PREFIX = 'rg:prop:';
 const DEBOUNCE_SECONDS = 300; // 5 minutes per user

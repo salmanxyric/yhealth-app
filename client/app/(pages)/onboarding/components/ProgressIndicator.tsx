@@ -24,7 +24,10 @@ export function ProgressIndicator({
     <div className="w-full">
       {/* Desktop Stepper */}
       <div className="hidden md:block">
-        <div className="flex items-start justify-between">
+        <div
+          className="grid items-start"
+          style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+        >
           {steps.map((step, index) => {
             const isCompleted = index < currentStep;
             const isCurrent = index === currentStep;
@@ -32,20 +35,29 @@ export function ProgressIndicator({
             const isLast = index === steps.length - 1;
 
             return (
-              <div key={step.id} className="flex items-start flex-1">
-                {/* Step circle + label */}
+              <div key={step.id} className="relative flex justify-center">
+                {!isLast && (
+                  <div className="absolute left-1/2 right-[-50%] top-[14px] px-8 lg:px-10 xl:px-12 pointer-events-none">
+                    <div
+                      className={`
+                        h-[2px] w-full rounded-full transition-colors duration-300
+                        ${index < currentStep ? "bg-sky-600" : "bg-white/15"}
+                      `}
+                    />
+                  </div>
+                )}
+
                 <motion.button
                   onClick={() => isClickable && onStepClick(index)}
                   disabled={!isClickable}
                   className={`
-                    flex flex-col items-center gap-1.5 shrink-0
+                    relative z-10 flex min-w-0 flex-col items-center gap-1.5
                     ${isClickable ? "cursor-pointer" : "cursor-default"}
                   `}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                 >
-                  {/* Circle */}
                   <div
                     className={`
                       w-[30px] h-[30px] rounded-full flex items-center justify-center
@@ -70,28 +82,15 @@ export function ProgressIndicator({
                     )}
                   </div>
 
-                  {/* Label */}
                   <span
                     className={`
-                      text-xs lg:text-sm font-medium whitespace-nowrap
+                      text-xs lg:text-sm font-medium whitespace-nowrap tracking-normal
                       ${isCurrent || isCompleted ? "text-white" : "text-white/40"}
                     `}
                   >
                     {step.shortLabel}
                   </span>
                 </motion.button>
-
-                {/* Connecting line — solid */}
-                {!isLast && (
-                  <div className="flex-1 flex items-center px-2 lg:px-3 mt-[14px]">
-                    <div
-                      className={`
-                        w-full h-[2px] rounded-full transition-colors duration-300
-                        ${index < currentStep ? "bg-sky-600" : "bg-white/15"}
-                      `}
-                    />
-                  </div>
-                )}
               </div>
             );
           })}

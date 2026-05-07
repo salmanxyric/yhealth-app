@@ -161,7 +161,6 @@ describe('getChats', () => {
 
     expect(mockChatService.getUserChats).toHaveBeenCalledWith(
       'test-user-id',
-      false,
       1,
       50
     );
@@ -171,7 +170,7 @@ describe('getChats', () => {
     expect(body.data).toEqual(chats);
   });
 
-  it('should pass isAdmin=true for admin role', async () => {
+  it('should use same query for admin role (no special admin listing)', async () => {
     mockChatService.getUserChats.mockResolvedValue([]);
 
     const req = createAuthReq(
@@ -185,7 +184,6 @@ describe('getChats', () => {
 
     expect(mockChatService.getUserChats).toHaveBeenCalledWith(
       'test-user-id',
-      true,
       1,
       50
     );

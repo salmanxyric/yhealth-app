@@ -14,7 +14,7 @@ import { RecoveriesTable } from './components/RecoveriesTable';
 import { WhoopMetrics } from './components/WhoopMetrics';
 import { StressMonitor } from './components/StressMonitor';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
-import { Activity, Heart, Moon, TrendingUp, CheckCircle2, XCircle, AlertCircle, Loader2, Settings, Clock, Link2, Calendar, Brain, RefreshCw } from 'lucide-react';
+import { Activity, Heart, Moon, TrendingUp, XCircle, AlertCircle, Loader2, Settings, Link2, Calendar, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
@@ -40,7 +40,6 @@ interface WhoopStatus {
 export default function WhoopPageContent() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showInitialSkeleton, setShowInitialSkeleton] = useState(true);
   const router = useRouter();
   const isConnectedRef = useRef<boolean>(false);
@@ -107,40 +106,6 @@ export default function WhoopPageContent() {
   // No mount events needed — child components use `immediate: true` in useFetch
   // Tab changes unmount/remount child components via AnimatePresence, which triggers useFetch automatically
 
-  // Handle refresh - sync data from WHOOP and refetch
-  const handleRefresh = async () => {
-    try {
-      setIsRefreshing(true);
-
-      // Trigger sync from WHOOP API
-      const syncResponse = await api.post('/integrations/whoop/sync', {});
-
-      if (syncResponse.success) {
-        toast.success('Syncing latest data from WHOOP...');
-
-        // Refetch status
-        await refetchStatus();
-
-        // Wait for sync to process, then notify children to refetch
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('whoop-refresh-requested'));
-          toast.success('Data refreshed successfully');
-        }, 2000);
-      } else {
-        throw new Error('Failed to trigger sync');
-      }
-    } catch (error) {
-      console.error('[WHOOP Page] Failed to refresh data:', error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Failed to refresh data. Please try again.'
-      );
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
   // Handle WHOOP OAuth connection
   const handleConnectWhoop = async () => {
     try {
@@ -187,42 +152,6 @@ export default function WhoopPageContent() {
       </div>
 
       <div className="relative max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-          {/* Header */}
-          <div className="mb-4 sm:mb-8 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-[18px] sm:text-[20px] font-bold text-white mb-1 sm:mb-2">
-                <span className="bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  WHOOP Analytics
-                </span>
-              </h1>
-              <p className="text-slate-400 text-[13px] sm:text-[14px]">
-                Comprehensive recovery, sleep, and strain insights
-              </p>
-            </div>
-            {/* Refresh Button - Show when connected */}
-            {(statusData?.isConnected || isConnectedRef.current) && (
-              <Button
-                onClick={handleRefresh}
-                disabled={isRefreshing || isLoadingStatus}
-                variant="outline"
-                size="sm"
-                className="bg-purple-500/20 border-purple-500/30 text-purple-400 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {isRefreshing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Refresh Data
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-
           {/* Connection Status Banner */}
           {isLoadingStatus ? (
             <div className="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
@@ -312,69 +241,50 @@ export default function WhoopPageContent() {
               </div>
             </div>
           ) : statusData && statusData.isConnected ? (
-            <div className="mb-4 sm:mb-6 p-3 sm:p-4 rounded-xl bg-green-500/10 border border-green-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-green-400 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-green-400 font-medium text-[14px]">WHOOP connected</p>
-                  <div className="flex items-center gap-2 sm:gap-4 text-[13px] text-green-300/70 mt-1 flex-wrap">
-                    {statusData.email && (
-                      <span className="flex items-center gap-1 truncate">
-                        <span className="text-green-400">Email:</span> {statusData.email}
-                      </span>
-                    )}
-                    {statusData.connectedAt && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Connected: {new Date(statusData.connectedAt).toLocaleDateString()}
-                      </span>
-                    )}
-                    {statusData.lastSyncAt && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Last sync: {new Date(statusData.lastSyncAt).toLocaleString()}
-                      </span>
-                    )}
-                    {statusData.webhookRegistered && (
-                      <span className="flex items-center gap-1 text-green-400">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Webhook active
-                      </span>
-                    )}
-                  </div>
+            <div
+              className="mb-6 sm:mb-[30px] flex flex-col sm:flex-row gap-4 sm:gap-[10px] items-start sm:items-center justify-between px-5 sm:px-[32px] py-5 sm:py-[24px] rounded-[16px] border border-white/10"
+              style={{ backgroundImage: "linear-gradient(179.22deg, rgba(5, 150, 105, 0) 2.64%, rgba(5, 150, 105, 0.3) 98.73%)" }}
+            >
+              <div className="flex-1 min-w-0 flex flex-col gap-[5px] items-start justify-center">
+                <p className="font-medium text-[20px] sm:text-[24px] leading-[1.3] text-white whitespace-nowrap">
+                  Whoop Connected
+                </p>
+                <div className="flex items-center gap-[8px]">
+                  <svg className="w-4 h-4 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="font-normal text-[13px] sm:text-[14px] text-white opacity-40 truncate leading-[21px]">
+                    {statusData.email || 'Connected'}
+                  </span>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button
+              <div className="flex gap-[10px] h-[44px] sm:h-[48px] items-center shrink-0">
+                <button
                   onClick={handleConnectWhoop}
                   disabled={isConnecting}
-                  variant="outline"
-                  size="sm"
-                  className="bg-purple-500/20 border-purple-500/30 text-purple-400 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-[13px]"
+                  className="flex gap-[8px] h-full items-center justify-center px-[16px] py-[10px] rounded-[10px] border border-white/20 text-white font-medium text-[15px] sm:text-[17px] tracking-[-0.16px] disabled:opacity-50 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#059669' }}
                 >
                   {isConnecting ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <Loader2 className="w-[16px] h-[16px] animate-spin" />
                       <span className="hidden sm:inline">Reconnecting...</span>
-                      <span className="sm:hidden">...</span>
                     </>
                   ) : (
                     <>
-                      <Link2 className="w-4 h-4 mr-2" />
-                      <span className="hidden sm:inline">Reconnect WHOOP</span>
-                      <span className="sm:hidden">Reconnect</span>
+                      <Link2 className="w-[18px] h-[18px]" />
+                      <span>Reconnect WHOOP</span>
                     </>
                   )}
-                </Button>
-                <Button
+                </button>
+                <button
                   onClick={() => router.push('/settings?tab=integrations')}
-                  variant="outline"
-                  size="sm"
-                  className="bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 text-[13px]"
+                  className="flex gap-[8px] h-full items-center justify-center px-[16px] py-[10px] rounded-[10px] border border-white/20 text-white font-medium text-[15px] sm:text-[17px] tracking-[-0.16px] transition-colors hover:bg-emerald-500/20"
+                  style={{ backgroundColor: 'rgba(5, 150, 105, 0.1)' }}
                 >
-                  <Settings className="w-4 h-4 mr-2" />
-                  Manage
-                </Button>
+                  <Settings className="w-[14px] h-[14px]" />
+                  <span>Manage</span>
+                </button>
               </div>
             </div>
           ) : null}

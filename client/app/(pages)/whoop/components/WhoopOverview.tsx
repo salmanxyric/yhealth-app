@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useFetch } from '@/hooks/use-fetch';
 import { useApiMutation } from '@/hooks/use-api-mutation';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,20 @@ export function WhoopOverview() {
     : '/whoop/analytics/overview';
 
   const { data, isLoading, error, refetch } = useFetch<{
+    currentRecovery: {
+      score: number;
+      hrv: number;
+      rhr: number;
+      spo2?: number;
+      skinTemp?: number;
+      timestamp: string;
+    } | null;
+    currentSleep: {
+      duration: number;
+      quality: number;
+      efficiency: number;
+      timestamp: string;
+    } | null;
     trends: {
       recovery7d: number[] | Array<{ date: string; value: number }>;
       sleep7d: number[] | Array<{ date: string; value: number }>;
@@ -96,7 +110,7 @@ export function WhoopOverview() {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-[16px]">
       {/* Date Range Picker */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 sm:gap-4">
@@ -106,25 +120,19 @@ export function WhoopOverview() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button
+          <button
             onClick={handleSync}
-            variant="outline"
-            size="sm"
             disabled={isSyncing}
-            className="bg-background/50 backdrop-blur-sm border-border/50 hover:bg-accent/50 transition-all"
+            className="inline-flex items-center gap-[11px] h-[42px] px-4 py-[5px] rounded-[8px] border border-white/10 text-white text-[16px] font-normal tracking-[0.1px] leading-6 disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:bg-white/[0.05]"
+            style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
           >
             {isSyncing ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Syncing...
-              </>
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Sync Data
-              </>
+              <RefreshCw className="w-4 h-4" />
             )}
-          </Button>
+            {isSyncing ? 'Syncing...' : 'Sync Data'}
+          </button>
         </div>
       </div>
 
@@ -391,132 +399,190 @@ export function WhoopOverview() {
             strain: item.strain || 0,
           }));
 
+        const currentRecovery = data.currentRecovery;
+        const currentSleep = data.currentSleep;
+        const tempC = currentRecovery?.skinTemp;
+        const sleepHours = currentSleep ? Math.round((currentSleep.duration / 60) * 10) / 10 : null;
+        const recoveryPct = currentRecovery?.score ?? 0;
+
         return (
-          <div className="relative rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-xl border border-white/20 p-4 sm:p-8 transition-all duration-500 hover:from-white/15 hover:to-white/10 hover:shadow-2xl hover:shadow-purple-500/20 group">
-            {/* Decorative gradient overlay */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            
-            <div className="relative z-10">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_337px] gap-4 sm:gap-[30px] items-start">
+            {/* LEFT — Trends card */}
+            <div
+              className="relative rounded-[24px] sm:rounded-[32px] border border-white/10 p-5 sm:p-8 h-auto xl:h-[445px] overflow-hidden"
+              style={{ backgroundColor: '#080615' }}
+            >
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5 sm:mb-6">
                 <div>
-                  <h3 className="text-[18px] sm:text-[20px] font-bold mb-1 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  <h3 className="text-[20px] sm:text-[24px] font-medium text-white leading-none">
                     Trends
                   </h3>
-                  <p className="text-[13px] sm:text-[14px] text-slate-400">Historical performance metrics</p>
+                  <p className="text-[13px] sm:text-[14px] text-white opacity-50 mt-1 leading-[1.2]">
+                    Historical performance metrics
+                  </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <div className="px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                      <span className="text-xs text-red-300 font-medium">Recovery</span>
-                    </div>
+                <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                  <div className="flex items-center gap-[9px]">
+                    <div className="w-[10.79px] h-[10px] rounded-[2px] border-2 border-[#201f2c]" style={{ backgroundColor: '#159d73' }} />
+                    <span className="font-normal leading-6 text-[14px] text-white opacity-50 tracking-[0.1px]">Recovery</span>
                   </div>
-                  <div className="px-3 py-1.5 rounded-lg bg-blue-500/20 border border-blue-500/30 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                      <span className="text-xs text-blue-300 font-medium">Sleep</span>
-                    </div>
+                  <div className="flex items-center gap-[9px]">
+                    <div className="w-[10.79px] h-[10px] rounded-[2px] border-2 border-[#201f2c]" style={{ backgroundColor: '#0284c7' }} />
+                    <span className="font-normal leading-6 text-[14px] text-white opacity-50 tracking-[0.1px]">Sleep</span>
                   </div>
-                  <div className="px-3 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 backdrop-blur-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-                      <span className="text-xs text-purple-300 font-medium">Strain</span>
+                  <div className="flex items-center gap-[9px]">
+                    <div className="w-[10.79px] h-[10px] rounded-[2px] border-2 border-[#201f2c]" style={{ backgroundColor: '#faac18' }} />
+                    <span className="font-normal leading-6 text-[14px] text-white opacity-50 tracking-[0.1px]">Strain</span>
+                  </div>
+                </div>
+              </div>
+
+              <ResponsiveContainer width="100%" height={298}>
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  barCategoryGap="20%"
+                  barGap={4}
+                >
+                  <CartesianGrid
+                    strokeDasharray="0"
+                    stroke="rgba(255,255,255,0.06)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#92929d"
+                    tick={{ fill: '#92929d', fontSize: 14 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    stroke="#92929d"
+                    tick={{ fill: '#92929d', fontSize: 14 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgba(8, 6, 21, 0.95)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '12px',
+                      padding: '10px 12px',
+                    }}
+                    labelStyle={{ color: '#fff', fontWeight: 600, marginBottom: '6px' }}
+                    itemStyle={{ color: '#e5e7eb', padding: '2px 0' }}
+                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  />
+                  <Bar dataKey="recovery" fill="#159d73" name="Recovery" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="sleep" fill="#0284c7" name="Sleep (hrs)" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="strain" fill="#faac18" name="Strain" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* RIGHT — Sidebar (Temperature + Sleep) */}
+            <div className="flex flex-col gap-4 sm:gap-[24px] w-full xl:w-[337px]">
+              {/* Temperature */}
+              <div
+                className="rounded-[24px] border border-white/10 overflow-hidden px-[25px] py-[20px]"
+                style={{ backgroundColor: '#080615' }}
+              >
+                <div className="flex flex-col items-center gap-4">
+                  <p className="font-normal text-[22px] text-center" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    Temperature
+                  </p>
+                  {/* Sun icon */}
+                  <svg className="w-[90px] h-[90px]" viewBox="0 0 90 90" fill="none" aria-hidden>
+                    <defs>
+                      <radialGradient id="sunGrad" cx="0.5" cy="0.5" r="0.5">
+                        <stop offset="0%" stopColor="#fde047" />
+                        <stop offset="60%" stopColor="#f59e0b" />
+                        <stop offset="100%" stopColor="#ea580c" />
+                      </radialGradient>
+                    </defs>
+                    <circle cx="45" cy="45" r="28" fill="url(#sunGrad)" />
+                    <circle cx="45" cy="45" r="38" fill="none" stroke="#f59e0b" strokeOpacity="0.2" strokeWidth="2" />
+                  </svg>
+                  <div className="flex flex-col gap-3 w-full">
+                    <p className="text-center font-semibold text-white" style={{ fontSize: '42px', letterSpacing: '-0.8px', lineHeight: 1 }}>
+                      {tempC != null ? tempC.toFixed(1) : '--'}
+                      <span style={{ fontSize: '27px', verticalAlign: 'super' }}>°</span>
+                      C
+                    </p>
+                    <div className="flex items-center justify-between w-full text-[12px]">
+                      <span className="font-medium text-white">Skin Temp:</span>
+                      <span className="font-normal text-[#b4b4b4]">
+                        {tempC != null ? `${tempC.toFixed(1)}°C` : '--'}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
-              
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart 
-                  data={chartData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="recoveryGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#EF4444" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#EF4444" stopOpacity={0.1} />
-                    </linearGradient>
-                    <linearGradient id="sleepGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.1} />
-                    </linearGradient>
-                    <linearGradient id="strainGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#A855F7" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#A855F7" stopOpacity={0.1} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid 
-                    strokeDasharray="3 3" 
-                    stroke="#374151" 
-                    opacity={0.3}
-                    vertical={false}
-                  />
-                  <XAxis 
-                    dataKey="date" 
-                    stroke="#9CA3AF"
-                    tick={{ fill: '#9CA3AF', fontSize: 12 }}
-                    axisLine={{ stroke: '#374151' }}
-                    tickLine={{ stroke: '#374151' }}
-                  />
-                  <YAxis 
-                    stroke="#9CA3AF"
-                    tick={{ fill: '#9CA3AF', fontSize: 12 }}
-                    axisLine={{ stroke: '#374151' }}
-                    tickLine={{ stroke: '#374151' }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'rgba(31, 41, 55, 0.95)',
-                      border: '1px solid rgba(55, 65, 81, 0.5)',
-                      borderRadius: '12px',
-                      backdropFilter: 'blur(10px)',
-                      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
-                      padding: '12px',
-                    }}
-                    labelStyle={{ color: '#E5E7EB', fontWeight: 600, marginBottom: '8px' }}
-                    itemStyle={{ color: '#E5E7EB', padding: '4px 0' }}
-                    cursor={{ stroke: '#6366F1', strokeWidth: 2, strokeDasharray: '5 5' }}
-                  />
-                  <Legend 
-                    wrapperStyle={{ paddingTop: '20px' }}
-                    iconType="line"
-                    formatter={(value) => <span className="text-slate-300 text-sm">{value}</span>}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="recovery"
-                    stroke="#EF4444"
-                    strokeWidth={3}
-                    name="Recovery"
-                    dot={{ r: 5, fill: '#EF4444', strokeWidth: 2, stroke: '#1F2937' }}
-                    activeDot={{ r: 8, fill: '#EF4444', strokeWidth: 2, stroke: '#1F2937' }}
-                    strokeLinecap="round"
-                    animationDuration={1000}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="sleep"
-                    stroke="#3B82F6"
-                    strokeWidth={3}
-                    name="Sleep (hrs)"
-                    dot={{ r: 5, fill: '#3B82F6', strokeWidth: 2, stroke: '#1F2937' }}
-                    activeDot={{ r: 8, fill: '#3B82F6', strokeWidth: 2, stroke: '#1F2937' }}
-                    strokeLinecap="round"
-                    animationDuration={1000}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="strain"
-                    stroke="#A855F7"
-                    strokeWidth={3}
-                    name="Strain"
-                    dot={{ r: 5, fill: '#A855F7', strokeWidth: 2, stroke: '#1F2937' }}
-                    activeDot={{ r: 8, fill: '#A855F7', strokeWidth: 2, stroke: '#1F2937' }}
-                    strokeLinecap="round"
-                    animationDuration={1000}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+
+              {/* Sleep */}
+              <div
+                className="rounded-[24px] border border-white/10 overflow-hidden px-[24px] py-[20px]"
+                style={{ backgroundColor: '#080615' }}
+              >
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <p className="font-normal text-[20px] text-center text-white opacity-80 w-full">
+                    Sleep
+                  </p>
+                  {/* Circular progress ring */}
+                  <div className="relative w-[169px] h-[162px] flex items-center justify-center">
+                    <svg className="absolute inset-0" viewBox="0 0 170 170" fill="none" aria-hidden>
+                      {/* Base ring (dashed) */}
+                      <circle
+                        cx="85"
+                        cy="85"
+                        r="75"
+                        stroke="#2a2a3a"
+                        strokeWidth="8"
+                        strokeDasharray="4 6"
+                        fill="none"
+                      />
+                      {/* Progress arc */}
+                      <circle
+                        cx="85"
+                        cy="85"
+                        r="75"
+                        stroke="#0284c7"
+                        strokeWidth="9"
+                        strokeLinecap="round"
+                        fill="none"
+                        strokeDasharray={`${(recoveryPct / 100) * 2 * Math.PI * 75} ${2 * Math.PI * 75}`}
+                        transform="rotate(-90 85 85)"
+                      />
+                    </svg>
+                    <div className="relative flex flex-col items-center gap-[2px] text-center">
+                      <p className="font-bold text-[20.7px] text-[#f9f9f9] leading-none">
+                        {sleepHours != null ? Math.round(sleepHours) : '--'}
+                        <span className="text-[#f9f9f9]">hrs</span>
+                      </p>
+                      <p className="text-[13.8px] text-[#555] leading-none">
+                        Recovery: {recoveryPct}%
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-3 w-full">
+                    <div className="flex items-center justify-between w-full text-[12px]">
+                      <span className="font-medium text-white">Quality:</span>
+                      <span className="font-normal text-[#b4b4b4]">
+                        {currentSleep ? `${currentSleep.quality}%` : '--'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between w-full text-[12px]">
+                      <span className="font-medium text-white">Efficiency:</span>
+                      <span className="font-normal text-[#b4b4b4]">
+                        {currentSleep ? `${currentSleep.efficiency.toFixed(1)}%` : '--'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         );

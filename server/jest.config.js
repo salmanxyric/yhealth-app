@@ -16,8 +16,8 @@ export default {
     '^@utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@types/(.*)$': '<rootDir>/src/types/$1',
     '^@validators/(.*)$': '<rootDir>/src/validators/$1',
-    '^@shared/(.*)\\.js$': '<rootDir>/../shared/$1',
-    '^@shared/(.*)$': '<rootDir>/../shared/$1',
+    '^@shared/(.*)\\.js$': '<rootDir>/shared/$1',
+    '^@shared/(.*)$': '<rootDir>/shared/$1',
   },
   transform: {
     '^.+\\.tsx?$': [
@@ -34,6 +34,9 @@ export default {
     '**/__tests__/**/*.ts',
     '**/*.test.ts',
     '**/*.spec.ts',
+  ],
+  transformIgnorePatterns: [
+    'node_modules/(?!(@faker-js/faker)/)',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   collectCoverageFrom: [
@@ -53,6 +56,7 @@ export default {
     },
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  globalTeardown: '<rootDir>/tests/globalTeardown.ts',
   testTimeout: 30000,
   verbose: true,
   forceExit: true,

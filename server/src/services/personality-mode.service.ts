@@ -12,7 +12,7 @@ import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { cache } from './cache.service.js';
 import type { UserTier } from './user-classification.service.js';
-import { normalizePersonaId } from '../../../shared/types/domain/coach-persona.js';
+import { normalizePersonaId } from '@shared/types/domain/coach-persona.js';
 
 // ============================================
 // TYPES

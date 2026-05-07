@@ -57,4 +57,10 @@ router.get(
   activityController.getCalendarData
 );
 
+// Create a manual activity log
+router.post(
+  '/logs',
+  activityController.createActivityLog
+);
+
 export default router;

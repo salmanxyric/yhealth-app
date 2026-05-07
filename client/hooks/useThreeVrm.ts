@@ -57,6 +57,97 @@ function getCameraZ(): number {
 
 const CAMERA_POSITION = new THREE.Vector3(0, 0.8, getCameraZ());
 
+type MaterialWithMaps = THREE.Material & {
+  color?: THREE.Color;
+  map?: THREE.Texture | null;
+  shadeColorFactor?: THREE.Color;
+  uniforms?: Record<string, { value: unknown }>;
+};
+
+const AUTHORED_COLOR_FALLBACKS: Array<{
+  pattern: RegExp;
+  lit: string;
+  shade: string;
+}> = [
+  { pattern: /^Body_.*SKIN/i, lit: "#edd8d0", shade: "#d2aaa2" },
+  { pattern: /^Face_.*SKIN/i, lit: "#f6e6df", shade: "#d8b5ad" },
+  { pattern: /^FaceMouth_.*FACE/i, lit: "#f3d8d3", shade: "#c99390" },
+  { pattern: /^Tops_.*CLOTH/i, lit: "#f2f2f0", shade: "#d1d2d0" },
+  { pattern: /^Bottoms_.*CLOTH/i, lit: "#070708", shade: "#010101" },
+  { pattern: /^Shoes_.*CLOTH/i, lit: "#101012", shade: "#030303" },
+  { pattern: /^HairBack_.*HAIR/i, lit: "#5f3a27", shade: "#2b1810" },
+  { pattern: /^Hair_.*HAIR/i, lit: "#6a4129", shade: "#2f1b12" },
+  { pattern: /^EyeIris_.*EYE/i, lit: "#6b4a2f", shade: "#21150d" },
+  { pattern: /^EyeWhite_.*EYE/i, lit: "#fbf7f1", shade: "#ddd6ce" },
+  { pattern: /^Face(Eyeline|Brow)_.*FACE/i, lit: "#3b2a20", shade: "#160e0a" },
+  { pattern: /^EyeHighlight_.*EYE/i, lit: "#ffffff", shade: "#ffffff" },
+];
+
+function materialHasRenderableMap(material: MaterialWithMaps): boolean {
+  const map =
+    material.map ||
+    (material.uniforms?.map?.value instanceof THREE.Texture
+      ? material.uniforms.map.value
+      : null);
+
+  if (!map) return false;
+  const image = map.image as { width?: number; height?: number } | undefined;
+  return Boolean(image && image.width && image.height);
+}
+
+function getAuthoredFallback(materialName: string) {
+  return AUTHORED_COLOR_FALLBACKS.find(({ pattern }) => pattern.test(materialName));
+}
+
+function setMaterialColor(material: MaterialWithMaps, lit: THREE.Color, shade: THREE.Color) {
+  material.color?.copy(lit);
+  material.shadeColorFactor?.copy(shade);
+
+  if (material.uniforms?.litFactor?.value instanceof THREE.Color) {
+    material.uniforms.litFactor.value.copy(lit);
+  }
+  if (material.uniforms?.shadeColorFactor?.value instanceof THREE.Color) {
+    material.uniforms.shadeColorFactor.value.copy(shade);
+  }
+}
+
+function repairVrmMaterialColor(material: MaterialWithMaps): boolean {
+  if (materialHasRenderableMap(material)) {
+    return false;
+  }
+
+  const fallback = getAuthoredFallback(material.name || "");
+  if (!fallback) return false;
+
+  setMaterialColor(
+    material,
+    new THREE.Color(fallback.lit),
+    new THREE.Color(fallback.shade),
+  );
+  material.needsUpdate = true;
+  return true;
+}
+
+function repairVrmMaterialColors(root: THREE.Object3D): number {
+  let repaired = 0;
+  const seen = new Set<THREE.Material>();
+
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+
+    for (const material of materials) {
+      if (!material || seen.has(material)) continue;
+      seen.add(material);
+      if (repairVrmMaterialColor(material as MaterialWithMaps)) {
+        repaired++;
+      }
+    }
+  });
+
+  return repaired;
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -96,6 +187,19 @@ export interface UseThreeVrmReturn {
 // ============================================
 
 const STATE_BLEND_SPEED = 3.0; // ~333ms transition
+const SPEAKING_GESTURE_SCALE_CAP = 0.55;
+const SPEAKING_GESTURE_ACTIVE_SCALE = 0.25;
+const ARM_POSE_SMOOTH_SPEED = 14;
+const ARM_STABILIZED_BONES = [
+  "leftShoulder",
+  "rightShoulder",
+  "leftUpperArm",
+  "rightUpperArm",
+  "leftLowerArm",
+  "rightLowerArm",
+  "leftHand",
+  "rightHand",
+];
 
 // ============================================
 // HOOK
@@ -125,6 +229,7 @@ export function useThreeVrm({
 
   // Cached rest-pose bone quaternions (set after VRM load)
   const restQuatsRef = useRef<Map<string, THREE.Quaternion>>(new Map());
+  const smoothedArmQuatsRef = useRef<Map<string, THREE.Quaternion>>(new Map());
 
   // State blend tracking
   const prevStateRef = useRef<string>("idle");
@@ -200,7 +305,11 @@ export function useThreeVrm({
         console.error = (...args: unknown[]) => {
           const first = typeof args[0] === 'string' ? args[0] : '';
           if (first.includes("Couldn't load texture") || first.includes('colorSpace')) return;
-          _origConsoleError.apply(console, args);
+          if (first.includes("In HTML,") || first.includes("hydration")) {
+            _origConsoleError(...args);
+            return;
+          }
+          _origConsoleError(...args);
         };
 
         let gltf;
@@ -233,6 +342,13 @@ export function useThreeVrm({
             }
           });
         });
+
+        const repairedMaterials = repairVrmMaterialColors(vrm.scene);
+        if (repairedMaterials > 0) {
+          console.warn(
+            `[useThreeVrm] Applied ${repairedMaterials} authored VRM color fallback(s) for missing texture(s).`,
+          );
+        }
 
         // Remove previous VRM
         if (vrmRef.current) {
@@ -284,6 +400,7 @@ export function useThreeVrm({
           }
         }
         restQuatsRef.current = boneQuats;
+        smoothedArmQuatsRef.current.clear();
 
         // Make VRM visible to RAF loop AFTER rest quats are cached
         vrmRef.current = vrm;
@@ -497,6 +614,26 @@ export function useThreeVrm({
       }
     };
 
+    const smoothArmPose = (vrm: VRM, deltaTime: number) => {
+      const alpha = 1 - Math.exp(-ARM_POSE_SMOOTH_SPEED * deltaTime);
+      const smoothed = smoothedArmQuatsRef.current;
+
+      for (const boneName of ARM_STABILIZED_BONES) {
+        const bone = vrm.humanoid?.getNormalizedBoneNode(boneName as VRMHumanBoneName);
+        if (!bone) continue;
+
+        const previous = smoothed.get(boneName);
+        if (!previous) {
+          smoothed.set(boneName, bone.quaternion.clone());
+          continue;
+        }
+
+        tempQuatRef.current.copy(bone.quaternion);
+        previous.slerp(tempQuatRef.current, alpha);
+        bone.quaternion.copy(previous);
+      }
+    };
+
     // ---- Helper: lerp emotion modulator toward target ----
     const lerpModulators = (
       current: EmotionModulators,
@@ -571,6 +708,10 @@ export function useThreeVrm({
         if (currentState !== prevStateRef.current) {
           stateBlendRef.current = 0;
           prevStateRef.current = currentState;
+          if (currentState === "speaking") {
+            nextAutoGestureRef.current = elapsed + 2.0;
+          }
+          smoothedArmQuatsRef.current.clear();
         }
         if (stateBlendRef.current < 1.0) {
           stateBlendRef.current = Math.min(
@@ -652,9 +793,13 @@ export function useThreeVrm({
           const gesturePhaseShift = elapsed * 0.15;
 
           // Apply base speaking channels (reduced amplitude when discrete gesture is active)
+          const cappedGestureScale = Math.min(
+            effectiveMod.gestureScale,
+            SPEAKING_GESTURE_SCALE_CAP,
+          );
           const baseGestureScale = gesturePlayerRef.current.isPlaying
-            ? effectiveMod.gestureScale * 0.35  // Reduce base when discrete gesture playing
-            : effectiveMod.gestureScale;
+            ? cappedGestureScale * SPEAKING_GESTURE_ACTIVE_SCALE
+            : cappedGestureScale;
           applyChannelsModulated(
             vrm, SPEAKING_GESTURE_CHANNELS,
             elapsed + gesturePhaseShift,
@@ -747,6 +892,10 @@ export function useThreeVrm({
               lowerBone.quaternion.setFromEuler(clampEuler);
             }
           }
+        }
+
+        if (currentState === "speaking" || currentState === "listening") {
+          smoothArmPose(vrm, delta);
         }
 
         // 6. Enhanced blink (emotion-modulated interval + double-blink + micro-expression modifier)

@@ -24,8 +24,18 @@ import {
   MOOD_TO_EXPRESSION,
   EMOTION_TO_EXPRESSION,
 } from "@/lib/avatar/vrmMappings";
+import { ALL_EMOTIONS } from "@/lib/avatar/emotionModulation";
 import type { GestureType } from "@/lib/avatar/gestureSystem";
 import { AvatarCard } from "./AvatarCard";
+
+const AVAILABLE_MOTION_EMOTIONS = new Set(ALL_EMOTIONS);
+
+const STATE_TO_MOTION_EMOTION: Record<AvatarState, string> = {
+  idle: "neutral",
+  listening: "listening",
+  thinking: "contemplation",
+  speaking: "explaining",
+};
 
 // ============================================
 // PUBLIC API TYPE
@@ -164,15 +174,21 @@ export const AvatarLayer = forwardRef<AvatarLayerHandle, AvatarLayerProps>(
         },
         setExpression: expressions.setExpression,
         setState: (state: AvatarState) => {
+          if (state === "idle" || state === "listening") {
+            backendEmotionActiveRef.current = false;
+          }
           if (backendEmotionActiveRef.current && (state === "speaking" || state === "thinking")) {
             // Backend emotion is active — update body pose without overriding facial expression
             expressions.setStateWithoutExpression(state);
           } else {
             expressions.setState(state);
           }
+          if (!backendEmotionActiveRef.current) {
+            emotionModRef.current = STATE_TO_MOTION_EMOTION[state] || "neutral";
+          }
           // Clear backend emotion flag when returning to idle
           if (state === "idle") {
-            backendEmotionActiveRef.current = false;
+            emotionModRef.current = "neutral";
           }
         },
         speakFromMediaStream: (stream: MediaStream) => {
@@ -192,7 +208,9 @@ export const AvatarLayer = forwardRef<AvatarLayerHandle, AvatarLayerProps>(
           const expr = EMOTION_TO_EXPRESSION[emotion] || "neutral";
           const intensity = Math.min(1.0, (confidence / 100) * 1.4);
           expressions.setExpression(expr, intensity, 400);
-          emotionModRef.current = expr; // drives full-body animation modulation
+          emotionModRef.current = AVAILABLE_MOTION_EMOTIONS.has(emotion)
+            ? emotion
+            : expr; // drives full-body animation modulation
         },
         queueGesture,
       }),

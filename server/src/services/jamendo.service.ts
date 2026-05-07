@@ -6,7 +6,7 @@
 
 import env from '../config/env.config.js';
 import { logger } from './logger.service.js';
-import type { SpotifyTrack, SpotifyPlaylist, SpotifyActivityCategory } from '../../../shared/types/domain/spotify.js';
+import type { SpotifyTrack, SpotifyPlaylist, SpotifyActivityCategory } from '@shared/types/domain/spotify.js';
 
 const JAMENDO_API = 'https://api.jamendo.com/v3.0';
 

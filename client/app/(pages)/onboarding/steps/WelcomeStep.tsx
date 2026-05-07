@@ -151,7 +151,7 @@ export function WelcomeStep() {
         </motion.div>
 
         {/* Title — responsive sizing */}
-        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-medium text-white mb-3 sm:mb-4 leading-tight">
+        <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-medium text-white mb-3 sm:mb-4 leading-tight">
           What&apos;s Your Primary Goal?
         </h1>
 

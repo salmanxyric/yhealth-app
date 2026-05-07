@@ -13,6 +13,9 @@ import {
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import { api, ApiError } from "@/lib/api-client";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Auth");
 
 // User interface matching backend response
 export interface User {
@@ -89,9 +92,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     
     // Set up token expiration handler - automatically logout on 401
     api.setOnTokenExpired(async () => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[AuthContext] Token expired, logging out user");
-      }
+      log.debug("Token expired, logging out user");
       
       // Clear token
       api.setAccessToken(null);
@@ -104,7 +105,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         });
       } catch (error) {
         // Handle JSON parsing errors or other signOut issues
-        console.error("[AuthContext] Error during signOut:", error);
+        log.error("Error during signOut:", error);
         // Fallback: redirect manually if signOut fails
         if (typeof window !== "undefined") {
           window.location.href = "/auth/signin?expired=true";
@@ -124,19 +125,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const isLoading = status === "loading";
     const isAuthenticated = status === "authenticated" && !!session;
 
-    // Debug logging in development
-    if (process.env.NODE_ENV === "development") {
-      console.log("[AuthContext] Session state:", {
-        status,
-        hasSession: !!session,
-        sessionUser: session?.user ? { id: session.user.id, email: session.user.email } : null,
-        accessToken: session?.accessToken
-          ? `${session.accessToken.substring(0, 20)}...`
-          : null,
-        refreshToken: session?.refreshToken ? "present" : null,
-        onboardingStatus: session?.onboardingStatus,
-      });
-    }
+    // Debug logging (suppressed in production by logger)
+    log.debug("Session state:", {
+      status,
+      hasSession: !!session,
+      sessionUser: session?.user ? { id: session.user.id, email: session.user.email } : null,
+      accessToken: session?.accessToken
+        ? `${session.accessToken.substring(0, 20)}...`
+        : null,
+      refreshToken: session?.refreshToken ? "present" : null,
+      onboardingStatus: session?.onboardingStatus,
+    });
 
     if (isLoading) {
       return {
@@ -169,13 +168,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Try to recover token from cookie (set during login via use-auth.ts)
       const hasTokenInCookie = api.hasToken();
       if (hasTokenInCookie) {
-        console.log(
-          "[AuthContext] Session missing accessToken, but found token in cookie"
-        );
+        log.debug("Session missing accessToken, but found token in cookie");
       } else {
-        console.warn(
-          "[AuthContext] Session authenticated but no accessToken found (and none in cookie)!"
-        );
+        log.warn("Session authenticated but no accessToken found (and none in cookie)!");
       }
     }
 
@@ -262,16 +257,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
               .then(({ workoutRescheduleService }) => {
                 workoutRescheduleService.autoCheckAndReschedule().catch((err) => {
                   // Silently fail - don't interrupt user experience
-                  if (process.env.NODE_ENV === 'development') {
-                    console.log('[WorkoutAutoCheck] Background reschedule check completed with error:', err);
-                  }
+                  log.debug("Background reschedule check completed with error:", err);
                 });
               })
               .catch((importError) => {
                 // Silently fail if service can't be imported
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('[WorkoutAutoCheck] Failed to import service:', importError);
-                }
+                log.debug("Failed to import workout reschedule service:", importError);
               });
           }
         } catch (error) {
@@ -284,12 +275,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
             await signOut({ redirect: false });
             setFetchedUser(null);
           } else if (error instanceof ApiError && error.code === "NETWORK_ERROR") {
-            // Server unreachable - use session data if available; avoid noisy console
-            if (process.env.NODE_ENV === "development") {
-              console.warn("[Auth] Server unreachable. Using session data if available.");
-            }
+            // Server unreachable - use session data if available
+            log.warn("Server unreachable. Using session data if available.");
           } else {
-            console.error("Failed to fetch user profile:", error);
+            log.error("Failed to fetch user profile:", error);
           }
         }
       };
@@ -406,7 +395,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setFetchedUser(response.data.user);
       }
     } catch (error) {
-      console.error("Failed to refresh user profile:", error);
+      log.error("Failed to refresh user profile:", error);
       if (error instanceof ApiError && error.statusCode === 401) {
         await signOut({ redirect: false });
         setFetchedUser(null);

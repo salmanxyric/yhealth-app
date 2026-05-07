@@ -165,12 +165,16 @@ class LeaderboardService {
     }));
     await redisCacheService.zDelete(redisKey);
     
-    // Only add to Redis if there are members to add
     if (members.length > 0) {
       await redisCacheService.zAddMultiple(redisKey, members);
       await redisCacheService.expire(redisKey, 86400 * 7); // 7 days
     } else {
-      logger.warn('[Leaderboard] No members to cache for leaderboard', { type, date, segment });
+      const logPayload = { type, date, segment };
+      if (type === 'competition') {
+        logger.debug('[Leaderboard] Competition leaderboard has no scored members yet', logPayload);
+      } else {
+        logger.info('[Leaderboard] Leaderboard has no scored members yet', logPayload);
+      }
     }
 
     logger.info('[Leaderboard] Materialized leaderboard', { type, date, segment, count: ranks.length });

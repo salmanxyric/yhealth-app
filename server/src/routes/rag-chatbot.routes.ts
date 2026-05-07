@@ -116,11 +116,29 @@ router.get('/conversations', authenticate, ragChatbotController.getUserConversat
 router.get('/conversations/:conversationId', authenticate, ragChatbotController.getConversation);
 
 /**
+ * @route   DELETE /api/rag-chat/conversations/:conversationId/messages/:messageId/after
+ * @desc    Remove a user message and all later messages before resending an edit
+ * @access  Private
+ */
+router.delete(
+  '/conversations/:conversationId/messages/:messageId/after',
+  authenticate,
+  ragChatbotController.truncateConversationFromMessage
+);
+
+/**
  * @route   DELETE /api/rag-chat/conversations/:conversationId
  * @desc    Delete a conversation
  * @access  Private
  */
 router.delete('/conversations/:conversationId', authenticate, ragChatbotController.deleteConversation);
+
+/**
+ * @route   POST /api/rag-chat/conversations/bulk-delete
+ * @desc    Bulk delete multiple conversations
+ * @access  Private
+ */
+router.post('/conversations/bulk-delete', authenticate, ragChatbotController.deleteConversations);
 
 /**
  * @route   PATCH /api/rag-chat/conversations/:conversationId/archive

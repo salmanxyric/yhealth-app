@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Brain, Activity, Moon, AlertTriangle, ChevronRight, Loader2 } from 'lucide-react';
+import { Brain, Activity, Moon, AlertTriangle, ChevronRight } from 'lucide-react';
 import {
   knowledgeGraphService,
   type ReasoningOverlayData,

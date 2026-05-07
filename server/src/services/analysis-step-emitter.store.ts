@@ -1,4 +1,4 @@
-import type { AnalysisStep } from '../../../shared/types/domain/intelligence-files.js';
+import type { AnalysisStep } from '@shared/types/domain/intelligence-files.js';
 
 const emitters = new Map<string, (step: AnalysisStep) => void>();
 
