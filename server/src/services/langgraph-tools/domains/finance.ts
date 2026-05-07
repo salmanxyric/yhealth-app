@@ -62,6 +62,181 @@ function formatMoney(value: unknown): string {
   }).format(Number.isFinite(amount) ? amount : 0);
 }
 
+const CHART_COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+  '#14b8a6', '#e11d48', '#a855f7',
+];
+
+function buildReportCharts(
+  month: string,
+  summary: { totalIncome: number; totalExpense: number; netSavings: number },
+  breakdown: { category: string; amount: number; percentage: number }[],
+  budgets: { category: string; monthlyLimit: number; currentSpend: number; status: string }[],
+  goals: { title: string; targetAmount: number; currentAmount: number; status: string; emoji: string }[],
+  comparison: { current: { totalIncome: number; totalExpense: number; netSavings: number; month: string }; previous: { totalIncome: number; totalExpense: number; netSavings: number; month: string } } | null,
+  forecast: { projectedTotal: number; dailyBurnRate: number; daysRemaining: number; projectedByCategory: Record<string, number> } | null,
+): Record<string, unknown>[] {
+  const artifacts: Record<string, unknown>[] = [];
+
+  // 1. Income vs Expenses bar chart (always show if any data)
+  if (summary.totalIncome > 0 || summary.totalExpense > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'bar',
+      title: `Income vs Expenses — ${month}`,
+      data: [
+        { category: 'Income', amount: summary.totalIncome },
+        { category: 'Expenses', amount: summary.totalExpense },
+        { category: 'Net Savings', amount: summary.netSavings },
+      ],
+      xAxisKey: 'category',
+      dataKeys: [{ key: 'amount', label: 'Amount ($)', color: '#10b981' }],
+      yAxisLabel: 'Amount ($)',
+      insight: summary.netSavings >= 0
+        ? `You saved ${formatMoney(summary.netSavings)} this month.`
+        : `You overspent by ${formatMoney(Math.abs(summary.netSavings))} this month.`,
+    });
+  }
+
+  // 2. Category breakdown pie chart
+  if (breakdown.length > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'pie',
+      title: `Spending by Category — ${month}`,
+      data: breakdown.map((item) => ({
+        name: item.category,
+        value: item.amount,
+        percentage: item.percentage,
+      })),
+      xAxisKey: 'name',
+      dataKeys: breakdown.map((item, i) => ({
+        key: 'value',
+        label: item.category,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+      })),
+      insight: breakdown.length > 0
+        ? `Top category: ${breakdown[0].category} at ${breakdown[0].percentage}% of spending.`
+        : undefined,
+    });
+  }
+
+  // 3. Budget vs Actual comparison bar
+  if (budgets.length > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'comparison_bar',
+      title: `Budget Health — ${month}`,
+      data: budgets.map((b) => ({
+        category: b.category,
+        spent: b.currentSpend,
+        limit: b.monthlyLimit,
+      })),
+      xAxisKey: 'category',
+      dataKeys: [
+        { key: 'spent', label: 'Spent', color: '#ef4444' },
+        { key: 'limit', label: 'Budget Limit', color: '#3b82f6' },
+      ],
+      yAxisLabel: 'Amount ($)',
+      insight: (() => {
+        const exceeded = budgets.filter((b) => b.currentSpend > b.monthlyLimit);
+        return exceeded.length > 0
+          ? `${exceeded.length} budget${exceeded.length > 1 ? 's' : ''} exceeded: ${exceeded.map((b) => b.category).join(', ')}.`
+          : 'All budgets within limits.';
+      })(),
+    });
+  }
+
+  // 4. Savings goals progress bar chart
+  const activeGoals = goals.filter((g) => g.status === 'in_progress' || g.status === 'achieved');
+  if (activeGoals.length > 0) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'bar',
+      title: 'Savings Goals Progress',
+      data: activeGoals.map((g) => ({
+        name: `${g.emoji || '🎯'} ${g.title}`,
+        saved: g.currentAmount,
+        target: g.targetAmount,
+      })),
+      xAxisKey: 'name',
+      dataKeys: [
+        { key: 'saved', label: 'Saved', color: '#10b981' },
+        { key: 'target', label: 'Target', color: '#64748b' },
+      ],
+      yAxisLabel: 'Amount ($)',
+      insight: (() => {
+        const achieved = activeGoals.filter((g) => g.status === 'achieved');
+        return achieved.length > 0
+          ? `${achieved.length} goal${achieved.length > 1 ? 's' : ''} achieved! 🎉`
+          : `${activeGoals.length} goal${activeGoals.length > 1 ? 's' : ''} in progress.`;
+      })(),
+    });
+  }
+
+  // 5. Month-over-month comparison area chart
+  if (comparison && (comparison.previous.totalIncome > 0 || comparison.previous.totalExpense > 0)) {
+    artifacts.push({
+      type: 'chart',
+      chartType: 'area',
+      title: 'Month-over-Month Comparison',
+      data: [
+        {
+          month: comparison.previous.month,
+          income: comparison.previous.totalIncome,
+          expenses: comparison.previous.totalExpense,
+        },
+        {
+          month: comparison.current.month,
+          income: comparison.current.totalIncome,
+          expenses: comparison.current.totalExpense,
+        },
+      ],
+      xAxisKey: 'month',
+      dataKeys: [
+        { key: 'income', label: 'Income', color: '#10b981' },
+        { key: 'expenses', label: 'Expenses', color: '#ef4444' },
+      ],
+      yAxisLabel: 'Amount ($)',
+      insight: (() => {
+        const expDiff = comparison.current.totalExpense - comparison.previous.totalExpense;
+        if (expDiff > 0) return `Expenses up ${formatMoney(expDiff)} from last month.`;
+        if (expDiff < 0) return `Expenses down ${formatMoney(Math.abs(expDiff))} from last month.`;
+        return 'Expenses unchanged from last month.';
+      })(),
+    });
+  }
+
+  // 6. Forecast line chart
+  if (forecast && forecast.dailyBurnRate > 0) {
+    const now = new Date();
+    const dayOfMonth = now.getDate();
+    const daysInMonth = dayOfMonth + forecast.daysRemaining;
+    const currentSpend = summary.totalExpense;
+    const dataPoints = [
+      { day: `Day 1`, amount: 0 },
+      { day: `Day ${dayOfMonth}`, amount: currentSpend },
+      { day: `Day ${daysInMonth}`, amount: forecast.projectedTotal },
+    ];
+    artifacts.push({
+      type: 'chart',
+      chartType: 'line',
+      title: `Spending Forecast — ${month}`,
+      data: dataPoints,
+      xAxisKey: 'day',
+      dataKeys: [{ key: 'amount', label: 'Projected Spend', color: '#f59e0b' }],
+      yAxisLabel: 'Amount ($)',
+      referenceLines: summary.totalIncome > 0
+        ? [{ y: summary.totalIncome, label: 'Income', stroke: '#10b981', strokeDasharray: '4 4' }]
+        : undefined,
+      insight: `At ${formatMoney(forecast.dailyBurnRate)}/day, projected total: ${formatMoney(forecast.projectedTotal)}.`,
+    });
+  }
+
+  return artifacts;
+}
+
 const UpdateTransactionSchema = z.object({
   transactionId: z.string().uuid().describe('Transaction ID to update (required).'),
   amount: z.number().optional().describe('Updated amount.'),
@@ -162,6 +337,10 @@ async function getFinancialReport(userId: string, params: z.infer<typeof GetFina
     ? `Financial report ready for ${month}: ${formatMoney(summary.totalIncome)} income, ${formatMoney(summary.totalExpense)} expenses, ${formatMoney(summary.netSavings)} net cash flow.`
     : `I don't have tracked finance data yet for ${month}. Log income, expenses, budgets, or saving goals first so I can generate a real financial report.`;
 
+  const artifacts = hasTrackedData
+    ? buildReportCharts(month, summary, breakdown, budgets, goals, comparison, forecast)
+    : [];
+
   return successResponse({
     message,
     hasTrackedData,
@@ -174,6 +353,7 @@ async function getFinancialReport(userId: string, params: z.infer<typeof GetFina
       monthComparison: comparison,
       forecast,
     },
+    artifacts,
   });
 }
 
