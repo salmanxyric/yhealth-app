@@ -8,9 +8,10 @@
 
 import { useCallback, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Pencil, Trash2, Sparkles, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { X, Pencil, Trash2, Sparkles, ChevronDown, ChevronUp, Clock, Eye } from "lucide-react";
 import type { JournalEntry, JournalingMode } from "@shared/types/domain/wellbeing";
 import { formatStarLabel, formatTime, getMoodEmoji, getMoodLabel } from "./constellation-math";
+import { JournalEntryDetailView } from "./JournalEntryDetailView";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,10 +57,12 @@ function EntryCard({
   entry,
   onEdit,
   onDelete,
+  onView,
 }: {
   entry: JournalEntry;
   onEdit?: (entry: JournalEntry) => void;
   onDelete?: (entryId: string) => void;
+  onView?: (entry: JournalEntry) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
@@ -227,6 +230,16 @@ function EntryCard({
 
         {/* Actions */}
         <div className="flex items-center gap-2 pt-1">
+          {onView && (
+            <button
+              onClick={() => onView(entry)}
+              className="inline-flex items-center gap-1 text-purple-400/40 hover:text-purple-300/70 transition-colors observatory-font-display"
+              style={{ fontSize: 9, letterSpacing: "0.08em" }}
+            >
+              <Eye className="w-3 h-3" />
+              VIEW
+            </button>
+          )}
           {onEdit && (
             <button
               onClick={() => onEdit(entry)}
@@ -263,6 +276,8 @@ export function JournalEntryModal({
   onEdit,
   onDelete,
 }: JournalEntryModalProps) {
+  const [detailEntry, setDetailEntry] = useState<JournalEntry | null>(null);
+
   const handleBackdropClick = useCallback(() => {
     onClose();
   }, [onClose]);
@@ -272,6 +287,17 @@ export function JournalEntryModal({
   }, []);
 
   if (entries.length === 0) return null;
+
+  if (detailEntry) {
+    return (
+      <JournalEntryDetailView
+        entry={detailEntry}
+        onClose={() => setDetailEntry(null)}
+        onEdit={onEdit ? (entry) => { setDetailEntry(null); onEdit(entry); } : undefined}
+        onDelete={onDelete}
+      />
+    );
+  }
 
   const dateLabel = formatStarLabel(entries[0].loggedAt);
   const entryCount = entries.length;
@@ -352,6 +378,7 @@ export function JournalEntryModal({
                 <EntryCard
                   key={entry.id}
                   entry={entry}
+                  onView={setDetailEntry}
                   onEdit={onEdit}
                   onDelete={onDelete}
                 />

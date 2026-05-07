@@ -1,6 +1,7 @@
 export { MindConstellation } from "./MindConstellation";
 export { StarTooltip } from "./StarTooltip";
 export { JournalEntryModal } from "./JournalEntryModal";
+export { JournalEntryDetailView } from "./JournalEntryDetailView";
 export { ConstellationEmptyState } from "./ConstellationEmptyState";
 export { ConstellationBackground } from "./ConstellationBackground";
 export { ConstellationSVGLines } from "./ConstellationSVGLines";
