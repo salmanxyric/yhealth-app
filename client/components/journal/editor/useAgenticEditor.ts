@@ -17,6 +17,7 @@ import CharacterCount from "@tiptap/extension-character-count";
 import { createLowlight } from "lowlight";
 import { useCallback } from "react";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
+import { SlashMenuExtension } from "./slash-menu/slash-menu-extension";
 
 const PLACEHOLDER_BY_MODE: Record<JournalingMode, string> = {
   quick_reflection: "Take a moment to reflect on your day so far. What stands out?",
@@ -81,6 +82,7 @@ export function useAgenticEditor({
         },
       }),
       CharacterCount,
+      SlashMenuExtension,
     ],
     content: initialContent || "",
     editorProps: {
