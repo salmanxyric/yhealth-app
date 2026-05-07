@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import { useAgenticEditor, type AgenticEditorAPI } from "./useAgenticEditor";
 import { BubbleToolbar } from "./toolbar/BubbleToolbar";
 import { ImageUploadDialog } from "./media/ImageUploadDialog";
+import { useDictation } from "./useDictation";
+import { DictationOverlay } from "./dictation/DictationOverlay";
 import type { JournalingMode } from "@shared/types/domain/wellbeing";
 
 interface AgenticEditorProps {
@@ -25,6 +27,16 @@ export function AgenticEditor({
 }: AgenticEditorProps) {
   const api = useAgenticEditor({ mode, initialContent, onUpdate });
   const [showImageDialog, setShowImageDialog] = useState(false);
+  const [dictationActive, setDictationActive] = useState(false);
+
+  const dictation = useDictation({
+    onTranscript: (text, isFinal) => {
+      if (isFinal && api.editor) {
+        api.editor.chain().focus().insertContent(text + " ").run();
+      }
+    },
+    onEnd: () => setDictationActive(false),
+  });
 
   useEffect(() => {
     if (api.editor && onReady) {
@@ -37,6 +49,15 @@ export function AgenticEditor({
     document.addEventListener("slash-menu:image", handler);
     return () => document.removeEventListener("slash-menu:image", handler);
   }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      setDictationActive(true);
+      dictation.start();
+    };
+    document.addEventListener("slash-menu:dictation", handler);
+    return () => document.removeEventListener("slash-menu:dictation", handler);
+  }, [dictation.start]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!api.editor) {
     return (
@@ -66,6 +87,18 @@ export function AgenticEditor({
         onClose={() => setShowImageDialog(false)}
         onInsert={(url, alt) => {
           api.editor?.chain().focus().setImage({ src: url, alt: alt || "" }).run();
+        }}
+      />
+
+      <DictationOverlay
+        isActive={dictationActive}
+        status={dictation.status}
+        elapsed={dictation.elapsed}
+        onPause={dictation.pause}
+        onResume={dictation.resume}
+        onStop={() => {
+          dictation.stop();
+          setDictationActive(false);
         }}
       />
 
