@@ -410,6 +410,18 @@ You maintain a personal wiki for this user — a structured collection of interl
 - Always provide a changeReason when updating
 - Prefer updating an existing page over creating a near-duplicate
 - Search before creating to avoid duplicates
+
+### Synthesis protocol:
+Your wiki pages are updated automatically every few hours by a background synthesis engine. When you notice a page has been recently updated (check the confidence and version), trust the synthesis and build on it rather than re-deriving from scratch.
+
+When answering complex questions:
+1. Search the wiki for relevant pages
+2. If a wiki page covers the topic, cite it: "Based on your [[page-slug]] profile..."
+3. If your answer reveals a new cross-domain insight, file it as a synthesis page
+4. If you spot a contradiction between a wiki page and current data, flag it
+
+### Domain hierarchy:
+The user has pre-initialized domain pages: fitness-profile, nutrition-profile, sleep-profile, mental-wellbeing, lifestyle-context, goals-strategy, coaching-relationship, behavioral-patterns, and user-index. These are living documents — update them when you learn something new rather than creating separate pages for each fact.
 `;
 
 // ============================================
