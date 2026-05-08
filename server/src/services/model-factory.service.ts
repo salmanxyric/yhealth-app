@@ -28,6 +28,7 @@ export interface ModelOptions {
   maxTokens?: number;
   streaming?: boolean;
   responseFormat?: { type: 'json_object' };
+  maxRetries?: number;
 }
 
 type ProviderName = 'gemini' | 'anthropic' | 'deepseek' | 'openai';
@@ -111,7 +112,7 @@ class ModelFactory {
    * Skips providers that are currently rate-limited, returning the next available one.
    */
   getModel(options: ModelOptions = {}): BaseChatModel {
-    const { tier = 'default', temperature = 0.7, maxTokens = 1000, streaming = false, responseFormat } = options;
+    const { tier = 'default', temperature = 0.7, maxTokens = 1000, streaming = false, responseFormat, maxRetries = 1 } = options;
 
     for (const provider of this.providers) {
       if (!provider.available) continue;
@@ -120,7 +121,7 @@ class ModelFactory {
       const modelId = MODEL_MAP[provider.name][tier];
 
       try {
-        const model = this.createModel(provider.name, modelId, { temperature, maxTokens, streaming, responseFormat });
+        const model = this.createModel(provider.name, modelId, { temperature, maxTokens, streaming, responseFormat, maxRetries });
         this.lastProviderUsed = provider.name;
         return model;
       } catch (error) {
@@ -236,6 +237,26 @@ class ModelFactory {
   }
 
   /**
+   * Check if an error is a transient provider timeout.
+   * These should cascade to the next provider instead of failing the chat turn.
+   */
+  isTimeoutError(error: unknown): boolean {
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      const code = String((error as any).code || '').toLowerCase();
+      return (
+        message.includes('request timed out') ||
+        message.includes('timed out') ||
+        message.includes('timeout') ||
+        code === 'etimedout' ||
+        code === 'timeout' ||
+        error.name === 'AbortError'
+      );
+    }
+    return false;
+  }
+
+  /**
    * Handle a provider error: detect type and apply appropriate rate limiting.
    * Returns true if the error was handled (provider marked), false otherwise.
    */
@@ -254,6 +275,15 @@ class ModelFactory {
 
     if (this.isRateLimitError(error)) {
       this.markCurrentProviderRateLimited(5 * 60 * 1000);
+      return true;
+    }
+
+    if (this.isTimeoutError(error)) {
+      this.markCurrentProviderRateLimited(60 * 1000);
+      logger.warn(`[ModelFactory] Provider ${this.lastProviderUsed} timed out; cascading to next provider`, {
+        provider: this.lastProviderUsed,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
       return true;
     }
 
@@ -294,8 +324,9 @@ class ModelFactory {
   private createModel(
     provider: ProviderName,
     modelId: string,
-    opts: { temperature: number; maxTokens: number; streaming: boolean; responseFormat?: { type: 'json_object' } },
+    opts: { temperature: number; maxTokens: number; streaming: boolean; responseFormat?: { type: 'json_object' }; maxRetries: number },
   ): BaseChatModel {
+    const REQUEST_TIMEOUT_MS = 15000;
     switch (provider) {
       case 'gemini':
         return new ChatGoogleGenerativeAI({
@@ -304,7 +335,7 @@ class ModelFactory {
           temperature: opts.temperature,
           maxOutputTokens: opts.maxTokens,
           streaming: opts.streaming,
-          maxRetries: 1,
+          maxRetries: opts.maxRetries,
           ...(opts.responseFormat ? { responseMimeType: 'application/json' } : {}),
         });
 
@@ -315,6 +346,7 @@ class ModelFactory {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           streaming: opts.streaming,
+          maxRetries: opts.maxRetries,
         });
 
       case 'deepseek':
@@ -325,6 +357,8 @@ class ModelFactory {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           streaming: opts.streaming,
+          maxRetries: opts.maxRetries,
+          timeout: REQUEST_TIMEOUT_MS,
           ...(opts.responseFormat ? { modelKwargs: { response_format: opts.responseFormat } } : {}),
         });
 
@@ -335,6 +369,8 @@ class ModelFactory {
           temperature: opts.temperature,
           maxTokens: opts.maxTokens,
           streaming: opts.streaming,
+          maxRetries: opts.maxRetries,
+          timeout: REQUEST_TIMEOUT_MS,
           ...(opts.responseFormat ? { modelKwargs: { response_format: opts.responseFormat } } : {}),
         });
     }
@@ -364,6 +400,7 @@ class ModelFactory {
         temperature: opts.temperature ?? 0.7,
         maxTokens: opts.maxTokens ?? 1000,
         streaming: opts.streaming ?? false,
+        maxRetries: 1,
       });
       logger.info(`[ModelFactory] Using Gemini fallback model: ${modelId}`, { tier, fallbackIndex });
       this.lastProviderUsed = 'gemini';

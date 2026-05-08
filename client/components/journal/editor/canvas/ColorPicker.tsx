@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const OBSERVATORY_PALETTE = [
@@ -15,8 +14,6 @@ interface ColorPickerProps {
 }
 
 export function ColorPicker({ value, onChange }: ColorPickerProps) {
-  const [showCustom, setShowCustom] = useState(false);
-
   return (
     <div className="p-2 rounded-xl bg-[#0e0a22] border border-white/10">
       <div className="grid grid-cols-5 gap-1.5 mb-2">

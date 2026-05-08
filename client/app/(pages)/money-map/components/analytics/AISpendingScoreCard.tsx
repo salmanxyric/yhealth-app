@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Bot, CheckCircle, AlertTriangle, ChevronRight } from "lucide-react";
 import { useCountUp, fadeSlideUp } from "../../lib/motion";
-import type { BudgetAlert, CategoryBreakdownItem } from "@shared/types/domain/finance";
+import type { BudgetAlert, CategoryBreakdownItem, FinanceCategory } from "@shared/types/domain/finance";
 import { FINANCE_CATEGORY_LABELS } from "@shared/types/domain/finance";
 
 interface AISpendingScoreCardProps {

@@ -568,7 +568,7 @@ export function useAICoach() {
 
             case "error": {
               console.error("[AI Coach] Stream error:", event.error);
-              const errorContent = "I'm sorry, I encountered an error. Please try again.";
+              const errorContent = event.error || "I'm sorry, I encountered an error. Please try again.";
               if (streamingMsgCreated) {
                 setMessages((prev) => prev.map((m) =>
                   m.id === streamingMsgId

@@ -17,6 +17,8 @@ import type { CompactMessageContext } from './comprehensive-user-context.service
 import { cache } from './cache.service.js';
 import { userCoachingProfileService } from './user-coaching-profile.service.js';
 import { personalityModeService } from './personality-mode.service.js';
+import { localTimeToUtc } from '../lib/user-timezone.js';
+import { planScheduleSyncService } from './plan-schedule-sync.service.js';
 
 // ============================================
 // TYPES
@@ -923,6 +925,16 @@ Return ONLY the message text.`;
         });
       }
 
+      // Sync workout & nutrition plan items into the schedule
+      try {
+        await planScheduleSyncService.syncToExistingSchedule(userId, schedule.id, today);
+      } catch (err) {
+        logger.warn('[ScheduleAutomation] Plan sync failed during auto-create (non-blocking)', {
+          userId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
       // Generate personalized announcement
       const chatId = await this.getOrCreateAICoachChat(userId);
       const messageContent = await this.generateScheduleAnnouncement(
@@ -1128,21 +1140,7 @@ Adjust anything in the Wellbeing section. What's your #1 priority today?`;
    * Note: For production, consider using date-fns-tz for proper timezone handling
    */
   private parseScheduleTime(timeStr: string, dateStr: string, timezone: string): Date {
-    // Create date in user's timezone (simplified approach)
-    const dateTime = new Date(`${dateStr}T${timeStr.padEnd(8, ':00')}`);
-
-    // Validate timezone by attempting to use it
-    try {
-      // Use the timezone to format - this validates the timezone is valid
-      new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
-
-      // Return as UTC timestamp (assumes local time matches user timezone for now)
-      // TODO: For production, use proper timezone conversion with date-fns-tz
-      return new Date(`${dateStr}T${timeStr.padEnd(8, ':00')}Z`);
-    } catch {
-      // Invalid timezone, return date as-is
-      return dateTime;
-    }
+    return localTimeToUtc(timeStr, dateStr, timezone);
   }
 
   /**

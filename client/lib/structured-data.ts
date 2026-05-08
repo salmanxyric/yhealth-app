@@ -13,6 +13,10 @@ export function organizationJsonLd() {
     url: SITE_URL,
     logo: `${SITE_URL}/logo.png`,
     description: 'AI-Powered Personal Health & Wellness Platform',
+    founder: {
+      '@type': 'Person',
+      name: 'Salman Sadiq',
+    },
     sameAs: [],
     contactPoint: {
       '@type': 'ContactPoint',
@@ -43,6 +47,10 @@ export function softwareApplicationJsonLd() {
     name: 'Balencia',
     applicationCategory: 'HealthApplication',
     operatingSystem: 'Web',
+    author: {
+      '@type': 'Person',
+      name: 'Salman Sadiq',
+    },
     description:
       'AI-driven fitness plans, smart nutrition tracking, mental wellness tools, and personalized coaching — all in one platform.',
     url: SITE_URL,

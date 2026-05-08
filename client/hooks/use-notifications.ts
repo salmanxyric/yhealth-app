@@ -10,6 +10,7 @@ import {
 } from "@/lib/socket-client";
 import { useAuth } from "@/app/context/AuthContext";
 import toast from "react-hot-toast";
+import { subscribeToPush, isPushSupported, getPushPermission } from "@/lib/push-notifications";
 
 const MAX_RECENT = 8;
 
@@ -50,8 +51,8 @@ export function useNotifications() {
       }>("/notifications/unread-count");
       setUnreadCount(response.data?.unreadCount ?? 0);
       setUrgentCount(response.data?.urgentCount ?? 0);
-    } catch {
-      // Silently fail — counts will update via socket
+    } catch (err) {
+      console.error('[useNotifications] fetchCounts failed:', err);
     }
   }, [isAuthenticated]);
 
@@ -64,7 +65,7 @@ export function useNotifications() {
     try {
       setIsLoading(true);
       const response = await api.get<NotificationEvent[]>("/notifications", {
-        params: { limit: MAX_RECENT.toString(), sort_order: "desc" },
+        params: { limit: MAX_RECENT.toString(), sortOrder: "desc" },
       });
       const items = Array.isArray(response.data) ? response.data : [];
       setRecentNotifications(
@@ -79,8 +80,8 @@ export function useNotifications() {
           createdAt: n.createdAt,
         }))
       );
-    } catch {
-      // Silently fail
+    } catch (err) {
+      console.error('[useNotifications] fetchRecent failed:', err);
     } finally {
       setIsLoading(false);
     }
@@ -122,6 +123,10 @@ export function useNotifications() {
 
     fetchCounts();
     fetchRecent();
+
+    if (isPushSupported() && getPushPermission() === 'granted') {
+      subscribeToPush().catch(() => {});
+    }
 
     const socket = initSocket();
     if (!socket) return;

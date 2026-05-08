@@ -54,6 +54,7 @@ const MANAGER_READ_ACTIONS = new Set([
   'get', 'getAll', 'getById', 'getByName', 'getByDate', 'getPlans', 'getLogs',
   'getActive', 'getStats', 'getLatest', 'getStreak', 'getInsights',
   'getTimeline', 'getPatterns', 'getTrends', 'getHistory', 'getCheckin',
+  'checkConflicts',
   'status', 'overview', 'recommend', 'search_and_play', 'progress',
   'analytics', 'summary', 'trends',
 ]);

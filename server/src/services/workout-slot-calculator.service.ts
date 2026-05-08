@@ -80,7 +80,7 @@ class WorkoutSlotCalculatorService {
       // Group existing tasks by date
       const tasksByDate = new Map<string, typeof existingTasks>();
       for (const task of existingTasks) {
-        const dateKey = task.date.toISOString().split('T')[0];
+        const dateKey = typeof task.date === 'string' ? task.date : new Date(task.date).toISOString().split('T')[0];
         if (!tasksByDate.has(dateKey)) {
           tasksByDate.set(dateKey, []);
         }

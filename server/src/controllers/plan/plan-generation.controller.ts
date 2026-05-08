@@ -527,6 +527,16 @@ export const completeOnboarding = asyncHandler(async (req: AuthenticatedRequest,
     });
   });
 
+  // Auto-create today's schedule with workout & meal entries (fire-and-forget)
+  const { planScheduleSyncService } = await import('../../services/plan-schedule-sync.service.js');
+  const today = new Date().toISOString().split('T')[0];
+  planScheduleSyncService.syncPlansToSchedule(userId, today).catch((err) => {
+    logger.warn('[Onboarding] Post-onboarding schedule sync failed (non-blocking)', {
+      userId,
+      error: err instanceof Error ? err.message : 'Unknown',
+    });
+  });
+
   ApiResponse.success(res, {
     message: "You're all set! Your personalized plan is ready.",
     planId: finalPlanResult.rows[0].id,
@@ -1072,6 +1082,16 @@ export const generateOnboardingPlans = asyncHandler(async (req: AuthenticatedReq
       workoutPlanId,
       provider: result.provider,
       durationWeeks: planDurationWeeks,
+    });
+
+    // Auto-create today's schedule with workout & meal entries (fire-and-forget)
+    const { planScheduleSyncService } = await import('../../services/plan-schedule-sync.service.js');
+    const today = new Date().toISOString().split('T')[0];
+    planScheduleSyncService.syncPlansToSchedule(userId, today).catch((err) => {
+      logger.warn('[PlanGeneration] Post-onboarding schedule sync failed (non-blocking)', {
+        userId,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
     });
 
     ApiResponse.created(res, {

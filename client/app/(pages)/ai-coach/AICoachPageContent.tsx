@@ -107,6 +107,7 @@ function AICoachLayout() {
                 actionResults={coach.actionResults}
                 messagesEndRef={coach.messagesEndRef}
                 onRegenerateMessage={coach.regenerateMessage}
+                onOpenWikiPage={intelligence.openWikiPage}
               />
             ) : coach.messages.length === 0 ? (
               <div className="flex-1 overflow-y-auto">
@@ -121,6 +122,7 @@ function AICoachLayout() {
                 messagesEndRef={coach.messagesEndRef}
                 onRegenerateMessage={coach.regenerateMessage}
                 onEditUserMessage={coach.editUserMessage}
+                onOpenWikiPage={intelligence.openWikiPage}
                 isThinking={coach.isThinking}
                 thinkingLabel={coach.thinkingLabel}
                 liveTimelineEvents={coach.liveTimelineEvents}

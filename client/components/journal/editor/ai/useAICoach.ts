@@ -20,7 +20,7 @@ export function useAICoach(): UseAICoachReturn {
   const [insights, setInsights] = useState<CoachInsight[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const analyzeContent = useCallback(async (text: string, mode: string) => {
+  const analyzeContent = useCallback(async (text: string, _mode: string) => {
     if (text.trim().length < 50) return;
 
     // Pattern detection (client-side for instant feedback)
@@ -56,7 +56,7 @@ export function useAICoach(): UseAICoachReturn {
     setInsights(newInsights);
   }, []);
 
-  const sendMessage = useCallback(async (message: string): Promise<string> => {
+  const sendMessage = useCallback(async (_message: string): Promise<string> => {
     setIsLoading(true);
     try {
       // TODO: Wire to /v1/ai/coach/journal API

@@ -8,6 +8,7 @@ import { Worker } from 'bullmq';
 import { redisConnection, QueueNames } from '../config/queue.config.js';
 import { logger } from '../services/logger.service.js';
 import { aiScoringService } from '../services/ai-scoring.service.js';
+import { wikiIngestService } from '../services/wiki-ingest.service.js';
 
 // ============================================
 // TYPES
@@ -55,6 +56,21 @@ export function startActivityEventProcessor(): void {
           // This is incremental - we recalculate the entire day's score
           const score = await aiScoringService.calculateDailyScore(data.userId, eventDate);
           await aiScoringService.saveDailyScore(score);
+
+          // Wiki micro-ingest — fire-and-forget, non-blocking
+          wikiIngestService
+            .ingestFromDataEvent(data.userId, {
+              type: data.type,
+              eventId: data.eventId,
+              source: 'activity_event',
+              timestamp: data.timestamp,
+            })
+            .catch((error) => {
+              logger.warn('[ActivityEventProcessor] Wiki ingest failed (non-critical)', {
+                eventId: data.eventId,
+                error: error instanceof Error ? error.message : 'Unknown',
+              });
+            });
 
           logger.info('[ActivityEventProcessor] Updated daily score', {
             eventId: data.eventId,

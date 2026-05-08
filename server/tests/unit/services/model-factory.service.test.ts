@@ -220,6 +220,17 @@ describe('isRateLimitError', () => {
   });
 });
 
+describe('isTimeoutError', () => {
+  it('detects provider request timeouts', () => {
+    expect(modelFactory.isTimeoutError(new Error('Request timed out.'))).toBe(true);
+    expect(modelFactory.isTimeoutError(new Error('LLM final stream timeout'))).toBe(true);
+  });
+
+  it('returns false for non-timeout errors', () => {
+    expect(modelFactory.isTimeoutError(new Error('503 Service UNAVAILABLE'))).toBe(false);
+  });
+});
+
 describe('isAuthError', () => {
   it('detects 401 errors', () => {
     expect(modelFactory.isAuthError(new Error('HTTP 401 Unauthorized'))).toBe(true);
@@ -277,6 +288,19 @@ describe('handleProviderError', () => {
     expect(handled).toBe(true);
 
     // Cleanup
+    modelFactory.clearProviderRateLimit('gemini');
+  });
+
+  it('marks provider on timeout error and returns true', () => {
+    modelFactory.clearProviderRateLimit('gemini');
+    modelFactory.clearProviderRateLimit('anthropic');
+    modelFactory.getModel();
+
+    const handled = modelFactory.handleProviderError(new Error('Request timed out.'));
+
+    expect(handled).toBe(true);
+    expect(modelFactory.getActiveProvider()).toBe('anthropic');
+
     modelFactory.clearProviderRateLimit('gemini');
   });
 

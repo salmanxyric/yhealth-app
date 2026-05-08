@@ -142,6 +142,8 @@ export interface StreamDoneEvent {
 export interface StreamErrorEvent {
   type: 'error';
   error: string;
+  code?: string;
+  retryable?: boolean;
 }
 
 export interface StreamArtifactEvent {
@@ -560,7 +562,12 @@ function normalizeSSEEvent(raw: unknown): StreamEvent | null {
     const primary = String(event.error || 'Unknown error');
     const detail = event.errorMessage ? String(event.errorMessage) : '';
     const combined = detail && detail !== primary ? `${primary}: ${detail}` : primary;
-    return { type: 'error', error: combined } as StreamErrorEvent;
+    return {
+      type: 'error',
+      error: combined,
+      code: typeof event.code === 'string' ? event.code : undefined,
+      retryable: typeof event.retryable === 'boolean' ? event.retryable : undefined,
+    } as StreamErrorEvent;
   }
 
   return null;

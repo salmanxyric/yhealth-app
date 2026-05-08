@@ -77,6 +77,7 @@ function transformApiMealToClient(meal: MealLog): ClientMeal {
     carbs: f.carbs || 0,
     fat: f.fat || 0,
     portion: f.portion || "1 serving",
+    quantity: f.quantity || 1,
   }));
 
   let protein = meal.proteinGrams || 0;
@@ -527,12 +528,15 @@ export function useNutritionData() {
     try {
       const eatenFoods = mealFormData.items.filter((item) => item.eaten !== false);
       const totals = eatenFoods.reduce(
-        (acc, item) => ({
-          calories: acc.calories + item.calories,
-          protein: acc.protein + item.protein,
-          carbs: acc.carbs + item.carbs,
-          fat: acc.fat + item.fat,
-        }),
+        (acc, item) => {
+          const qty = item.quantity || 1;
+          return {
+            calories: acc.calories + item.calories * qty,
+            protein: acc.protein + item.protein * qty,
+            carbs: acc.carbs + item.carbs * qty,
+            fat: acc.fat + item.fat * qty,
+          };
+        },
         { calories: 0, protein: 0, carbs: 0, fat: 0 }
       );
 
@@ -583,12 +587,15 @@ export function useNutritionData() {
       const eatenFoods = mealFormData.items.filter((item) => item.eaten !== false);
       const totals = eatenFoods.length > 0
         ? eatenFoods.reduce(
-            (acc, item) => ({
-              calories: acc.calories + item.calories,
-              protein: acc.protein + item.protein,
-              carbs: acc.carbs + item.carbs,
-              fat: acc.fat + item.fat,
-            }),
+            (acc, item) => {
+              const qty = item.quantity || 1;
+              return {
+                calories: acc.calories + item.calories * qty,
+                protein: acc.protein + item.protein * qty,
+                carbs: acc.carbs + item.carbs * qty,
+                fat: acc.fat + item.fat * qty,
+              };
+            },
             { calories: 0, protein: 0, carbs: 0, fat: 0 }
           )
         : { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -1265,16 +1272,23 @@ export function useNutritionData() {
   };
 
   const addFoodItem = (food: MealFood) => {
-    const alreadyAdded = mealFormData.items.some(
+    const existingIndex = mealFormData.items.findIndex(
       (i) => i.name.trim().toLowerCase() === food.name.trim().toLowerCase()
     );
-    if (alreadyAdded) {
-      toast(`${food.name} is already added`, { icon: "ℹ️" });
+    if (existingIndex !== -1) {
+      setMealFormData((prev) => ({
+        ...prev,
+        items: prev.items.map((item, idx) =>
+          idx === existingIndex ? { ...item, quantity: (item.quantity || 1) + 1 } : item
+        ),
+      }));
+      const newQty = (mealFormData.items[existingIndex].quantity || 1) + 1;
+      toast.success(`${food.name} × ${newQty}`);
       return;
     }
     setMealFormData((prev) => ({
       ...prev,
-      items: [...prev.items, { ...food, id: Date.now().toString(), eaten: true }],
+      items: [...prev.items, { ...food, id: Date.now().toString(), eaten: true, quantity: 1 }],
     }));
     toast.success(`${food.name} added`);
   };
@@ -2402,12 +2416,15 @@ Format your response EXACTLY as shown above with **bold** markdown headers. Be p
       mealFormData.items
         .filter((item) => item.eaten !== false)
         .reduce(
-          (acc, item) => ({
-            calories: acc.calories + item.calories,
-            protein: acc.protein + item.protein,
-            carbs: acc.carbs + item.carbs,
-            fat: acc.fat + item.fat,
-          }),
+          (acc, item) => {
+            const qty = item.quantity || 1;
+            return {
+              calories: acc.calories + item.calories * qty,
+              protein: acc.protein + item.protein * qty,
+              carbs: acc.carbs + item.carbs * qty,
+              fat: acc.fat + item.fat * qty,
+            };
+          },
           { calories: 0, protein: 0, carbs: 0, fat: 0 }
         ),
     [mealFormData.items]

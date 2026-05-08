@@ -133,6 +133,15 @@ async function getWikiPage(userId: string, params: z.infer<typeof GetWikiPageSch
 }
 
 async function createWikiPage(userId: string, params: z.infer<typeof CreateWikiPageSchema>): Promise<string> {
+  // Idempotency guard — return early if the page already exists
+  const existing = await wikiService.getPage(userId, params.slug);
+  if (existing) {
+    return JSON.stringify({
+      message: `Wiki page "${params.slug}" already exists`,
+      data: { slug: existing.slug, title: existing.title, version: existing.version },
+    }, null, 2);
+  }
+
   const page = await wikiService.createPage(userId, {
     slug: params.slug,
     pageType: params.pageType,
@@ -175,6 +184,26 @@ async function createWikiPage(userId: string, params: z.infer<typeof CreateWikiP
 }
 
 async function updateWikiPage(userId: string, params: z.infer<typeof UpdateWikiPageSchema>): Promise<string> {
+  // Idempotency guard — check existence and detect no-op updates
+  const existing = await wikiService.getPage(userId, params.slug);
+  if (!existing) {
+    return JSON.stringify({
+      message: `Wiki page "${params.slug}" not found`,
+    }, null, 2);
+  }
+
+  const titleUnchanged = params.title === undefined || params.title === existing.title;
+  const summaryUnchanged = params.summary === undefined || params.summary === existing.summary;
+  const bodyUnchanged = params.body === undefined || params.body === existing.body;
+  const confidenceUnchanged = params.confidence === undefined || params.confidence === existing.confidence;
+
+  if (titleUnchanged && summaryUnchanged && bodyUnchanged && confidenceUnchanged) {
+    return JSON.stringify({
+      message: `Wiki page "${params.slug}" has no changes — skipping update`,
+      data: { slug: existing.slug, version: existing.version },
+    }, null, 2);
+  }
+
   const page = await wikiService.updatePage(userId, params.slug, {
     title: params.title,
     summary: params.summary,
@@ -262,6 +291,15 @@ async function flagWikiContradiction(userId: string, params: z.infer<typeof Flag
 }
 
 async function fileQueryAsWikiPage(userId: string, params: z.infer<typeof FileQueryAsWikiPageSchema>): Promise<string> {
+  // Idempotency guard — return early if the synthesis page already exists
+  const existing = await wikiService.getPage(userId, params.slug);
+  if (existing) {
+    return JSON.stringify({
+      message: `Wiki page "${params.slug}" already exists`,
+      data: { slug: existing.slug, title: existing.title, version: existing.version },
+    }, null, 2);
+  }
+
   const page = await wikiService.createPage(userId, {
     slug: params.slug,
     pageType: 'synthesis',

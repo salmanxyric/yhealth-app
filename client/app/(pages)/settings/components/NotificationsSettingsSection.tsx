@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import {
   Bell,
   Moon,
@@ -7,14 +8,37 @@ import {
   Mail,
   MessageSquare,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import type { PreferencesWithSetterProps } from "./settings-types";
 import { ToggleSwitch, GlassCard, SectionHeader } from "./SettingsSharedUI";
+import { isPushSupported, subscribeToPush, unsubscribeFromPush } from "@/lib/push-notifications";
 
 export function NotificationsSettingsSection({
   preferences,
   updatePreference,
   setPreferences,
 }: PreferencesWithSetterProps) {
+  const handlePushToggle = useCallback(async () => {
+    const currentlyEnabled = !!preferences.notifications.push;
+
+    if (!currentlyEnabled) {
+      if (!isPushSupported()) {
+        toast.error("Push notifications are not supported in this browser");
+        return;
+      }
+      const success = await subscribeToPush();
+      if (success) {
+        updatePreference("notifications", "push", true);
+        toast.success("Push notifications enabled");
+      } else {
+        toast.error("Could not enable push notifications. Please allow notifications in your browser settings.");
+      }
+    } else {
+      await unsubscribeFromPush();
+      updatePreference("notifications", "push", false);
+      toast.success("Push notifications disabled");
+    }
+  }, [preferences.notifications.push, updatePreference]);
   return (
     <div className="space-y-6">
       <GlassCard>
@@ -32,7 +56,7 @@ export function NotificationsSettingsSection({
 
         <div className="space-y-3">
           {[
-            { id: "push", label: "Push Notifications", icon: <Smartphone className="w-5 h-5" />, key: "push" },
+            { id: "push", label: "Push Notifications", icon: <Smartphone className="w-5 h-5" />, key: "push", onToggle: handlePushToggle },
             { id: "email", label: "Email", icon: <Mail className="w-5 h-5" />, key: "email" },
             { id: "sms", label: "SMS", icon: <MessageSquare className="w-5 h-5" />, key: "sms" },
             { id: "whatsapp", label: "WhatsApp", icon: <MessageSquare className="w-5 h-5" />, key: "whatsapp" },
@@ -44,7 +68,7 @@ export function NotificationsSettingsSection({
               </div>
               <ToggleSwitch
                 checked={!!preferences.notifications[channel.key as keyof typeof preferences.notifications]}
-                onChange={() => updatePreference("notifications", channel.key, !preferences.notifications[channel.key as keyof typeof preferences.notifications])}
+                onChange={channel.onToggle ?? (() => updatePreference("notifications", channel.key, !preferences.notifications[channel.key as keyof typeof preferences.notifications]))}
                 disabled={!preferences.notifications.enabled}
               />
             </div>

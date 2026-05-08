@@ -1527,9 +1527,9 @@ async function handleWorkoutManager(userId: string, params: z.infer<typeof Worko
       case 'getLogs': {
         let sql = 'SELECT * FROM workout_logs WHERE user_id = $1';
         const values: (string | number)[] = [userId];
-        if (filters?.startDate) { sql += ` AND logged_at >= $${values.length + 1}`; values.push(filters.startDate); }
-        if (filters?.endDate) { sql += ` AND logged_at <= $${values.length + 1}`; values.push(filters.endDate); }
-        sql += ` ORDER BY logged_at DESC LIMIT ${filters?.limit || 20}`;
+        if (filters?.startDate) { sql += ` AND scheduled_date >= $${values.length + 1}`; values.push(filters.startDate); }
+        if (filters?.endDate) { sql += ` AND scheduled_date <= $${values.length + 1}`; values.push(filters.endDate); }
+        sql += ` ORDER BY scheduled_date DESC LIMIT ${filters?.limit || 20}`;
         const result = await query(sql, values);
         return JSON.stringify({ success: true, workoutLogs: result.rows });
       }
@@ -1572,11 +1572,13 @@ async function handleWorkoutManager(userId: string, params: z.infer<typeof Worko
       }
 
       case 'createLog': {
+        const logDate = data?.loggedAt || new Date().toISOString().split('T')[0];
         const result = await query(
-          `INSERT INTO workout_logs (user_id, workout_plan_id, exercises, duration_minutes, notes, logged_at)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-          [userId, data?.workoutPlanId || null, JSON.stringify(data?.exercises || []),
-           data?.durationMinutes || null, data?.notes || null, data?.loggedAt || new Date().toISOString()]
+          `INSERT INTO workout_logs (user_id, workout_plan_id, scheduled_date, workout_name, exercises_completed, duration_minutes, notes, status)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8) RETURNING *`,
+          [userId, data?.workoutPlanId || null, logDate, data?.name || null,
+           JSON.stringify(data?.exercises || []), data?.durationMinutes || null,
+           data?.notes || null, 'completed']
         );
         return JSON.stringify({ success: true, workoutLog: result.rows[0], message: 'Workout logged' });
       }
@@ -1587,7 +1589,7 @@ async function handleWorkoutManager(userId: string, params: z.infer<typeof Worko
         const values: (string | number)[] = [identifier.id, userId];
         let i = 3;
 
-        if (data?.exercises) { updates.push(`exercises = $${i++}`); values.push(JSON.stringify(data.exercises)); }
+        if (data?.exercises) { updates.push(`exercises_completed = $${i++}`); values.push(JSON.stringify(data.exercises)); }
         if (data?.durationMinutes !== undefined) { updates.push(`duration_minutes = $${i++}`); values.push(data.durationMinutes); }
         if (data?.notes) { updates.push(`notes = $${i++}`); values.push(data.notes); }
 

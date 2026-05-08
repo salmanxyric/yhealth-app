@@ -191,7 +191,7 @@ export function AgenticEditor({
         isLoading={aiCoach.isLoading}
         onSendMessage={aiCoach.sendMessage}
         onDismissInsight={aiCoach.dismissInsight}
-        onQuickAction={(action) => {
+        onQuickAction={(_action) => {
           // TODO: Wire quick actions to AI slash commands
         }}
       />

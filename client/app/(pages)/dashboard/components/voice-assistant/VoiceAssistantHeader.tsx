@@ -21,12 +21,12 @@ interface VoiceAssistantHeaderProps {
 }
 
 export function VoiceAssistantHeader({
-  _user,
+  user: _user,
   selectedLanguage,
   setSelectedLanguage,
   isTTSEnabled,
   setIsTTSEnabled,
-  _getInitials,
+  getInitials: _getInitials,
   isCallActive,
   onEndCall,
   showCamera,

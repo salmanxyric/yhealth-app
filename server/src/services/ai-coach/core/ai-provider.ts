@@ -265,11 +265,22 @@ export class AIProvider {
       },
     };
 
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 8000);
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      clearTimeout(fetchTimeout);
+      if (err.name === 'AbortError') throw new Error('Gemini text request timed out (8s)');
+      throw err;
+    }
+    clearTimeout(fetchTimeout);
 
     if (!resp.ok) {
       const errText = await resp.text();

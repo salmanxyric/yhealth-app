@@ -44,6 +44,7 @@ export interface MealFood {
   carbs: number;
   fat: number;
   portion: string;
+  quantity?: number;
   // Optional micro-nutrients
   fiber?: number;
   vitamins?: {

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar, ChevronLeft, ChevronRight, Clock, Timer, Check,
-  Plus, Loader2, AlertCircle, RotateCcw, Sparkles, Moon,
+  Loader2, AlertCircle, RotateCcw, Moon,
   ChevronDown, Dumbbell, Activity, Heart, Sun, Utensils,
   Droplets, Brain, Star,
 } from 'lucide-react';
@@ -15,9 +15,11 @@ import {
   type ScheduleItem,
   type CalendarSchedule,
 } from '@/src/shared/services/schedule.service';
-import { api } from '@/lib/api-client';
 import { ScheduleItemActions } from '@/app/(pages)/dashboard/components/tabs/overview/ScheduleItemActions';
 import { EditScheduleItemModal } from '@/app/(pages)/dashboard/components/tabs/overview/EditScheduleItemModal';
+import { CalendarConflictModal } from './components/CalendarConflictModal';
+import { ConflictBanner } from './components/ConflictBanner';
+import { useCalendarConflicts } from '@/hooks/use-calendar-conflicts';
 import { confirm } from '@/components/common/ConfirmDialog';
 import toast from 'react-hot-toast';
 
@@ -110,6 +112,17 @@ export function ScheduleFullView() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [historySchedules, setHistorySchedules] = useState<Record<string, DailySchedule>>({});
+
+  const dateStr = formatDate(selectedDate);
+  const {
+    conflicts,
+    activeConflict,
+    isModalOpen: isConflictModalOpen,
+    resolveConflict,
+    openConflictModal,
+    closeConflictModal,
+    fetchConflicts,
+  } = useCalendarConflicts(dateStr);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -307,6 +320,9 @@ export function ScheduleFullView() {
           </div>
         </div>
       </motion.div>
+
+      {/* Conflict Banner */}
+      <ConflictBanner conflicts={conflicts} onReviewConflict={openConflictModal} />
 
       {/* Schedule Timeline */}
       <motion.div
@@ -599,6 +615,30 @@ export function ScheduleFullView() {
         onOpenChange={setIsEditModalOpen}
         activity={editingActivity}
         onSuccess={fetchData}
+      />
+
+      {/* Calendar Conflict Resolution Modal */}
+      <CalendarConflictModal
+        isOpen={isConflictModalOpen}
+        onClose={closeConflictModal}
+        conflict={activeConflict}
+        onResolve={async (notificationId, resolution) => {
+          const success = await resolveConflict(notificationId, resolution);
+          if (success) {
+            toast.success(
+              resolution === 'remove_existing'
+                ? 'Existing item removed'
+                : resolution === 'keep_both'
+                  ? 'Both items kept on schedule'
+                  : 'Conflict dismissed',
+            );
+            fetchData();
+            fetchConflicts();
+          } else {
+            toast.error('Failed to resolve conflict');
+          }
+          return success;
+        }}
       />
     </div>
   );

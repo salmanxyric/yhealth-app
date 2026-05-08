@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
 
 /**
  * Animated SVG eye exercise visualizations for the Eye Yoga session player.

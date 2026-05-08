@@ -25,8 +25,10 @@ export interface ScheduleTemplate {
  * - 'google': synced from Google Calendar; read-only.
  * - 'prayer': synced from the prayer_schedules table; read-only; supports
  *    a "completed" toggle.
+ * - 'plan': synced from active workout/diet plans; read-only; supports
+ *    a "completed" toggle.
  */
-export type ScheduleItemSource = 'manual' | 'google' | 'prayer';
+export type ScheduleItemSource = 'manual' | 'google' | 'prayer' | 'plan';
 
 export interface ScheduleItem {
   id: string;
@@ -274,6 +276,58 @@ export const scheduleService = {
   async applyTemplate(scheduleId: string, templateId: string): Promise<ApiResponse<{ schedule: DailySchedule }>> {
     return api.post(`/v1/schedules/${scheduleId}/apply-template/${templateId}`);
   },
+
+  // ── Calendar Conflict Resolution ──
+
+  async getPendingConflicts(date?: string): Promise<ApiResponse<{ conflicts: ScheduleConflict[]; count: number }>> {
+    const params = date ? { date } : {};
+    return api.get('/v1/schedules/conflicts', { params });
+  },
+
+  async resolveConflict(
+    notificationId: string,
+    resolution: ConflictResolution,
+  ): Promise<ApiResponse<void>> {
+    return api.post('/v1/schedules/conflicts/resolve', { notificationId, resolution });
+  },
 };
+
+// ============================================
+// CONFLICT TYPES
+// ============================================
+
+export type ConflictResolution = 'keep_existing' | 'remove_existing' | 'keep_both';
+
+export interface ScheduleConflict {
+  notificationId: string;
+  date: string;
+  conflictSource: 'google' | 'plan';
+  googleEvent?: {
+    externalId: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+  };
+  planItem?: {
+    title: string;
+    startTime: string;
+    endTime: string;
+    category: string;
+    description: string;
+  };
+  manualItem?: {
+    id: string;
+    title: string;
+    startTime: string;
+    endTime: string | null;
+  };
+  existingItem?: {
+    id: string;
+    title: string;
+    startTime: string;
+    endTime: string | null;
+    source: string;
+  };
+}
 
 

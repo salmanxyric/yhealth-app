@@ -474,6 +474,15 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
             try {
               const data = JSON.parse(line.slice(6));
 
+              if (data.error) {
+                const providerMessage = data.errorMessage || data.error;
+                setError(providerMessage);
+                setAiResponse(providerMessage);
+                isProcessingRef.current = false;
+                setVoiceState("idle");
+                return;
+              }
+
               if (data.token) {
                 fullResponse += data.token;
                 setAiResponse(fullResponse);

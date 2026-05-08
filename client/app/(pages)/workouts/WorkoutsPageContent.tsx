@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { Loader2, Dumbbell, Music } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/layout";
 import { WorkoutsTab } from "@/app/(pages)/dashboard/components/tabs";

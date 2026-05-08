@@ -99,7 +99,7 @@ describe('classifyMutationType', () => {
         'getLogs', 'getActive', 'getStats', 'getLatest', 'getStreak',
         'getInsights', 'getTimeline', 'getPatterns', 'getTrends', 'getHistory',
         'getCheckin', 'status', 'overview', 'recommend', 'search_and_play',
-        'progress', 'analytics', 'summary', 'trends',
+        'progress', 'analytics', 'summary', 'trends', 'checkConflicts',
       ];
       for (const action of readActions) {
         expect(classifyMutationType('mealManager', { action })).toBe('read');
