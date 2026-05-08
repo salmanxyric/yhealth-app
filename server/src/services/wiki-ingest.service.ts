@@ -16,6 +16,15 @@ import { logger } from './logger.service.js';
 const MAX_CONVERSATION_MESSAGES = 20;
 const MAX_PAGES_PER_INGEST = 8;
 
+const EVENT_TYPE_TO_SLUG: Record<string, string> = {
+  workout: 'fitness-profile',
+  nutrition: 'nutrition-profile',
+  wellbeing: 'mental-wellbeing',
+  participation: 'lifestyle-context',
+};
+
+const DATA_EVENT_CONFIDENCE_BUMP = 0.01;
+
 // ============================================
 // TYPES
 // ============================================
@@ -32,6 +41,13 @@ export interface IngestResult {
   pagesCreated: number;
   pagesUpdated: number;
   linksAdded: number;
+}
+
+export interface DataEventInput {
+  type: 'workout' | 'nutrition' | 'wellbeing' | 'participation';
+  eventId: string;
+  source: string;
+  timestamp: string;
 }
 
 // ============================================
@@ -280,6 +296,57 @@ class WikiIngestService {
         error: error instanceof Error ? error.message : String(error),
       });
       return emptyResult;
+    }
+  }
+
+  // ------------------------------------------
+  // ingestFromDataEvent
+  // ------------------------------------------
+
+  /**
+   * Micro-ingest a single data event (workout, meal, mood, etc.)
+   * into the matching wiki domain page. No LLM call — just bumps
+   * confidence and adds a source reference.
+   */
+  async ingestFromDataEvent(
+    userId: string,
+    event: DataEventInput
+  ): Promise<{ pagesUpdated: number }> {
+    try {
+      const slug = EVENT_TYPE_TO_SLUG[event.type];
+      if (!slug) {
+        return { pagesUpdated: 0 };
+      }
+
+      const page = await wikiService.getPage(userId, slug);
+      if (!page) {
+        return { pagesUpdated: 0 };
+      }
+
+      const newConfidence = Math.min(1.0, (page.confidence ?? 0.1) + DATA_EVENT_CONFIDENCE_BUMP);
+
+      await wikiService.updatePage(userId, slug, {
+        confidence: newConfidence,
+        changeReason: `Micro-ingest: ${event.type} event (${event.source})`,
+      });
+
+      await wikiService.addSources(page.id, [
+        {
+          sourceType: 'activity_event',
+          sourceId: event.eventId,
+          sourceTable: 'activity_events',
+          extractSummary: `${event.type} event from ${event.source} at ${event.timestamp}`,
+        },
+      ]);
+
+      return { pagesUpdated: 1 };
+    } catch (error) {
+      logger.error('[WikiIngest] ingestFromDataEvent failed', {
+        userId,
+        event,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { pagesUpdated: 0 };
     }
   }
 }
