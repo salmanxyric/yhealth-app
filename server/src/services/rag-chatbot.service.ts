@@ -14,6 +14,7 @@ import { vectorEmbeddingService } from './vector-embedding.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
 import { query } from '../config/database.config.js';
 import { langGraphChatbotService } from './langgraph-chatbot.service.js';
+import { wikiContextService } from './wiki-context.service.js';
 
 function isToolArtifactLike(value: string): boolean {
   const text = value.trim();
@@ -54,6 +55,7 @@ interface RAGContext {
   relevantKnowledge: Array<{ content: string; category: string; similarity: number }>;
   userProfile: Array<{ section: string; content: string; similarity: number }>;
   previousConversations: Array<{ content: string; similarity: number }>;
+  wikiContext?: string;
 }
 
 interface ChatRequest {
@@ -156,6 +158,7 @@ class RAGChatbotService {
         userProfile,
         previousConversations,
         userDataEmbeddings,
+        wikiContext,
       ] = await Promise.all([
         vectorEmbeddingService.searchKnowledge({
           queryText,
@@ -171,18 +174,18 @@ class RAGChatbotService {
           queryText,
           limit: 5,
         }),
-        // Search user data embeddings (plans, workouts, meals, tasks, logs)
-        // Lower threshold and higher limit for better recall
         vectorEmbeddingService.searchSimilar({
           queryText,
           userId,
           limit: 15,
-          minSimilarity: 0.5, // Lowered from 0.6 for better recall
+          minSimilarity: 0.5,
         }),
+        wikiContextService.getContextForQuery(userId, queryText).catch(() => ''),
       ]);
 
       return {
         conversationHistory: [],
+        wikiContext,
         relevantKnowledge: relevantKnowledge.map((k) => ({
           content: k.content,
           category: k.category || 'general',
@@ -224,6 +227,11 @@ class RAGChatbotService {
    */
   private buildContextString(context: RAGContext): string {
     const sections: string[] = [];
+
+    if (context.wikiContext) {
+      sections.push(context.wikiContext);
+      sections.push('');
+    }
 
     // Add user profile context
     if (context.userProfile.length > 0) {
