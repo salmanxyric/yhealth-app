@@ -44,6 +44,7 @@ import { correlationComputeJob } from "./jobs/correlation-compute.job.js";
 import { memoryDecayJob } from "./jobs/memory-decay.job.js";
 import { memoryExtractionJob } from "./jobs/memory-extraction.job.js";
 import { coreProfileCalibrationJob } from "./jobs/core-profile-calibration.job.js";
+import { wikiSynthesisJob } from "./jobs/wiki-synthesis.job.js";
 import { activityEventProcessor } from "./workers/activity-event-processor.worker.js";
 import { ensureDefaultPlans } from "./services/subscription.service.js";
 import { runGraceExpirationJob } from "./jobs/graceExpirationJob.js";
@@ -454,6 +455,11 @@ async function startServer(): Promise<void> {
           coreProfileCalibrationJob.start();
           logger.info("Core profile calibration job started (staggered 1560s)");
         }, 1560_000);
+
+        setTimeout(() => {
+          wikiSynthesisJob.start();
+          logger.info("Wiki synthesis job started (staggered 1620s)");
+        }, 1620_000);
 
         // ── Subscription lifecycle jobs ──
 
