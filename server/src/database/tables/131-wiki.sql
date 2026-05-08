@@ -44,6 +44,16 @@ CREATE INDEX IF NOT EXISTS idx_wiki_pages_user_category_status ON wiki_pages(use
 CREATE INDEX IF NOT EXISTS idx_wiki_pages_user_status_updated ON wiki_pages(user_id, status, updated_at DESC) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_wiki_pages_parent ON wiki_pages(user_id, parent_slug) WHERE parent_slug IS NOT NULL;
 
+-- pgvector embedding columns (optional — only if pgvector extension is available)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+        ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS summary_embedding_vec vector(1536);
+        ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS body_embedding_vec vector(1536);
+        CREATE INDEX IF NOT EXISTS idx_wiki_pages_summary_emb
+            ON wiki_pages USING ivfflat (summary_embedding_vec vector_cosine_ops) WITH (lists = 100);
+    END IF;
+END $$;
+
 -- 2. Wiki Links
 CREATE TABLE IF NOT EXISTS wiki_links (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
