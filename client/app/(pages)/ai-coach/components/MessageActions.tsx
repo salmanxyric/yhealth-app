@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, RefreshCw, Share2, MoreHorizontal, Volume2, VolumeX, X, MessageSquare, Mail, Link2, Check } from "lucide-react";
+import { Copy, RefreshCw, Share2, MoreHorizontal, Volume2, VolumeX, X, MessageSquare, Mail, Link2, Check, BookOpen } from "lucide-react";
+import { SaveToWikiModal } from "./SaveToWikiModal";
 import toast from "react-hot-toast";
 
 interface MessageActionsProps {
@@ -30,6 +31,7 @@ export function MessageActions({ content, onRegenerate, isRegenerating }: Messag
   const [shareOpen, setShareOpen] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showSaveToWiki, setShowSaveToWiki] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -125,6 +127,7 @@ export function MessageActions({ content, onRegenerate, isRegenerating }: Messag
         disabled={isRegenerating}
       />
       <ActionButton icon={<Share2 className="w-3.5 h-3.5" />} title="Share" onClick={handleShare} />
+      <ActionButton icon={<BookOpen className="w-3.5 h-3.5" />} title="Save to Wiki" onClick={() => setShowSaveToWiki(true)} />
 
       {/* Share portal */}
       <AnimatePresence>
@@ -254,6 +257,13 @@ export function MessageActions({ content, onRegenerate, isRegenerating }: Messag
           )}
         </AnimatePresence>
       </div>
+
+      {/* Save to Wiki modal */}
+      <SaveToWikiModal
+        isOpen={showSaveToWiki}
+        onClose={() => setShowSaveToWiki(false)}
+        messageContent={content}
+      />
     </div>
   );
 }
