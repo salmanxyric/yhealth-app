@@ -9,6 +9,7 @@
 
 import { wikiService } from './wiki.service.js';
 import { logger } from './logger.service.js';
+import { wikiSeedService } from './wiki-seed.service.js';
 
 // ============================================
 // CONSTANTS
@@ -48,6 +49,9 @@ class WikiCompilerService {
     conversationId: string
   ): Promise<CompilerResult> {
     try {
+      // Seed wiki for first-time users (no-op if pages already exist)
+      await wikiSeedService.seedUser(userId);
+
       // Skip short messages — not enough signal to be meaningful
       if (userMessage.length < MIN_MESSAGE_LENGTH) {
         return { pagesUpdated: 0, conversationId };
