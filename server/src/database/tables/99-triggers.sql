@@ -132,4 +132,7 @@ CREATE TRIGGER update_data_source_connections_updated_at BEFORE UPDATE ON data_s
 DROP TRIGGER IF EXISTS update_quick_notes_updated_at ON quick_notes;
 CREATE TRIGGER update_quick_notes_updated_at BEFORE UPDATE ON quick_notes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_wiki_pages_updated_at ON wiki_pages;
+CREATE TRIGGER update_wiki_pages_updated_at BEFORE UPDATE ON wiki_pages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Note: new_table trigger removed (67-new-table.sql is a placeholder template)

@@ -184,6 +184,8 @@ const TABLE_FILES = [
   '127-mental-health-screening-events.sql',
   // Quick notes
   '130-quick-notes.sql',
+  // Wiki system (LLM knowledge layer)
+  '131-wiki.sql',
   // Triggers (must be last)
   '99-triggers.sql',
 ];
