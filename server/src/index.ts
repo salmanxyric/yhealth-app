@@ -45,6 +45,7 @@ import { memoryDecayJob } from "./jobs/memory-decay.job.js";
 import { memoryExtractionJob } from "./jobs/memory-extraction.job.js";
 import { coreProfileCalibrationJob } from "./jobs/core-profile-calibration.job.js";
 import { wikiSynthesisJob } from "./jobs/wiki-synthesis.job.js";
+import { wikiLintJob } from "./jobs/wiki-lint.job.js";
 import { activityEventProcessor } from "./workers/activity-event-processor.worker.js";
 import { ensureDefaultPlans } from "./services/subscription.service.js";
 import { runGraceExpirationJob } from "./jobs/graceExpirationJob.js";
@@ -460,6 +461,11 @@ async function startServer(): Promise<void> {
           wikiSynthesisJob.start();
           logger.info("Wiki synthesis job started (staggered 1620s)");
         }, 1620_000);
+
+        setTimeout(() => {
+          wikiLintJob.start();
+          logger.info("Wiki lint job started (staggered 1800s)");
+        }, 1800_000);
 
         // ── Subscription lifecycle jobs ──
 
