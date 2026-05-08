@@ -1,6 +1,11 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import type { AuthenticatedRequest } from '../types/index.js';
 import notificationsController from '../controllers/notifications.controller.js';
+import { webPushService } from '../services/web-push.service.js';
+import { ApiResponse } from '../utils/ApiResponse.js';
+import { ApiError } from '../utils/ApiError.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
 
@@ -74,5 +79,37 @@ router.post('/', notificationsController.createNotification);
 
 // Cleanup expired notifications
 router.post('/cleanup-expired', notificationsController.cleanupExpired);
+
+// ============================================
+// Web Push subscriptions
+// ============================================
+
+router.post('/push/subscribe', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { subscription } = req.body;
+  if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+    throw ApiError.badRequest('Valid push subscription object required');
+  }
+
+  await webPushService.saveSubscription(userId, subscription, req.headers['user-agent']);
+  ApiResponse.success(res, null, 'Push subscription saved');
+}));
+
+router.post('/push/unsubscribe', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { endpoint } = req.body;
+  if (!endpoint) throw ApiError.badRequest('endpoint is required');
+
+  await webPushService.removeSubscription(userId, endpoint);
+  ApiResponse.success(res, null, 'Push subscription removed');
+}));
+
+router.get('/push/vapid-key', asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
+  ApiResponse.success(res, { publicKey: process.env.VAPID_PUBLIC_KEY || '' });
+}));
 
 export default router;

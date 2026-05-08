@@ -75,6 +75,94 @@ export function getUserLocalDateISO(
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Convert a wall-clock time in a specific IANA timezone to a UTC Date.
+ * e.g. localTimeToUtc('11:50', '2026-05-08', 'Asia/Karachi') → Date(2026-05-08T06:50:00Z)
+ */
+export function localTimeToUtc(
+  timeStr: string,
+  dateStr: string,
+  timezone: string | null | undefined,
+): Date {
+  const tz = resolveTimeZone(timezone);
+  const paddedTime = timeStr.padEnd(8, ':00');
+
+  const naiveUtc = new Date(`${dateStr}T${paddedTime}Z`);
+  if (tz === 'UTC') return naiveUtc;
+
+  const offsetMs = getTimezoneOffsetMs(naiveUtc, tz);
+  const corrected = new Date(naiveUtc.getTime() - offsetMs);
+
+  // DST edge-case: offset may differ at the corrected instant
+  const verifyMs = getTimezoneOffsetMs(corrected, tz);
+  if (verifyMs !== offsetMs) {
+    return new Date(naiveUtc.getTime() - verifyMs);
+  }
+  return corrected;
+}
+
+/**
+ * Format a UTC Date as "HH:mm" in the given IANA timezone.
+ */
+export function formatHHmm(
+  date: Date,
+  timezone: string | null | undefined,
+): string {
+  const tz = resolveTimeZone(timezone);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const h = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const m = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  return `${h === '24' ? '00' : h}:${m}`;
+}
+
+/**
+ * Format a UTC Date as "h:mm AM/PM" in the given IANA timezone.
+ */
+export function formatTime12h(
+  date: Date,
+  timezone: string | null | undefined,
+): string {
+  const tz = resolveTimeZone(timezone);
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date);
+}
+
+// ── internal helper ──
+
+function getTimezoneOffsetMs(date: Date, timezone: string): number {
+  const fmt = (tz: string): number => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(date);
+
+    const g = (type: string) => {
+      const v = parts.find((p) => p.type === type)?.value ?? '0';
+      return parseInt(v === '24' ? '0' : v, 10);
+    };
+
+    return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second'));
+  };
+
+  return fmt(timezone) - fmt('UTC');
+}
+
 export function addDaysToISODate(dateISO: string, days: number): string {
   const [year, month, day] = dateISO.split('-').map((part) => parseInt(part, 10));
   if (!year || !month || !day) return dateISO;

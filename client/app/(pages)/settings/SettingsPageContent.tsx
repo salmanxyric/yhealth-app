@@ -3,7 +3,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useState, useCallback, Suspense } from "react";
 import {
-  Settings,
   User,
   Bell,
   Shield,
@@ -15,7 +14,6 @@ import {
   Save,
   Link as LinkIcon,
   Brain,
-  Sparkles,
   Lock,
   CreditCard,
   HelpCircle,

@@ -3,10 +3,13 @@
  * @description Handles daily schedules with drag-drop items and workflow-style linking
  */
 
+import { createHash } from 'node:crypto';
 import { query } from '../config/database.config.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from './logger.service.js';
 import { googleCalendarService } from './google-calendar.service.js';
+import { notificationEngine } from './notification-engine.service.js';
+import { planScheduleSyncService } from './plan-schedule-sync.service.js';
 
 // ============================================
 // TYPES
@@ -27,7 +30,7 @@ export interface ScheduleTemplate {
  * prayer items are materialised by the scheduled sync from external providers
  * (Google Calendar + prayer_schedules) and are read-only from the mutation APIs.
  */
-export type ScheduleItemSource = 'manual' | 'google' | 'prayer';
+export type ScheduleItemSource = 'manual' | 'google' | 'prayer' | 'plan';
 
 export interface ScheduleItem {
   id: string;
@@ -270,8 +273,9 @@ class ScheduleService {
     userId: string,
     scheduleId: string,
     date: string,
-  ): Promise<{ google: number; prayer: number; pruned: number }> {
+  ): Promise<{ google: number; prayer: number; pruned: number; conflicts: number; plan: number }> {
     const upsertKeys: Array<{ source: string; externalId: string }> = [];
+    const syncedGoogleEvents: Array<{ externalId: string; title: string; startHhmm: string; endHhmm: string }> = [];
     let googleCount = 0;
     let prayerCount = 0;
 
@@ -328,6 +332,14 @@ class ScheduleService {
           category: null,
         });
         upsertKeys.push({ source: 'google', externalId: r.external_id });
+        if (!r.all_day) {
+          syncedGoogleEvents.push({
+            externalId: r.external_id,
+            title: r.title || 'Google event',
+            startHhmm: r.start_hhmm,
+            endHhmm: r.end_hhmm,
+          });
+        }
         googleCount++;
       }
     } catch (err) {
@@ -389,12 +401,33 @@ class ScheduleService {
       });
     }
 
+    // ── Sync workout & nutrition plan items ──
+    let planCount = 0;
+    try {
+      const planResult = await planScheduleSyncService.syncToExistingSchedule(userId, scheduleId, date);
+      planCount = planResult.workoutItems + planResult.mealItems;
+    } catch (err) {
+      logger.warn('[Schedule] Plan sync failed (non-blocking)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // ── Prune stale external items ──
-    // Anything in this schedule with source <> 'manual' whose (source, external_id)
-    // is NOT in the upsert set for this run has been deleted upstream.
+    // Anything in this schedule with source not in ('manual','plan') whose
+    // (source, external_id) is NOT in the upsert set has been deleted upstream.
     const pruned = await this.pruneStaleExternals(scheduleId, upsertKeys);
 
-    return { google: googleCount, prayer: prayerCount, pruned };
+    // ── Detect conflicts between new Google events and manual items ──
+    let conflicts = 0;
+    try {
+      conflicts = await this.detectAndNotifyConflicts(userId, scheduleId, date, syncedGoogleEvents);
+    } catch (err) {
+      logger.warn('[Schedule] Conflict detection failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    return { google: googleCount, prayer: prayerCount, pruned, conflicts, plan: planCount };
   }
 
   private async upsertExternalItem(args: {
@@ -457,7 +490,7 @@ class ScheduleService {
     if (keep.length === 0) {
       const result = await query(
         `DELETE FROM schedule_items
-         WHERE schedule_id = $1 AND source <> 'manual'
+         WHERE schedule_id = $1 AND source NOT IN ('manual', 'plan')
          RETURNING id`,
         [scheduleId],
       );
@@ -475,12 +508,293 @@ class ScheduleService {
     const result = await query(
       `DELETE FROM schedule_items
        WHERE schedule_id = $1
-         AND source <> 'manual'
+         AND source NOT IN ('manual', 'plan')
          AND (source, external_id) NOT IN (${tuples.join(', ')})
        RETURNING id`,
       params,
     );
     return result.rows.length;
+  }
+
+  /**
+   * After syncing Google Calendar events, detect time overlaps with manual
+   * schedule items and send a real-time notification for each new conflict.
+   * Uses the notification's related_entity_id as a deterministic key so
+   * the same conflict pair is never notified twice (until the user resolves it).
+   */
+  private async detectAndNotifyConflicts(
+    userId: string,
+    scheduleId: string,
+    date: string,
+    googleEvents: Array<{ externalId: string; title: string; startHhmm: string; endHhmm: string }>,
+  ): Promise<number> {
+    if (googleEvents.length === 0) return 0;
+
+    const manualItems = await query<{
+      id: string;
+      title: string;
+      start_time: string;
+      end_time: string | null;
+      duration_minutes: number | null;
+    }>(
+      `SELECT id, title,
+              TO_CHAR(start_time, 'HH24:MI') AS start_time,
+              TO_CHAR(end_time,   'HH24:MI') AS end_time,
+              duration_minutes
+       FROM schedule_items
+       WHERE schedule_id = $1 AND source = 'manual'`,
+      [scheduleId],
+    );
+
+    if (manualItems.rows.length === 0) return 0;
+
+    const toMin = (hhmm: string): number => {
+      const [h, m] = hhmm.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    let conflictsFound = 0;
+
+    for (const gEvent of googleEvents) {
+      const gStart = toMin(gEvent.startHhmm);
+      const gEnd = toMin(gEvent.endHhmm);
+      if (gEnd <= gStart) continue;
+
+      for (const manual of manualItems.rows) {
+        const mStart = toMin(manual.start_time);
+        let mEnd: number;
+        if (manual.end_time) {
+          mEnd = toMin(manual.end_time);
+        } else if (manual.duration_minutes) {
+          mEnd = mStart + manual.duration_minutes;
+        } else {
+          mEnd = mStart + 30;
+        }
+        if (mEnd <= mStart) continue;
+
+        // Overlap check: [gStart, gEnd) ∩ [mStart, mEnd) ≠ ∅
+        if (gStart < mEnd && gEnd > mStart) {
+          const conflictSeed = `conflict:${gEvent.externalId}:${manual.id}`;
+          const conflictUuid = this.deterministicUuid(conflictSeed);
+
+          // Skip if an unread notification for this exact conflict pair already exists
+          const existing = await query<{ id: string }>(
+            `SELECT id FROM notifications
+             WHERE user_id = $1
+               AND related_entity_id = $2
+               AND is_read = false
+             LIMIT 1`,
+            [userId, conflictUuid],
+          );
+          if (existing.rows.length > 0) continue;
+
+          await notificationEngine.send({
+            userId,
+            type: 'warning',
+            title: 'Schedule Conflict Detected',
+            message: `"${gEvent.title}" (${gEvent.startHhmm}-${gEvent.endHhmm}) conflicts with "${manual.title}" (${manual.start_time}-${manual.end_time || '?'}) on ${date}.`,
+            icon: '⚠️',
+            actionUrl: `/schedule?conflict=true&date=${date}`,
+            actionLabel: 'Resolve Conflict',
+            category: 'schedule_conflict',
+            priority: 'high',
+            relatedEntityType: 'schedule_conflict',
+            relatedEntityId: conflictUuid,
+            metadata: {
+              date,
+              scheduleId,
+              googleEvent: {
+                externalId: gEvent.externalId,
+                title: gEvent.title,
+                startTime: gEvent.startHhmm,
+                endTime: gEvent.endHhmm,
+              },
+              manualItem: {
+                id: manual.id,
+                title: manual.title,
+                startTime: manual.start_time,
+                endTime: manual.end_time,
+              },
+            },
+          });
+          conflictsFound++;
+        }
+      }
+    }
+
+    if (conflictsFound > 0) {
+      logger.info('[Schedule] Calendar conflicts detected', { userId, date, conflictsFound });
+    }
+
+    return conflictsFound;
+  }
+
+  /**
+   * Resolve a schedule conflict by applying the user's chosen action.
+   */
+  async resolveConflict(
+    userId: string,
+    notificationId: string,
+    resolution: 'keep_existing' | 'remove_existing' | 'keep_both',
+  ): Promise<void> {
+    // Fetch the notification to get conflict metadata
+    const notifResult = await query<{
+      id: string;
+      user_id: string;
+      metadata: Record<string, unknown> | null;
+      related_entity_type: string | null;
+      related_entity_id: string | null;
+    }>(
+      `SELECT id, user_id, metadata, related_entity_type, related_entity_id
+       FROM notifications
+       WHERE id = $1 AND user_id = $2 AND related_entity_type IN ('schedule_conflict', 'plan_conflict')`,
+      [notificationId, userId],
+    );
+
+    if (notifResult.rows.length === 0) {
+      throw ApiError.notFound('Conflict notification not found');
+    }
+
+    const notif = notifResult.rows[0];
+    const isPlanConflict = notif.related_entity_type === 'plan_conflict';
+
+    if (isPlanConflict) {
+      await this.resolvePlanConflict(userId, notif.metadata, resolution);
+    } else {
+      await this.resolveGoogleConflict(userId, notif.metadata, resolution);
+    }
+
+    // Mark the notification as read
+    await query(
+      `UPDATE notifications SET is_read = true, read_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [notificationId],
+    );
+  }
+
+  private async resolveGoogleConflict(
+    userId: string,
+    metadata: Record<string, unknown> | null,
+    resolution: 'keep_existing' | 'remove_existing' | 'keep_both',
+  ): Promise<void> {
+    const meta = metadata as {
+      scheduleId?: string;
+      manualItem?: { id: string };
+    } | null;
+
+    if (resolution === 'remove_existing' && meta?.manualItem?.id) {
+      if (meta.scheduleId) {
+        await this.verifyScheduleOwnership(userId, meta.scheduleId);
+      }
+      await query(
+        `DELETE FROM schedule_links WHERE source_item_id = $1 OR target_item_id = $1`,
+        [meta.manualItem.id],
+      );
+      await query(
+        `DELETE FROM schedule_items WHERE id = $1 AND source = 'manual'`,
+        [meta.manualItem.id],
+      );
+    }
+  }
+
+  private async resolvePlanConflict(
+    userId: string,
+    metadata: Record<string, unknown> | null,
+    resolution: 'keep_existing' | 'remove_existing' | 'keep_both',
+  ): Promise<void> {
+    const meta = metadata as {
+      scheduleId?: string;
+      planItem?: {
+        title: string;
+        description: string;
+        startTime: string;
+        endTime: string;
+        durationMinutes: number;
+        color: string;
+        category: string;
+        externalSource: string;
+        externalId: string;
+        metadata: Record<string, unknown>;
+      };
+      existingItem?: { id: string };
+    } | null;
+
+    if (!meta?.scheduleId || !meta?.planItem) return;
+
+    if (resolution === 'keep_both' || resolution === 'remove_existing') {
+      // 'keep_both' = add plan item alongside existing
+      // 'remove_existing' = remove existing item, add plan item
+      if (resolution === 'remove_existing' && meta.existingItem?.id) {
+        await this.verifyScheduleOwnership(userId, meta.scheduleId);
+        await query(
+          `DELETE FROM schedule_links WHERE source_item_id = $1 OR target_item_id = $1`,
+          [meta.existingItem.id],
+        );
+        await query(
+          `DELETE FROM schedule_items WHERE id = $1`,
+          [meta.existingItem.id],
+        );
+      }
+
+      await planScheduleSyncService.upsertApprovedPlanItem(meta.scheduleId, meta.planItem);
+    }
+    // 'keep_existing' = dismiss, don't add the plan item
+  }
+
+  /**
+   * Get all pending (unresolved) schedule conflict notifications for a user,
+   * optionally filtered by date.
+   */
+  async getPendingConflicts(userId: string, date?: string): Promise<Array<{
+    notificationId: string;
+    date: string;
+    conflictSource: 'google' | 'plan';
+    googleEvent?: { externalId: string; title: string; startTime: string; endTime: string };
+    planItem?: { title: string; startTime: string; endTime: string; category: string; description: string };
+    manualItem?: { id: string; title: string; startTime: string; endTime: string | null };
+    existingItem?: { id: string; title: string; startTime: string; endTime: string | null; source: string };
+  }>> {
+    const dateFilter = date
+      ? `AND metadata->>'date' = $2`
+      : '';
+    const params: string[] = [userId];
+    if (date) params.push(date);
+
+    const result = await query<{
+      id: string;
+      related_entity_type: string;
+      metadata: Record<string, unknown>;
+    }>(
+      `SELECT id, related_entity_type, metadata FROM notifications
+       WHERE user_id = $1
+         AND related_entity_type IN ('schedule_conflict', 'plan_conflict')
+         AND is_read = false
+         ${dateFilter}
+       ORDER BY created_at DESC`,
+      params,
+    );
+
+    return result.rows.map((r) => {
+      const meta = r.metadata as Record<string, any>;
+      const isPlan = r.related_entity_type === 'plan_conflict';
+
+      if (isPlan) {
+        return {
+          notificationId: r.id,
+          date: meta.date,
+          conflictSource: 'plan' as const,
+          planItem: meta.planItem,
+          existingItem: meta.existingItem,
+        };
+      }
+
+      return {
+        notificationId: r.id,
+        date: meta.date,
+        conflictSource: 'google' as const,
+        googleEvent: meta.googleEvent,
+        manualItem: meta.manualItem,
+      };
+    });
   }
 
   /**
@@ -1116,6 +1430,15 @@ class ScheduleService {
     if (result.rows.length === 0) {
       throw ApiError.notFound('Schedule not found');
     }
+  }
+
+  /**
+   * Derive a deterministic UUID from an arbitrary string seed (MD5-based).
+   * Used for conflict dedup keys that must fit the notifications.related_entity_id UUID column.
+   */
+  private deterministicUuid(seed: string): string {
+    const hex = createHash('md5').update(seed).digest('hex');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
   }
 
   private timeToMinutes(time: string): number {

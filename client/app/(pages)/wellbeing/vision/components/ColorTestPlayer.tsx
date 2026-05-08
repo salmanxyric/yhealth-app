@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Eye, CheckCircle2, XCircle, Clock, ArrowRight,
-  RotateCw, Trophy, Target, Zap, AlertCircle,
+  RotateCw, Target, Zap, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generatePlate } from "../utils/plateGenerator";

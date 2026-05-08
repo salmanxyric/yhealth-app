@@ -20,6 +20,7 @@ import { socketService } from '../services/socket.service.js';
 import { mailHelper } from '../helper/mail.js';
 import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
+import { formatTime12h } from '../lib/user-timezone.js';
 
 // ============================================
 // CONFIGURATION
@@ -100,11 +101,14 @@ async function processCalendarEventReminders(): Promise<number> {
       start_time: Date;
       end_time: Date;
       location: string | null;
+      timezone: string | null;
     }>(
-      `SELECT id, user_id, title, start_time, end_time, location
-       FROM calendar_events
-       WHERE status = 'confirmed' AND all_day = false
-         AND start_time > $1 AND start_time <= $2`,
+      `SELECT ce.id, ce.user_id, ce.title, ce.start_time, ce.end_time, ce.location,
+              u.timezone
+       FROM calendar_events ce
+       JOIN users u ON ce.user_id = u.id
+       WHERE ce.status = 'confirmed' AND ce.all_day = false
+         AND ce.start_time > $1 AND ce.start_time <= $2`,
       [now.toISOString(), windowEnd.toISOString()],
     );
 
@@ -118,8 +122,8 @@ async function processCalendarEventReminders(): Promise<number> {
       const startTime = new Date(event.start_time);
       const endTime = new Date(event.end_time);
       const minutesUntil = Math.round((startTime.getTime() - now.getTime()) / 60_000);
-      const startStr = startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const endStr = endTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const startStr = formatTime12h(startTime, event.timezone);
+      const endStr = formatTime12h(endTime, event.timezone);
 
       const message = minutesUntil <= 1
         ? `Your meeting "${event.title}" is starting now (${startStr} - ${endStr}).${event.location ? ` Location: ${event.location}` : ''}`

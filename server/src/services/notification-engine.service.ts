@@ -8,6 +8,7 @@
 import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { socketService } from './socket.service.js';
+import { webPushService } from './web-push.service.js';
 
 // ============================================
 // TYPES
@@ -146,7 +147,7 @@ class NotificationEngine {
       // Update dedup map
       this.dedupMap.set(dedupKey, Date.now());
 
-      // 2. Emit real-time notification event (lightweight payload)
+      // 2. Emit real-time notification event
       socketService.emitToUser(userId, 'notification:new', {
         id: notification.id,
         type: notification.type,
@@ -155,6 +156,8 @@ class NotificationEngine {
         priority: notification.priority,
         icon: notification.icon,
         actionUrl: notification.action_url,
+        category: notification.category,
+        metadata: notification.metadata,
         createdAt: notification.created_at.toISOString(),
       });
 
@@ -181,6 +184,16 @@ class NotificationEngine {
           })
         )
         .catch(() => {});
+
+      // 6. Web Push (non-blocking) — browser notifications when tab is closed
+      webPushService.sendToUser(userId, {
+        title: notification.title,
+        body: notification.message,
+        icon: '/logo.png',
+        badge: '/logo.png',
+        url: notification.action_url || '/',
+        tag: notification.id,
+      }).catch(() => {});
 
       logger.info('[NotificationEngine] Sent notification', {
         userId,

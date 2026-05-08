@@ -46,7 +46,7 @@ export function MealCard({
               <span className="text-xs text-slate-500">{formatTime(meal.time)}</span>
             </div>
             <p className="text-sm text-slate-400 mb-3 truncate">
-              {meal.items.map((i) => i.name).join(" • ")}
+              {meal.items.map((i) => (i.quantity || 1) > 1 ? `${i.name} ×${i.quantity}` : i.name).join(" • ")}
             </p>
             <div className="flex flex-wrap gap-3">
               <span className="flex items-center gap-1 text-xs text-slate-400">
@@ -112,13 +112,20 @@ export function MealCard({
                   >
                     <span className="text-xl flex-shrink-0">{getFoodIcon(item.name)}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white truncate">{item.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-white truncate">{item.name}</p>
+                        {(item.quantity || 1) > 1 && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0 tabular-nums">
+                            ×{item.quantity}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500">{item.portion}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm text-orange-400">{item.calories} kcal</p>
+                      <p className="text-sm text-orange-400">{item.calories * (item.quantity || 1)} kcal</p>
                       <p className="text-xs text-slate-500">
-                        P: {item.protein}g • C: {item.carbs}g • F: {item.fat}g
+                        P:{Math.round(item.protein * (item.quantity || 1))}g • C:{Math.round(item.carbs * (item.quantity || 1))}g • F:{Math.round(item.fat * (item.quantity || 1))}g
                       </p>
                     </div>
                   </div>

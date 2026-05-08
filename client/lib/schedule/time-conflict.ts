@@ -10,7 +10,7 @@
 
 import { parseISO } from "date-fns";
 
-export type SlotSource = "manual" | "google" | "prayer";
+export type SlotSource = "manual" | "google" | "prayer" | "plan";
 
 /**
  * Normalised view of an already-scheduled slot used for conflict checks.

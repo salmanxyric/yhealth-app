@@ -251,13 +251,20 @@ export function TodayTab({
                                 >
                                   <span className="text-base sm:text-lg shrink-0">{getFoodIcon(item.name)}</span>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[13px] text-white truncate font-medium">{item.name}</p>
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="text-[13px] text-white truncate font-medium">{item.name}</p>
+                                      {(item.quantity || 1) > 1 && (
+                                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0 tabular-nums">
+                                          ×{item.quantity}
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-[10px] sm:text-[11px] text-slate-500">{item.portion}</p>
                                   </div>
                                   <div className="text-right shrink-0">
-                                    <p className="text-[12px] sm:text-[13px] text-orange-400 font-semibold">{item.calories} kcal</p>
+                                    <p className="text-[12px] sm:text-[13px] text-orange-400 font-semibold">{item.calories * (item.quantity || 1)} kcal</p>
                                     <p className="text-[10px] text-slate-500">
-                                      P:{item.protein}g · C:{item.carbs}g · F:{item.fat}g
+                                      P:{Math.round(item.protein * (item.quantity || 1))}g · C:{Math.round(item.carbs * (item.quantity || 1))}g · F:{Math.round(item.fat * (item.quantity || 1))}g
                                     </p>
                                   </div>
                                 </div>

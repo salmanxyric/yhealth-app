@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
   Brain,
@@ -15,7 +15,6 @@ import {
   formatCurrency,
   staggerContainer,
   slideFromRight,
-  spring,
 } from "../../lib/motion";
 
 interface AIInsightsFeedProps {

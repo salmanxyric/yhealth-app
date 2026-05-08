@@ -10,6 +10,7 @@ import { authenticate } from '../middlewares/auth.middleware.js';
 import { scheduleContextService } from '../services/schedule-context.service.js';
 import { specialDaysService } from '../services/special-days.service.js';
 import { holidayCalendarService } from '../services/holiday-calendar.service.js';
+import { scheduleService } from '../services/schedule.service.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -68,6 +69,42 @@ router.put('/holidays/preferences', asyncHandler(async (req: AuthenticatedReques
   const { region, religiousCalendar, customHolidays } = req.body;
   await holidayCalendarService.saveUserPreferences(userId, { region, religiousCalendar, customHolidays });
   ApiResponse.success(res, null, 'Holiday preferences updated');
+}));
+
+/**
+ * @route   GET /api/v1/schedules/conflicts
+ * @desc    Get pending (unresolved) calendar conflicts for user
+ * @access  Private
+ */
+router.get('/conflicts', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const date = req.query.date as string | undefined;
+  const conflicts = await scheduleService.getPendingConflicts(userId, date);
+  ApiResponse.success(res, { conflicts, count: conflicts.length });
+}));
+
+/**
+ * @route   POST /api/v1/schedules/conflicts/resolve
+ * @desc    Resolve a calendar conflict (keep_existing | remove_existing | keep_both)
+ * @access  Private
+ */
+router.post('/conflicts/resolve', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) throw ApiError.unauthorized();
+
+  const { notificationId, resolution } = req.body;
+  if (!notificationId || !resolution) {
+    throw ApiError.badRequest('notificationId and resolution are required');
+  }
+  const validResolutions = ['keep_existing', 'remove_existing', 'keep_both'];
+  if (!validResolutions.includes(resolution)) {
+    throw ApiError.badRequest(`resolution must be one of: ${validResolutions.join(', ')}`);
+  }
+
+  await scheduleService.resolveConflict(userId, notificationId, resolution);
+  ApiResponse.success(res, null, 'Conflict resolved');
 }));
 
 /**

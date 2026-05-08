@@ -9,7 +9,6 @@ import {
   ArrowLeft,
   ChevronDown,
   Flame,
-  Heart,
   BarChart3,
   Shield,
 } from "lucide-react";

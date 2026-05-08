@@ -50,21 +50,6 @@ const MODE_LABELS: Record<JournalingMode, { label: string; accent: string }> = {
   voice_conversation: { label: "VOICE JOURNAL", accent: "rgba(45, 212, 191, 0.5)" },
 };
 
-const PLACEHOLDER_BY_MODE: Record<JournalingMode, string> = {
-  quick_reflection:
-    "Take a moment to reflect on your day so far. What stands out?",
-  deep_dive:
-    "Let your thoughts flow freely. Explore what is on your mind without judgement...",
-  gratitude:
-    "Name three things you are grateful for today. Why do they matter to you?",
-  life_perspective:
-    "Consider your values and the person you are becoming. What do you notice?",
-  free_write:
-    "Start writing. There are no rules here -- just let the words come...",
-  voice_conversation:
-    "Speak your thoughts aloud. Your voice will be transcribed and guided by AI...",
-};
-
 function formatElapsed(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;

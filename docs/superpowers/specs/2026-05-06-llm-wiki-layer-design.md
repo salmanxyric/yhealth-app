@@ -1,9 +1,18 @@
 # LLM Wiki Layer — System Design
 
-**Date:** 2026-05-06
-**Status:** Draft
+**Date:** 2026-05-06 (Updated: 2026-05-08)
+**Status:** Approved
 **Author:** AI Architect + Salman
-**Scope:** Add a persistent, compounding wiki layer to the AI Coach (Aurea)
+**Scope:** Add a persistent, compounding wiki layer to the AI Coach (Cia/Balencia)
+
+### Design Decisions (2026-05-08 Brainstorming)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Wiki vs Memories relationship | **Synthesis layer** | Wiki sits above raw memories as distilled intelligence. Memories = raw evidence; Wiki = narrative synthesis. |
+| Compiler trigger model | **Hybrid** | Lightweight per-chat updates (append evidence, bump confidence) + daily deep synthesis (rewrite narratives, resolve contradictions). |
+| Page structure | **Domain-driven + Hierarchical** | Top-level domain pages (fitness, nutrition, sleep, etc.) that expand into sub-topic pages when evidence accumulates (5+ memories or 3+ weeks of data). |
+| Analytics scope | **Behavioral + Coaching effectiveness** | Track both user behavior trends AND coaching system accuracy/effectiveness. |
 
 ---
 
@@ -107,6 +116,47 @@ wiki/
 └── index.md           # Master index (auto-maintained)
 ```
 
+### 3.2.1 Domain-Driven Hierarchy (Per User)
+
+In addition to page types, each user's wiki is organized by **life domains** that deepen as data accumulates. Sub-pages are created dynamically when a domain accumulates enough evidence (threshold: 5+ memories or 3+ weeks of data). Until then, sub-topics live as sections within the parent domain page.
+
+```
+user-index (synthesis — master profile summary)
+├── fitness-profile (domain)
+│   ├── strength-training (sub-page, created when 5+ workout memories)
+│   ├── cardio-patterns
+│   └── recovery-habits
+├── nutrition-profile
+│   ├── meal-patterns
+│   ├── dietary-preferences
+│   └── nutrition-gaps
+├── sleep-profile
+│   ├── sleep-quality-trends
+│   └── sleep-disruption-triggers
+├── mental-wellbeing
+│   ├── stress-patterns
+│   ├── mood-trends
+│   └── emotional-triggers
+├── lifestyle-context
+│   ├── daily-routines
+│   ├── work-life-balance
+│   └── social-patterns
+├── goals-strategy
+│   ├── active-goals
+│   ├── goal-achievement-history
+│   └── obstacle-patterns
+├── coaching-relationship
+│   ├── coaching-style-preferences
+│   ├── communication-patterns
+│   └── trust-calibration
+└── behavioral-patterns
+    ├── consistency-profile
+    ├── motivation-triggers
+    └── failure-modes
+```
+
+**Domain pages coexist with typed pages.** A domain page (e.g., `fitness-profile`) is a `pattern` type page in the `fitness` category. Entity, concept, and synthesis pages cross-reference domain pages via `[[wiki-links]]`.
+
 ### 3.3 Page Structure (Markdown with YAML Frontmatter)
 
 ```markdown
@@ -168,7 +218,12 @@ above weekday baseline (2,100 → 2,900 kcal).
 
 ## 4. Database Schema
 
-### 4.1 New Tables
+> **Implementation Note:** The schema below is the **target state**. The current deployed migration
+> (`server/src/database/migrations/20260506000000_wiki.sql`) differs in several ways. See
+> **Section 4.3 — Schema Delta & Reconciliation** for the exact differences and the migration
+> plan to bring the live schema in line with this spec.
+
+### 4.1 Target Tables
 
 ```sql
 -- ============================================================
@@ -413,6 +468,50 @@ CREATE INDEX idx_wiki_page_versions_page ON wiki_page_versions(page_id, version 
 └──────────────────────┘
 ```
 
+### 4.3 Schema Delta & Reconciliation
+
+The current deployed migration (`20260506000000_wiki.sql`) differs from the target schema above.
+A reconciliation migration must run as **Phase 0** before any new wiki work begins.
+
+| Column / Feature | Current Migration | Target Spec | Migration Action |
+|-----------------|-------------------|-------------|-----------------|
+| `wiki_pages.category` | `VARCHAR(64)` | `intelligence_category` enum | **Keep VARCHAR(64)** — more flexible for domain hierarchy slugs |
+| `wiki_pages.summary` | Nullable | `NOT NULL` | `ALTER ... SET NOT NULL` (backfill empty rows first) |
+| `wiki_pages.body` | Nullable | `NOT NULL` | `ALTER ... SET NOT NULL` (backfill empty rows first) |
+| `wiki_pages.summary_embedding` | `TEXT` (fallback) | `vector(1536)` | See embedding strategy below |
+| `wiki_pages.body_embedding` | `TEXT` (fallback) | `vector(1536)` | See embedding strategy below |
+| `wiki_pages.stale_after` | `INTEGER ... DEFAULT 30` (days) | `INTERVAL DEFAULT '30 days'` | **Keep INTEGER** — simpler arithmetic, matches current code |
+| `wiki_links.link_type` | `wiki_link_type` enum | `VARCHAR(32)` | **Keep enum** — matches current migration |
+| `wiki_log.operation` | `wiki_log_operation` enum | `VARCHAR(32)` | **Keep enum** — matches current migration |
+| `wiki_log.summary` | Nullable | `NOT NULL` | `ALTER ... SET NOT NULL` (backfill '' for nulls) |
+| `wiki_page_sources.source_id` | Nullable | `NOT NULL` | **Keep nullable** — some sources have no single ID (e.g., aggregated data) |
+| `wiki_page_sources.source_table` | Nullable | `NOT NULL` | **Keep nullable** — same reason as source_id |
+| `wiki_page_versions.*` | Nullable columns | `NOT NULL` on title, summary, body, confidence, evidence_count | `ALTER ... SET NOT NULL` |
+| Indexes | No `status` in composites | `status` in composite indexes | Add composite indexes with status |
+| UUID function | `uuid_generate_v4()` | `gen_random_uuid()` | **Keep `uuid_generate_v4()`** — matches all other tables |
+
+### 4.4 Embedding Strategy
+
+**Decision: Dual-mode with runtime detection**, aligned with `vector-embedding.service.ts`:
+
+1. **If pgvector extension is available** (production): Use `vector(1536)` columns with IVFFlat cosine indexes. The reconciliation migration adds vector columns alongside the existing TEXT columns, then drops TEXT columns once migration is verified.
+
+2. **If pgvector is unavailable** (local dev, some CI): Fall back to TEXT serialization of embedding arrays, with ILIKE-based text search. This matches the existing pattern in `vector-embedding.service.ts` which already detects pgvector availability on startup.
+
+```sql
+-- Reconciliation migration: add vector columns if pgvector exists
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+    ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS summary_embedding_vec vector(1536);
+    ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS body_embedding_vec vector(1536);
+    CREATE INDEX IF NOT EXISTS idx_wiki_pages_summary_emb
+      ON wiki_pages USING ivfflat (summary_embedding_vec vector_cosine_ops) WITH (lists = 100);
+  END IF;
+END $$;
+```
+
+The wiki service reads `vectorEmbeddingService.isVectorAvailable()` at startup and uses the appropriate column.
+
 ## 5. Operations
 
 ### 5.1 Ingest — When new data arrives
@@ -597,26 +696,35 @@ POST   /v1/wiki/pages/:slug/flag        # User flags page for review
 POST   /v1/wiki/pages/:slug/feedback    # Verify, correct, or dispute a page
 ```
 
-### 6.2 New LangGraph Tools (for AI Coach)
+### 6.2 LangGraph Tools (Canonical Names)
+
+All tool names use `Wiki` prefix for namespace clarity. These are the **canonical names** —
+code must use these exactly.
 
 ```typescript
-// Wiki Read Tools
+// ─── Wiki Read Tools ───────────────────────────────────────────
+
 searchWikiPages(query: string, category?: string, limit?: number)
-  → Search wiki for relevant pages
+  → Semantic + keyword search across user's wiki pages
+  → Returns: { slug, title, summary, confidence, similarity }[]
 
 getWikiPage(slug: string)
-  → Read a specific wiki page with its links
+  → Read a specific wiki page with its outbound/inbound links
+  → Returns: { page: WikiPage, outbound: WikiLink[], inbound: WikiLink[] }
 
 getWikiIndex()
-  → Read the master index for navigation
+  → Read the master index (page counts, health metrics, category breakdown)
+  → Returns: WikiIndex
 
 getRelatedPages(slug: string, depth?: number)
-  → Get connected pages (follow links N levels)
+  → Follow wiki_links N levels deep from a starting page
+  → Returns: WikiPage[] (deduplicated, ordered by relevance)
 
-// Wiki Write Tools
+// ─── Wiki Write Tools ──────────────────────────────────────────
+
 createWikiPage(input: {
   pageType: WikiPageType,
-  category: IntelligenceCategory,
+  category: string,
   slug: string,
   title: string,
   summary: string,
@@ -624,7 +732,9 @@ createWikiPage(input: {
   confidence: number,
   sources: WikiSourceRef[]
 })
-  → Create a new wiki page
+  → Create a new wiki page (auto-extracts [[links]], queues embedding)
+  → Returns: WikiPage
+  → Idempotent: if slug exists for user, returns existing page unchanged
 
 updateWikiPage(slug: string, input: {
   body?: string,
@@ -633,20 +743,30 @@ updateWikiPage(slug: string, input: {
   changeReason: string,
   newSources?: WikiSourceRef[]
 })
-  → Update an existing page (auto-versions)
+  → Update an existing page (auto-versions before overwrite)
+  → Returns: WikiPage (new version)
+  → Idempotent: if body/summary unchanged, skips version bump
 
 createWikiLink(sourceSlug: string, targetSlug: string, linkType: string, context?: string)
-  → Create a cross-reference between pages
+  → Create a cross-reference between two pages
+  → Returns: WikiLink
+  → Idempotent: if link exists with same type, returns existing
 
-flagContradiction(pageSlug: string, contradictingSlug: string, explanation: string)
+flagWikiContradiction(pageSlug: string, contradictingSlug: string, explanation: string)
   → Flag a contradiction between two pages
+  → Creates 'contradicts' link + marks older page status
+  → Returns: { link: WikiLink, markedPage: string }
 
-// Wiki Maintenance Tools
+// ─── Wiki Maintenance Tools ────────────────────────────────────
+
 lintWiki(scope?: 'full' | 'stale' | 'orphans' | 'contradictions')
-  → Run health check, return findings
+  → Run health check, return structured findings
+  → Returns: { stale: string[], orphans: string[], contradictions: WikiLink[] }
 
-fileQueryAsPage(query: string, answer: string, pageType: WikiPageType)
-  → File a valuable Q&A exchange as a new wiki page
+fileQueryAsWikiPage(query: string, answer: string, pageType: WikiPageType)
+  → File a valuable Q&A exchange as a new synthesis/concept page
+  → Returns: WikiPage
+  → Idempotent: deduplicates by semantic similarity (>0.9 = skip)
 ```
 
 ## 7. Integration with Existing Systems
@@ -804,12 +924,27 @@ const FOLDER_CONFIG = {
 
 ```
 server/src/services/
-├── wiki.service.ts              # Core CRUD + search + versioning
-├── wiki-ingest.service.ts       # Ingest pipeline (classify → find → create/update)
-├── wiki-lint.service.ts         # Health checks (stale, orphans, contradictions)
-├── wiki-index.service.ts        # Index maintenance + stats
+├── wiki.service.ts              # ✅ EXISTS — Core CRUD + search + versioning
+├── wiki-ingest.service.ts       # ❌ NOT IMPLEMENTED — Ingest pipeline (classify → find → create/update)
+├── wiki-lint.service.ts         # ❌ NOT IMPLEMENTED — Health checks (stale, orphans, contradictions)
+├── wiki-index.service.ts        # ❌ NOT IMPLEMENTED — Index maintenance + stats
 └── langgraph-tools/domains/
-    └── wiki.ts                  # LangGraph tool definitions (8-10 tools)
+    └── wiki.ts                  # ✅ EXISTS — LangGraph tool definitions
+
+server/src/controllers/
+├── wiki.controller.ts           # ✅ EXISTS — REST API endpoints
+
+server/src/routes/
+├── wiki.routes.ts               # ✅ EXISTS — Route definitions
+
+server/src/validators/
+├── wiki.validator.ts            # ✅ EXISTS — Input validation
+
+server/src/jobs/
+├── wiki-synthesis.job.ts        # ❌ NOT IMPLEMENTED — Daily deep synthesis (Memory Compiler Mode 2)
+
+server/src/database/migrations/
+├── 20260506000000_wiki.sql      # ✅ EXISTS — Base schema (needs reconciliation, see 4.3)
 ```
 
 ### 9.2 WikiService (Core)
@@ -970,18 +1105,35 @@ const INGEST_DEBOUNCE = {
 
 ## 12. Migration Strategy
 
-### Phase 1: Schema + Core Service (Week 1-2)
-- Create database migration
-- Implement WikiService (CRUD, search, versioning)
-- Implement WikiIngestService (basic ingest pipeline)
-- Add LangGraph wiki tools (search, read, create, update)
+### Phase 0: Reconcile Existing Implementation (Week 0)
 
-### Phase 2: Integration (Week 3-4)
-- Wire wiki search into RAG context pipeline
+The wiki schema and core service already exist. Before building new features, reconcile:
+
+- **Schema reconciliation migration** (`20260508_wiki_reconcile.sql`):
+  - `ALTER wiki_pages ALTER COLUMN summary SET NOT NULL` (backfill empty rows with `''`)
+  - `ALTER wiki_pages ALTER COLUMN body SET NOT NULL` (backfill empty rows with `''`)
+  - `ALTER wiki_page_versions ALTER COLUMN title SET NOT NULL` (backfill)
+  - Add composite indexes with `status` (see section 4.3)
+  - Add vector embedding columns if pgvector available (see section 4.4)
+- **Audit existing `wiki.service.ts`**: Verify CRUD methods match spec interfaces. Add missing methods (search by embedding, link graph traversal).
+- **Audit existing `langgraph-tools/domains/wiki.ts`**: Verify tool names match canonical names (section 6.2). Add return types and idempotency guards.
+- **Audit existing `wiki.controller.ts` + `wiki.routes.ts`**: Verify endpoints match section 6.1. Add missing routes.
+- **Verify existing data**: Check if any wiki pages were created by early testing. Clean up test data if needed.
+
+### Phase 1: Core Services + Memory Compiler (Week 1-2)
+- Implement `wiki-ingest.service.ts` (ingest pipeline: classify → find related → create/update)
+- Implement `wiki-index.service.ts` (index regeneration + stats)
+- Implement lightweight Memory Compiler (per-chat hook in `langgraph-chatbot.service.ts`)
+- Add wiki context loader to RAG context assembly pipeline
+- Update LangGraph wiki tools with idempotency + canonical names
+
+### Phase 2: Deep Synthesis + Integration (Week 3-4)
+- Implement `wiki-synthesis.job.ts` (daily deep synthesis — Memory Compiler Mode 2)
+- Wire wiki search into RAG context pipeline (priority: wiki → memories → RAG chunks)
 - Add conversation-end ingest trigger
 - Add data-event micro-ingest for key tables (workouts, meals, mood)
-- Update system prompt with wiki instructions
-- Add periodic synthesis job (weekly journal pages)
+- Update system prompt with wiki instructions (section 7.4)
+- Create default domain page hierarchy for new users (section 3.2.1)
 
 ### Phase 3: Frontend (Week 5-6)
 - Wiki Browser component in Intelligence Drawer
@@ -990,12 +1142,82 @@ const INGEST_DEBOUNCE = {
 - "Save to Wiki" action on AI responses
 - Wiki stats in dashboard
 
-### Phase 4: Polish (Week 7-8)
-- Lint service (stale detection, orphan detection, contradiction flagging)
+### Phase 4: Analytics + Polish (Week 7-8)
+- Implement `wiki-lint.service.ts` (stale detection, orphan detection, contradiction flagging)
+- Analytics layer: behavioral trend metrics + coaching effectiveness metrics (section 16)
 - Wiki graph visualization (D3 force graph)
 - User feedback system (verify, correct, dispute)
 - Performance optimization (token budgets, ingest throttling)
 - Seed wiki from existing memories and conversation history
+
+## 12.1 Operational Guardrails
+
+Safety constraints to prevent wiki thrashing, runaway costs, and data corruption.
+
+### Async Queue
+
+All wiki write operations (create, update, ingest) run through the existing BullMQ embedding queue infrastructure. No wiki writes happen synchronously in the chat request path — the lightweight compiler enqueues work, the worker processes it.
+
+```typescript
+const WIKI_QUEUE = 'WIKI_OPERATIONS';
+
+interface WikiJobData {
+  userId: string;
+  operation: 'micro_ingest' | 'conversation_ingest' | 'deep_synthesis' | 'lint';
+  payload: Record<string, unknown>;
+  priority: number; // 1 (low) – 5 (critical)
+}
+```
+
+### Per-User Daily Write Budget
+
+Prevent runaway LLM costs from wiki synthesis:
+
+| Operation | Daily Limit Per User | Token Budget |
+|-----------|---------------------|--------------|
+| Lightweight compiler (per-chat) | 50 updates/day | ~200 tokens each |
+| Deep synthesis job | 1 run/day | ~5,000 tokens max |
+| Manual ingest (user-triggered) | 5/day | ~1,000 tokens each |
+| Total daily wiki tokens | — | ~20,000 tokens max |
+
+If a user exceeds the daily budget, wiki updates are deferred to the next day's deep synthesis job. The queue tracks `wiki_writes_today` in a Redis counter with 24h TTL.
+
+### Idempotency
+
+Every wiki tool is idempotent (see section 6.2):
+
+- `createWikiPage`: If slug exists → return existing page, no mutation
+- `updateWikiPage`: If body/summary unchanged → skip version bump, return current
+- `createWikiLink`: If link exists with same type → return existing
+- `fileQueryAsWikiPage`: Semantic dedup (>0.9 similarity → skip)
+
+This prevents the LLM from creating duplicates when retrying or when multiple conversation turns produce similar insights.
+
+### Max Pages Touched Per Operation
+
+| Operation | Max Pages | Behavior at Limit |
+|-----------|-----------|-------------------|
+| Lightweight compiler (per-chat) | 3 pages | Skip remaining signals, log warning |
+| Conversation ingest | 8 pages | Prioritize by confidence, defer rest |
+| Deep synthesis | 20 pages | Process highest-evidence domains first |
+| Lint | No limit | Read-only — marks status, doesn't rewrite |
+
+### No Direct Mutation Retries
+
+After a successful wiki tool execution (create/update), the LLM must NOT re-execute the same tool in the same conversation turn. The LangGraph tool wrapper enforces this:
+
+```typescript
+const executedWikiOps = new Set<string>();
+
+function wikiToolGuard(toolName: string, key: string): boolean {
+  const opKey = `${toolName}:${key}`;
+  if (executedWikiOps.has(opKey)) return false; // skip
+  executedWikiOps.add(opKey);
+  return true;
+}
+```
+
+The set resets at the start of each conversation turn.
 
 ## 13. Success Metrics
 
@@ -1072,4 +1294,172 @@ index.md (auto-generated)
 │
 └── Sources (1)
     └── article-creatine-meta-analysis — 2023 meta-analysis, supports current dosing
+```
+
+## 15. Memory Compiler (State Evolution Engine)
+
+The Memory Compiler is the decision engine that routes new information into the appropriate layer. It operates in two modes:
+
+### 15.1 Mode 1: Lightweight Per-Chat Compiler
+
+Runs after every conversation turn. Fast, low-cost operations only.
+
+```
+Conversation turn completes
+    │
+    ▼
+┌──────────────────────────────────────────┐
+│  LIGHTWEIGHT COMPILER (~100-200 tokens)  │
+│                                          │
+│  1. Extract behavioral signals from      │
+│     the conversation turn                │
+│  2. For each signal:                     │
+│     ├── Find matching wiki domain page   │
+│     ├── Append to evidence JSONB array   │
+│     ├── Bump confidence if reinforcing   │
+│     ├── Flag contradiction if conflicting│
+│     └── Update last_accessed_at          │
+│  3. Log operation in wiki_log            │
+│                                          │
+│  Does NOT:                               │
+│  - Rewrite page narratives               │
+│  - Create new pages                      │
+│  - Restructure links                     │
+│  - Generate analytics                    │
+└──────────────────────────────────────────┘
+```
+
+**Implementation:** Runs as a post-response hook in `langgraph-chatbot.service.ts` after the streaming response completes. Non-blocking — does not delay the user's next message.
+
+### 15.2 Mode 2: Daily Deep Synthesis
+
+Runs as a scheduled job (e.g., 4 AM). Full LLM-powered synthesis.
+
+```
+Daily cron trigger
+    │
+    ▼
+┌──────────────────────────────────────────────────┐
+│  DEEP SYNTHESIS JOB (~2,000-5,000 tokens/user)   │
+│                                                   │
+│  1. Gather inputs:                                │
+│     ├── All intelligence_memories (new/updated    │
+│     │   in last 24h)                              │
+│     ├── All wiki pages for user                   │
+│     ├── Core profile changes                      │
+│     ├── Raw data signals (workout_logs, meal_logs,│
+│     │   mood_logs, etc. from last 24h)            │
+│     └── Lightweight compiler flags (contradictions,│
+│         evidence appends)                          │
+│                                                   │
+│  2. For each domain page:                         │
+│     ├── LLM rewrites narrative sections           │
+│     ├── Updates pattern descriptions              │
+│     ├── Resolves flagged contradictions            │
+│     ├── Updates confidence scores                 │
+│     └── Saves version snapshot                    │
+│                                                   │
+│  3. Sub-page creation check:                      │
+│     IF domain has 5+ memories in a subcategory    │
+│     AND no sub-page exists                        │
+│     → Create new sub-page, move content from      │
+│       parent domain page                          │
+│                                                   │
+│  4. Cross-domain synthesis:                       │
+│     ├── Update wiki_links graph                   │
+│     ├── Detect cross-domain correlations          │
+│     ├── Generate synthesis pages if patterns span │
+│     │   multiple domains                          │
+│     └── Update user-index (master summary)        │
+│                                                   │
+│  5. Analytics computation:                        │
+│     ├── Calculate behavioral metrics              │
+│     ├── Calculate coaching effectiveness metrics  │
+│     └── Store as intelligence_artifacts           │
+│                                                   │
+│  6. Maintenance:                                  │
+│     ├── Run lint (stale, orphan, contradiction)   │
+│     ├── Regenerate wiki_index                     │
+│     └── Log all operations                        │
+└──────────────────────────────────────────────────┘
+```
+
+**Implementation:** New job file `server/src/jobs/wiki-synthesis.job.ts`, scheduled via existing cron infrastructure. Runs after `memory-extraction.job.ts` and `memory-decay.job.ts`.
+
+### 15.3 Compiler Decision Matrix
+
+| Signal Type | Per-Chat Action | Daily Deep Action |
+|------------|-----------------|-------------------|
+| New behavioral fact | Append to evidence array | Rewrite narrative if pattern changed |
+| Reinforcing existing pattern | Bump confidence +0.05 | Strengthen language, update statistics |
+| Contradicting existing claim | Flag in frontmatter | LLM resolves: update or mark contradicted |
+| New domain data (first time) | Create domain page stub | Populate with full synthesis |
+| Sub-category threshold met | No action | Create sub-page, restructure parent |
+| Cross-domain correlation | No action | Create synthesis page + wiki_links |
+| Temporary/emotional signal | Store in vector memory only | Discard (do NOT write to wiki) |
+| User explicit correction | Update immediately | Propagate to related pages |
+
+## 16. Analytics Layer
+
+### 16.1 Behavioral Trend Analytics
+
+Derived from wiki page evolution and raw data. Stored as `intelligence_artifacts` (type: `report` or `chart`).
+
+| Metric | Source | Calculation | Update Frequency |
+|--------|--------|-------------|------------------|
+| Domain consistency score | Wiki domain pages | (days_with_activity / total_days) × 100, rolling 7/30/90d | Daily |
+| Pattern strength | Wiki page confidence | Confidence trajectory over time (improving/stable/declining) | Daily |
+| Goal progress velocity | goals-strategy wiki page | Δ(goal_metric) / Δ(time), normalized | Daily |
+| Habit streak length | behavioral-patterns wiki page | Consecutive days of target behavior | Daily |
+| Behavioral change detection | Cross-domain wiki comparison | Statistical change-point detection on key metrics | Weekly |
+| Contradiction count | wiki_links (type: contradicts) | Count of active contradictions | Daily |
+| Wiki coverage | wiki_index | Domains with active pages / total domains | Daily |
+
+### 16.2 Coaching Effectiveness Analytics
+
+Measures how well the AI coaching system is learning and performing.
+
+| Metric | Source | Calculation | Target |
+|--------|--------|-------------|--------|
+| Recommendation adherence | Tool results + follow-up data | (actions_taken / recommendations_made) × 100 | > 60% |
+| Memory accuracy | intelligence_feedback | verified / (verified + rejected) × 100 | > 85% |
+| User correction frequency | intelligence_feedback (action: correct) | Corrections per 100 conversations | < 5 |
+| Wiki page stability | wiki_page_versions | Pages with 0 contradictions / total active pages | > 90% |
+| Context relevance | intelligence_session_context (was_helpful) | Helpful responses / total responses | > 80% |
+| Coaching style fit | coaching-relationship wiki page | User engagement trend after style adjustments | Improving |
+| Confidence trajectory | wiki_pages aggregate | Average confidence across all user wiki pages | > 0.7 |
+| Hallucination proxy | Contradiction detection rate + user rejections | (contradictions_caught + rejections) / total_claims | < 10% |
+
+### 16.3 Analytics Display
+
+Analytics are surfaced in three places:
+
+1. **Intelligence Files Drawer → Artifacts folder**: Pre-generated chart artifacts (line charts for trends, gauge for scores)
+2. **Chat on-demand**: User asks "how am I doing?" → AI generates analytics artifact from wiki data
+3. **Daily/Weekly coaching nudges**: Proactive insights delivered via chat based on analytics thresholds (e.g., "Your fitness consistency dropped 15% this week")
+
+### 16.4 Analytics Data Flow
+
+```
+Wiki Pages (domain pages, behavioral-patterns, goals-strategy)
+    │
+    ▼
+Daily Deep Synthesis Job (step 5)
+    │
+    ├── Calculate all behavioral metrics
+    ├── Calculate all coaching effectiveness metrics
+    ├── Compare with previous period
+    │
+    ▼
+Store as intelligence_artifacts (type: report)
+    │
+    ├── chart_config: { type, axes, data_points }
+    ├── data: { current, previous, change, trend }
+    └── insight: "Your sleep consistency improved 12% this week..."
+    │
+    ▼
+Available via:
+    ├── Intelligence Files Drawer (auto-displayed)
+    ├── Chat tool: getAnalytics(domain?, period?)
+    └── Push notifications (threshold-based)
 ```

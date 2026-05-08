@@ -300,7 +300,7 @@ export default function SessionPlayer({
     resume,
     skipPhase,
     prevPhase,
-    complete,
+    complete: _complete,
     reset,
   } = yogaSession;
 

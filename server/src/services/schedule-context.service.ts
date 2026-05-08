@@ -11,6 +11,7 @@ import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { holidayCalendarService } from './holiday-calendar.service.js';
 import type { HolidayContext } from './holiday-calendar.service.js';
+import { formatHHmm, getUserLocalHour } from '../lib/user-timezone.js';
 
 // ============================================
 // TYPES
@@ -97,8 +98,22 @@ class ScheduleContextService {
    * Get the full day context for a user on a given date.
    * Queries schedule_items + workout_schedule_tasks, computes metrics.
    */
-  async getDayContext(userId: string, date?: string): Promise<DayContext> {
+  async getDayContext(userId: string, date?: string, timezone?: string): Promise<DayContext> {
     const targetDate = date || new Date().toISOString().split('T')[0];
+
+    // Resolve user timezone if not provided
+    let userTz = timezone;
+    if (!userTz) {
+      try {
+        const tzResult = await query<{ timezone: string }>(
+          `SELECT timezone FROM users WHERE id = $1`,
+          [userId],
+        );
+        userTz = tzResult.rows[0]?.timezone || 'UTC';
+      } catch {
+        userTz = 'UTC';
+      }
+    }
 
     try {
       // ── Fetch schedule items for the date ──
@@ -184,8 +199,8 @@ class ScheduleContextService {
       for (const ce of calendarEvents) {
         const start = new Date(ce.start_time);
         const end = new Date(ce.end_time);
-        const startStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
-        const endStr = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+        const startStr = formatHHmm(start, userTz);
+        const endStr = formatHHmm(end, userTz);
         const duration = Math.round((end.getTime() - start.getTime()) / 60000);
         timeBlocks.push({
           startTime: startStr,
@@ -364,7 +379,11 @@ class ScheduleContextService {
   async isUserInBusyBlock(userId: string): Promise<boolean> {
     const ctx = await this.getDayContext(userId);
     const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const userTzResult = await query<{ timezone: string }>(
+      `SELECT timezone FROM users WHERE id = $1`, [userId],
+    );
+    const currentMinutes = getUserLocalHour(userTzResult.rows[0]?.timezone) * 60 +
+      parseInt(formatHHmm(now, userTzResult.rows[0]?.timezone).split(':')[1], 10);
 
     for (const block of ctx.timeBlocks) {
       if (block.startTime === '00:00') continue; // skip untimed blocks
@@ -387,7 +406,11 @@ class ScheduleContextService {
   async getNextFreeWindow(userId: string): Promise<FreeWindow | null> {
     const ctx = await this.getDayContext(userId);
     const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const userTzResult = await query<{ timezone: string }>(
+      `SELECT timezone FROM users WHERE id = $1`, [userId],
+    );
+    const currentMinutes = getUserLocalHour(userTzResult.rows[0]?.timezone) * 60 +
+      parseInt(formatHHmm(now, userTzResult.rows[0]?.timezone).split(':')[1], 10);
 
     for (const window of ctx.freeWindows) {
       const windowStart = timeToMinutes(window.startTime);

@@ -115,7 +115,7 @@ export function DeepAssessmentStep() {
     }
   }, [qaAiAvailable, mcqAssessment.aiAvailable, handleSwitchToQuick]);
 
-  const handleModeChange = useCallback((mode: AssessmentInteractionMode) => {
+  const _handleModeChange = useCallback((mode: AssessmentInteractionMode) => {
     // Only allow mode change if no progress made
     if (isQAMode && qaMessages.length <= 1) {
       setInteractionMode(mode);

@@ -14,7 +14,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api-client";
+import { api } from "@/lib/api-client";
 import { DataSourceType, dataSourceService } from "@/src/shared/services/data-source.service";
 import { toast } from "sonner";
 import { confirm } from "@/components/common/ConfirmDialog";
@@ -33,7 +33,7 @@ export function IntegrationsSection({
   tokenInfo,
   integrations,
   isSpotifyConnecting,
-  setWhoopStatus,
+  setWhoopStatus: _setWhoopStatus,
   setSpotifyStatus,
   setTokenInfo,
   setIsSpotifyConnecting,

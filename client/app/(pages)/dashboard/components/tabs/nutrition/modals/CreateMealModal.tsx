@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Tag,
   Edit3,
+  Minus,
 } from "lucide-react";
 import Image from "next/image";
 import type { MealFood } from "@/src/shared/services";
@@ -876,6 +877,11 @@ function AddedFoodsSection({
                     <p className={`text-sm font-medium truncate ${muted ? "text-slate-500 line-through" : "text-white"}`}>
                       {item.name}
                     </p>
+                    {(item.quantity || 1) > 1 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0">
+                        ×{item.quantity}
+                      </span>
+                    )}
                     {item.id?.startsWith("ai-") && (
                       <span className="px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 text-[9px] font-bold uppercase tracking-wider shrink-0">
                         AI
@@ -883,23 +889,62 @@ function AddedFoodsSection({
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">{item.portion}</p>
-                  <div className="flex items-center gap-1.5 mt-1.5 text-[11px] overflow-x-auto scrollbar-hide whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-200 shrink-0">
-                      <Flame className="w-3 h-3" />
-                      {item.calories}
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-500/10 text-red-200 shrink-0">
-                      <Beef className="w-3 h-3" />
-                      {item.protein}g
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-200 shrink-0">
-                      <Wheat className="w-3 h-3" />
-                      {item.carbs}g
-                    </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-200 shrink-0">
-                      <Apple className="w-3 h-3" />
-                      {item.fat}g
-                    </span>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    {/* Quantity controls */}
+                    <div className="inline-flex items-center gap-0 rounded-lg border border-white/[0.1] bg-white/[0.03] shrink-0 mr-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const currentQty = item.quantity || 1;
+                          if (currentQty <= 1) {
+                            if (editingItemId === item.id) setEditingItemId(null);
+                            removeFoodItem(item.id);
+                          } else {
+                            setMealFormData((prev) => ({
+                              ...prev,
+                              items: prev.items.map((i) => i.id === item.id ? { ...i, quantity: currentQty - 1 } : i),
+                            }));
+                          }
+                        }}
+                        className="p-1 hover:bg-white/[0.08] rounded-l-lg text-slate-400 hover:text-white transition-colors"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="px-2 text-[11px] font-semibold text-white min-w-[20px] text-center tabular-nums">
+                        {item.quantity || 1}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMealFormData((prev) => ({
+                            ...prev,
+                            items: prev.items.map((i) => i.id === item.id ? { ...i, quantity: (i.quantity || 1) + 1 } : i),
+                          }));
+                        }}
+                        className="p-1 hover:bg-white/[0.08] rounded-r-lg text-slate-400 hover:text-emerald-300 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Macro badges (show per-unit values × quantity) */}
+                    <div className="flex items-center gap-1.5 text-[11px] overflow-x-auto scrollbar-hide whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-200 shrink-0">
+                        <Flame className="w-3 h-3" />
+                        {item.calories * (item.quantity || 1)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-500/10 text-red-200 shrink-0">
+                        <Beef className="w-3 h-3" />
+                        {Math.round(item.protein * (item.quantity || 1) * 10) / 10}g
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-200 shrink-0">
+                        <Wheat className="w-3 h-3" />
+                        {Math.round(item.carbs * (item.quantity || 1) * 10) / 10}g
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-200 shrink-0">
+                        <Apple className="w-3 h-3" />
+                        {Math.round(item.fat * (item.quantity || 1) * 10) / 10}g
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0 self-start">
@@ -1223,9 +1268,11 @@ function ManualFoodSection({
             </h5>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
               {foods.map((food) => {
-                const isAdded = mealFormData.items.some(
+                const addedItem = mealFormData.items.find(
                   (i) => i.name.trim().toLowerCase() === food.name.trim().toLowerCase()
                 );
+                const isAdded = !!addedItem;
+                const addedQty = addedItem?.quantity || 1;
                 return (
                   <button
                     key={food.id}
@@ -1249,9 +1296,8 @@ function ManualFoodSection({
                           {food.name}
                         </p>
                         {isAdded && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-semibold flex items-center gap-0.5 shrink-0">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            Added
+                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-bold flex items-center gap-0.5 shrink-0 tabular-nums">
+                            ×{addedQty}
                           </span>
                         )}
                       </div>
@@ -1263,7 +1309,10 @@ function ManualFoodSection({
                         {food.calories}
                       </span>
                       {isAdded ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-emerald-400 font-medium">tap +1</span>
+                          <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                        </div>
                       ) : (
                         <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center group-hover:bg-emerald-500/25 transition-colors">
                           <Plus className="w-3 h-3 text-emerald-300" />

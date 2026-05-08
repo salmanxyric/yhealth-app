@@ -16,6 +16,8 @@ import type {
 } from '../types/index.js';
 
 export class MCQGeneratorService {
+  private openaiQuotaExhaustedUntil = 0;
+
   constructor(private provider: AIProvider) {}
 
   async generateMCQQuestion(request: MCQGenerationRequest): Promise<MCQGenerationResponse> {
@@ -103,9 +105,18 @@ Rules:
           }
         }
 
-        if (!content && this.provider.visionClient) {
-          content = await this.generateMCQWithOpenAI(mcqSystemPrompt, userPrompt);
-          contentSource = content ? 'openai' : null;
+        if (!content && this.provider.visionClient && Date.now() > this.openaiQuotaExhaustedUntil) {
+          try {
+            content = await this.generateMCQWithOpenAI(mcqSystemPrompt, userPrompt);
+            contentSource = content ? 'openai' : null;
+          } catch (openaiError: any) {
+            const msg = openaiError?.message || '';
+            if (msg.includes('429') || msg.includes('quota')) {
+              this.openaiQuotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
+              logger.warn('[AICoach] OpenAI quota exhausted, skipping for 5 min');
+            }
+            throw openaiError;
+          }
         }
 
         if (!content || content.trim().length === 0) {

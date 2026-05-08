@@ -65,6 +65,60 @@ function shouldSkipEmotionDetection(message: string): boolean {
   return false;
 }
 
+function buildClientStreamError(error: unknown): { error: string; errorMessage: string; code: string; retryable: boolean } {
+  const message = error instanceof Error ? error.message : String(error || 'Unknown error');
+  const lower = message.toLowerCase();
+  const code = String((error as any)?.code || '').toLowerCase();
+
+  const isGemini = lower.includes('gemini') || lower.includes('googlegenerativeai') || lower.includes('generativelanguage');
+  const isQuota = lower.includes('quota') || lower.includes('billing') || lower.includes('insufficient') || lower.includes('402');
+  const isRateLimit = lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('429');
+  const isTimeout = lower.includes('timed out') || lower.includes('timeout') || code === 'etimedout';
+
+  if (isQuota) {
+    return {
+      error: 'AI provider quota issue',
+      errorMessage: 'The AI service quota or billing limit has been reached. Please check the configured API plan, then try again.',
+      code: 'AI_PROVIDER_QUOTA',
+      retryable: false,
+    };
+  }
+
+  if (isGemini && isRateLimit) {
+    return {
+      error: 'Gemini is rate limited',
+      errorMessage: 'Gemini is receiving too many requests right now. Please wait a moment and try again.',
+      code: 'GEMINI_RATE_LIMITED',
+      retryable: true,
+    };
+  }
+
+  if (isGemini && isTimeout) {
+    return {
+      error: 'Gemini request timed out',
+      errorMessage: 'Gemini took too long to respond. Your data was not lost; please try again in a moment.',
+      code: 'GEMINI_TIMEOUT',
+      retryable: true,
+    };
+  }
+
+  if (isTimeout) {
+    return {
+      error: 'AI request timed out',
+      errorMessage: 'The AI service took too long to respond. Please try again in a moment.',
+      code: 'AI_PROVIDER_TIMEOUT',
+      retryable: true,
+    };
+  }
+
+  return {
+    error: 'Failed to generate response',
+    errorMessage: 'The AI coach is temporarily unavailable. Please try again shortly.',
+    code: 'AI_PROVIDER_ERROR',
+    retryable: true,
+  };
+}
+
 class RAGChatbotController {
   chat = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.userId;
@@ -485,7 +539,7 @@ class RAGChatbotController {
         userId,
       });
       try {
-        res.write(`data: ${JSON.stringify({ error: 'Failed to generate response', errorMessage: error?.message || 'Unknown error' })}\n\n`);
+        res.write(`data: ${JSON.stringify(buildClientStreamError(error))}\n\n`);
         res.end();
       } catch (writeError: any) {
         // Stream may already be closed

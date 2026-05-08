@@ -57,13 +57,6 @@ function getSentimentColor(score?: number | null): string {
   return "#f87171";
 }
 
-function getSentimentGradient(score?: number | null): string {
-  if (score == null) return "from-slate-500/10 to-slate-600/5";
-  if (score > 0.3) return "from-amber-500/10 to-yellow-600/5";
-  if (score > -0.3) return "from-blue-500/10 to-indigo-600/5";
-  if (score > -0.6) return "from-violet-500/10 to-purple-600/5";
-  return "from-red-500/10 to-rose-600/5";
-}
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
