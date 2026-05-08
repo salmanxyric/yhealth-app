@@ -48,7 +48,7 @@ class IntelligenceFilesController {
       }
     };
 
-    const [memories, artifacts, plans, core, logs, notes] = await Promise.all([
+    const [memories, artifacts, plans, core, logs, notes, wiki] = await Promise.all([
       safeCount(
         `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
          FROM intelligence_memories WHERE user_id = $1 AND status IN ('active', 'verified')`,
@@ -79,6 +79,11 @@ class IntelligenceFilesController {
          FROM user_files WHERE user_id = $1 AND NOT is_archived`,
         [userId]
       ),
+      safeCount(
+        `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
+         FROM wiki_pages WHERE user_id = $1 AND status IN ('active', 'verified')`,
+        [userId]
+      ),
     ]);
 
     const folders = [
@@ -88,6 +93,7 @@ class IntelligenceFilesController {
       { id: 'plans', label: 'Plans', itemCount: plans.count, lastModified: plans.lastModified },
       { id: 'core', label: 'Core', itemCount: core.count, lastModified: core.lastModified },
       { id: 'logs', label: 'Logs', itemCount: logs.count, lastModified: logs.lastModified },
+      { id: 'wiki', label: 'Wiki', itemCount: wiki.count, lastModified: wiki.lastModified },
     ];
 
     ApiResponse.success(res, { folders }, 'Folder summaries retrieved', undefined, req);
