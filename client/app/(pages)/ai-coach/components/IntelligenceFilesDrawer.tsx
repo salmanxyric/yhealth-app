@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  BookOpen,
   Brain,
   StickyNote,
   Sparkles,
@@ -18,6 +19,8 @@ import {
 } from "lucide-react";
 import { MemoryCard } from "./MemoryCard";
 import { CoreProfilePanel } from "./CoreProfilePanel";
+import { WikiPageCard } from "./WikiPageCard";
+import { WikiPageDetail } from "./WikiPageDetail";
 import type { useIntelligenceFiles } from "../hooks/useIntelligenceFiles";
 import type {
   IntelligenceFolder,
@@ -26,6 +29,7 @@ import type {
 
 const FOLDER_CONFIG: Record<IntelligenceFolder, { icon: LucideIcon; accent: string }> = {
   memories: { icon: Brain, accent: "text-purple-400" },
+  wiki: { icon: BookOpen, accent: "text-indigo-400" },
   notes: { icon: StickyNote, accent: "text-slate-400" },
   artifacts: { icon: Sparkles, accent: "text-cyan-400" },
   plans: { icon: ClipboardList, accent: "text-blue-400" },
@@ -81,16 +85,16 @@ export function IntelligenceFilesDrawer({ hook }: IntelligenceFilesDrawerProps) 
           </button>
         </div>
 
-        {/* Search (only in memories list) */}
-        {hook.drawer.level === "list" && hook.drawer.activeFolder === "memories" && (
+        {/* Search (memories & wiki list) */}
+        {hook.drawer.level === "list" && (hook.drawer.activeFolder === "memories" || hook.drawer.activeFolder === "wiki") && (
           <div className="px-5 py-3 border-b border-white/[0.06]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
               <input
                 type="text"
-                value={hook.searchQuery}
-                onChange={(e) => hook.handleSearch(e.target.value)}
-                placeholder="Search memories..."
+                value={hook.drawer.activeFolder === "wiki" ? hook.wikiSearchQuery : hook.searchQuery}
+                onChange={(e) => hook.drawer.activeFolder === "wiki" ? hook.handleWikiSearch(e.target.value) : hook.handleSearch(e.target.value)}
+                placeholder={hook.drawer.activeFolder === "wiki" ? "Search wiki pages..." : "Search memories..."}
                 className="w-full text-xs text-white bg-white/[0.04] border border-white/[0.08] rounded-lg pl-9 pr-3 py-2 outline-none focus:border-white/20 placeholder:text-slate-600 transition-colors"
               />
             </div>
@@ -111,6 +115,13 @@ export function IntelligenceFilesDrawer({ hook }: IntelligenceFilesDrawerProps) 
             ) : (
               <FolderGrid folders={hook.folders} onSelect={hook.navigateToFolder} />
             )
+          ) : hook.drawer.level === "detail" && hook.drawer.activeFolder === "wiki" ? (
+            <WikiPageDetail
+              page={hook.selectedWikiPage}
+              onOpenPage={hook.selectWikiPage}
+              onFlag={hook.handleFlagWikiPage}
+              onVerify={hook.handleVerifyWikiPage}
+            />
           ) : hook.drawer.level === "list" ? (
             <FolderContent hook={hook} />
           ) : null}
@@ -176,6 +187,36 @@ function FolderContent({ hook }: { hook: IntelligenceFilesHook }) {
                 onVerify={() => hook.handleVerifyMemory(m.id)}
                 onReject={() => hook.handleRejectMemory(m.id)}
                 onExpire={() => hook.handleExpireMemory(m.id)}
+              />
+            ))
+          )}
+        </div>
+      );
+
+    case "wiki":
+      return (
+        <div className="space-y-3">
+          {hook.wikiStats && (
+            <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-indigo-500/5 border border-indigo-500/10 text-[10px] text-slate-400">
+              <span>{hook.wikiStats.activePages} pages</span>
+              <span className="text-white/20">·</span>
+              <span>{hook.wikiStats.stalePages} stale</span>
+              <span className="text-white/20">·</span>
+              <span>{hook.wikiStats.contradictedPages} contradicted</span>
+            </div>
+          )}
+          {hook.wikiPages.length === 0 ? (
+            <EmptyState
+              icon={BookOpen}
+              message="No wiki pages yet"
+              sub="Your AI coach builds a personal health wiki from your conversations and data."
+            />
+          ) : (
+            hook.wikiPages.map((page) => (
+              <WikiPageCard
+                key={page.id}
+                page={page}
+                onClick={() => hook.selectWikiPage(page.slug)}
               />
             ))
           )}

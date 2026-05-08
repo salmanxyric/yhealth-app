@@ -15,7 +15,7 @@ export type MemoryStatus = 'active' | 'verified' | 'rejected' | 'expired' | 'sup
 
 export type IntelligenceSource = 'ai' | 'user' | 'system' | 'wearable';
 
-export type IntelligenceFolder = 'memories' | 'notes' | 'artifacts' | 'plans' | 'core' | 'logs';
+export type IntelligenceFolder = 'memories' | 'wiki' | 'notes' | 'artifacts' | 'plans' | 'core' | 'logs';
 
 export type ArtifactType = 'chart' | 'comparison' | 'report' | 'heatmap' | 'scatter' | 'gauge' | 'timeline' | 'table';
 

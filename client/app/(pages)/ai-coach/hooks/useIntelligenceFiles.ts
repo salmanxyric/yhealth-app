@@ -10,7 +10,13 @@ import type {
   CoreProfile,
   LogReference,
 } from "@shared/types/domain/intelligence-files";
+import type {
+  WikiPage,
+  WikiPageWithLinks,
+  WikiStats,
+} from "@shared/types/domain/wiki";
 import * as intelligenceApi from "@/src/shared/services/intelligence-files.service";
+import * as wikiApi from "@/src/shared/services/wiki.service";
 
 type NavigationLevel = "folders" | "list" | "detail";
 
@@ -39,6 +45,13 @@ export function useIntelligenceFiles() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Wiki state
+  const [wikiPages, setWikiPages] = useState<WikiPage[]>([]);
+  const [wikiStats, setWikiStats] = useState<WikiStats | null>(null);
+  const [selectedWikiPage, setSelectedWikiPage] = useState<WikiPageWithLinks | null>(null);
+  const [wikiSearchQuery, setWikiSearchQuery] = useState("");
+  const wikiSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Drawer controls
   const openDrawer = useCallback(async () => {
@@ -93,6 +106,17 @@ export function useIntelligenceFiles() {
         case "logs": {
           const res = await intelligenceApi.listLogs({ limit: 50 });
           if (res.success && res.data?.logs) setLogs(res.data.logs);
+          break;
+        }
+        case "wiki": {
+          const [pagesRes, statsRes] = await Promise.all([
+            wikiApi.listPages({ limit: 100, sort: "updated_at", order: "desc" }),
+            wikiApi.getStats(),
+          ]);
+          if (pagesRes.success && pagesRes.data) {
+            setWikiPages(pagesRes.data.data ?? []);
+          }
+          if (statsRes.success && statsRes.data) setWikiStats(statsRes.data);
           break;
         }
         case "notes":
@@ -180,6 +204,69 @@ export function useIntelligenceFiles() {
     }, 300);
   }, []);
 
+  // Wiki actions
+  const selectWikiPage = useCallback(async (slug: string) => {
+    setDrawer((prev) => ({ ...prev, level: "detail", selectedItemId: slug }));
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await wikiApi.getPage(slug);
+      if (res.success && res.data) setSelectedWikiPage(res.data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load wiki page";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const openWikiPage = useCallback(async (slug: string) => {
+    setDrawer({ isOpen: true, level: "detail", activeFolder: "wiki", selectedItemId: slug });
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await wikiApi.getPage(slug);
+      if (res.success && res.data) setSelectedWikiPage(res.data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load wiki page";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleWikiSearch = useCallback((q: string) => {
+    setWikiSearchQuery(q);
+    if (wikiSearchTimeout.current) clearTimeout(wikiSearchTimeout.current);
+    if (!q.trim()) {
+      wikiApi.listPages({ limit: 100, sort: "updated_at", order: "desc" }).then((res) => {
+        if (res.success && res.data) {
+          setWikiPages(res.data.data ?? []);
+        }
+      });
+      return;
+    }
+    wikiSearchTimeout.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await wikiApi.searchPages(q);
+        if (res.success && res.data) {
+          setWikiPages(res.data.map((r) => r.page));
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleFlagWikiPage = useCallback(async (slug: string, reason: string) => {
+    await wikiApi.flagPage(slug, reason);
+  }, []);
+
+  const handleVerifyWikiPage = useCallback(async (slug: string) => {
+    await wikiApi.submitFeedback(slug, { action: "verify" });
+  }, []);
+
   return {
     // Drawer state
     drawer,
@@ -207,5 +294,16 @@ export function useIntelligenceFiles() {
     handleVerifyMemory,
     handleRejectMemory,
     handleExpireMemory,
+
+    // Wiki
+    wikiPages,
+    wikiStats,
+    selectedWikiPage,
+    wikiSearchQuery,
+    selectWikiPage,
+    openWikiPage,
+    handleWikiSearch,
+    handleFlagWikiPage,
+    handleVerifyWikiPage,
   };
 }
