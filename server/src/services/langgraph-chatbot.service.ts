@@ -56,6 +56,7 @@ import {
 } from '../lib/user-timezone.js';
 import { artifactGenerationService } from './artifact-generation.service.js';
 import { wikiCompilerService } from './wiki-compiler.service.js';
+import { wikiIngestService } from './wiki-ingest.service.js';
 
 const lifeAreaRouterOpenAI: OpenAI | null = env.openai.apiKey
   ? new OpenAI({ apiKey: env.openai.apiKey })
@@ -4469,6 +4470,13 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         .processConversationTurn(userId, message, responseContent, activeConversationId)
         .catch((error) => {
           logger.warn('[LangGraphChatbot] Wiki compiler failed (non-critical)', { error, userId });
+        });
+
+      // Wiki domain initialization — fire-and-forget, only runs once per user
+      wikiIngestService
+        .initializeDomainPages(userId)
+        .catch((error) => {
+          logger.warn('[LangGraphChatbot] Wiki init failed (non-critical)', { error, userId });
         });
 
       // Auto-inject suggestedAction from musicManager tool results into actions
