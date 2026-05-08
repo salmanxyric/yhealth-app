@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { Bot, User, Loader2, CheckCircle2, AlertCircle, Copy, Pencil, Check, X } from "lucide-react";
@@ -11,6 +12,7 @@ import { parseActionsFromResponse, ActionExecutionResult } from "@/src/shared/se
 import { cleanCoachDisplayText } from "@/src/shared/utils/coach-message-display";
 
 import { RoutingChip } from "@/components/ai-coach/RoutingChip";
+import { WikiLinkChip } from "./WikiLinkChip";
 import { MessageActions } from "./MessageActions";
 import { AgentTimeline } from "./AgentTimeline";
 import { CheckInCard, parseCheckInFromMessage } from "./CheckInCard";
@@ -27,6 +29,7 @@ interface AICoachMessagesProps {
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onRegenerateMessage: (messageId: string) => void;
   onEditUserMessage?: (messageId: string, content: string) => void | Promise<void>;
+  onOpenWikiPage?: (slug: string) => void;
   isThinking?: boolean;
   thinkingLabel?: string;
   liveTimelineEvents?: ToolTimelineEvent[];
@@ -79,6 +82,7 @@ export function AICoachMessages({
   messagesEndRef,
   onRegenerateMessage,
   onEditUserMessage,
+  onOpenWikiPage,
   isThinking,
   thinkingLabel,
   liveTimelineEvents,
@@ -117,6 +121,30 @@ export function AICoachMessages({
     } finally {
       setSavingEdit(false);
     }
+  }
+
+  function renderContentWithWikiLinks(content: string): React.ReactNode {
+    if (!onOpenWikiPage || !content.includes("[[")) {
+      return (
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+          {content}
+        </ReactMarkdown>
+      );
+    }
+
+    const parts = content.split(/(\[\[[^\]]+\]\])/g);
+    return parts.map((part, i) => {
+      const match = part.match(/^\[\[([^\]]+)\]\]$/);
+      if (match) {
+        return <WikiLinkChip key={i} slug={match[1]} onClick={onOpenWikiPage} />;
+      }
+      if (!part) return null;
+      return (
+        <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+          {part}
+        </ReactMarkdown>
+      );
+    });
   }
 
   if (isLoadingConversation) return <MessagesSkeleton />;
@@ -180,14 +208,7 @@ export function AICoachMessages({
                     ))
                   : parsedArtifact ? <ArtifactCard artifact={parsedArtifact} /> : null}
                 <div className="coach-prose prose prose-invert prose-sm max-w-none">
-                  {displayContent && (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeRaw]}
-                    >
-                      {displayContent}
-                    </ReactMarkdown>
-                  )}
+                  {displayContent && renderContentWithWikiLinks(displayContent)}
                 </div>
                 {/* Action execution indicators */}
                 {(() => {
