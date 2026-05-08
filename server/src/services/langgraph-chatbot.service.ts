@@ -55,6 +55,7 @@ import {
   resolveTimeZone,
 } from '../lib/user-timezone.js';
 import { artifactGenerationService } from './artifact-generation.service.js';
+import { wikiCompilerService } from './wiki-compiler.service.js';
 
 const lifeAreaRouterOpenAI: OpenAI | null = env.openai.apiKey
   ? new OpenAI({ apiKey: env.openai.apiKey })
@@ -690,7 +691,31 @@ class LangGraphChatbotService {
         music: { toolName: 'musicManager', defaultArgs: { action: 'recommend', activity: 'focus' } },
         water: { toolName: 'waterIntakeManager', defaultArgs: { action: 'get_today' } },
         schedules: { toolName: 'scheduleManager', defaultArgs: { action: 'get_today' } },
+        finance: { toolName: 'getFinancialReport', defaultArgs: {} },
+        meals: { toolName: 'getUserMealLogs', defaultArgs: {} },
+        workouts: { toolName: 'getUserWorkoutLogs', defaultArgs: {} },
+        goals: { toolName: 'getUserGoals', defaultArgs: {} },
+        progress: { toolName: 'getUserProgress', defaultArgs: {} },
+        wellbeing: { toolName: 'moodManager', defaultArgs: { action: 'get' } },
       };
+
+      // For finance, detect time references like "last month", "previous month"
+      if (intent.primary === 'finance') {
+        const lowerMsg = message.toLowerCase();
+        if (lowerMsg.includes('last month') || lowerMsg.includes('previous month') || lowerMsg.includes('prev month')) {
+          const now = new Date();
+          const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const monthStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+          intentToolMap.finance.defaultArgs = { month: monthStr };
+        }
+        if (lowerMsg.includes('spending') || lowerMsg.includes('category') || lowerMsg.includes('breakdown')) {
+          intentToolMap.finance.toolName = 'getSpendingByCategory';
+        } else if (lowerMsg.includes('trend')) {
+          intentToolMap.finance.toolName = 'getSpendingTrends';
+        } else if (lowerMsg.includes('summary')) {
+          intentToolMap.finance.toolName = 'getMonthlySummary';
+        }
+      }
 
       // For music, try to parse the user message for more specific args
       if (intent.primary === 'music') {
@@ -746,6 +771,28 @@ class LangGraphChatbotService {
             message: `${namePrefix}I couldn't find music right now. ${parsedResult.error || 'Please try again in a moment.'}`,
           };
         }
+      }
+
+      if (intent.primary === 'finance') {
+        if (parsedResult.success === false || parsedResult.error) {
+          return {
+            message: `${namePrefix}I couldn't pull up your financial data right now. ${parsedResult.error || 'Please try again in a moment.'}`,
+          };
+        }
+        const month = mapping.defaultArgs.month || 'this month';
+        const summary = parsedResult.summary || parsedResult;
+        const income = summary.totalIncome ?? summary.total_income;
+        const expenses = summary.totalExpense ?? summary.total_expense ?? summary.totalExpenses ?? summary.total_expenses;
+        if (income !== undefined && expenses !== undefined) {
+          const net = (income || 0) - (expenses || 0);
+          const netLabel = net >= 0 ? `saved $${Math.abs(net).toLocaleString()}` : `overspent by $${Math.abs(net).toLocaleString()}`;
+          return {
+            message: `${namePrefix}Here's your financial report for ${month}:\n\n💰 **Income:** $${Number(income).toLocaleString()}\n💸 **Expenses:** $${Number(expenses).toLocaleString()}\n📊 **Net:** You ${netLabel}\n\nWould you like a deeper breakdown by category?`,
+          };
+        }
+        return {
+          message: `${namePrefix}Here's your financial report for ${month}. Would you like me to break it down further?`,
+        };
       }
 
       return {
@@ -2061,29 +2108,38 @@ class LangGraphChatbotService {
       );
     }
 
-    // Adaptive coaching loop — classify user state and inject strategy directive
-    try {
-      const adaptiveDirective = await adaptiveCoachingLoopService.evaluate(userId);
-      if (adaptiveDirective.state !== 'stable') {
-        systemPrompt += `\n\n---\nCURRENT USER STATE: ${adaptiveDirective.state.toUpperCase()}\n${adaptiveDirective.promptInjection}`;
-      }
-    } catch (err) {
-      logger.warn('[LangGraphChatbot] Adaptive coaching loop unavailable, continuing without', { userId, error: (err as Error).message });
+    // Adaptive coaching + intelligence context — run in parallel with timeout
+    // These were sequential awaits with no timeout, causing the 4s stream deadline to fire
+    const POST_FETCH_ENRICHMENT_MS = 750;
+    const [adaptiveDirective, intelligenceCtx] = await Promise.all([
+      Promise.race([
+        adaptiveCoachingLoopService.evaluate(userId),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), POST_FETCH_ENRICHMENT_MS)),
+      ]).catch((err) => {
+        logger.warn('[LangGraphChatbot] Adaptive coaching loop unavailable, continuing without', { userId, error: (err as Error).message });
+        return null;
+      }),
+      Promise.race([
+        transparencyService.prepareContext(userId, '', 'system'),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), POST_FETCH_ENRICHMENT_MS)),
+      ]).catch((err) => {
+        logger.warn('[LangGraphChatbot] Intelligence context unavailable, continuing without', { userId, error: (err as Error).message });
+        return null;
+      }),
+    ]);
+
+    if (adaptiveDirective && adaptiveDirective.state !== 'stable') {
+      systemPrompt += `\n\n---\nCURRENT USER STATE: ${adaptiveDirective.state.toUpperCase()}\n${adaptiveDirective.promptInjection}`;
     }
 
-    // Add intelligence context (memories + core profile)
-    try {
-      const intelligenceCtx = await transparencyService.prepareContext(userId, '', 'system');
-      if (intelligenceCtx.memoriesForPrompt) {
-        systemPrompt += `\n\n---\nYOUR INTELLIGENCE (active memories, confidence-ranked):\n${intelligenceCtx.memoriesForPrompt}\n\nUse these learned patterns and preferences to personalize your response. Reference them naturally — don't list them.`;
-      }
-      if (intelligenceCtx.coreProfileForPrompt && intelligenceCtx.coreProfileForPrompt !== '(No core profile data available yet)') {
-        systemPrompt += `\n\n---\nCORE PROFILE (calibrated baselines):\n${intelligenceCtx.coreProfileForPrompt}`;
-      }
-      // Store for SSE transparency event emission
+    if (intelligenceCtx?.memoriesForPrompt) {
+      systemPrompt += `\n\n---\nYOUR INTELLIGENCE (active memories, confidence-ranked):\n${intelligenceCtx.memoriesForPrompt}\n\nUse these learned patterns and preferences to personalize your response. Reference them naturally — don't list them.`;
+    }
+    if (intelligenceCtx?.coreProfileForPrompt && intelligenceCtx.coreProfileForPrompt !== '(No core profile data available yet)') {
+      systemPrompt += `\n\n---\nCORE PROFILE (calibrated baselines):\n${intelligenceCtx.coreProfileForPrompt}`;
+    }
+    if (intelligenceCtx) {
       (this as any)._lastIntelligenceCtx = intelligenceCtx;
-    } catch (err) {
-      logger.warn('[LangGraphChatbot] Intelligence context unavailable, continuing without', { userId, error: (err as Error).message });
     }
 
     if (ragContext) {
@@ -2262,6 +2318,64 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       delta: compact(message, 'completed'),
       icon: undefined,
     };
+  }
+
+  private parseToolResult(resultContent: string): any | null {
+    try {
+      return JSON.parse(resultContent);
+    } catch {
+      return null;
+    }
+  }
+
+  private isToolCallFailure(toolCall: { tool: string; result: string }): boolean {
+    const result = toolCall.result || '';
+    if (
+      result.startsWith('Error executing tool:') ||
+      result.startsWith('Tool "') ||
+      result.includes('not found') ||
+      result.startsWith('Missing required field')
+    ) {
+      return true;
+    }
+
+    const parsed = this.parseToolResult(result);
+    return parsed?.success === false || Boolean(parsed?.error);
+  }
+
+  private sanitizeToolResultMessage(message: string): string {
+    const cleaned = message
+      .replace(/\s*Schedule ID:\s*[a-f0-9-]+\.?/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) return '';
+    const withPunctuation = /[.!?]$/.test(cleaned) ? cleaned : `${cleaned}.`;
+    return withPunctuation.length > 240 ? `${withPunctuation.slice(0, 237)}...` : withPunctuation;
+  }
+
+  private buildToolFallbackMessage(
+    toolCalls: Array<{ tool: string; result: string }>,
+    namePrefix: string
+  ): string | null {
+    for (const toolCall of toolCalls) {
+      if (this.isToolCallFailure(toolCall)) continue;
+
+      const parsed = this.parseToolResult(toolCall.result);
+      const message = parsed?.message || parsed?.data?.message;
+      if (typeof message === 'string' && message.trim()) {
+        return `${namePrefix}${this.sanitizeToolResultMessage(message)}`;
+      }
+    }
+
+    if (toolCalls.some(tc => !this.isToolCallFailure(tc) && tc.tool === 'scheduleManager')) {
+      return `${namePrefix}your schedule has been updated.`;
+    }
+
+    if (toolCalls.some(tc => !this.isToolCallFailure(tc) && tc.tool === 'mealManager')) {
+      return `${namePrefix}your meal has been logged.`;
+    }
+
+    return null;
   }
 
   /**
@@ -2778,14 +2892,52 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   /**
    * Execute tools and get results
    */
+  private buildToolCallSignature(toolCall: { name: string; args: Record<string, unknown> }): string {
+    const normalize = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(normalize);
+      if (value && typeof value === 'object') {
+        return Object.keys(value as Record<string, unknown>)
+          .sort()
+          .reduce<Record<string, unknown>>((acc, key) => {
+            acc[key] = normalize((value as Record<string, unknown>)[key]);
+            return acc;
+          }, {});
+      }
+      return value;
+    };
+
+    return JSON.stringify({
+      name: toolCall.name,
+      args: normalize(toolCall.args || {}),
+    });
+  }
+
   private async executeTools(
     tools: ReturnType<typeof createTools>,
     toolCalls: Array<{ name: string; args: Record<string, unknown>; id: string }>,
     context?: { userId: string; conversationId?: string },
   ): Promise<ToolMessage[]> {
     const toolResults: ToolMessage[] = [];
+    const executedThisTurn = new Map<string, string>();
 
     for (const toolCall of toolCalls) {
+      const toolSignature = this.buildToolCallSignature(toolCall);
+      const duplicateResult = executedThisTurn.get(toolSignature);
+      if (duplicateResult !== undefined) {
+        logger.info('[LangGraphChatbot] Duplicate tool call collapsed within turn', {
+          userId: context?.userId,
+          toolName: toolCall.name,
+          toolCallId: toolCall.id,
+        });
+        toolResults.push(
+          new ToolMessage({
+            content: duplicateResult,
+            tool_call_id: toolCall.id,
+          })
+        );
+        continue;
+      }
+
       let tool = tools.find((t) => t.name === toolCall.name);
       if (!tool) {
         // Try case-insensitive match as fallback
@@ -2942,6 +3094,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
             toolArgs: toolCall.args,
             toolCallId: toolCall.id,
           });
+          executedThisTurn.set(toolSignature, execResult.content);
           toolResults.push(
             new ToolMessage({
               content: execResult.content,
@@ -2951,9 +3104,11 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         } else {
           // Fallback: direct invocation when no context available
           const result = await tool.invoke(toolCall.args);
+          const content = typeof result === 'string' ? result : JSON.stringify(result);
+          executedThisTurn.set(toolSignature, content);
           toolResults.push(
             new ToolMessage({
-              content: typeof result === 'string' ? result : JSON.stringify(result),
+              content,
               tool_call_id: toolCall.id,
             })
           );
@@ -4065,12 +4220,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           });
 
           // Check if tool results were all errors — don't pretend success
-          const errorResults = toolCalls.filter(tc =>
-            tc.result.startsWith('Error executing tool:') ||
-            tc.result.startsWith('Tool "') ||
-            tc.result.includes('not found') ||
-            tc.result.startsWith('Missing required field')
-          );
+          const errorResults = toolCalls.filter(tc => this.isToolCallFailure(tc));
 
           if (errorResults.length > 0 && errorResults.length === toolCalls.length) {
             logger.error('[LangGraphChatbot] All tool calls failed', {
@@ -4083,6 +4233,10 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           const userName = await this.getUserName(userId);
           const namePrefix = userName ? `${userName}, ` : '';
 
+          const toolFallbackMessage = this.buildToolFallbackMessage(toolCalls, namePrefix);
+          if (toolFallbackMessage) {
+            responseContent = toolFallbackMessage;
+          } else {
           // Build specific message based on tool calls
           const completedActions: string[] = [];
           let hasWorkoutPlan = false;
@@ -4144,6 +4298,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
             responseContent = `${namePrefix}here's the information you requested. What would you like to know more about?`;
           } else {
             responseContent = `${namePrefix}I've completed that action for you. How else can I help?`;
+          }
           }
           } // end else (some tools succeeded)
         } else {
@@ -4309,6 +4464,13 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         logger.error('[LangGraphChatbot] Error storing messages', { error, userId });
       });
 
+      // Lightweight wiki compiler — fire-and-forget, non-blocking
+      wikiCompilerService
+        .processConversationTurn(userId, message, responseContent, activeConversationId)
+        .catch((error) => {
+          logger.warn('[LangGraphChatbot] Wiki compiler failed (non-critical)', { error, userId });
+        });
+
       // Auto-inject suggestedAction from musicManager tool results into actions
       if (toolCalls.length > 0) {
         for (const tc of toolCalls) {
@@ -4378,11 +4540,23 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   private buildProviderExhaustedResponse(conversationId: string, errorMsg: string): ChatResponse {
     const isBillingError = /quota|billing|exceeded.*limit|insufficient.*funds|payment/i.test(errorMsg);
     const isRateLimit = /rate.?limit|too many requests|429/i.test(errorMsg);
-    const response = isBillingError
+    const isGeminiError = /gemini|googlegenerativeai|generativelanguage/i.test(errorMsg);
+    const isTimeout = /timed out|timeout/i.test(errorMsg);
+    let response = isBillingError
       ? "I'm temporarily unable to respond — our AI service is experiencing a billing or quota issue. The team has been notified. Please try again shortly."
       : isRateLimit
         ? "I'm receiving too many requests right now. Please wait a moment and try again."
         : "I'm temporarily unavailable due to a service issue. Please try again in a few moments.";
+
+    if (isBillingError) {
+      response = "I'm temporarily unable to respond because the AI provider quota or billing limit has been reached. Please check the configured API plan, then try again.";
+    } else if (isRateLimit) {
+      response = `${isGeminiError ? 'Gemini' : 'The AI service'} is receiving too many requests right now. Please wait a moment and try again.`;
+    } else if (isTimeout) {
+      response = `${isGeminiError ? 'Gemini' : 'The AI service'} took too long to respond. Your data was not lost; please try again in a moment.`;
+    } else {
+      response = `${isGeminiError ? 'Gemini' : 'The AI service'} is temporarily unavailable. Please try again in a few moments.`;
+    }
     return {
       conversationId,
       response,
@@ -4644,7 +4818,9 @@ I'm listening. What's happening right now?`;
           }),
           new Promise<string>((resolve) => setTimeout(() => {
             logger.warn('[LangGraphChatbot] Stream system prompt timed out, using static fallback', { userId });
-            resolve(BASE_HUMAN_LIKE_PROMPT);
+            this.getFallbackSystemPrompt(userId)
+              .catch(() => BASE_HUMAN_LIKE_PROMPT)
+              .then(resolve);
           }, 4000)),
         ])),
         timedPhase('lifeAreaRouting', raceTimeout(
@@ -5113,6 +5289,37 @@ I'm listening. What's happening right now?`;
         // Pop the nudge so conversation history stays clean
         messages.pop(); // remove nudge
         if (messages[messages.length - 1] === response) messages.pop(); // remove empty response if we pushed it
+
+        // If still empty after nudge with tools, retry WITHOUT tools to force a text response
+        if (!fullResponse.trim() && accumulatedToolCalls.length === 0) {
+          logger.warn('[LangGraphChatbot:Stream] Nudge with tools also empty, retrying without tools', {
+            userId,
+            messagePreview: message.substring(0, 60),
+          });
+          const noToolsRetryStream = await Promise.race([
+            this.llm.stream(messages),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('LLM no-tools retry stream timeout')), LLM_STREAM_TIMEOUT_MS)
+            ),
+          ]);
+          for await (const chunk of noToolsRetryStream) {
+            if (chunk.content) {
+              let token = '';
+              if (typeof chunk.content === 'string') {
+                token = chunk.content;
+              } else if (Array.isArray(chunk.content)) {
+                token = chunk.content.map((part: any) => (typeof part === 'string' ? part : part.text || '')).join('');
+              }
+              if (token) {
+                fullResponse += token;
+                onToken(token);
+              }
+            }
+            if (chunk instanceof AIMessage || (chunk as any).type === 'ai') {
+              response = chunk as AIMessage;
+            }
+          }
+        }
       }
 
       // After stream completes, check for tool calls (handle both formats like non-streaming version)
@@ -5303,13 +5510,31 @@ I'm listening. What's happening right now?`;
         messages.push(...toolResults);
         
 
-        // Generate next response after tool execution
-        const finalStream = await Promise.race([
-          llmWithTools.stream(messages),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('LLM final stream timeout')), LLM_STREAM_TIMEOUT_MS)
-          ),
-        ]);
+        // Generate next response after tool execution. If this final wording step
+        // times out, do not retry the whole turn: mutation tools may already have
+        // run, so the fallback below should summarize the completed tool results.
+        let finalStream: AsyncIterable<any> | null = null;
+        try {
+          finalStream = await Promise.race([
+            llmWithTools.stream(messages),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('LLM final stream timeout')), LLM_STREAM_TIMEOUT_MS)
+            ),
+          ]);
+        } catch (finalStreamError) {
+          if (modelFactory.isTimeoutError(finalStreamError)) {
+            logger.warn('[LangGraphChatbot] Final streaming response after tools timed out; using tool-result fallback', {
+              userId,
+              iterations,
+              toolCalls: toolCalls.map(tc => tc.tool),
+              error: finalStreamError instanceof Error ? finalStreamError.message : String(finalStreamError),
+            });
+            modelFactory.markCurrentProviderRateLimited(60_000);
+            break;
+          }
+          throw finalStreamError;
+        }
+        if (!finalStream) break;
         let finalResponse = '';
         
         // Reset response for next iteration
@@ -5374,12 +5599,7 @@ I'm listening. What's happening right now?`;
           });
 
           // Check if tool results were all errors — don't pretend success
-          const errorResults = toolCalls.filter(tc =>
-            tc.result.startsWith('Error executing tool:') ||
-            tc.result.startsWith('Tool "') ||
-            tc.result.includes('not found') ||
-            tc.result.startsWith('Missing required field')
-          );
+          const errorResults = toolCalls.filter(tc => this.isToolCallFailure(tc));
 
           if (errorResults.length > 0 && errorResults.length === toolCalls.length) {
             logger.error('[LangGraphChatbot] All tool calls failed (streaming)', {
@@ -5392,6 +5612,10 @@ I'm listening. What's happening right now?`;
           const userName = await this.getUserName(userId);
           const namePrefix = userName ? `${userName}, ` : '';
 
+          const toolFallbackMessage = this.buildToolFallbackMessage(toolCalls, namePrefix);
+          if (toolFallbackMessage) {
+            responseContent = toolFallbackMessage;
+          } else {
           // Build specific message based on tool calls
           const completedActions: string[] = [];
           let hasWorkoutPlan = false;
@@ -5461,6 +5685,7 @@ I'm listening. What's happening right now?`;
             responseContent = `${namePrefix}here's the information you requested. What would you like to know more about?`;
           } else {
             responseContent = `${namePrefix}I've completed that action for you. How else can I help?`;
+          }
           }
           } // end else (some tools succeeded)
           
@@ -5705,16 +5930,15 @@ I'm listening. What's happening right now?`;
       const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
         Promise.race([promise, new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms))]);
 
-      // Get user context in parallel — comprehensive context + coaching profile + basic info + delta
-      // coachingProfile gets a tighter timeout (5s) as it can trigger expensive LLM profile generation
+      // Get user context in parallel — tighter timeouts to keep greeting TTFT under 5s total
       const [userName, userTimezone, newUser, comprehensiveContext, assistantName, deltaSummary, coachingProfile] = await Promise.all([
         this.getUserName(userId),
         this.getUserTimezone(userId),
         this.isNewUser(userId),
-        withTimeout(comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null), 4000, null),
+        withTimeout(comprehensiveUserContextService.getComprehensiveContext(userId).catch(() => null), 1500, null),
         this.getAssistantName(userId),
-        withTimeout(userDeltaService.recordSessionStart(userId, callPurpose ? 'voice_call' : 'app_open').catch(() => null), 3000, null),
-        withTimeout(userCoachingProfileService.getOrGenerateProfile(userId).catch(() => null), 3000, null),
+        withTimeout(userDeltaService.recordSessionStart(userId, callPurpose ? 'voice_call' : 'app_open').catch(() => null), 1500, null),
+        withTimeout(userCoachingProfileService.getOrGenerateProfile(userId).catch(() => null), 1500, null),
       ]);
       const timeOfDay = this.getTimeOfDay(userTimezone);
 
@@ -6111,14 +6335,14 @@ ${context}
 Generate the greeting. Return ONLY the spoken text.`;
 
       // Use LLM to generate personalized greeting with timeout
-      // Greeting should complete within 15s total; if LLM takes too long, use data-aware fallback
+      // Greetings are latency-sensitive — fall back to data-aware greeting quickly
       const messages = [
         new SystemMessage(greetingPrompt),
         new HumanMessage('Generate the greeting.'),
       ];
 
       const llmStartTime = Date.now();
-      const llmTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 8000));
+      const llmTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 3000));
       const llmResult = await Promise.race([
         this.llm.invoke(messages),
         llmTimeout,
@@ -6129,6 +6353,7 @@ Generate the greeting. Return ONLY the spoken text.`;
 
       if (!llmResult) {
         logger.warn('[LangGraphChatbot] Greeting LLM timed out, using data-aware fallback', { userId, llmTimeMs: llmTime, totalTimeMs: totalTime });
+        modelFactory.markCurrentProviderRateLimited(60_000);
         return this.buildDataAwareFallbackGreeting(userName, timeOfDay, comprehensiveContext, coachingProfile);
       }
 
