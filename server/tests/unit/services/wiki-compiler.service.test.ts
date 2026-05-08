@@ -38,6 +38,11 @@ jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
   logger: mockLogger,
 }));
 
+const mockSeedUser = jest.fn<any>();
+jest.unstable_mockModule('../../../src/services/wiki-seed.service.js', () => ({
+  wikiSeedService: { seedUser: mockSeedUser },
+}));
+
 // ============================================
 // IMPORTS (dynamic, after mock setup)
 // ============================================
@@ -114,6 +119,7 @@ function makeFullPage(slug: string, confidence = 0.5) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockLogOperation.mockResolvedValue(undefined);
+  mockSeedUser.mockResolvedValue({ pagesCreated: 0, errors: 0 });
 });
 
 describe('WikiCompilerService.processConversationTurn', () => {
