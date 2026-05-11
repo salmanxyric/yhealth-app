@@ -1048,6 +1048,18 @@ class ScheduleService {
 
     let item = this.mapRowToScheduleItem(result.rows[0]);
     item = await this.tryCreateGoogleCalendarEventForManualItem(userId, item);
+
+    // Fire-and-forget: update wiki with schedule activity
+    import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'schedule',
+        userId,
+        eventType: 'schedule_item_added',
+        summary: `Scheduled: ${input.title} at ${input.startTime}${endTime ? `–${endTime}` : ''}${category ? ` (${category})` : ''}`,
+        payload: { title: input.title, startTime: input.startTime, endTime, category, durationMinutes },
+      })
+    ).catch(() => {});
+
     return item;
   }
 

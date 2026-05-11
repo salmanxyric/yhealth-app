@@ -350,6 +350,21 @@ class VoiceJournalService {
       })
     ).catch(() => {});
 
+    // Fire-and-forget: AI analysis → insights + coach reflection + wiki knowledge
+    import('./journal-analysis.service.js').then(({ journalAnalysisService }) =>
+      journalAnalysisService.analyzeAndStore(userId, journalEntryId, entryText, 'reflection')
+    ).catch(() => {});
+
+    // Fire-and-forget: add voice journal to today's activity digest
+    import('../activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'mood',
+        userId,
+        eventType: 'voice_journal_completed',
+        summary: `Voice journal session: ${entryText.slice(0, 80)}${entryText.length > 80 ? '...' : ''}`,
+      })
+    ).catch(() => {});
+
     return { journalEntryId };
   }
 

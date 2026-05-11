@@ -315,6 +315,17 @@ class HabitService {
       );
     }
 
+    // Fire-and-forget: update wiki with habit activity
+    import('../activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'habit',
+        userId,
+        eventType: input.completed ? 'habit_completed' : 'habit_skipped',
+        summary: `Habit ${input.completed ? 'completed' : 'skipped'} on ${logDate}${input.value ? ` (value: ${input.value})` : ''}${input.note ? ` — ${input.note}` : ''}`,
+        payload: { habitId, completed: input.completed, value: input.value, logDate },
+      })
+    ).catch(() => {});
+
     return this.mapRowToHabitLog(result.rows[0]);
   }
 

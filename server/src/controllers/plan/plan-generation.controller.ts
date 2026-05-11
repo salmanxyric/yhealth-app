@@ -537,6 +537,11 @@ export const completeOnboarding = asyncHandler(async (req: AuthenticatedRequest,
     });
   });
 
+  // Populate wiki pages with real onboarding data (fire-and-forget)
+  import('../../services/wiki-seed.service.js').then(({ wikiSeedService }) =>
+    wikiSeedService.populateFromAssessment(userId)
+  ).catch(() => {});
+
   ApiResponse.success(res, {
     message: "You're all set! Your personalized plan is ready.",
     planId: finalPlanResult.rows[0].id,

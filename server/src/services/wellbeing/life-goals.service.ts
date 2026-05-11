@@ -180,6 +180,17 @@ class LifeGoalsService {
         logger.warn('Auto-decompose failed for goal', { goalId: goal.id, error: (err as Error).message });
       });
 
+    // Fire-and-forget: update wiki with goal activity
+    import('../activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'goal',
+        userId,
+        eventType: 'goal_created',
+        summary: `New goal: ${goal.title} (${goal.category})${goal.targetValue ? ` — target: ${goal.targetValue} ${goal.targetUnit || ''}` : ''}`,
+        payload: { goalId: goal.id, title: goal.title, category: goal.category, motivation: goal.motivation },
+      })
+    ).catch(() => {});
+
     return goal;
   }
 

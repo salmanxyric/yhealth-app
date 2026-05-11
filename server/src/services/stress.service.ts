@@ -154,6 +154,17 @@ class StressService {
       checkInType: log.checkInType,
     });
 
+    // Fire-and-forget: update wiki with stress activity
+    import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'stress',
+        userId,
+        eventType: 'stress_logged',
+        summary: `Stress level: ${log.stressRating}/10 (${log.checkInType})${input.triggers?.length ? `. Triggers: ${input.triggers.join(', ')}` : ''}`,
+        payload: { rating: log.stressRating, checkInType: log.checkInType, triggers: input.triggers },
+      })
+    ).catch(() => {});
+
     return log;
   }
 

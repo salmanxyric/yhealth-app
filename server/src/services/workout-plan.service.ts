@@ -541,6 +541,17 @@ class WorkoutPlanService {
       priority: JobPriorities.MEDIUM,
     });
 
+    // Fire-and-forget: update wiki with workout activity
+    import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'workout',
+        userId,
+        eventType: isNewLog ? 'workout_logged' : 'workout_updated',
+        summary: `${data.workoutName || 'Workout'} — ${data.durationMinutes || 0}min, ${totalSets} sets, ${totalReps} reps`,
+        payload: { status, durationMinutes: data.durationMinutes, totalSets, totalReps, totalVolume, difficultyRating: data.difficultyRating },
+      })
+    ).catch(() => {});
+
     return workoutLog;
   }
 
@@ -1020,26 +1031,39 @@ class WorkoutPlanService {
    * Get workout schedule for a specific week
    */
   async getWeekSchedule(planId: string, weekNumber: number): Promise<WeekPlan | null> {
-    const result = await pool.query(
-      `SELECT weeks, weekly_schedule, duration_weeks FROM workout_plans WHERE id = $1`,
-      [planId]
-    );
-
-    if (result.rows.length === 0) return null;
-
-    const { weeks, weekly_schedule, duration_weeks } = result.rows[0];
-
-    // If new structure exists, use it
-    if (weeks && weeks[`week_${weekNumber}`]) {
-      return weeks[`week_${weekNumber}`] as WeekPlan;
+    let row: { weeks?: Record<string, unknown> | null; weekly_schedule?: Record<string, unknown> | null; duration_weeks?: number };
+    try {
+      const result = await pool.query(
+        `SELECT weeks, weekly_schedule, duration_weeks FROM workout_plans WHERE id = $1`,
+        [planId]
+      );
+      if (result.rows.length === 0) return null;
+      row = result.rows[0];
+    } catch (err: any) {
+      if (err?.code === '42703') {
+        logger.warn('[WorkoutPlan] Migration column "weeks" missing, using fallback');
+        const result = await pool.query(
+          `SELECT weekly_schedule, duration_weeks FROM workout_plans WHERE id = $1`,
+          [planId]
+        );
+        if (result.rows.length === 0) return null;
+        row = { ...result.rows[0], weeks: null };
+      } else {
+        throw err;
+      }
     }
 
-    // Fallback to legacy structure - all weeks are the same
-    if (weekly_schedule && weekNumber <= duration_weeks) {
+    const { weeks, weekly_schedule, duration_weeks } = row;
+
+    if (weeks && (weeks as any)[`week_${weekNumber}`]) {
+      return (weeks as any)[`week_${weekNumber}`] as WeekPlan;
+    }
+
+    if (weekly_schedule && weekNumber <= (duration_weeks || 4)) {
       return {
         weekNumber,
         multiplier: 1.0,
-        days: weekly_schedule,
+        days: weekly_schedule as Record<string, DayWorkout | null>,
         isDeloadWeek: false,
       };
     }
@@ -1055,24 +1079,37 @@ class WorkoutPlanService {
     weekNumber: number,
     weekPlan: Partial<WeekPlan>
   ): Promise<void> {
-    const result = await pool.query(
-      `SELECT weeks FROM workout_plans WHERE id = $1`,
-      [planId]
-    );
-
-    if (result.rows.length === 0) {
-      throw new Error('Workout plan not found');
+    let existingWeeks: Record<string, unknown> = {};
+    try {
+      const result = await pool.query(
+        `SELECT weeks FROM workout_plans WHERE id = $1`,
+        [planId]
+      );
+      if (result.rows.length === 0) {
+        throw new Error('Workout plan not found');
+      }
+      existingWeeks = result.rows[0].weeks || {};
+    } catch (err: any) {
+      if (err?.code === '42703') {
+        logger.warn('[WorkoutPlan] Migration column "weeks" missing, ensuring it exists');
+        await pool.query(`ALTER TABLE workout_plans ADD COLUMN IF NOT EXISTS weeks JSONB DEFAULT '{}'::jsonb`);
+        const result = await pool.query(`SELECT id FROM workout_plans WHERE id = $1`, [planId]);
+        if (result.rows.length === 0) {
+          throw new Error('Workout plan not found');
+        }
+      } else {
+        throw err;
+      }
     }
 
-    const weeks = result.rows[0].weeks || {};
-    weeks[`week_${weekNumber}`] = {
-      ...weeks[`week_${weekNumber}`],
+    existingWeeks[`week_${weekNumber}`] = {
+      ...existingWeeks[`week_${weekNumber}`] as Record<string, unknown>,
       ...weekPlan,
     };
 
     await pool.query(
       `UPDATE workout_plans SET weeks = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      [JSON.stringify(weeks), planId]
+      [JSON.stringify(existingWeeks), planId]
     );
   }
 

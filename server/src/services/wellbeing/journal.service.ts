@@ -349,6 +349,11 @@ class JournalService {
     // Fire-and-forget: extract lessons from journal entry (non-blocking)
     this.triggerLessonExtraction(userId, entry.id, input.entryText).catch(() => {});
 
+    // Fire-and-forget: AI analysis → insights + coach reflection + wiki knowledge
+    import('./journal-analysis.service.js').then(({ journalAnalysisService }) =>
+      journalAnalysisService.analyzeAndStore(userId, entry.id, input.entryText, input.promptCategory)
+    ).catch(() => {});
+
     // Fire-and-forget: embed journal entry in life history timeline
     import('../life-history-embedding.service.js').then(({ lifeHistoryEmbeddingService }) =>
       lifeHistoryEmbeddingService.embedLifeEvent({
@@ -364,6 +369,16 @@ class JournalService {
     // Record for unified streak system
     import('../streak.service.js').then(({ streakService }) =>
       streakService.recordActivity(userId, 'journal', entry.id)
+    ).catch(() => {});
+
+    // Fire-and-forget: add journal to today's activity digest
+    import('../activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'mood',
+        userId,
+        eventType: 'journal_created',
+        summary: `Journal entry${input.promptCategory ? ` (${input.promptCategory})` : ''}: ${input.entryText.slice(0, 80)}${input.entryText.length > 80 ? '...' : ''}`,
+      })
     ).catch(() => {});
 
     return entry;

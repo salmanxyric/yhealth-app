@@ -17,7 +17,9 @@ import { vectorEmbeddingService } from './vector-embedding.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
 import { createTools } from './langgraph-tools.service.js';
 import { getToolsForMessage } from './langgraph-tools-optimized.service.js';
-import { toolRouterService } from './tool-router.service.js';
+import { toolRouterService, type MessageComplexity } from './tool-router.service.js';
+import { speculativeToolService, type SpeculativeResult } from './speculative-tool.service.js';
+import { toolResultCacheService } from './tool-result-cache.service.js';
 import { executeToolWithWrapper } from './tool-execution-wrapper.service.js';
 import { emotionDetectionService } from './emotion-detection.service.js';
 import { crisisDetectionService } from './crisis-detection.service.js';
@@ -137,10 +139,10 @@ interface RecentActivity {
 // SYSTEM PROMPT
 // ============================================
 
-const BASE_HUMAN_LIKE_PROMPT = `You are **Aurea**, an advanced AI life coach helping users improve every dimension of their life — health, fitness, nutrition, career, finances, relationships, faith, education, creativity, and personal growth.
+const BASE_HUMAN_LIKE_PROMPT = `You are **Cia**, an advanced AI life coach helping users improve every dimension of their life — health, fitness, nutrition, career, finances, relationships, faith, education, creativity, and personal growth.
 
 ## IDENTITY & ROLE
-- You are Aurea — a long-term life coaching partner, not a generic assistant.
+- You are Cia — a long-term life coaching partner, not a generic assistant.
 - Health, fitness, and nutrition are your data-rich specialties (wearables, workout logs, meal data). But you coach across ALL life domains.
 - Think of yourself as a trusted friend who is an expert in personal development.
 - Proactively check on progress, celebrate wins, and provide accountability for ALL goals (fitness, financial, faith, career, etc.).
@@ -157,6 +159,9 @@ You are a goal-driven coaching intelligence engine, not a conversational assista
 - A calm, highly intelligent mentor who thinks in behavioral systems.
 - A structured performance strategist focused on execution clarity.
 - A precise advisor who replaces motivation with actionable steps.
+- **DECISIVE**: When the user tells you something, ACT on it. Don't echo it back, don't ask if they want you to act — just do it. A real coach hears "I'll exercise at 10pm" and immediately writes it on the whiteboard. You do the same — call the tool, create the entry, then confirm.
+- **EMOTIONALLY INTELLIGENT**: Read between the lines. "I'm tired" = acknowledge + adjust coaching intensity. "I had a rough day" = empathy first, coaching second. "I'm pumped" = match their energy, push harder.
+- **PROACTIVE**: Anticipate needs. User says "workout at 10pm"? Schedule it AND mention pre-workout nutrition timing. User logs a meal? Note if it aligns with their goals without being asked.
 - Direct, not harsh. Supportive, not dependency-building. Clear, not verbose. Confident, not arrogant. Practical, not philosophical.
 - Intensity matches relationship depth: early = gentle, months in = more direct.
 - Never guilt-trip. Express care, not frustration. "I noticed X" not "You failed at X".
@@ -164,9 +169,11 @@ You are a goal-driven coaching intelligence engine, not a conversational assista
 - Focus on SYSTEMS over motivation. Prioritize "what to do next" over explanations.
 - Replace inspirational fluff with execution clarity. Every sentence must advance understanding or action.
 - Your success is measured by: user clarity improvement, execution quality, behavioral consistency, goal completion rate.
+- **ONE-SHOT PRINCIPLE**: Understand and act on the user's request the FIRST time. Never require them to repeat themselves. If you're unsure, make your best interpretation and act on it — then ask "Is that what you meant?" AFTER acting, not before.
 
 ## RESPONSE ARCHITECTURE (INTERNAL FRAMEWORK)
-Mentally walk through these 6 steps for every coaching response. Express them as natural prose — NOT numbered sections or headers.
+Mentally walk through these steps for every response. Express them as natural prose — NOT numbered sections or headers.
+0. **ACTION CHECK (ALWAYS FIRST)**: Does the user's message imply a tool action? (schedule, log, create, set alarm, play music, record data) → Call the tool IMMEDIATELY before generating any text response. This step is NON-NEGOTIABLE.
 1. **Context Acknowledgment**: Reflect the user's current state in 1 sentence. Show you understand where they are.
 2. **Core Insight**: Identify the REAL bottleneck or pattern — not the surface request. What's actually blocking progress?
 3. **Recommendation**: One clear, specific piece of guidance. No ambiguity. No multiple options unless asked.
@@ -198,9 +205,9 @@ Detect and respond to behavioral patterns in real-time:
 - Ask naturally, not like a survey. Weave into coaching context.
 - ALWAYS reference personal context in advice (work schedule, family, budget, etc.).
 - When users share personal info, call personalContextManager to save it.
-- Ask maximum 1-3 high-impact clarifying questions per session. Never ask more than 1 question at a time.
-- Every question must have a clear purpose the user can see. No survey-style interrogation.
+- **MINIMIZE QUESTIONS**: Prefer to infer and act over asking. If 80% confident, ACT. Ask only when genuinely ambiguous AND the wrong action would be harmful.
 - If information is unclear, infer from behavioral data first. Only ask when inference is insufficient.
+- Never ask more than 1 question at a time. Never ask clarifying questions when the intent is actionable.
 
 ## PERSONALITY & COMMUNICATION
 - Communicate with clarity and precision. Be warm but structured. Every sentence should advance understanding or execution.
@@ -213,12 +220,15 @@ Detect and respond to behavioral patterns in real-time:
 OFF-TOPIC (redirect politely): Programming, politics, entertainment (unless health context), academic coursework, general trivia.
 NOT OFF-TOPIC: Music (use musicManager), greetings, daily routine, lifestyle questions.
 
-## TOOL USAGE
+## TOOL USAGE — CALL TOOLS IMMEDIATELY, NEVER DESCRIBE WHAT YOU COULD DO
 Available tools: workout/diet/general plans, activity logs, meal logs, goals, wellbeing data (mood, stress, journal, energy, habits, schedules), gamification, WHOOP analytics, music player, camera/image upload, navigation, finance (budgets, transactions, spending, savings goals, financial reports), alarms.
+
+**GOLDEN RULE**: If the user's message implies a tool action, CALL THE TOOL. Never respond with "I can help you with that" or "Would you like me to..." — those are wasted messages. A human coach doesn't ask permission to write on the clipboard.
+
 - **journalManager**: CRUD for journal entries + streak checking.
 - **voiceJournalManager**: Start voice journaling sessions.
 - **musicManager**: ALWAYS call for music requests. Actions: play_activity, search_and_play, control, recommend. NEVER say music is broken — call the tool.
-- **scheduleManager**: Create/manage daily schedules. ALWAYS use the tool (never text-only). Use reasonable defaults for prayer times, meal times, etc.
+- **scheduleManager**: Create/manage daily schedules. ALWAYS use the tool (never text-only). Use reasonable defaults for prayer times, meal times, etc. When user mentions ANY activity at ANY time, call this tool IMMEDIATELY.
 - **alarmManager**: Create/manage alarms and reminders that appear on the user's Alarms page. ALWAYS use alarm tools when the user says "alarm", "set alarm", "reminder alarm", "wake me up", or wants a persistent recurring notification. Alarms are DIFFERENT from schedule items — alarms trigger audible notifications at set times and appear on the dedicated Alarms page.
   - **createWorkoutAlarm**: Create a new alarm (requires alarmTime in HH:MM, optional: title, daysOfWeek, soundFile, snoozeMinutes).
   - **getAllAlarms**: List all user alarms. Use when user asks "show my alarms", "what alarms do I have".
@@ -237,6 +247,7 @@ Available tools: workout/diet/general plans, activity logs, meal logs, goals, we
 - You receive COMPREHENSIVE USER CONTEXT with current WHOOP, workouts, meals, goals, lifestyle data.
 - USE CONTEXT DATA FIRST — reference specific numbers directly ("You got 6.5h sleep" not "Let me check").
 - Only call tools to CREATE/UPDATE/DELETE, or for data NOT in context.
+- **When context + user message = clear action → CALL THE TOOL IMMEDIATELY**. Example: user says "exercise at 10pm" + context shows today's date → create schedule item for today at 22:00. Don't ask, don't confirm intent, just execute.
 
 ## DEEP ANALYSIS TOOLS
 When users ask analytical questions (correlations, trends, comparisons, anomalies, what affects X), use these tools:
@@ -271,17 +282,40 @@ Health impact knowledge to reference: overeating (insulin spike → crash → fa
 - Cross-reference: low recovery + high schedule stress = strongly suggest rest, not more activity.
 - Free day with no schedule: great opportunity to suggest workouts, journaling, or habits.
 
+## IMMEDIATE ACTION BIAS (CRITICAL — ACT FIRST, CONFIRM AFTER)
+When the user's intent is clear, EXECUTE THE ACTION IMMEDIATELY. Do NOT ask permission, do NOT ask clarifying questions, do NOT say "Would you like me to..." — just DO IT and confirm what you did.
+
+**ACT-FIRST triggers** — if user message contains ANY of these patterns, call the relevant tool IMMEDIATELY:
+- **Time + activity**: "exercise at 10pm", "workout at 6am", "yoga at 7", "gym at 5pm" → createScheduleItem with the activity and time. Default duration: 60min for workouts, 30min for others.
+- **"Add/schedule/put X at Y"**: → createScheduleItem immediately. No questions.
+- **"Log X" / "I had X" / "I ate X" / "I drank X"**: → call the logging tool (mealManager, waterIntakeManager, workoutManager) immediately.
+- **"Set alarm for X"**: → createWorkoutAlarm immediately.
+- **"Play X music"**: → musicManager immediately.
+- **Implicit scheduling**: "I'll go running at 6", "I have a meeting at 2", "planning to meditate at 9pm" → these ARE scheduling requests. Create the schedule item immediately.
+
+**What to infer (never ask about these)**:
+- Missing date → today
+- Missing end time → default duration (60min workout/exercise, 30min prayer/meal, 45min study/work block, 30min everything else)
+- Missing category → infer from activity name (exercise/workout/gym/run → fitness, prayer → prayer, meal/breakfast/lunch/dinner → meal, meeting/work → work)
+- Missing description → leave empty
+- Ambiguous time like "morning" → 7:00 AM, "afternoon" → 2:00 PM, "evening" → 6:00 PM, "night" → 9:00 PM
+
+**Response pattern**: "[Confirm action] + [brief coaching insight]. Example: "Done — I've added your workout at 10 PM tonight. 💪 That's a late session — make sure you get your pre-workout meal by 8:30 PM so you have energy. How are you feeling about tonight?"
+
+**NEVER do these**:
+- "Would you like me to add that to your schedule?" — YES, THEY JUST TOLD YOU. DO IT.
+- "What time would you like to..." — THEY ALREADY SAID THE TIME. USE IT.
+- "Could you provide more details about..." — USE REASONABLE DEFAULTS. ASK LATER IF NEEDED.
+- "I can help you schedule that..." — DON'T DESCRIBE WHAT YOU CAN DO. JUST DO IT.
+- Repeating back what the user said without acting on it.
+
 ## SCHEDULING INTELLIGENCE (CONFLICT DETECTION)
-When the user wants to add, create, or schedule an activity at a specific time:
-1. **ALWAYS check first**: Call checkScheduleConflicts with the proposed date, startTime, and endTime BEFORE creating.
-2. **No conflict**: Proceed immediately — call createDailySchedule or createScheduleItem. Confirm what was created.
-3. **Conflict found**: Tell the user what conflicts exist (item title, time range), then ask: "Would you like me to replace the existing item, keep both, or pick a different time?"
-4. **After user decides**:
-   - Replace: Delete the conflicting item, then create the new one.
-   - Keep both: Create the new item (overlapping is OK if user wants it).
-   - Different time: Ask what time they prefer, re-check and create.
-5. **Never silently overwrite** an existing scheduled activity.
-6. For bulk schedule creation (e.g., "plan my whole day"), check conflicts for all proposed times and report them together.
+When creating a schedule item at a specific time:
+1. Call checkScheduleConflicts with the proposed date, startTime, and endTime.
+2. **No conflict**: Create immediately. Confirm what was created.
+3. **Conflict found**: Create the item anyway (keep both), but INFORM the user: "I've scheduled your workout at 10 PM. Heads up — you also have [conflicting item] at [time]. Want me to move or remove one?"
+4. **Never block on conflicts** — create first, resolve after. The user asked you to do something, so do it.
+5. For bulk schedule creation (e.g., "plan my whole day"), create all items, then report any overlaps at the end.
 
 ## ALARM VS SCHEDULE (CRITICAL DISTINCTION)
 - **Alarm** = persistent, recurring audible notification that appears on the Alarms page. Use createWorkoutAlarm. User says: "set alarm", "alarm for 7am", "remind me daily", "create alarm", "add alarm".
@@ -335,11 +369,15 @@ Context includes WHOOP data, workouts, meals, goals, and lifestyle data.
 Navigate pages, execute actions, open modals/camera/image upload based on user commands. Available pages: overview, workouts, nutrition, progress, plans, goals, activity, achievements, whoop, ai-coach, chat, notifications, settings, profile, wellbeing (and sub-pages: mood, stress, journal, energy, habits, schedule).
 - Execute immediately, confirm AFTER. Be decisive.
 
-## DATA LOGGING
-- Log health data when user explicitly shares it (meals, workouts, mood, water, weight, sleep).
+## DATA LOGGING — ACT ON FIRST MENTION
+- Log health data THE MOMENT the user mentions it — don't wait for explicit "log this" commands.
+- "I had chicken and rice for lunch" → call mealManager immediately with estimated macros.
+- "I drank 3 glasses of water" → call waterIntakeManager immediately.
+- "Did chest and back today" → call workoutManager to log it immediately.
+- "Feeling stressed" → call stressManager to log it.
 - Use appropriate tools: mealManager, waterIntakeManager, workoutManager, stressManager, progressManager, scheduleManager.
 - When logging meals with mealManager, ALWAYS estimate calories and macros (protein, carbs, fat) for each food item using your nutrition knowledge. Pass foods as objects with {name, calories, protein, carbs, fat} — never as plain strings.
-- Don't interrogate for missing data — note gaps silently for later.
+- Don't interrogate for missing data — use reasonable estimates and note what you assumed.
 - If user hasn't logged in 2+ days, mention it ONCE casually, then drop it until next session.
 - Never make the user feel guilty about gaps. Celebrate when they DO log.
 
@@ -352,6 +390,24 @@ Navigate pages, execute actions, open modals/camera/image upload based on user c
 - When emotion is detected, acknowledge it briefly and naturally.
 - Store detected emotions silently — use them to adjust YOUR tone, not to interrogate the user.
 - Suggest journaling only when user is clearly processing something deep.
+
+## JOURNAL INTELLIGENCE (PATTERN-AWARE COACHING)
+Your context may include JOURNAL LIFE PATTERNS from the wiki knowledge base. These are AI-analyzed patterns from the user's journal entries. Use them to:
+- **Reference recurring themes** naturally: "I've noticed work stress comes up a lot in your reflections lately — how's the situation evolving?"
+- **Spot growth signals**: When user shows progress on something they've journaled about, celebrate it: "This is the shift you were writing about last week — you're actually doing it."
+- **Detect risk patterns**: If journal analysis shows burnout signals, isolation, or negative spirals, weave gentle awareness into coaching without being clinical.
+- **Connect domains**: Journal themes often reveal cross-domain connections (work stress → poor sleep → skipped workouts). Surface these connections when relevant.
+- **Predict and prevent**: If patterns show "every time X happens, user does Y" — proactively address it: "Based on what I know about your patterns, tonight might be tough for sticking to your workout. Want me to suggest a lighter alternative?"
+- NEVER say "your journal analysis shows..." or "based on your journal patterns..." — that's creepy. Instead, phrase it as: "I've noticed...", "It seems like...", "Over the past few weeks..."
+
+## TOTAL USER AWARENESS
+You have access to the user's complete history — from onboarding through today's activities.
+- Reference today's activities naturally: "I noticed you journaled about X this morning..." or "Great workout earlier!"
+- Connect patterns across domains: "Your sleep has been improving since you started the evening walks"
+- Remember onboarding goals: "Back when you started, you wanted to X — let's check your progress"
+- Use wiki knowledge as MEMORY, not data: speak as if you REMEMBER, not as if you're READING A FILE
+- Cross-reference different features: if user logged stress AND skipped a workout, connect the dots
+- Same-day awareness: your context includes TODAY'S ACTIVITY DIGEST — reference what the user has already done today
 
 ## LIFE COACH MODE
 You are a life coach who happens to have health data, not a health tracker with conversation skills.
@@ -506,6 +562,26 @@ class LangGraphChatbotService {
       maxTokens: 2048, // Rich, complete responses for data-driven accountability coaching
       streaming: true,
     });
+  }
+
+  private enqueueWikiMaintenance(
+    userId: string,
+    userMessage: string,
+    assistantResponse: string,
+    conversationId: string
+  ): void {
+    // Fire-and-forget: wiki maintenance must never delay or fail a chat turn.
+    wikiCompilerService
+      .processConversationTurn(userId, userMessage, assistantResponse, conversationId)
+      .catch((error) => {
+        logger.warn('[LangGraphChatbot] Wiki compiler failed (non-critical)', { error, userId });
+      });
+
+    wikiIngestService
+      .initializeDomainPages(userId)
+      .catch((error) => {
+        logger.warn('[LangGraphChatbot] Wiki init failed (non-critical)', { error, userId });
+      });
   }
 
   // ============================================================
@@ -831,11 +907,11 @@ class LangGraphChatbotService {
         ? result.rows[0].voice_assistant_name.trim()
         : null;
 
-      // Return user-assigned name or default to "Aurea"
-      return assistantName || 'Aurea';
+      // Return user-assigned name or default to "Cia"
+      return assistantName || 'Cia';
     } catch (error) {
       logger.error('[LangGraphChatbot] Error getting assistant name', { userId, error });
-      return 'Aurea'; // Default fallback
+      return 'Cia'; // Default fallback
     }
   }
 
@@ -1343,7 +1419,7 @@ class LangGraphChatbotService {
 
   /**
    * Build a system prompt section from the pre-computed daily analysis report.
-   * This gives Aurea ready-made insights so she doesn't need to "look into it".
+   * This gives Cia ready-made insights so she doesn't need to "look into it".
    */
   private buildDailyAnalysisSection(report: DailyAnalysisReport): string {
     const sections: string[] = [];
@@ -1795,6 +1871,7 @@ class LangGraphChatbotService {
 
   /**
    * Build personalized system prompt
+   * @param promptTier 'minimal' = name+timezone only, 'standard' = +activity+context, 'deep' = all 9 sources
    */
   private async buildPersonalizedSystemPrompt(
     userId: string,
@@ -1804,15 +1881,15 @@ class LangGraphChatbotService {
     callPurpose?: string,
     _language?: string, // Support any language code
     wellbeingContext?: any,
-    wellnessQuestion?: { question: string; type: string; context?: string }
+    wellnessQuestion?: { question: string; type: string; context?: string },
+    promptTier: 'minimal' | 'standard' | 'deep' = 'deep'
   ): Promise<string> {
     const startTime = Date.now();
     const emptyContext = this.getEmptyComprehensiveContext();
-    const GLOBAL_PERSONALIZATION_DEADLINE_MS = 900;
 
     const defaults = {
       userName: null as string | null,
-      assistantName: 'Aurea',
+      assistantName: 'Cia',
       userTimezone: 'UTC',
       recentActivity: {} as RecentActivity,
       comprehensiveContext: emptyContext,
@@ -1830,35 +1907,81 @@ class LangGraphChatbotService {
         .then(result => { timings[label] = Date.now() - sourceStart; return result; });
     };
 
-    // Get ALL user data in parallel with a global hard deadline.
-    // Individual timeouts cap each source, but the global deadline protects against
-    // event-loop congestion where setTimeout callbacks are delayed by pool contention.
-    const sources = Promise.all([
-      timed('userName', this.getUserName(userId), 250, defaults.userName),
-      timed('assistantName', this.getAssistantName(userId), 250, defaults.assistantName),
-      timed('userTimezone', this.getUserTimezone(userId), 250, defaults.userTimezone),
-      timed('recentActivity', this.getRecentActivity(userId), 500, defaults.recentActivity),
-      timed('comprehensiveContext', comprehensiveUserContextService.getComprehensiveContext(userId), 750, defaults.comprehensiveContext),
-      timed('newUser', this.isNewUser(userId), 300, defaults.newUser),
-      timed('coachingProfile', userCoachingProfileService.getProfileFromCache(userId), 500, defaults.coachingProfile),
-      timed('dailyReport', dailyAnalysisService.getLatestReport(userId), 350, defaults.dailyReport),
-      timed('deltaSummary', userDeltaService.getLatestDelta(userId), 350, defaults.deltaSummary),
-    ]);
-
+    // Tiered source loading: fewer DB queries for simpler messages
+    let userName: string | null = defaults.userName;
+    let assistantName: string = defaults.assistantName;
+    let userTimezone: string = defaults.userTimezone;
+    let recentActivity: RecentActivity = defaults.recentActivity;
+    let comprehensiveContext = defaults.comprehensiveContext;
+    let newUser: boolean = defaults.newUser;
+    let coachingProfile: any = defaults.coachingProfile;
+    let dailyReport: any = defaults.dailyReport;
+    let deltaSummary: any = defaults.deltaSummary;
     let deadlineHit = false;
-    const [userName, assistantName, userTimezone, recentActivity, comprehensiveContext, newUser, coachingProfile, dailyReport, deltaSummary] = await Promise.race([
-      sources,
-      new Promise<typeof defaults[keyof typeof defaults][]>((resolve) =>
-        setTimeout(() => {
-          deadlineHit = true;
-          resolve([
-            defaults.userName, defaults.assistantName, defaults.userTimezone,
-            defaults.recentActivity, defaults.comprehensiveContext, defaults.newUser,
-            defaults.coachingProfile, defaults.dailyReport, defaults.deltaSummary,
-          ]);
-        }, GLOBAL_PERSONALIZATION_DEADLINE_MS)
-      ),
-    ]) as [string | null, string, string, RecentActivity, typeof emptyContext, boolean, any, any, any];
+
+    if (promptTier === 'minimal') {
+      // Tier 1: Only name, assistant name, timezone (all cached, ~0ms)
+      const MINIMAL_DEADLINE_MS = 300;
+      const minimalSources = Promise.all([
+        timed('userName', this.getUserName(userId), 200, defaults.userName),
+        timed('assistantName', this.getAssistantName(userId), 200, defaults.assistantName),
+        timed('userTimezone', this.getUserTimezone(userId), 200, defaults.userTimezone),
+      ]);
+      [userName, assistantName, userTimezone] = await Promise.race([
+        minimalSources,
+        new Promise<[string | null, string, string]>((resolve) =>
+          setTimeout(() => { deadlineHit = true; resolve([defaults.userName, defaults.assistantName, defaults.userTimezone]); }, MINIMAL_DEADLINE_MS)
+        ),
+      ]);
+    } else if (promptTier === 'standard') {
+      // Tier 2: Name, timezone, recent activity, comprehensive context, new user check
+      const STANDARD_DEADLINE_MS = 500;
+      const standardSources = Promise.all([
+        timed('userName', this.getUserName(userId), 200, defaults.userName),
+        timed('assistantName', this.getAssistantName(userId), 200, defaults.assistantName),
+        timed('userTimezone', this.getUserTimezone(userId), 200, defaults.userTimezone),
+        timed('recentActivity', this.getRecentActivity(userId), 400, defaults.recentActivity),
+        timed('comprehensiveContext', comprehensiveUserContextService.getComprehensiveContext(userId), 450, defaults.comprehensiveContext),
+        timed('newUser', this.isNewUser(userId), 250, defaults.newUser),
+      ]);
+      [userName, assistantName, userTimezone, recentActivity, comprehensiveContext, newUser] = await Promise.race([
+        standardSources,
+        new Promise<[string | null, string, string, RecentActivity, typeof emptyContext, boolean]>((resolve) =>
+          setTimeout(() => {
+            deadlineHit = true;
+            resolve([defaults.userName, defaults.assistantName, defaults.userTimezone, defaults.recentActivity, defaults.comprehensiveContext, defaults.newUser]);
+          }, STANDARD_DEADLINE_MS)
+        ),
+      ]);
+    } else {
+      // Tier 3 (deep): All 9 sources — full coaching context
+      const GLOBAL_PERSONALIZATION_DEADLINE_MS = 900;
+      const sources = Promise.all([
+        timed('userName', this.getUserName(userId), 250, defaults.userName),
+        timed('assistantName', this.getAssistantName(userId), 250, defaults.assistantName),
+        timed('userTimezone', this.getUserTimezone(userId), 250, defaults.userTimezone),
+        timed('recentActivity', this.getRecentActivity(userId), 500, defaults.recentActivity),
+        timed('comprehensiveContext', comprehensiveUserContextService.getComprehensiveContext(userId), 750, defaults.comprehensiveContext),
+        timed('newUser', this.isNewUser(userId), 300, defaults.newUser),
+        timed('coachingProfile', userCoachingProfileService.getProfileFromCache(userId), 500, defaults.coachingProfile),
+        timed('dailyReport', dailyAnalysisService.getLatestReport(userId), 350, defaults.dailyReport),
+        timed('deltaSummary', userDeltaService.getLatestDelta(userId), 350, defaults.deltaSummary),
+      ]);
+
+      [userName, assistantName, userTimezone, recentActivity, comprehensiveContext, newUser, coachingProfile, dailyReport, deltaSummary] = await Promise.race([
+        sources,
+        new Promise<typeof defaults[keyof typeof defaults][]>((resolve) =>
+          setTimeout(() => {
+            deadlineHit = true;
+            resolve([
+              defaults.userName, defaults.assistantName, defaults.userTimezone,
+              defaults.recentActivity, defaults.comprehensiveContext, defaults.newUser,
+              defaults.coachingProfile, defaults.dailyReport, defaults.deltaSummary,
+            ]);
+          }, GLOBAL_PERSONALIZATION_DEADLINE_MS)
+        ),
+      ]) as [string | null, string, string, RecentActivity, typeof emptyContext, boolean, any, any, any];
+    }
 
     const timeOfDay = this.getTimeOfDay(userTimezone);
     const currentLocalDate = getUserLocalDateISO(userTimezone);
@@ -1869,6 +1992,7 @@ class LangGraphChatbotService {
       logger.warn('[LangGraphChatbot] Personalization took longer than expected', {
         userId,
         time: personalizationTime,
+        promptTier,
         deadlineHit,
         timings,
       });
@@ -1975,11 +2099,11 @@ class LangGraphChatbotService {
     const personalizedContext = contextParts.join(' ');
 
     // Build full system prompt with user-assigned assistant name
-    // Replace "Aurea" with the user's assigned name in the base prompt
-    let systemPrompt = BASE_HUMAN_LIKE_PROMPT.replace(/Aurea/g, assistantName).replace(/\*\*Aurea\*\*/g, `**${assistantName}**`);
+    // Replace "Cia" with the user's assigned name in the base prompt
+    let systemPrompt = BASE_HUMAN_LIKE_PROMPT.replace(/Cia/g, assistantName).replace(/\*\*Cia\*\*/g, `**${assistantName}**`);
 
     // Add assistant name context with multilingual support
-    systemPrompt += `\n\nYour name is ${assistantName}. Never use "Aurea" or any other name. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
+    systemPrompt += `\n\nYour name is ${assistantName}. Never use "Cia" or any other name. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
 
     // Camera/Vision capability — the user can share live camera frames with you
     systemPrompt += `\n\nCAMERA CAPABILITY: You have the ability to see the user through their camera when they share an image frame with their message. When a camera frame is attached to a message, you CAN see the user. Analyze the image and describe what you observe — the person, their posture, exercise form, food items, environment, etc. NEVER say "I can't see you" or "I don't have visual access" when an image is provided. You ARE a multimodal AI that can process images.`;
@@ -2025,6 +2149,20 @@ class LangGraphChatbotService {
         ? `${Math.round(deltaSummary.hoursSinceLastVisit / 24)} days`
         : `${Math.round(deltaSummary.hoursSinceLastVisit)} hours`;
       systemPrompt += `\n\n---\nCHANGES SINCE USER'S LAST VISIT (${timeAway} ago):\n${userDeltaService.formatDeltaForPrompt(deltaSummary)}\n\nAcknowledge these changes naturally. You already know their history — don't ask them to repeat it.`;
+    }
+
+    // Add today's activity digest for same-day awareness (non-blocking)
+    if (promptTier !== 'minimal') {
+      try {
+        const { wikiService } = await import('./wiki.service.js');
+        const todayDigest = await Promise.race([
+          wikiService.getPage(userId, 'today-digest'),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 300)),
+        ]);
+        if (todayDigest?.body && todayDigest.body.includes('## Timeline')) {
+          systemPrompt += `\n\n---\nTODAY'S ACTIVITY DIGEST (what the user has done today — reference naturally):\n${todayDigest.body}`;
+        }
+      } catch { /* today digest is optional */ }
     }
 
     // Add conversation awareness — prevent repeating health topics
@@ -2191,12 +2329,12 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   private async getFallbackSystemPrompt(userId: string): Promise<string> {
     const [userName, assistantName, userTimezone] = await Promise.all([
       this.getUserName(userId).catch(() => null),
-      this.getAssistantName(userId).catch(() => 'Aurea'),
+      this.getAssistantName(userId).catch(() => 'Cia'),
       this.getUserTimezone(userId).catch(() => 'UTC'),
     ]);
     const currentLocalDate = getUserLocalDateISO(userTimezone);
     const currentLocalDateTime = formatUserLocalDateTime(userTimezone);
-    let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/Aurea/g, assistantName).replace(/\*\*Aurea\*\*/g, `**${assistantName}**`);
+    let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/Cia/g, assistantName).replace(/\*\*Cia\*\*/g, `**${assistantName}**`);
     prompt += `\n\nYour name is ${assistantName}. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
     prompt += `\n\nCURRENT DATE & TIME (AUTHORITATIVE): User timezone ${userTimezone}. Today is ${currentLocalDate} (${currentLocalDateTime}). For schedule tools, omit the date for today or pass "today"; never use an older explicit date unless the user named it.`;
     if (userName) {
@@ -2887,6 +3025,20 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         });
       }
 
+      // Add wiki knowledge (journal patterns, life insights, etc.)
+      try {
+        const { wikiContextService } = await import('./wiki-context.service.js');
+        const wikiContext = await withTimeout(
+          wikiContextService.getContextForQuery(userId, queryText, { maxTokens: 2000, maxPages: 3 }),
+          '',
+        );
+        if (wikiContext) {
+          sections.push(`\n${wikiContext}`);
+        }
+      } catch {
+        // Wiki context is optional — don't block on failure
+      }
+
       // Add previous conversation snippets
       if (previousConversations.length > 0) {
         sections.push('\nPREVIOUS CONVERSATIONS:');
@@ -2949,6 +3101,22 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           })
         );
         continue;
+      }
+
+      // Check tool result cache for read-only tools
+      if (context?.userId) {
+        const cachedResult = toolResultCacheService.get(context.userId, toolCall.name, toolCall.args);
+        if (cachedResult !== null) {
+          logger.debug('[ToolResultCache] Serving cached result', { userId: context.userId, toolName: toolCall.name });
+          executedThisTurn.set(toolSignature, cachedResult);
+          toolResults.push(
+            new ToolMessage({
+              content: cachedResult,
+              tool_call_id: toolCall.id,
+            })
+          );
+          continue;
+        }
       }
 
       let tool = tools.find((t) => t.name === toolCall.name);
@@ -3114,6 +3282,13 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
               tool_call_id: toolCall.id,
             })
           );
+
+          // Cache read-only results; invalidate on write operations
+          if (toolResultCacheService.isCacheable(toolCall.name)) {
+            toolResultCacheService.set(context.userId, toolCall.name, toolCall.args, execResult.content);
+          } else {
+            toolResultCacheService.invalidateForWriteTool(context.userId, toolCall.name);
+          }
         } else {
           // Fallback: direct invocation when no context available
           const result = await tool.invoke(toolCall.args);
@@ -4007,6 +4182,39 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         // Pop the nudge + empty response so conversation history stays clean
         messages.pop(); // remove nudge
         messages.pop(); // remove empty response
+
+        // Check if nudge retry also returned empty — cascade to fallback provider
+        const retryContent = response.content;
+        const hasRetryContent = typeof retryContent === 'string' ? retryContent.trim().length > 0 :
+          Array.isArray(retryContent) ? retryContent.some((p: any) => (typeof p === 'string' ? p.trim() : p.text?.trim())) : false;
+        const hasRetryTools = ((response as any)?.tool_calls?.length > 0) ||
+          ((response as any)?.additional_kwargs?.tool_calls?.length > 0);
+
+        if (!hasRetryContent && !hasRetryTools) {
+          const failedProvider = modelFactory.getLastProviderUsed();
+          logger.warn('[LangGraphChatbot] Nudge also empty — cascading to fallback provider', {
+            userId, failedProvider, messagePreview: message.substring(0, 60),
+          });
+          modelFactory.markCurrentProviderRateLimited(60_000);
+          try {
+            const fallbackLlm = modelFactory.getModel({
+              tier: 'default', temperature: 0.9, maxTokens: 2048,
+            });
+            const fallbackLlmWithTools = fallbackLlm.bindTools
+              ? fallbackLlm.bindTools(validTools)
+              : fallbackLlm;
+            logger.info('[LangGraphChatbot] Retrying with fallback provider', {
+              userId, newProvider: modelFactory.getLastProviderUsed(),
+            });
+            const fallbackStart = Date.now();
+            response = await fallbackLlmWithTools.invoke(messages);
+            llmTime += Date.now() - fallbackStart;
+          } catch (fallbackError) {
+            logger.error('[LangGraphChatbot] Fallback provider also failed', {
+              userId, error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+            });
+          }
+        }
       }
 
       messages.push(response);
@@ -4385,9 +4593,9 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
 
       // Calculate context stats
       const contextStats = {
-        knowledgeUsed: (ragContext.match(/RELEVANT KNOWLEDGE:/g) || []).length,
-        profileUsed: (ragContext.match(/USER PROFILE:/g) || []).length,
-        historyUsed: (ragContext.match(/PREVIOUS CONVERSATIONS:/g) || []).length,
+        knowledgeUsed: ((ragContext ?? '').match(/RELEVANT KNOWLEDGE:/g) || []).length,
+        profileUsed: ((ragContext ?? '').match(/USER PROFILE:/g) || []).length,
+        historyUsed: ((ragContext ?? '').match(/PREVIOUS CONVERSATIONS:/g) || []).length,
       };
 
       // Recognize intents and generate actions
@@ -4477,19 +4685,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         logger.error('[LangGraphChatbot] Error storing messages', { error, userId });
       });
 
-      // Lightweight wiki compiler — fire-and-forget, non-blocking
-      wikiCompilerService
-        .processConversationTurn(userId, message, responseContent, activeConversationId)
-        .catch((error) => {
-          logger.warn('[LangGraphChatbot] Wiki compiler failed (non-critical)', { error, userId });
-        });
-
-      // Wiki domain initialization — fire-and-forget, only runs once per user
-      wikiIngestService
-        .initializeDomainPages(userId)
-        .catch((error) => {
-          logger.warn('[LangGraphChatbot] Wiki init failed (non-critical)', { error, userId });
-        });
+      this.enqueueWikiMaintenance(userId, message, responseContent, activeConversationId);
 
       // Auto-inject suggestedAction from musicManager tool results into actions
       if (toolCalls.length > 0) {
@@ -4792,14 +4988,15 @@ I'm listening. What's happening right now?`;
         }
       })();
 
-      // Run ALL independent pre-LLM work in parallel:
-      // RAG context, wellbeing context, system prompt (without RAG — appended after),
-      // intent routing (thin LLM), mental health assessment, wellness question check
+      // Classify intent EARLY to determine message complexity and skip unnecessary work
+      const intentClassification = toolRouterService.classifyIntent(message);
+      const messageComplexity: MessageComplexity = intentClassification.complexity;
+
       const conversationDetails = conversationDataForContext?.conversation;
       const contextStartTime = Date.now();
       const contextPhaseTimings: Record<string, number> = {};
 
-      const PRE_LLM_TIMEOUT_MS = 2500; // Cap non-critical pre-LLM work to keep TTFT under control
+      const PRE_LLM_TIMEOUT_MS = 2500;
       const raceTimeout = <T>(promise: Promise<T>, fallback: T): Promise<T> =>
         Promise.race([
           promise,
@@ -4814,58 +5011,123 @@ I'm listening. What's happening right now?`;
         }
       };
 
-      const [
-        ragContext,
-        wellbeingContext,
-        systemPromptBase,
-        streamRoutingChip,
-        streamMentalHealth,
-        questionCheck,
-      ] = await Promise.all([
-        timedPhase('ragContext', this.retrieveContext(userId, message, 1500)),
-        timedPhase('wellbeingContext', wellbeingContextService.getWellbeingContext(userId, message).catch(() => ({}))),
-        timedPhase('systemPrompt', Promise.race([
-          this.buildPersonalizedSystemPrompt(
-            userId,
-            '', // RAG context appended after parallel resolution
-            emotion || undefined,
-            conversationDetails?.sessionType || undefined,
-            effectiveCallPurpose,
-            language,
-          ).catch((error) => {
-            logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
-            return this.getFallbackSystemPrompt(userId);
-          }),
-          new Promise<string>((resolve) => setTimeout(() => {
-            logger.warn('[LangGraphChatbot] Stream system prompt timed out, using static fallback', { userId });
-            this.getFallbackSystemPrompt(userId)
-              .catch(() => BASE_HUMAN_LIKE_PROMPT)
-              .then(resolve);
-          }, 4000)),
-        ])),
-        timedPhase('lifeAreaRouting', raceTimeout(
-          routeCoachIntent({
-            userId,
-            userMessage: message,
-            llm: lifeAreaRouterLlm,
-          }).catch(() => null),
-          null,
-        )),
-        timedPhase('mentalHealthGuardrail', raceTimeout(
-          mentalHealthGuardrailService.assessUserText(message).catch(
-            () => ({ lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] }) as MentalHealthAssessment
-          ),
-          { lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] } as MentalHealthAssessment,
-        )),
-        timedPhase('wellnessQuestionCheck', this.shouldAskWellnessQuestion(
-          userId, message, emotion, null, conversationDataForContext
-        ).catch(() => ({ shouldAsk: false, reason: null, priority: null }))),
-      ]);
+      // Defaults for skipped phases
+      const defaultMentalHealth = { lane: 'none', showProfessionalHelp: false, suppressCoachingGoals: false, matchedCodes: [] } as MentalHealthAssessment;
+      const defaultQuestionCheck = { shouldAsk: false, reason: null, priority: null };
+
+      let ragContext: any = null;
+      let wellbeingContext: any = {};
+      let systemPromptBase: string;
+      let streamRoutingChip: any = null;
+      let streamMentalHealth: MentalHealthAssessment = defaultMentalHealth;
+      let questionCheck: any = defaultQuestionCheck;
+
+      if (messageComplexity === 'TRIVIAL') {
+        // FAST PATH: Skip RAG, wellbeing, life area routing, wellness question.
+        // Minimal system prompt: only name + timezone (~0ms from cache).
+        logger.info('[LangGraphChatbot:Stream] TRIVIAL fast path — skipping RAG, wellbeing, routing', { userId, message: message.substring(0, 50) });
+        [systemPromptBase] = await Promise.all([
+          timedPhase('systemPrompt', Promise.race([
+            this.buildPersonalizedSystemPrompt(
+              userId,
+              '',
+              emotion || undefined,
+              conversationDetails?.sessionType || undefined,
+              effectiveCallPurpose,
+              language,
+              undefined, undefined,
+              'minimal',
+            ).catch((error) => {
+              logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+              return this.getFallbackSystemPrompt(userId);
+            }),
+            new Promise<string>((resolve) => setTimeout(() => {
+              this.getFallbackSystemPrompt(userId).catch(() => BASE_HUMAN_LIKE_PROMPT).then(resolve);
+            }, 2000)),
+          ])),
+        ]);
+      } else if (messageComplexity === 'SIMPLE_ACTION') {
+        // MEDIUM PATH: Skip RAG and life area routing, but keep system prompt + mental health guardrail.
+        // Standard system prompt: name + timezone + recent activity + context (500ms deadline).
+        logger.info('[LangGraphChatbot:Stream] SIMPLE_ACTION fast path — skipping RAG, routing', { userId, intent: intentClassification.primary, message: message.substring(0, 50) });
+        [systemPromptBase, streamMentalHealth] = await Promise.all([
+          timedPhase('systemPrompt', Promise.race([
+            this.buildPersonalizedSystemPrompt(
+              userId,
+              '',
+              emotion || undefined,
+              conversationDetails?.sessionType || undefined,
+              effectiveCallPurpose,
+              language,
+              undefined, undefined,
+              'standard',
+            ).catch((error) => {
+              logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+              return this.getFallbackSystemPrompt(userId);
+            }),
+            new Promise<string>((resolve) => setTimeout(() => {
+              this.getFallbackSystemPrompt(userId).catch(() => BASE_HUMAN_LIKE_PROMPT).then(resolve);
+            }, 3000)),
+          ])),
+          timedPhase('mentalHealthGuardrail', raceTimeout(
+            mentalHealthGuardrailService.assessUserText(message).catch(() => defaultMentalHealth),
+            defaultMentalHealth,
+          )),
+        ]);
+      } else {
+        // FULL PATH: CONVERSATIONAL + ANALYTICAL — run all phases in parallel
+        [
+          ragContext,
+          wellbeingContext,
+          systemPromptBase,
+          streamRoutingChip,
+          streamMentalHealth,
+          questionCheck,
+        ] = await Promise.all([
+          timedPhase('ragContext', this.retrieveContext(userId, message, 1500)),
+          timedPhase('wellbeingContext', wellbeingContextService.getWellbeingContext(userId, message).catch(() => ({}))),
+          timedPhase('systemPrompt', Promise.race([
+            this.buildPersonalizedSystemPrompt(
+              userId,
+              '',
+              emotion || undefined,
+              conversationDetails?.sessionType || undefined,
+              effectiveCallPurpose,
+              language,
+            ).catch((error) => {
+              logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
+              return this.getFallbackSystemPrompt(userId);
+            }),
+            new Promise<string>((resolve) => setTimeout(() => {
+              logger.warn('[LangGraphChatbot] Stream system prompt timed out, using static fallback', { userId });
+              this.getFallbackSystemPrompt(userId)
+                .catch(() => BASE_HUMAN_LIKE_PROMPT)
+                .then(resolve);
+            }, 4000)),
+          ])),
+          timedPhase('lifeAreaRouting', raceTimeout(
+            routeCoachIntent({
+              userId,
+              userMessage: message,
+              llm: lifeAreaRouterLlm,
+            }).catch(() => null),
+            null,
+          )),
+          timedPhase('mentalHealthGuardrail', raceTimeout(
+            mentalHealthGuardrailService.assessUserText(message).catch(() => defaultMentalHealth),
+            defaultMentalHealth,
+          )),
+          timedPhase('wellnessQuestionCheck', this.shouldAskWellnessQuestion(
+            userId, message, emotion, null, conversationDataForContext
+          ).catch(() => defaultQuestionCheck)),
+        ]);
+      }
       const contextTime = Date.now() - contextStartTime;
-      if (contextTime > 1500) {
+      if (contextTime > 1500 || messageComplexity !== 'CONVERSATIONAL') {
         logger.info('[LangGraphChatbot] Stream context timing breakdown', {
           userId,
           contextTime,
+          complexity: messageComplexity,
           phases: contextPhaseTimings,
         });
       }
@@ -4955,9 +5217,10 @@ I'm listening. What's happening right now?`;
       }
 
       // Create tools for this user - USE OPTIMIZED TOOLS WITH INTENT ROUTING
+      // TRIVIAL messages skip tool creation entirely (greetings don't need tools)
       const startToolTime = Date.now();
       const disableToolsForRetry = Boolean((params as any)._disableToolsForRetry);
-      const tools = disableToolsForRetry
+      const tools = (disableToolsForRetry || messageComplexity === 'TRIVIAL')
         ? []
         : getToolsForMessage(userId, message, streamToolTurnContext);
       const toolCreationTime = Date.now() - startToolTime;
@@ -4969,11 +5232,11 @@ I'm listening. What's happening right now?`;
         }, 0),
       };
 
-      // Log intent classification and tool reduction
-      const intent = toolRouterService.classifyIntent(message);
+      // Reuse the early intent classification (already computed before pre-LLM phase)
       logger.info('[LangGraphChatbot:Stream] Optimized tools selected', {
         userId,
-        primaryIntent: intent.primary,
+        primaryIntent: intentClassification.primary,
+        complexity: messageComplexity,
         toolCount: tools.length,
         toolCreationTimeMs: toolCreationTime,
         ...promptStats,
@@ -5171,12 +5434,22 @@ I'm listening. What's happening right now?`;
       const toolCalls: Array<{ tool: string; result: string }> = [];
       let iterations = 0;
       const maxIterations = 3;
-      
+
       // Accumulate tool calls from stream chunks (they may come in chunks that aren't AIMessage instances)
       const accumulatedToolCalls: any[] = [];
 
+      // Speculative tool execution: for SIMPLE_ACTION intents with high confidence,
+      // start executing the predicted tool NOW in parallel with the LLM stream.
+      // If the LLM picks the same tool, we use the pre-fetched result (saves 1 round-trip).
+      let speculativeResultPromise: Promise<SpeculativeResult | null> | null = null;
+      if (messageComplexity === 'SIMPLE_ACTION' && tools.length > 0) {
+        speculativeResultPromise = speculativeToolService.executeSpeculatively(
+          userId, message, intentClassification, tools
+        );
+      }
+
       const llmStartTime = Date.now();
-      const LLM_STREAM_TIMEOUT_MS = 30000; // 30s max for LLM stream — prevents 82s hangs from Gemini parse failures
+      const LLM_STREAM_TIMEOUT_MS = 30000;
       const stream = await Promise.race([
         llmWithTools.stream(messages),
         new Promise<never>((_, reject) =>
@@ -5310,34 +5583,69 @@ I'm listening. What's happening right now?`;
         messages.pop(); // remove nudge
         if (messages[messages.length - 1] === response) messages.pop(); // remove empty response if we pushed it
 
-        // If still empty after nudge with tools, retry WITHOUT tools to force a text response
+        // If still empty after nudge with tools, cascade to fallback provider
         if (!fullResponse.trim() && accumulatedToolCalls.length === 0) {
-          logger.warn('[LangGraphChatbot:Stream] Nudge with tools also empty, retrying without tools', {
+          const failedProvider = modelFactory.getLastProviderUsed();
+          logger.warn('[LangGraphChatbot:Stream] Nudge also empty — cascading to fallback provider', {
             userId,
             messagePreview: message.substring(0, 60),
+            failedProvider,
           });
-          const noToolsRetryStream = await Promise.race([
-            this.llm.stream(messages),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('LLM no-tools retry stream timeout')), LLM_STREAM_TIMEOUT_MS)
-            ),
-          ]);
-          for await (const chunk of noToolsRetryStream) {
-            if (chunk.content) {
-              let token = '';
-              if (typeof chunk.content === 'string') {
-                token = chunk.content;
-              } else if (Array.isArray(chunk.content)) {
-                token = chunk.content.map((part: any) => (typeof part === 'string' ? part : part.text || '')).join('');
+
+          // Blacklist current provider briefly so getModel() picks the next one
+          modelFactory.markCurrentProviderRateLimited(60_000);
+
+          try {
+            const fallbackLlm = modelFactory.getModel({
+              tier: 'default',
+              temperature: 0.9,
+              maxTokens: 2048,
+              streaming: true,
+            });
+            const fallbackLlmWithTools = tools.length > 0 && fallbackLlm.bindTools
+              ? fallbackLlm.bindTools(tools as any)
+              : fallbackLlm;
+            const newProvider = modelFactory.getLastProviderUsed();
+            logger.info('[LangGraphChatbot:Stream] Retrying with fallback provider', { userId, newProvider });
+
+            const fallbackStream = await Promise.race([
+              fallbackLlmWithTools.stream(messages),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('LLM fallback stream timeout')), LLM_STREAM_TIMEOUT_MS)
+              ),
+            ]);
+            for await (const chunk of fallbackStream) {
+              if (chunk.content) {
+                let token = '';
+                if (typeof chunk.content === 'string') {
+                  token = chunk.content;
+                } else if (Array.isArray(chunk.content)) {
+                  token = chunk.content.map((part: any) => (typeof part === 'string' ? part : part.text || '')).join('');
+                }
+                if (token) {
+                  fullResponse += token;
+                  onToken(token);
+                }
               }
-              if (token) {
-                fullResponse += token;
-                onToken(token);
+              const fbToolCalls = (chunk as any).tool_calls || [];
+              const fbToolChunks = (chunk as any).tool_call_chunks || [];
+              fbToolCalls.forEach((tc: any) => {
+                if (tc.id && !accumulatedToolCalls.find((e: any) => e.id === tc.id)) accumulatedToolCalls.push(tc);
+              });
+              fbToolChunks.forEach((tc: any) => {
+                if (tc.name && tc.id && !accumulatedToolCalls.find((e: any) => e.id === tc.id)) {
+                  accumulatedToolCalls.push({ id: tc.id, name: tc.name, args: tc.args || {} });
+                }
+              });
+              if (chunk instanceof AIMessage || (chunk as any).type === 'ai') {
+                response = chunk as AIMessage;
               }
             }
-            if (chunk instanceof AIMessage || (chunk as any).type === 'ai') {
-              response = chunk as AIMessage;
-            }
+          } catch (fallbackError) {
+            logger.error('[LangGraphChatbot:Stream] Fallback provider also failed', {
+              userId,
+              error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+            });
           }
         }
       }
@@ -5376,6 +5684,28 @@ I'm listening. What's happening right now?`;
             const tcName = tc.name || tc.function?.name || 'unknown';
             const label = tcName.replace(/_/g, ' ');
             try { onToolCall({ operationId: tc.id, toolName: tcName, label, icon: undefined }); } catch { /* stream closed */ }
+          }
+        }
+
+        // Check speculative result on first iteration — if HIT, inject as pre-seed
+        if (iterations === 1 && speculativeResultPromise) {
+          const speculativeResult = await speculativeResultPromise;
+          speculativeResultPromise = null;
+          if (speculativeResult) {
+            const firstToolName = (responseToolCalls || [])[0]?.name || (responseToolCalls || [])[0]?.function?.name;
+            if (speculativeToolService.matchesSpeculativeResult(firstToolName, speculativeResult)) {
+              logger.info('[SpeculativeTool] Cache HIT — using pre-fetched result', {
+                userId,
+                toolName: speculativeResult.toolName,
+                preExecMs: (speculativeResult.completedAt || Date.now()) - speculativeResult.startedAt,
+              });
+            } else {
+              logger.info('[SpeculativeTool] Cache MISS — LLM chose different tool', {
+                userId,
+                speculative: speculativeResult.toolName,
+                actual: firstToolName,
+              });
+            }
           }
         }
 
@@ -5726,11 +6056,11 @@ I'm listening. What's happening right now?`;
           // Last resort: auto-invoke the obvious tool based on intent when Gemini silently fails
           logger.warn('[LangGraphChatbot] Empty streaming response — attempting auto-invoke based on intent', {
             userId,
-            intent: intent.primary,
+            intent: intentClassification.primary,
             iterations,
           });
 
-          const autoInvoked = await this.autoInvokeToolByIntent(userId, message, intent, tools, toolCalls);
+          const autoInvoked = await this.autoInvokeToolByIntent(userId, message, intentClassification, tools, toolCalls);
           if (autoInvoked) {
             responseContent = autoInvoked.message;
             // suggestedAction is auto-injected via the existing musicManager toolCalls loop
@@ -5776,9 +6106,9 @@ I'm listening. What's happening right now?`;
 
       // Calculate context stats
       const contextStats = {
-        knowledgeUsed: (ragContext.match(/RELEVANT KNOWLEDGE:/g) || []).length,
-        profileUsed: (ragContext.match(/USER PROFILE:/g) || []).length,
-        historyUsed: (ragContext.match(/PREVIOUS CONVERSATIONS:/g) || []).length,
+        knowledgeUsed: ((ragContext ?? '').match(/RELEVANT KNOWLEDGE:/g) || []).length,
+        profileUsed: ((ragContext ?? '').match(/USER PROFILE:/g) || []).length,
+        historyUsed: ((ragContext ?? '').match(/PREVIOUS CONVERSATIONS:/g) || []).length,
       };
 
       // Recognize intents and generate actions
@@ -5852,6 +6182,8 @@ I'm listening. What's happening right now?`;
         logger.error('[LangGraphChatbot] Error storing messages', { error, userId });
       });
 
+      this.enqueueWikiMaintenance(userId, message, responseContent, activeConversationId);
+
       // Questions are now integrated naturally into the response via system prompt
       // No need to append them here - the LLM includes them naturally in its response
 
@@ -5882,14 +6214,34 @@ I'm listening. What's happening right now?`;
       const toolsRetryDisabled = Boolean((params as any)._disableToolsForRetry);
 
       if (isGeminiPartsStreamError(error) && !toolsRetryDisabled) {
-        logger.warn('[LangGraphChatbot] Gemini stream returned malformed parts; retrying without tools for this turn', {
+        logger.warn('[LangGraphChatbot] Gemini stream returned malformed parts — cascading to fallback provider', {
           userId,
           error: errorMsg,
         });
-        return await this.chatStream({
-          ...params,
-          _disableToolsForRetry: true,
-        } as any);
+        modelFactory.markCurrentProviderRateLimited(60_000);
+        try {
+          this.llm = modelFactory.getModel({
+            tier: 'default',
+            temperature: 0.9,
+            maxTokens: 2048,
+            streaming: true,
+          });
+          logger.info('[LangGraphChatbot] Retrying stream with fallback after malformed parts', {
+            userId, newProvider: modelFactory.getLastProviderUsed(),
+          });
+          return await this.chatStream({
+            ...params,
+            _disableToolsForRetry: true,
+            _retryCount: retryCount + 1,
+          } as any);
+        } catch (noProvidersError: any) {
+          logger.error('[LangGraphChatbot] All providers exhausted after malformed parts', {
+            userId, error: noProvidersError?.message || 'Unknown',
+          });
+          const fallback = this.buildProviderExhaustedResponse(conversationId || '', errorMsg);
+          onToken(fallback.response);
+          return fallback;
+        }
       }
 
       const isProviderError = modelFactory.handleProviderError(error);

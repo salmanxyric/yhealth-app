@@ -295,6 +295,17 @@ class MoodService {
       streakService.recordActivity(userId, 'mood_checkin', moodLog.id)
     ).catch(() => {});
 
+    // Fire-and-forget: update wiki with mood activity
+    import('../activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'mood',
+        userId,
+        eventType: 'mood_logged',
+        summary: `Mood: ${input.moodEmoji || ''} ${input.descriptor || ''}. Happiness: ${input.happinessRating ?? 'N/A'}/10, Energy: ${input.energyRating ?? 'N/A'}/10${input.emotionTags?.length ? `. Emotions: ${input.emotionTags.join(', ')}` : ''}`,
+        payload: { happiness: input.happinessRating, energy: input.energyRating, stress: input.stressRating, anxiety: input.anxietyRating, emotions: input.emotionTags },
+      })
+    ).catch(() => {});
+
     return moodLog;
   }
 

@@ -77,6 +77,17 @@ class EnergyService {
       [userId, input.energyRating, input.contextTag || null, input.contextNote || null, loggedAt]
     );
 
+    // Fire-and-forget: update wiki with energy activity
+    import('../activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'energy',
+        userId,
+        eventType: 'energy_logged',
+        summary: `Energy level: ${input.energyRating}/10${input.contextTag ? ` (${input.contextTag})` : ''}${input.contextNote ? ` — ${input.contextNote}` : ''}`,
+        payload: { rating: input.energyRating, context: input.contextTag },
+      })
+    ).catch(() => {});
+
     return this.mapRowToEnergyLog(result.rows[0]);
   }
 

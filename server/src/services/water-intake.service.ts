@@ -142,6 +142,17 @@ class WaterIntakeService {
       logger.info(`User ${userId} achieved water goal: ${newMlConsumed}ml`);
     }
 
+    // Fire-and-forget: update wiki with water intake
+    import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+      activityWikiSynthesizer.synthesize({
+        domain: 'water',
+        userId,
+        eventType: 'water_logged',
+        summary: `${amountMl}ml ${type || 'water'} — total today: ${newMlConsumed}ml (${updatedLog.glassesConsumed} glasses)`,
+        payload: { amountMl, totalMl: newMlConsumed, glasses: updatedLog.glassesConsumed, goalAchieved: isGoalAchieved },
+      })
+    ).catch(() => {});
+
     return updatedLog;
   }
 
