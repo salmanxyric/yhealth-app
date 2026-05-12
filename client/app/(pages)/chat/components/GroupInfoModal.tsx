@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -170,6 +171,7 @@ export function GroupInfoModal({
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-[520px] max-h-[90vh] bg-[#0a0f1f] border border-white/10 rounded-[24px] p-0 gap-0 shadow-[0_0_80px_rgba(2,132,199,0.06)] overflow-hidden [&>button]:hidden">
+          <DialogTitle className="sr-only">Group info</DialogTitle>
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-0">
             <div className="flex items-center gap-3">

@@ -25,7 +25,9 @@ import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
 import { subscribeToUserEvents } from '@/lib/socket-client';
 import { JoinGroupDialog } from './JoinGroupDialog';
 import { CreateGroupDialog } from './CreateGroupDialog';
+import { ChatSocialModal } from './ChatSocialModal';
 import { stripMarkdownForPreview } from '@/src/shared/utils/coach-message-display';
+import { api } from '@/lib/api-client';
 
 interface ChatListProps {
   selectedChatId: string | null;
@@ -44,6 +46,8 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
   const [searchQuery, setSearchQuery] = useState('');
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showSocialModal, setShowSocialModal] = useState(false);
+  const [pendingFriendRequestCount, setPendingFriendRequestCount] = useState(0);
   const hasLoadedRef = useRef(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
@@ -129,9 +133,41 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
       onUserOffline: (data) => {
         setOnlineUsers((prev) => { const n = new Set(prev); n.delete(data.userId); return n; });
       },
+      onFollowRequest: (data) => {
+        setPendingFriendRequestCount((count) => count + 1);
+        toastRef.current({
+          title: 'New friend request',
+          description: `${data.requesterName} wants to connect with you`,
+        });
+      },
+      onFollowAccepted: (data) => {
+        toastRef.current({
+          title: 'Friend request accepted',
+          description: `${data.recipientName} accepted your request`,
+        });
+        if (data.chatId) {
+          hasLoadedRef.current = false;
+          isLoadingRef.current = false;
+          loadChats();
+          onSelectChat(data.chatId);
+        }
+      },
     });
     return cleanup;
-  }, [loadChats]);
+  }, [loadChats, onSelectChat]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    api.get<{ stats: { pendingCount: number } }>('/follows/stats')
+      .then((result) => {
+        if (!cancelled) setPendingFriendRequestCount(result.data?.stats.pendingCount ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const getChatTitle = (chat: Chat): string => {
     if (chat.isGroupChat) return chat.chatName || 'Group Chat';
@@ -270,6 +306,15 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowCreateDialog(true)} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
                 <UserRoundPlus className="mr-2 h-4 w-4" /> Create Group
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowSocialModal(true)} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
+                <Users className="mr-2 h-4 w-4" />
+                Friend requests
+                {pendingFriendRequestCount > 0 && (
+                  <span className="ml-auto rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {pendingFriendRequestCount > 9 ? '9+' : pendingFriendRequestCount}
+                  </span>
+                )}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/[0.06]" />
               <DropdownMenuItem
@@ -458,6 +503,17 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
         onJoinSuccess={async (chat) => { hasLoadedRef.current = false; isLoadingRef.current = false; await loadChats(); onSelectChat(chat.id); setShowJoinDialog(false); }} />
       <CreateGroupDialog isOpen={showCreateDialog} onClose={() => setShowCreateDialog(false)}
         onGroupCreated={async (chat) => { hasLoadedRef.current = false; isLoadingRef.current = false; await loadChats(); onSelectChat(chat.id); }} />
+      <ChatSocialModal
+        open={showSocialModal}
+        onClose={() => setShowSocialModal(false)}
+        onPendingCountChange={setPendingFriendRequestCount}
+        onChatCreated={async (chatId) => {
+          hasLoadedRef.current = false;
+          isLoadingRef.current = false;
+          await loadChats();
+          onSelectChat(chatId);
+        }}
+      />
     </div>
   );
 }

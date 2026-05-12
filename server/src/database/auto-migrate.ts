@@ -966,6 +966,12 @@ const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
   'add-buddy-challenge-and-competition-invitations.sql',
   'add-health-profile-visibility.sql',
   'add-goal-actions-user-goal-support.sql',
+  // Activity-status awareness: adds user_plans.status_overrides,
+  // user_coaching_profiles.status_patterns, and lifecycle fields/indexes on
+  // activity_status_history. Idempotent (ADD COLUMN IF NOT EXISTS / DO guards).
+  // Listed here because all expected tables exist on most envs, so the
+  // missing-tables branch that auto-runs `add-*` files never fires.
+  'add-status-awareness-fields.sql',
 ];
 
 async function runSupplementaryMigrations(): Promise<void> {

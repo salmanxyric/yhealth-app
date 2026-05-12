@@ -8,6 +8,7 @@ import { ConfirmDialogProvider } from "@/components/common/ConfirmDialog";
 import { VisitorTracker } from "@/components/VisitorTracker";
 import { PersistentPlayer } from "@/components/music/PersistentPlayer";
 import { organizationJsonLd, webSiteJsonLd } from "@/lib/structured-data";
+import { ChatCallProvider } from "./providers/ChatCallProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -134,11 +135,13 @@ export default function RootLayout({
         <Providers>
           <AlarmProvider>
             <ConfirmDialogProvider>
-              <VisitorTracker />
-              {children}
-              <PersistentPlayer />
-              {/* <FloatingVoiceAssistantWrapper /> */}
-              <VoiceAssistantModal />
+              <ChatCallProvider>
+                <VisitorTracker />
+                {children}
+                <PersistentPlayer />
+                {/* <FloatingVoiceAssistantWrapper /> */}
+                <VoiceAssistantModal />
+              </ChatCallProvider>
             </ConfirmDialogProvider>
           </AlarmProvider>
         </Providers>

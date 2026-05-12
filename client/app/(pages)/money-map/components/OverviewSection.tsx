@@ -59,7 +59,7 @@ function ViewportSection({ children, className = "" }: { children: React.ReactNo
 export function OverviewSection({
   summary,
   monthlySummary,
-  _budgetAlerts,
+  budgetAlerts: _budgetAlerts,
   recentTransactions,
   budgets,
   goals,

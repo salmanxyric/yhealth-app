@@ -5,6 +5,7 @@ import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { updateUserOnlineStatus } from '../utils/user.helpers.js';
 import { competitionStreamService } from './competition-stream.service.js';
+import { chatCallService } from './chat-call.service.js';
 import { visionCoachingService } from './vision-coaching.service.js';
 import type { IJwtPayload, SocketUser, UserRole } from '../types/index.js';
 
@@ -140,6 +141,8 @@ class SocketService {
         connectedAt: new Date().toISOString(),
       });
 
+      chatCallService.emitPendingIncomingCalls(user.userId);
+
       // Broadcast online presence to all connected users
       socket.broadcast.emit('userOnline', { userId: user.userId });
 
@@ -163,6 +166,7 @@ class SocketService {
 
         if (!hasOtherConnections) {
           competitionStreamService.handleDisconnect(user.userId);
+          chatCallService.handleDisconnect(user.userId);
 
           // Broadcast offline presence
           if (this.io) {
@@ -364,6 +368,146 @@ class SocketService {
         });
       }
     });
+
+    // ============================================
+    // Chat Call Events
+    // ============================================
+
+    socket.on(
+      'chat:call:invite',
+      async (data: { chatId: string; callType: 'voice' | 'video' }) => {
+        if (!socket.user?.userId || !data?.chatId || !data?.callType) return;
+        try {
+          const call = await chatCallService.invite(
+            data.chatId,
+            socket.user.userId,
+            data.callType,
+          );
+          socket.join(`chat:call:${call.id}`);
+        } catch (error) {
+          socket.emit('chat:call:error', {
+            message: error instanceof Error ? error.message : 'Failed to start call',
+          });
+        }
+      },
+    );
+
+    socket.on('chat:call:accept', async (data: { callId: string }) => {
+      if (!socket.user?.userId || !data?.callId) return;
+      try {
+        const call = await chatCallService.accept(data.callId, socket.user.userId);
+        socket.join(`chat:call:${call.id}`);
+      } catch (error) {
+        socket.emit('chat:call:error', {
+          message: error instanceof Error ? error.message : 'Failed to accept call',
+        });
+      }
+    });
+
+    socket.on('chat:call:decline', async (data: { callId: string }) => {
+      if (!socket.user?.userId || !data?.callId) return;
+      try {
+        await chatCallService.decline(data.callId, socket.user.userId);
+      } catch (error) {
+        socket.emit('chat:call:error', {
+          message: error instanceof Error ? error.message : 'Failed to decline call',
+        });
+      }
+    });
+
+    socket.on('chat:call:cancel', async (data: { callId: string }) => {
+      if (!socket.user?.userId || !data?.callId) return;
+      try {
+        await chatCallService.cancel(data.callId, socket.user.userId);
+      } catch (error) {
+        socket.emit('chat:call:error', {
+          message: error instanceof Error ? error.message : 'Failed to cancel call',
+        });
+      }
+    });
+
+    socket.on('chat:call:end', async (data: { callId: string }) => {
+      if (!socket.user?.userId || !data?.callId) return;
+      try {
+        await chatCallService.end(data.callId, socket.user.userId);
+      } catch (error) {
+        socket.emit('chat:call:error', {
+          message: error instanceof Error ? error.message : 'Failed to end call',
+        });
+      }
+    });
+
+    socket.on(
+      'chat:call:media-state',
+      (data: { callId: string; audioEnabled?: boolean; videoEnabled?: boolean }) => {
+        if (!socket.user?.userId || !data?.callId) return;
+        try {
+          chatCallService.updateMediaState(data.callId, socket.user.userId, {
+            audioEnabled: data.audioEnabled,
+            videoEnabled: data.videoEnabled,
+          });
+        } catch (error) {
+          socket.emit('chat:call:error', {
+            message: error instanceof Error ? error.message : 'Failed to update media state',
+          });
+        }
+      },
+    );
+
+    socket.on(
+      'chat:call:offer',
+      (data: { callId: string; targetUserId: string; sdp: string }) => {
+        if (!socket.user?.userId || !data?.callId || !data?.targetUserId || !data?.sdp) return;
+        try {
+          chatCallService.relayOffer(data.callId, socket.user.userId, data.targetUserId, data.sdp);
+        } catch (error) {
+          socket.emit('chat:call:error', {
+            message: error instanceof Error ? error.message : 'Failed to send offer',
+          });
+        }
+      },
+    );
+
+    socket.on(
+      'chat:call:answer',
+      (data: { callId: string; targetUserId: string; sdp: string }) => {
+        if (!socket.user?.userId || !data?.callId || !data?.targetUserId || !data?.sdp) return;
+        try {
+          chatCallService.relayAnswer(data.callId, socket.user.userId, data.targetUserId, data.sdp);
+        } catch (error) {
+          socket.emit('chat:call:error', {
+            message: error instanceof Error ? error.message : 'Failed to send answer',
+          });
+        }
+      },
+    );
+
+    socket.on(
+      'chat:call:ice-candidate',
+      (data: {
+        callId: string;
+        targetUserId: string;
+        candidate: {
+          candidate: string;
+          sdpMLineIndex: number | null;
+          sdpMid: string | null;
+        };
+      }) => {
+        if (!socket.user?.userId || !data?.callId || !data?.targetUserId || !data?.candidate) return;
+        try {
+          chatCallService.relayIceCandidate(
+            data.callId,
+            socket.user.userId,
+            data.targetUserId,
+            data.candidate,
+          );
+        } catch (error) {
+          socket.emit('chat:call:error', {
+            message: error instanceof Error ? error.message : 'Failed to send ICE candidate',
+          });
+        }
+      },
+    );
 
     // ============================================
     // Video Room Events (N-to-N mesh)

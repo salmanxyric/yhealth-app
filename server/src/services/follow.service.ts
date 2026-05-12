@@ -76,6 +76,7 @@ async function ensureTables(): Promise<void> {
       )
     `);
     await query(`CREATE INDEX IF NOT EXISTS idx_bsc_user ON buddy_suggestions_cache(user_id, dismissed, match_score DESC)`);
+    await query(`ALTER TABLE buddy_suggestions_cache ADD COLUMN IF NOT EXISTS suggested_challenge JSONB`);
 
     tablesEnsured = true;
   } catch (error) {
@@ -171,7 +172,7 @@ class FollowService {
       priority: 'high',
       relatedEntityType: 'follow_request',
       relatedEntityId: follow.id,
-      actionUrl: '/dashboard?tab=social',
+      actionUrl: '/chat',
       actionLabel: 'View Request',
     }).catch(() => {});
 
@@ -251,7 +252,7 @@ class FollowService {
       priority: 'high',
       relatedEntityType: 'follow_accepted',
       relatedEntityId: followId,
-      actionUrl: '/chat',
+      actionUrl: follow.chatId ? `/chat?chatId=${follow.chatId}` : '/chat',
       actionLabel: 'Open Chat',
       metadata: { chatId: follow.chatId },
     }).catch(() => {});
@@ -328,6 +329,19 @@ class FollowService {
        FROM user_follows f
        JOIN users u ON u.id = f.requester_id
        WHERE f.recipient_id = $1 AND f.status = 'pending'
+       ORDER BY f.created_at DESC`,
+      [userId]
+    );
+    return result.rows.map(mapRow);
+  }
+
+  async getSentPendingRequests(userId: string): Promise<Follow[]> {
+    await ensureTables();
+    const result = await query(
+      `SELECT f.*, u.first_name || ' ' || COALESCE(u.last_name, '') as recipient_name, u.avatar as recipient_avatar
+       FROM user_follows f
+       JOIN users u ON u.id = f.recipient_id
+       WHERE f.requester_id = $1 AND f.status = 'pending'
        ORDER BY f.created_at DESC`,
       [userId]
     );

@@ -64,7 +64,7 @@ function SectionHeader({ icon: Icon, label, color }: { icon: React.ComponentType
 
 export function AnalyticsSection({
   categoryBreakdown, trends, comparison, budgetAlerts,
-  transactions, totalExpense, _totalIncome, savingsRate, financeScore,
+  transactions, totalExpense, totalIncome: _totalIncome, savingsRate, financeScore,
 }: AnalyticsSectionProps) {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

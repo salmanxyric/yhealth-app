@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS buddy_suggestions_cache (
   match_score NUMERIC(3,2) NOT NULL,
   match_reason TEXT NOT NULL,
   goal_overlap JSONB DEFAULT '{}',
+  suggested_challenge JSONB,
   computed_at TIMESTAMPTZ DEFAULT NOW(),
   dismissed BOOLEAN DEFAULT false,
   UNIQUE(user_id, suggested_user_id)

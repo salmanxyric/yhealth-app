@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { MoreVertical, Info, Search, Menu, ArrowLeft, Pencil, X, Trash2, LogOut, LayoutDashboard, Sparkles } from 'lucide-react';
+import { MoreVertical, Info, Search, Menu, ArrowLeft, Pencil, X, Trash2, LogOut, LayoutDashboard, Sparkles, Phone, Video, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import {
@@ -28,6 +28,10 @@ interface ChatHeaderProps {
   onClose?: () => void;
   onLeaveGroup?: () => void;
   onDelete?: () => void;
+  onVoiceCall?: () => void;
+  onVideoCall?: () => void;
+  onOpenSocial?: () => void;
+  pendingFriendRequestCount?: number;
   onUserClick?: (userId: string, userName: string, userAvatar?: string | null) => void;
   otherUserId?: string;
   otherUserName?: string;
@@ -58,6 +62,10 @@ export function ChatHeader({
   onClose,
   onLeaveGroup,
   onDelete,
+  onVoiceCall,
+  onVideoCall,
+  onOpenSocial,
+  pendingFriendRequestCount = 0,
   onUserClick,
   otherUserId,
   otherUserName,
@@ -176,6 +184,16 @@ export function ChatHeader({
           <Button variant="ghost" size="icon" onClick={() => router.push('/dashboard')} title="Dashboard" className={iconBtnClass}>
             <LayoutDashboard className="h-[18px] w-[18px]" />
           </Button>
+          {onVoiceCall && (
+            <Button variant="ghost" size="icon" onClick={onVoiceCall} title="Voice call" aria-label="Voice call" className={iconBtnClass}>
+              <Phone className="h-[18px] w-[18px]" />
+            </Button>
+          )}
+          {onVideoCall && (
+            <Button variant="ghost" size="icon" onClick={onVideoCall} title="Video call" aria-label="Video call" className={iconBtnClass}>
+              <Video className="h-[18px] w-[18px]" />
+            </Button>
+          )}
           {onSearch && (
             <Button variant="ghost" size="icon" onClick={onSearch} className={iconBtnClass}>
               <Search className="h-[18px] w-[18px]" />
@@ -195,6 +213,18 @@ export function ChatHeader({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="rounded-xl border-white/[0.08] bg-[#0f1120]/95 backdrop-blur-xl shadow-2xl shadow-black/50">
+                {onOpenSocial && (
+                  <DropdownMenuItem onClick={onOpenSocial} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Friend requests
+                    {pendingFriendRequestCount > 0 && (
+                      <span className="ml-auto rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        {pendingFriendRequestCount > 9 ? '9+' : pendingFriendRequestCount}
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {onOpenSocial && <DropdownMenuSeparator className="bg-white/[0.06]" />}
                 <DropdownMenuItem onClick={onGroupMenuClick} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
                   <Info className="mr-2 h-4 w-4" /> Group Info
                 </DropdownMenuItem>
@@ -208,7 +238,7 @@ export function ChatHeader({
             </DropdownMenu>
           )}
           {/* Regular menu */}
-          {(!isGroupChat || !onGroupMenuClick) && (onMore || onInfo || onSearch || onEdit || onClose || onDelete) && (
+          {(!isGroupChat || !onGroupMenuClick) && (onMore || onInfo || onSearch || onEdit || onClose || onDelete || onOpenSocial) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className={iconBtnClass}>
@@ -216,6 +246,18 @@ export function ChatHeader({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="rounded-xl border-white/[0.08] bg-[#0f1120]/95 backdrop-blur-xl shadow-2xl shadow-black/50">
+                {onOpenSocial && (
+                  <DropdownMenuItem onClick={onOpenSocial} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Friend requests
+                    {pendingFriendRequestCount > 0 && (
+                      <span className="ml-auto rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        {pendingFriendRequestCount > 9 ? '9+' : pendingFriendRequestCount}
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {onOpenSocial && (onSearch || onInfo || onEdit || onClose || onDelete || onMore) && <DropdownMenuSeparator className="bg-white/[0.06]" />}
                 {onSearch && <DropdownMenuItem onClick={onSearch} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]"><Search className="mr-2 h-4 w-4" /> Search</DropdownMenuItem>}
                 {onInfo && <DropdownMenuItem onClick={onInfo} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]"><Info className="mr-2 h-4 w-4" /> Info</DropdownMenuItem>}
                 {onEdit && <DropdownMenuItem onClick={onEdit} className="text-slate-300 hover:text-white focus:text-white focus:bg-white/[0.06]"><Pencil className="mr-2 h-4 w-4" /> Edit Chat</DropdownMenuItem>}

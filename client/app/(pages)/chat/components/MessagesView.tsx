@@ -23,6 +23,7 @@ import { EditChatDialog } from './EditChatDialog';
 import { ForwardMessageDialog } from './ForwardMessageDialog';
 import { ViewOnceViewer } from './ViewOnceViewer';
 import { UserHealthProfileModal } from './UserHealthProfileModal';
+import { ChatSocialModal } from './ChatSocialModal';
 import { chatService, type Chat } from '@/src/shared/services/chat.service';
 import { type ChatMessageItemData } from './ChatMessageItem';
 import { adaptMessageToChatMessageItem } from '../utils/messageAdapter';
@@ -32,6 +33,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/app/context/AuthContext';
 import { subscribeToChatEvents, subscribeToUserEvents, getSocket } from '@/lib/socket-client';
 import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
+import { useChatCall } from '@/app/providers/ChatCallProvider';
+import { api } from '@/lib/api-client';
 
 interface MessagesViewProps {
   chatId: string | null;
@@ -53,6 +56,7 @@ export function MessagesView({
   const router = useRouter();
   const { user } = useAuth();
   const { assistantName } = useVoiceAssistant();
+  const { startCall } = useChatCall();
   const { toast } = useToast();
   const toastRef = useRef(toast);
   const [chat, setChat] = useState<Chat | null>(null);
@@ -68,6 +72,8 @@ export function MessagesView({
     mediaType?: string;
   } | null>(null);
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
+  const [showSocialModal, setShowSocialModal] = useState(false);
+  const [pendingFriendRequestCount, setPendingFriendRequestCount] = useState(0);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showForwardDialog, setShowForwardDialog] = useState(false);
@@ -376,12 +382,41 @@ export function MessagesView({
       onUserOffline: (data) => {
         setOnlineUsers((prev) => { const n = new Set(prev); n.delete(data.userId); return n; });
       },
+      onFollowRequest: (data) => {
+        setPendingFriendRequestCount((count) => count + 1);
+        toast({
+          title: 'New friend request',
+          description: `${data.requesterName} wants to connect with you`,
+        });
+      },
+      onFollowAccepted: (data) => {
+        toast({
+          title: 'Friend request accepted',
+          description: `${data.recipientName} accepted your request`,
+        });
+        if (data.chatId) {
+          router.push(`/chat?chatId=${data.chatId}`);
+        }
+      },
     });
 
     return () => {
       if (cleanupUser) cleanupUser();
     };
   }, [user?.id, toast, onChatDeleted, router]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    api.get<{ stats: { pendingCount: number } }>('/follows/stats')
+      .then((result) => {
+        if (!cancelled) setPendingFriendRequestCount(result.data?.stats.pendingCount ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const searchMatchIds = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -432,6 +467,11 @@ export function MessagesView({
   const isAdmin = chat?.groupAdmin === user?.id;
   const isCreator = chat?.createdBy === user?.id;
   const isGroupAdmin = isAdmin || isCreator;
+  const isAiChat = isAiChatRef.current;
+  const canStartVoiceCall = !!chat && !isAiChat;
+  const canStartVideoCall = !!chat && !chat.isGroupChat && !isAiChat && !!chat.participants?.some(
+    (p) => p.user && p.user.id !== user?.id
+  );
 
   // Calculate if user can send messages (for group permissions)
   const canSendMessages = useMemo(() => {
@@ -958,6 +998,10 @@ export function MessagesView({
         onLeaveGroup={chat?.isGroupChat && !isGroupAdmin ? handleLeaveGroup : undefined}
         // Only show delete option for admin/creator
         onDelete={chat?.isGroupChat && isGroupAdmin ? handleDeleteChat : !chat?.isGroupChat ? handleDeleteChat : undefined}
+        onVoiceCall={canStartVoiceCall && chatId ? () => startCall(chatId, 'voice') : undefined}
+        onVideoCall={canStartVideoCall && chatId ? () => startCall(chatId, 'video') : undefined}
+        onOpenSocial={() => setShowSocialModal(true)}
+        pendingFriendRequestCount={pendingFriendRequestCount}
         onSearch={() => {
           setSearchMode((prev) => !prev);
           setSearchQuery('');
@@ -1035,6 +1079,16 @@ export function MessagesView({
           </button>
         </div>
       )}
+
+      <ChatSocialModal
+        open={showSocialModal}
+        onClose={() => setShowSocialModal(false)}
+        onPendingCountChange={setPendingFriendRequestCount}
+        onChatCreated={(createdChatId) => {
+          router.push(`/chat?chatId=${createdChatId}`);
+          reloadMessages();
+        }}
+      />
 
       {/* Messages List */}
       <div className="flex-1 min-h-0 overflow-hidden bg-transparent">

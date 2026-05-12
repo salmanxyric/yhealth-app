@@ -28,6 +28,14 @@ import {
 
 const router = Router();
 
+// --- Shared Challenge routes (must be before :id param routes) ---
+
+router.post('/shared-challenge/generate', authenticate, generateChallenge);
+router.post('/shared-challenge/create', authenticate, createSharedCompetition);
+router.get('/invitations', authenticate, getPendingInvitations);
+router.post('/invitations/:id/accept', authenticate, acceptInvitation);
+router.post('/invitations/:id/decline', authenticate, declineInvitation);
+
 // --- Public / optionally-authenticated GET routes ---
 
 /**
@@ -53,14 +61,6 @@ router.get('/:id', optionalAuth, validate(competitionIdParamSchema, 'params'), g
  * Get competition leaderboard
  */
 router.get('/:id/leaderboard', optionalAuth, validate(competitionIdParamSchema, 'params'), getCompetitionLeaderboard);
-
-// --- Shared Challenge routes (must be before :id param routes) ---
-
-router.post('/shared-challenge/generate', authenticate, generateChallenge);
-router.post('/shared-challenge/create', authenticate, createSharedCompetition);
-router.get('/invitations', authenticate, getPendingInvitations);
-router.post('/invitations/:id/accept', authenticate, acceptInvitation);
-router.post('/invitations/:id/decline', authenticate, declineInvitation);
 
 // --- Authenticated action routes ---
 

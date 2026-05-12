@@ -275,6 +275,8 @@ export function subscribeToUserEvents(
     onChatListUpdate?: (data: { chatId: string; lastMessage: string; senderId: string; sentAt: string }) => void;
     onUserOnline?: (data: { userId: string }) => void;
     onUserOffline?: (data: { userId: string }) => void;
+    onFollowRequest?: (data: { followId: string; requesterId: string; requesterName: string; message?: string; matchReason?: string }) => void;
+    onFollowAccepted?: (data: { followId: string; recipientId: string; recipientName: string; chatId?: string | null }) => void;
   }
 ): () => void {
   const socket = getSocket();
@@ -294,6 +296,12 @@ export function subscribeToUserEvents(
   if (handlers.onUserOffline) {
     socket.on('userOffline', handlers.onUserOffline);
   }
+  if (handlers.onFollowRequest) {
+    socket.on('follow:request', handlers.onFollowRequest);
+  }
+  if (handlers.onFollowAccepted) {
+    socket.on('follow:accepted', handlers.onFollowAccepted);
+  }
 
   return () => {
     if (socket) {
@@ -301,6 +309,8 @@ export function subscribeToUserEvents(
       if (handlers.onChatListUpdate) socket.off('chatListUpdate', handlers.onChatListUpdate);
       if (handlers.onUserOnline) socket.off('userOnline', handlers.onUserOnline);
       if (handlers.onUserOffline) socket.off('userOffline', handlers.onUserOffline);
+      if (handlers.onFollowRequest) socket.off('follow:request', handlers.onFollowRequest);
+      if (handlers.onFollowAccepted) socket.off('follow:accepted', handlers.onFollowAccepted);
     }
   };
 }

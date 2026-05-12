@@ -19,6 +19,8 @@ export function ChatPageContent() {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
+      const urlChatId = new URLSearchParams(window.location.search).get('chatId');
+      if (urlChatId) return urlChatId;
       return window.localStorage.getItem('chat.selectedChatId');
     } catch {
       return null;

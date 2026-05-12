@@ -79,7 +79,10 @@ export const getFollowing = asyncHandler(async (req: AuthenticatedRequest, res: 
 export const getPendingRequests = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
-  const pending = await followService.getPendingRequests(userId);
+  const direction = req.query.direction === 'sent' ? 'sent' : 'received';
+  const pending = direction === 'sent'
+    ? await followService.getSentPendingRequests(userId)
+    : await followService.getPendingRequests(userId);
   ApiResponse.success(res, { requests: pending, count: pending.length }, 'Pending requests retrieved');
 });
 

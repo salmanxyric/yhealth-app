@@ -3,7 +3,7 @@
 import { memo } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { Lock, Eye, EyeOff, MessageCircle, Compass } from 'lucide-react';
+import { Lock, Eye, EyeOff, MessageCircle, Compass, Phone, PhoneMissed, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MessageBubble, MessageStatus, MessageMedia } from '@/components/chat';
 import { AudioPlayer } from './AudioPlayer';
@@ -114,6 +114,76 @@ export const ChatMessageItem = memo(function ChatMessageItem({
       <div className="flex items-center justify-center px-4 py-2.5">
         <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/8 px-3 py-1 rounded-full font-medium">
           {message.content}
+        </div>
+      </div>
+    );
+  }
+
+  if (message.contentType === 'call') {
+    let call: {
+      callType?: 'voice' | 'video';
+      status?: 'ended' | 'declined' | 'missed' | 'cancelled';
+      durationSeconds?: number;
+    } = {};
+    try {
+      call = JSON.parse(message.content || '{}');
+    } catch {
+      call = {};
+    }
+    const isMissed = call.status === 'missed' || call.status === 'declined' || call.status === 'cancelled';
+    const minutes = Math.floor((call.durationSeconds || 0) / 60);
+    const seconds = (call.durationSeconds || 0) % 60;
+    const duration = call.durationSeconds
+      ? `${minutes}:${String(seconds).padStart(2, '0')}`
+      : undefined;
+    const label = call.status === 'missed'
+      ? 'Missed call'
+      : call.status === 'declined'
+        ? 'Declined call'
+        : call.status === 'cancelled'
+          ? 'Cancelled call'
+          : `${call.callType === 'video' ? 'Video' : 'Voice'} call`;
+
+    return (
+      <div className={cn('flex px-4 sm:px-6 py-1.5', isUser ? 'justify-end' : 'justify-start')}>
+        <div
+          className={cn(
+            'flex min-w-[220px] max-w-[320px] items-center gap-3 rounded-2xl border px-4 py-3 shadow-sm',
+            isUser
+              ? 'border-emerald-400/20 bg-emerald-500/10'
+              : 'border-white/10 bg-white/[0.06]',
+          )}
+        >
+          <div className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+            isMissed ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300',
+          )}>
+            {isMissed ? (
+              <PhoneMissed className="h-5 w-5" />
+            ) : call.callType === 'video' ? (
+              <Video className="h-5 w-5" />
+            ) : (
+              <Phone className="h-5 w-5" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-100">{label}</p>
+            <p className="text-xs text-slate-400">
+              {duration ? `Duration ${duration}` : isUser ? 'You called' : 'Incoming call'}
+            </p>
+          </div>
+          {message.timestamp && (
+            <span className="shrink-0 text-[11px] font-medium text-slate-500">
+              {(() => {
+                try {
+                  const date = new Date(message.timestamp.endsWith('Z') ? message.timestamp : `${message.timestamp}Z`);
+                  return isNaN(date.getTime()) ? '' : format(date, 'h:mm a');
+                } catch {
+                  return '';
+                }
+              })()}
+            </span>
+          )}
         </div>
       </div>
     );

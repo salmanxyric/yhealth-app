@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import {
   Loader2,
@@ -146,6 +147,9 @@ export function CreateGroupDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[480px] bg-[#0a0f1f] border border-white/10 rounded-[24px] p-0 gap-0 shadow-[0_0_80px_rgba(2,132,199,0.06)] overflow-hidden [&>button]:hidden">
+        <DialogTitle className="sr-only">
+          {createdChat ? 'Group created' : 'Create group'}
+        </DialogTitle>
         <AnimatePresence mode="wait">
           {createdChat ? (
             <SuccessView
