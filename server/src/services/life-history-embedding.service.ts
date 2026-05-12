@@ -485,7 +485,7 @@ class LifeHistoryEmbeddingService {
 
   private async getDailyScore(userId: string, date: string) {
     const result = await query(
-      `SELECT score, explanation, streak_days
+      `SELECT total_score, explanation
        FROM daily_user_scores WHERE user_id = $1 AND date = $2 LIMIT 1`,
       [userId, date],
     );
@@ -494,25 +494,25 @@ class LifeHistoryEmbeddingService {
 
     // Get previous day score for delta
     const prevResult = await query(
-      `SELECT score FROM daily_user_scores WHERE user_id = $1 AND date = $2::date - 1 LIMIT 1`,
+      `SELECT total_score FROM daily_user_scores WHERE user_id = $1 AND date = $2::date - 1 LIMIT 1`,
       [userId, date],
     );
-    const prevScore = prevResult.rows[0]?.score;
-    const delta = prevScore ? row.score - prevScore : null;
+    const prevScore = prevResult.rows[0]?.total_score;
+    const delta = prevScore ? row.total_score - prevScore : null;
 
-    return { score: row.score, streak: row.streak_days, delta };
+    return { score: row.total_score, streak: null, delta };
   }
 
   private async getWorkouts(userId: string, date: string) {
     const result = await query(
-      `SELECT wp.name, wl.duration_minutes, wl.status
+      `SELECT COALESCE(wp.name, wl.workout_name, 'Workout') as workout_name, wl.duration_minutes, wl.status
        FROM workout_logs wl
-       LEFT JOIN workout_plans wp ON wl.plan_id = wp.id
-       WHERE wl.user_id = $1 AND wl.date = $2`,
+       LEFT JOIN workout_plans wp ON wl.workout_plan_id = wp.id
+       WHERE wl.user_id = $1 AND wl.scheduled_date = $2`,
       [userId, date],
     );
     return result.rows.map(r => ({
-      name: r.name || 'Workout',
+      name: r.workout_name,
       duration: r.duration_minutes || 0,
       status: r.status || 'completed',
     }));
@@ -520,20 +520,19 @@ class LifeHistoryEmbeddingService {
 
   private async getNutrition(userId: string, date: string) {
     const result = await query(
-      `SELECT name, calories, protein_g FROM meal_logs WHERE user_id = $1 AND date = $2`,
+      `SELECT meal_name, calories, protein_grams FROM meal_logs WHERE user_id = $1 AND eaten_at::date = $2`,
       [userId, date],
     );
     return result.rows.map(r => ({
-      name: r.name,
+      name: r.meal_name,
       calories: r.calories || 0,
-      protein: r.protein_g || 0,
+      protein: r.protein_grams || 0,
     }));
   }
 
   private async getHealthMetrics(userId: string, date: string) {
     const result = await query(
-      `SELECT recovery_score, strain_score, sleep_duration_hours, sleep_quality_score,
-              hrv_rmssd, resting_heart_rate
+      `SELECT recovery_score, strain_score, sleep_hours
        FROM daily_health_metrics WHERE user_id = $1 AND metric_date = $2 LIMIT 1`,
       [userId, date],
     );
@@ -542,70 +541,68 @@ class LifeHistoryEmbeddingService {
     return {
       recovery: r.recovery_score,
       strain: r.strain_score,
-      sleepHours: r.sleep_duration_hours ? parseFloat(r.sleep_duration_hours) : null,
-      sleepQuality: r.sleep_quality_score,
-      hrv: r.hrv_rmssd,
-      rhr: r.resting_heart_rate,
+      sleepHours: r.sleep_hours ? parseFloat(r.sleep_hours) : null,
+      sleepQuality: null,
+      hrv: null,
+      rhr: null,
     };
   }
 
   private async getWellbeingLogs(userId: string, date: string) {
-    // Get latest mood, energy, stress for the day
     const moodResult = await query(
-      `SELECT rating FROM mood_logs WHERE user_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT mood_rating FROM mood_logs WHERE user_id = $1 AND logged_at::date = $2 ORDER BY logged_at DESC LIMIT 1`,
       [userId, date],
     );
     const energyResult = await query(
-      `SELECT rating FROM energy_logs WHERE user_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT energy_rating FROM energy_logs WHERE user_id = $1 AND logged_at::date = $2 ORDER BY logged_at DESC LIMIT 1`,
       [userId, date],
     );
     const stressResult = await query(
-      `SELECT rating FROM stress_logs WHERE user_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT stress_rating FROM stress_logs WHERE user_id = $1 AND logged_at::date = $2 ORDER BY logged_at DESC LIMIT 1`,
       [userId, date],
     );
     return {
-      mood: moodResult.rows[0]?.rating ?? null,
-      energy: energyResult.rows[0]?.rating ?? null,
-      stress: stressResult.rows[0]?.rating ?? null,
+      mood: moodResult.rows[0]?.mood_rating ?? null,
+      energy: energyResult.rows[0]?.energy_rating ?? null,
+      stress: stressResult.rows[0]?.stress_rating ?? null,
     };
   }
 
   private async getJournalEntries(userId: string, date: string) {
     const result = await query(
-      `SELECT content FROM journal_entries WHERE user_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC LIMIT 3`,
+      `SELECT entry_text FROM journal_entries WHERE user_id = $1 AND logged_at::date = $2 ORDER BY logged_at DESC LIMIT 3`,
       [userId, date],
     );
-    return result.rows.map(r => ({ content: r.content || '' }));
+    return result.rows.map(r => ({ content: r.entry_text || '' }));
   }
 
   private async getHabitLogs(userId: string, date: string) {
     const result = await query(
-      `SELECT h.name, hl.completed
+      `SELECT h.habit_name, hl.completed
        FROM habit_logs hl
        JOIN habits h ON hl.habit_id = h.id
-       WHERE hl.user_id = $1 AND hl.date = $2`,
+       WHERE hl.user_id = $1 AND hl.log_date = $2`,
       [userId, date],
     );
     const completed = result.rows.filter(r => r.completed).length;
-    const missed = result.rows.filter(r => !r.completed).map(r => r.name);
+    const missed = result.rows.filter(r => !r.completed).map(r => r.habit_name);
     return { completed, total: result.rows.length, missed };
   }
 
   private async getWaterIntake(userId: string, date: string): Promise<number> {
     const result = await query(
-      `SELECT COALESCE(SUM(amount_ml), 0) as total FROM water_intake WHERE user_id = $1 AND date = $2`,
+      `SELECT COALESCE(SUM(ml_consumed), 0) as total FROM water_intake_logs WHERE user_id = $1 AND log_date = $2`,
       [userId, date],
     );
     return parseInt(result.rows[0]?.total || '0', 10);
   }
 
   private async getGoalSnapshots(userId: string, _date: string) {
-    // Current active goals with progress
     const result = await query(
-      `SELECT name, progress_percentage FROM user_goals WHERE user_id = $1 AND status = 'active' LIMIT 5`,
+      `SELECT title, progress FROM user_goals WHERE user_id = $1 AND status = 'active' LIMIT 5`,
       [userId],
     );
-    return result.rows.map(r => ({ name: r.name, progress: r.progress_percentage || 0 }));
+    return result.rows.map(r => ({ name: r.title, progress: r.progress || 0 }));
   }
 
   private async getCoachingMessages(userId: string, date: string): Promise<number> {
@@ -618,10 +615,10 @@ class LifeHistoryEmbeddingService {
 
   private async getDailyCheckin(userId: string, date: string): Promise<string | null> {
     const result = await query(
-      `SELECT summary FROM daily_checkins WHERE user_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT day_summary FROM daily_checkins WHERE user_id = $1 AND checkin_date = $2 ORDER BY logged_at DESC LIMIT 1`,
       [userId, date],
     );
-    return result.rows[0]?.summary || null;
+    return result.rows[0]?.day_summary || null;
   }
 
   private async getYogaSessions(userId: string, date: string) {

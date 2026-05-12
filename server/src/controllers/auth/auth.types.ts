@@ -6,6 +6,7 @@
 import jwt from 'jsonwebtoken';
 import type { RegisterInput } from '../../validators/auth.validator.js';
 import { env } from '../../config/env.config.js';
+import { query } from '../../config/database.config.js';
 import { getPublicProfile as getPublicProfileHelper } from '../../utils/user.helpers.js';
 import type { MappedUser } from '../../database/schemas/index.js';
 
@@ -139,4 +140,25 @@ export function getPublicProfile(user: MappedUser) {
  */
 export function hasConsent(consents: ConsentRow[], type: string): boolean {
   return consents.some((c) => c.type === type);
+}
+
+const ADMIN_ROLE_ID = '11111111-1111-1111-1111-111111111102';
+
+/**
+ * Auto-promote user to admin if their email is in ADMIN_EMAILS env var.
+ * Updates both users.role_id and user_roles join table.
+ * Returns the updated role slug ('admin') or the original role if no promotion.
+ */
+export async function ensureAdminRole(userId: string, email: string, currentRole: string): Promise<string> {
+  if (env.adminEmails.length === 0) return currentRole;
+  if (!env.adminEmails.includes(email.toLowerCase())) return currentRole;
+  if (currentRole === 'admin') return currentRole;
+
+  await query('UPDATE users SET role_id = $1 WHERE id = $2', [ADMIN_ROLE_ID, userId]);
+  await query(
+    'INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [userId, ADMIN_ROLE_ID],
+  );
+
+  return 'admin';
 }

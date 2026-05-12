@@ -171,6 +171,8 @@ export function isValidSettingsSection(s: string | null): s is SettingsSectionId
 export interface WhoopStatus {
   isConnected: boolean;
   hasCredentials: boolean;
+  hasPerUserCredentials?: boolean;
+  clientIdMasked?: string;
   status?: string;
   lastSyncAt?: string;
   connectedAt?: string;
@@ -223,12 +225,9 @@ export interface PreferencesWithSetterProps extends PreferencesProps {
 export interface IntegrationsSectionProps {
   whoopStatus: WhoopStatus | null;
   spotifyStatus: SpotifyStatus | null;
-  tokenInfo: TokenInfo | null;
   integrations: ConnectedIntegration[];
   isSpotifyConnecting: boolean;
-  setWhoopStatus: React.Dispatch<React.SetStateAction<WhoopStatus | null>>;
   setSpotifyStatus: React.Dispatch<React.SetStateAction<SpotifyStatus | null>>;
-  setTokenInfo: React.Dispatch<React.SetStateAction<TokenInfo | null>>;
   setIsSpotifyConnecting: React.Dispatch<React.SetStateAction<boolean>>;
   fetchPreferences: () => Promise<void>;
 }

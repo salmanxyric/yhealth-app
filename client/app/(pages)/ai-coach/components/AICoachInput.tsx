@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link2, Camera, ArrowUp, Loader2, Mic, MicOff } from "lucide-react";
+import { Link2, Camera, ArrowUp, Loader2, Mic, MicOff, X } from "lucide-react";
 import Image from "next/image";
 
 interface SpeechRecognitionEventLike extends Event {
@@ -45,6 +45,9 @@ interface AICoachInputProps {
   onKeyDown: (e: React.KeyboardEvent) => void;
   onAttach: () => void;
   onCamera: () => void;
+  pendingImage?: { file: File; previewUrl: string } | null;
+  onAttachImage?: (file: File) => void;
+  onClearImage?: () => void;
 }
 
 export function AICoachInput({
@@ -56,10 +59,23 @@ export function AICoachInput({
   onKeyDown,
   onAttach,
   onCamera,
+  pendingImage,
+  onAttachImage,
+  onClearImage,
 }: AICoachInputProps) {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const transcriptBaseRef = useRef("");
   const valueRef = useRef(inputMessage);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 10 * 1024 * 1024) return;
+    onAttachImage?.(file);
+    if (e.target) e.target.value = "";
+  };
   const [isListening, setIsListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
@@ -170,6 +186,28 @@ export function AICoachInput({
           isListening ? "border-cyan-300/55 shadow-[0_0_28px_rgba(34,211,238,0.12)]" : "border-white/[0.17]"
         }`}
       >
+        {/* Hidden file input for image attach */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
+        {/* Image preview */}
+        {pendingImage && (
+          <div className="relative w-20 h-20 rounded-[12px] overflow-hidden border border-white/10 group">
+            <Image src={pendingImage.previewUrl} alt="Attached" fill className="object-cover" />
+            <button
+              onClick={onClearImage}
+              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <X className="w-3 h-3 text-white" />
+            </button>
+          </div>
+        )}
+
         {/* Top row: Star icon + Textarea */}
         <div className="flex items-center gap-3 w-full">
           <div className="relative w-8 h-8 shrink-0">
@@ -191,7 +229,7 @@ export function AICoachInput({
           {/* Left actions */}
           <div className="flex items-end gap-3">
             <button
-              onClick={onAttach}
+              onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-3 pr-4 py-1 border-r border-white/20"
             >
               <Link2 className="w-5 h-5 text-white/70" />
@@ -242,7 +280,7 @@ export function AICoachInput({
             {/* Send button */}
             <button
               onClick={handleSend}
-              disabled={!inputMessage.trim() || isSending}
+              disabled={(!inputMessage.trim() && !pendingImage) || isSending}
               className="flex items-center justify-center w-[47px] h-[47px] bg-[#0099b9] rounded-[8px] hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isSending ? (

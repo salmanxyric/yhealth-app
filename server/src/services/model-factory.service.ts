@@ -1,7 +1,8 @@
 /**
  * @file Model Factory Service
  * @description Centralized LLM model factory with cascading fallback:
- *   Gemini → Anthropic → DeepSeek → OpenAI
+ *   Gemini → OpenAI (primary pair)
+ *   Anthropic and DeepSeek available when enabled via env flags.
  *
  * Three model tiers:
  *   - default: Main chatbot, general tasks
@@ -31,7 +32,7 @@ export interface ModelOptions {
   maxRetries?: number;
 }
 
-type ProviderName = 'gemini' | 'anthropic' | 'deepseek' | 'openai';
+type ProviderName = 'gemini' | 'openai' | 'anthropic' | 'deepseek';
 
 interface ProviderEntry {
   name: ProviderName;
@@ -58,6 +59,11 @@ const MODEL_MAP: Record<ProviderName, Record<ModelTier, string>> = {
     reasoning: env.gemini.reasoningModel,
     light: env.gemini.lightModel,
   },
+  openai: {
+    default: env.openai.model,
+    reasoning: env.openai.model,
+    light: env.openai.model,
+  },
   anthropic: {
     default: env.anthropic.model,
     reasoning: env.anthropic.model,
@@ -67,11 +73,6 @@ const MODEL_MAP: Record<ProviderName, Record<ModelTier, string>> = {
     default: env.deepseek.model,
     reasoning: env.deepseek.reasoningModel,
     light: env.deepseek.model,
-  },
-  openai: {
-    default: env.openai.model,
-    reasoning: env.openai.model,
-    light: env.openai.model,
   },
 };
 
@@ -92,16 +93,19 @@ class ModelFactory {
   constructor() {
     this.providers = [
       { name: 'gemini', available: !!env.gemini.apiKey },
-      { name: 'anthropic', available: !!env.anthropic.apiKey },
-      { name: 'deepseek', available: !!env.deepseek.apiKey },
       { name: 'openai', available: !!env.openai.apiKey },
+      { name: 'anthropic', available: !!(env.anthropic.enabled && env.anthropic.apiKey) },
+      { name: 'deepseek', available: !!(env.deepseek.enabled && env.deepseek.apiKey) },
     ];
 
     const available = this.providers.filter(p => p.available);
     this.primaryProvider = available.length > 0 ? available[0].name : null;
 
     if (this.primaryProvider) {
-      logger.info(`[ModelFactory] Primary provider: ${this.primaryProvider} | Fallbacks: ${available.slice(1).map(p => p.name).join(', ') || 'none'}`);
+      const disabled: string[] = [];
+      if (!env.anthropic.enabled) disabled.push('anthropic');
+      if (!env.deepseek.enabled) disabled.push('deepseek');
+      logger.info(`[ModelFactory] Primary provider: ${this.primaryProvider} | Fallbacks: ${available.slice(1).map(p => p.name).join(', ') || 'none'}${disabled.length ? ` | Disabled: ${disabled.join(', ')} (set ENABLED=true in .env to activate)` : ''}`);
     } else {
       logger.warn('[ModelFactory] No LLM providers configured. AI features will be unavailable.');
     }
@@ -130,7 +134,7 @@ class ModelFactory {
       }
     }
 
-    throw new Error('[ModelFactory] No LLM providers available. Set GEMINI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, or OPENAI_API_KEY.');
+    throw new Error('[ModelFactory] No LLM providers available. Set GEMINI_API_KEY or OPENAI_API_KEY (or enable Anthropic/DeepSeek via ANTHROPIC_ENABLED=true / DEEPSEEK_ENABLED=true).');
   }
 
   /**
@@ -306,7 +310,7 @@ class ModelFactory {
     return false;
   }
 
-  private isProviderRateLimited(provider: ProviderName): boolean {
+  isProviderRateLimited(provider: ProviderName): boolean {
     const until = this.providerRateLimits.get(provider);
     if (!until) return false;
     if (Date.now() >= until) {
@@ -415,7 +419,7 @@ class ModelFactory {
    * Strategy:
    *   1. Try current model (e.g. gemini-2.5-flash)
    *   2. If Gemini 503/truncation → try gemini-2.5-flash-lite (same provider, stable model)
-   *   3. If still fails → cascade to next provider (anthropic → deepseek → openai)
+   *   3. If still fails → cascade to next provider (openai → anthropic/deepseek if enabled)
    *
    * Returns the result AND the (possibly new) LLM instance so callers can update their reference.
    */

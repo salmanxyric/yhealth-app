@@ -314,7 +314,14 @@ export function AICoachMessages({
                 </div>
               </div>
             ) : (
-              <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
+              <div>
+                {message.imageUrl && (
+                  <div className="mb-2 rounded-lg overflow-hidden relative w-48 h-36">
+                    <img src={message.imageUrl} alt="Attached" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <p className="text-sm whitespace-pre-wrap">{displayContent}</p>
+              </div>
             )}
             </div>
             {message.role === "user" && editingMessageId !== message.id && (

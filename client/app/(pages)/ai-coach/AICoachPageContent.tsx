@@ -14,6 +14,7 @@ import { AICoachInput } from "./components/AICoachInput";
 import { AICoachMessages } from "./components/AICoachMessages";
 import { IntelligenceFilesDrawer } from "./components/IntelligenceFilesDrawer";
 import { ImageAnalysisModal } from "../dashboard/components/modals/ImageAnalysisModal";
+import { UpgradeModal } from "@/components/common/upgrade-modal";
 
 export default function AICoachPageContent() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -147,6 +148,9 @@ function AICoachLayout() {
                 coach.setImageModalMode("camera");
                 coach.setShowImageModal(true);
               }}
+              pendingImage={coach.pendingImage}
+              onAttachImage={coach.attachImage}
+              onClearImage={coach.clearPendingImage}
             />
           </div>
         </div>
@@ -162,6 +166,13 @@ function AICoachLayout() {
         onAnalysisComplete={coach.handleImageAnalysisComplete}
         mode={coach.imageModalMode}
         conversationId={coach.activeConversationId || undefined}
+      />
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={coach.showUpgradeModal}
+        onClose={() => coach.setShowUpgradeModal(false)}
+        reason={coach.upgradeReason}
       />
     </div>
   );

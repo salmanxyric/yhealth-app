@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Calendar as CalendarIcon,
@@ -52,8 +52,12 @@ export default function CalendarConnectedView() {
     };
   }, [isSuccess, router]);
 
-  const particles = useMemo(
-    () =>
+  const [particles, setParticles] = useState<
+    Array<{ id: number; left: number; delay: number; duration: number; size: number; hue: string }>
+  >([]);
+
+  useEffect(() => {
+    setParticles(
       Array.from({ length: 28 }, (_, i) => ({
         id: i,
         left: Math.random() * 100,
@@ -62,8 +66,8 @@ export default function CalendarConnectedView() {
         size: 2 + Math.random() * 3.5,
         hue: Math.random() > 0.5 ? "#00d0b5" : "#2d9cdb",
       })),
-    [],
-  );
+    );
+  }, []);
 
   return (
     <div

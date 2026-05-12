@@ -267,32 +267,66 @@ router.post(
           .filter(([, workout]) => Boolean(workout))
           .map(([day]) => day);
 
-    const result = await dbQuery(
-      `INSERT INTO workout_plans (
-        user_id, name, description, goal_category,
-        initial_difficulty_level, duration_weeks, workouts_per_week,
-        weekly_schedule, available_equipment, workout_location,
-        start_date, end_date, status, ai_generated, schedule_days
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10, $11, $12, $13, $14, $15::text[])
-      RETURNING *`,
-      [
-        userId,
-        name.trim(),
-        description || null,
-        goalCategory,
-        fitnessLevel,
-        durationWeeks,
-        workoutsPerWeek,
-        JSON.stringify(weeklyScheduleJson),
-        availableEquipment,
-        workoutLocation,
-        formatLocalDate(startDate),
-        formatLocalDate(endDate),
-        isActive ? 'active' : 'draft',
-        false,
-        scheduleDays,
-      ]
-    );
+    let result;
+    try {
+      result = await dbQuery(
+        `INSERT INTO workout_plans (
+          user_id, name, description, goal_category,
+          initial_difficulty_level, duration_weeks, workouts_per_week,
+          weekly_schedule, available_equipment, workout_location,
+          start_date, end_date, status, ai_generated, schedule_days
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10, $11, $12, $13, $14, $15::text[])
+        RETURNING *`,
+        [
+          userId,
+          name.trim(),
+          description || null,
+          goalCategory,
+          fitnessLevel,
+          durationWeeks,
+          workoutsPerWeek,
+          JSON.stringify(weeklyScheduleJson),
+          availableEquipment,
+          workoutLocation,
+          formatLocalDate(startDate),
+          formatLocalDate(endDate),
+          isActive ? 'active' : 'draft',
+          false,
+          scheduleDays,
+        ]
+      );
+    } catch (err: any) {
+      if (err?.code === '42703') {
+        // schedule_days column missing — insert without it
+        result = await dbQuery(
+          `INSERT INTO workout_plans (
+            user_id, name, description, goal_category,
+            initial_difficulty_level, duration_weeks, workouts_per_week,
+            weekly_schedule, available_equipment, workout_location,
+            start_date, end_date, status, ai_generated
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[], $10, $11, $12, $13, $14)
+          RETURNING *`,
+          [
+            userId,
+            name.trim(),
+            description || null,
+            goalCategory,
+            fitnessLevel,
+            durationWeeks,
+            workoutsPerWeek,
+            JSON.stringify(weeklyScheduleJson),
+            availableEquipment,
+            workoutLocation,
+            formatLocalDate(startDate),
+            formatLocalDate(endDate),
+            isActive ? 'active' : 'draft',
+            false,
+          ]
+        );
+      } else {
+        throw err;
+      }
+    }
 
     logger.info('[Workouts] Created workout plan', { userId, planId: result.rows[0].id });
 

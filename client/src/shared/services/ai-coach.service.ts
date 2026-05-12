@@ -351,7 +351,9 @@ class AICoachServiceClient {
     if (goal) formData.append('goal', goal);
     if (question) formData.append('question', question);
 
-    const response = await api.upload<ImageAnalyzeResponse>('/ai-coach/image/analyze', formData);
+    const response = await api.upload<ImageAnalyzeResponse>('/ai-coach/image/analyze', formData, {
+      headers: { 'Idempotency-Key': `img-analyze-${Date.now()}-${Math.random().toString(36).substring(2, 10)}` },
+    });
 
     if (!response.success || !response.data) {
       throw new Error(response.error?.message || 'Failed to analyze image');
@@ -375,7 +377,9 @@ class AICoachServiceClient {
     if (message) formData.append('message', message);
     if (sessionId) formData.append('sessionId', sessionId);
 
-    const response = await api.upload<ChatWithImageResponse>('/ai-coach/chat-with-image', formData);
+    const response = await api.upload<ChatWithImageResponse>('/ai-coach/chat-with-image', formData, {
+      headers: { 'Idempotency-Key': `img-chat-${Date.now()}-${Math.random().toString(36).substring(2, 10)}` },
+    });
 
     if (!response.success || !response.data) {
       throw new Error(response.error?.message || 'Failed to send image');

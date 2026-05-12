@@ -80,16 +80,27 @@ class GeminiDirectEmbeddings extends Embeddings {
 
   private async _embed(text: string, taskType: GeminiTaskType): Promise<number[]> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:embedContent?key=${this.apiKey}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: `models/${this.model}`,
-        content: { parts: [{ text }] },
-        taskType,
-        outputDimensionality: this.outputDimensionality,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: `models/${this.model}`,
+          content: { parts: [{ text }] },
+          taskType,
+          outputDimensionality: this.outputDimensionality,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      clearTimeout(timeout);
+      if (err.name === 'AbortError') throw new Error('Gemini embedding request timed out (10s)');
+      throw err;
+    }
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -337,6 +348,21 @@ class VectorEmbeddingService {
   }
 
   /**
+   * Check if an error is a transient network failure that should trigger fallback.
+   */
+  private isNetworkError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    return (
+      msg.includes('fetch failed') ||
+      msg.includes('timed out') ||
+      msg.includes('ECONNREFUSED') ||
+      msg.includes('ENOTFOUND') ||
+      msg.includes('ETIMEDOUT') ||
+      msg.includes('network')
+    );
+  }
+
+  /**
    * Check if an error is an authentication/authorization error (unrecoverable).
    */
   private isAuthError(error: unknown): boolean {
@@ -477,8 +503,8 @@ class VectorEmbeddingService {
           logger.error('[VectorEmbedding] Auth error (unrecoverable)', { provider: this.providerName, error: (error as Error).message });
           throw new EmbeddingAuthError(`Embedding auth failed on ${this.providerName}: ${(error as Error).message}`);
         }
-        // Quota errors — try fallback provider
-        if (this.isQuotaError(error) && this.switchToFallback()) {
+        // Quota or network errors — try fallback provider
+        if ((this.isQuotaError(error) || this.isNetworkError(error)) && this.switchToFallback()) {
           try {
             const embedding = await this.embeddings.embedQuery(cleanText);
             logger.debug('Generated embedding via fallback', { provider: this.providerName, textLength: text.length, dimensions: embedding.length });
@@ -519,7 +545,7 @@ class VectorEmbeddingService {
         logger.error('[VectorEmbedding] Auth error in batch (unrecoverable)', { provider: this.providerName, error: (error as Error).message });
         throw new EmbeddingAuthError(`Batch embedding auth failed on ${this.providerName}: ${(error as Error).message}`);
       }
-      if (this.isQuotaError(error) && this.switchToFallback()) {
+      if ((this.isQuotaError(error) || this.isNetworkError(error)) && this.switchToFallback()) {
         try {
           const embeddings = await this.embeddings.embedDocuments(cleanTexts);
           logger.debug('Generated batch embeddings via fallback', { provider: this.providerName, count: texts.length });

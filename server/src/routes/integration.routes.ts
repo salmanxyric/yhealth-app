@@ -143,6 +143,13 @@ router.post(
   integrationController.registerWhoopWebhook
 );
 
+// Get WHOOP credentials
+router.get(
+  '/whoop/credentials',
+  apiLimiter,
+  integrationController.getWhoopCredentials
+);
+
 // Store WHOOP credentials
 router.post(
   '/whoop/credentials',

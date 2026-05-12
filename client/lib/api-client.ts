@@ -472,11 +472,15 @@ class ApiClient {
   // Upload method for multipart form data (don't set Content-Type - let browser set it with boundary)
   async upload<T>(
     endpoint: string,
-    formData: FormData
+    formData: FormData,
+    config?: RequestConfig
   ): Promise<ApiResponse<T>> {
     const response: AxiosResponse<ApiResponse<T>> = await this.axios.post<
       ApiResponse<T>
-    >(endpoint, formData);
+    >(endpoint, formData, {
+      headers: config?.headers,
+      signal: config?.signal,
+    });
 
     return response.data;
   }

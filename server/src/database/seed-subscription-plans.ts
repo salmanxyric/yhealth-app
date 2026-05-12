@@ -16,7 +16,7 @@ const PLANS = [
     currency: 'usd',
     interval: 'month' as const,
     tier: 0,
-    credits_included_monthly: 50,
+    credits_included_monthly: 100,
     credits_rollover_policy: 'none',
     credits_rollover_cap: 0,
     trial_days: 7,
@@ -130,38 +130,16 @@ async function seedSubscriptionPlans(): Promise<void> {
     // ── 3. Seed plan_features ──
     console.log('\n📋 Seeding plan_features…');
 
-    // FREE: basic features plus onboarding goal generation; no broad AI/premium access.
+    // FREE: all features enabled — users get 100 credits to explore the full platform.
+    // When credits run out the entitlement middleware returns 402 and the client
+    // shows the upgrade modal.
     await client.query(
       `INSERT INTO plan_features (plan_id, feature_key, is_enabled, limit_value, limit_period, credit_cost)
-       SELECT $1::uuid, fc.feature_key,
-              CASE
-                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN true
-                WHEN fc.is_ai = true THEN false
-                WHEN fc.feature_key IN (
-                  'voice_assistant.use','competitions.join_premium','analytics.export',
-                  'knowledge_graph.query','money_map.view','contracts.accountability_ai',
-                  'leaderboard.premium','wellbeing.advanced'
-                ) THEN false
-                ELSE true
-              END,
-              CASE
-                WHEN fc.feature_key = 'community.post' THEN 10
-                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 3
-                ELSE NULL
-              END,
-              CASE
-                WHEN fc.feature_key = 'community.post' THEN 'day'
-                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 'day'
-                ELSE NULL
-              END,
-              CASE
-                WHEN fc.feature_key IN ('ai.coach.goal_generate', 'ai.goals.from_assessment') THEN 0
-                ELSE NULL
-              END
+       SELECT $1::uuid, fc.feature_key, true, NULL, NULL, NULL
          FROM feature_catalog fc`,
       [planIds['free']]
     );
-    console.log('  ✅ Free plan features seeded');
+    console.log('  ✅ Free plan features seeded (all enabled)');
 
     // PRO: everything enabled
     await client.query(

@@ -9,7 +9,7 @@ import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, BookOpen, Calendar, Trash2, RefreshCw, Edit2, X, TrendingUp, BarChart3, PieChart } from "lucide-react";
+import { Loader2, BookOpen, Calendar, Trash2, RefreshCw, Edit2, X, TrendingUp, BarChart3, PieChart, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { journalService } from "@/src/shared/services/wellbeing.service";
 import type { JournalEntry } from "@shared/types/domain/wellbeing";
@@ -550,6 +550,22 @@ export function JournalHistory({ limit = 20, onRefresh }: JournalHistoryProps) {
                   {selectedEntry.entryText}
                 </p>
               </div>
+              {selectedEntry.coachReflection && (
+                <div className="p-4 rounded-lg bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Coach Reflection</span>
+                  </div>
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    {selectedEntry.coachReflection}
+                  </p>
+                  {selectedEntry.coachReflectionAt && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      {format(parseISO(selectedEntry.coachReflectionAt), "MMM d, yyyy 'at' h:mm a")}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="flex gap-3 pt-4 border-t border-white/10">
                 <Button
                   variant="outline"

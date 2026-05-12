@@ -16,6 +16,28 @@ import toast from "react-hot-toast";
 import type { RoutingChip as RoutingChipData } from "@/app/(pages)/life-areas/types";
 import type { Artifact } from "../components/ArtifactCard";
 
+function getAIErrorMessage(code?: string, fallbackMessage?: string): string {
+  switch (code) {
+    case "AI_PROVIDER_QUOTA":
+      return "The AI service quota has been reached. Please try again later or contact support.";
+    case "AI_PROVIDER_AUTH_ERROR":
+      return "There is an issue with the AI service configuration. Please contact support.";
+    case "AI_ALL_PROVIDERS_DOWN":
+      return "All AI services are currently unavailable. Please try again in a few minutes.";
+    case "GEMINI_RATE_LIMITED":
+    case "OPENAI_RATE_LIMITED":
+      return "The AI service is busy right now. Please wait a moment and try again.";
+    case "GEMINI_TIMEOUT":
+    case "OPENAI_TIMEOUT":
+    case "AI_PROVIDER_TIMEOUT":
+      return "The AI service took too long to respond. Please try again.";
+    case "AI_PROVIDER_ERROR":
+      return "The AI coach is temporarily unavailable. Please try again shortly.";
+    default:
+      return fallbackMessage || "I'm sorry, I encountered an error. Please try again.";
+  }
+}
+
 export interface AnalysisStepEvent {
   id: string;
   label: string;
@@ -47,6 +69,7 @@ export interface Message {
   thinkingDurationMs?: number;
   artifacts?: Artifact[];
   analysisSteps?: AnalysisStepEvent[];
+  imageUrl?: string;
 }
 
 export function useAICoach() {
@@ -63,6 +86,7 @@ export function useAICoach() {
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set());
   const [actionResults, setActionResults] = useState<Map<string, ActionExecutionResult>>(new Map());
   const [showImageModal, setShowImageModal] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string } | null>(null);
   // Agentic timeline state
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingLabel, setThinkingLabel] = useState("");
@@ -73,6 +97,8 @@ export function useAICoach() {
   const [isNewChat, setIsNewChat] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<"feature_disabled" | "credits_exhausted" | "limit_reached">("feature_disabled");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -300,6 +326,16 @@ export function useAICoach() {
     }
   }, []);
 
+  const attachImage = useCallback((file: File) => {
+    if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
+    setPendingImage({ file, previewUrl: URL.createObjectURL(file) });
+  }, [pendingImage]);
+
+  const clearPendingImage = useCallback(() => {
+    if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
+    setPendingImage(null);
+  }, [pendingImage]);
+
   const executeActionsAsync = useCallback(async (actions: ActionCommand[]) => {
     for (const action of actions) {
       const actionId = `${action.type}-${action.target}-${Date.now()}`;
@@ -385,17 +421,38 @@ export function useAICoach() {
 
   const sendMessage = async (overrideMessage?: string) => {
     const text = overrideMessage || inputMessage.trim();
-    if (!text || isSending) return;
+    if ((!text && !pendingImage) || isSending) return;
+
+    const messageText = text || "Analyze this image";
+    const attachedImage = pendingImage;
+
+    let imageBase64: string | undefined;
+    if (attachedImage) {
+      try {
+        const buffer = await attachedImage.file.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        imageBase64 = btoa(binary);
+      } catch {
+        imageBase64 = undefined;
+      }
+    }
 
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       role: "user",
-      content: text,
+      content: messageText,
       timestamp: new Date(),
+      imageUrl: attachedImage?.previewUrl,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputMessage("");
+    if (attachedImage) {
+      URL.revokeObjectURL(attachedImage.previewUrl);
+      setPendingImage(null);
+    }
     setIsSending(true);
     setIsThinking(false);
     setThinkingLabel("");
@@ -427,6 +484,7 @@ export function useAICoach() {
         await ragChatService.sendMessageStreaming({
           message: userMessage.content,
           conversationId,
+          imageBase64,
           signal: abortController.signal,
           onEvent: (event: StreamEvent) => {
             // Track TTFB on first token
@@ -567,8 +625,16 @@ export function useAICoach() {
             }
 
             case "error": {
-              console.error("[AI Coach] Stream error:", event.error);
-              const errorContent = event.error || "I'm sorry, I encountered an error. Please try again.";
+              console.error("[AI Coach] Stream error:", event.error, event.code);
+
+              const userMessage = getAIErrorMessage(event.code, event.error);
+              if (event.retryable === false) {
+                toast.error(userMessage, { duration: 6000 });
+              } else if (event.code) {
+                toast.error(userMessage, { duration: 4000 });
+              }
+
+              const errorContent = userMessage;
               if (streamingMsgCreated) {
                 setMessages((prev) => prev.map((m) =>
                   m.id === streamingMsgId
@@ -608,14 +674,34 @@ export function useAICoach() {
       await attemptSend(0);
     } catch (error) {
       if (abortController.signal.aborted) return;
-      const isNetworkError = error && typeof error === "object" && "code" in error && (error as unknown as { code: string }).code === "NETWORK_ERROR";
+
+      const errObj = error as Record<string, unknown> | null;
+      const statusCode = errObj && typeof errObj === "object" && "statusCode" in errObj ? Number(errObj.statusCode) : 0;
+      const errCode = errObj && typeof errObj === "object" && "code" in errObj ? String(errObj.code) : "";
+
+      if (statusCode === 402 || statusCode === 429) {
+        const reason =
+          errCode === "CREDITS_EXHAUSTED" ? "credits_exhausted" as const :
+          errCode === "FEATURE_LIMIT_REACHED" ? "limit_reached" as const :
+          "feature_disabled" as const;
+        setUpgradeReason(reason);
+        setShowUpgradeModal(true);
+        return;
+      }
+
+      const isNetworkError = errCode === "NETWORK_ERROR";
       if (!isNetworkError) console.error("Failed to send message:", error);
+
+      const errorMessage = isNetworkError
+        ? "Unable to connect to the server. Please ensure the server is running and try again."
+        : getAIErrorMessage(errCode, error instanceof Error ? error.message : undefined);
+
+      toast.error(errorMessage, { duration: 5000 });
+
       setMessages((prev) => [...prev, {
         id: `error-${Date.now()}`,
         role: "assistant",
-        content: isNetworkError
-          ? "Unable to connect to the server. Please ensure the server is running and try again."
-          : "I'm sorry, I encountered an error. Please try again.",
+        content: errorMessage,
         timestamp: new Date(),
       }]);
     } finally {
@@ -742,6 +828,7 @@ export function useAICoach() {
     actionResults,
     showImageModal,
     imageModalMode,
+    pendingImage,
     // Agentic timeline state
     isThinking,
     thinkingLabel,
@@ -766,6 +853,8 @@ export function useAICoach() {
     deleteConversation,
     archiveConversation,
     handleImageAnalysisComplete,
+    attachImage,
+    clearPendingImage,
     undoTimelineEvent,
     // Multi-select
     multiSelectMode,
@@ -776,5 +865,9 @@ export function useAICoach() {
     deselectAllConversations,
     exitMultiSelectMode,
     deleteSelectedConversations,
+    // Upgrade modal
+    showUpgradeModal,
+    setShowUpgradeModal,
+    upgradeReason,
   };
 }

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -298,7 +298,7 @@ export function ChatContainer({ className }: ChatContainerProps) {
         {/* Header */}
         {activeConversationId && (
           <ChatHeader
-            title={activeConversation?.title || 'Aurea'}
+            title={activeConversation?.title || 'Cia'}
             subtitle="Your personal AI health and fitness coach"
           />
         )}
@@ -310,8 +310,8 @@ export function ChatContainer({ className }: ChatContainerProps) {
           </div>
         ) : messages.length === 0 ? (
           <EmptyState
-            title="Aurea"
-            description="I'm Aurea, your personal AI-powered health and fitness coach. Ask me anything about nutrition, workouts, sleep, stress management, and more."
+            title="Cia"
+            description="I'm Cia, your personal AI-powered health and fitness coach. Ask me anything about nutrition, workouts, sleep, stress management, and more."
             suggestions={WELCOME_SUGGESTIONS}
             onSuggestionClick={handleSuggestionClick}
           />

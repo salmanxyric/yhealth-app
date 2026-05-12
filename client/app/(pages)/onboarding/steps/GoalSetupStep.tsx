@@ -8,6 +8,7 @@ import { useOnboardingApi } from '../hooks/useOnboardingApi';
 import { useGoalSetup } from '../hooks/useGoalSetup';
 import { StepNavigation } from '../components/StepNavigation';
 import { SuccessModal } from '@/components/common/success-modal';
+import { UpgradeModal } from '@/components/common/upgrade-modal';
 import {
   GoalCard,
   AIReasoningCard,
@@ -55,7 +56,9 @@ export function GoalSetupStep() {
     isGenerating,
     error,
     aiReasoning,
+    showUpgradeModal,
     setExpandedGoal,
+    setShowUpgradeModal,
     handleToggleGoal,
     handleConfidenceChange,
     handleStartEdit,
@@ -223,6 +226,14 @@ export function GoalSetupStep() {
         title="Goals Saved Successfully!"
         message={`${confirmedGoals.length} health goal${confirmedGoals.length !== 1 ? 's' : ''} have been saved. You're one step closer to your best self!`}
         autoCloseDelay={2500}
+      />
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        reason="credits_exhausted"
+        featureName="AI Goal Generation"
       />
     </div>
   );

@@ -25,12 +25,12 @@ export interface AICompletionRequest {
 
 export interface AICompletionResponse {
   content: string;
-  provider: 'openai' | 'deepseek' | 'gemini';
+  provider: 'gemini' | 'openai' | 'deepseek';
   model: string;
 }
 
 interface ProviderConfig {
-  name: 'openai' | 'deepseek' | 'gemini';
+  name: 'gemini' | 'openai' | 'deepseek';
   isAvailable: boolean;
   priority: number;
 }
@@ -95,23 +95,7 @@ class AIProviderService {
       logger.info('[AIProvider] Gemini initialized (primary)');
     }
 
-    // Initialize DeepSeek (OpenAI-compatible API) as secondary
-    if (env.deepseek.apiKey) {
-      try {
-        this.deepseekClient = new OpenAI({
-          apiKey: env.deepseek.apiKey,
-          baseURL: `${env.deepseek.baseUrl}/v1`,
-          timeout: 60000,
-          maxRetries: 1,
-        });
-        this.providers.push({ name: 'deepseek', isAvailable: true, priority: 2 });
-        logger.info('[AIProvider] DeepSeek initialized (fallback)');
-      } catch (error) {
-        logger.warn('[AIProvider] Failed to initialize DeepSeek', { error });
-      }
-    }
-
-    // Initialize OpenAI as last resort fallback
+    // Initialize OpenAI as fallback (or primary when Gemini unavailable)
     if (env.openai.apiKey) {
       try {
         this.openaiClient = new OpenAI({
@@ -119,10 +103,26 @@ class AIProviderService {
           timeout: 60000,
           maxRetries: 1,
         });
-        this.providers.push({ name: 'openai', isAvailable: true, priority: 3 });
+        this.providers.push({ name: 'openai', isAvailable: true, priority: 2 });
         logger.info('[AIProvider] OpenAI initialized (fallback)');
       } catch (error) {
         logger.warn('[AIProvider] Failed to initialize OpenAI', { error });
+      }
+    }
+
+    // Initialize DeepSeek only when explicitly enabled via DEEPSEEK_ENABLED=true
+    if (env.deepseek.enabled && env.deepseek.apiKey) {
+      try {
+        this.deepseekClient = new OpenAI({
+          apiKey: env.deepseek.apiKey,
+          baseURL: `${env.deepseek.baseUrl}/v1`,
+          timeout: 60000,
+          maxRetries: 1,
+        });
+        this.providers.push({ name: 'deepseek', isAvailable: true, priority: 3 });
+        logger.info('[AIProvider] DeepSeek initialized (enabled via env flag)');
+      } catch (error) {
+        logger.warn('[AIProvider] Failed to initialize DeepSeek', { error });
       }
     }
 
@@ -215,7 +215,7 @@ class AIProviderService {
    * Call specific provider
    */
   private async callProvider(
-    provider: 'openai' | 'deepseek' | 'gemini',
+    provider: 'gemini' | 'openai' | 'deepseek',
     request: AICompletionRequest
   ): Promise<AICompletionResponse> {
     switch (provider) {

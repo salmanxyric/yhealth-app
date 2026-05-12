@@ -1,6 +1,6 @@
 /**
  * @file Emotion Detection Service
- * @description Detects emotions from voice/text using Gemini (primary) with DeepSeek/OpenAI fallbacks
+ * @description Detects emotions from voice/text using Gemini (primary) with OpenAI fallback
  */
 
 import OpenAI from 'openai';
@@ -127,10 +127,10 @@ export function parseEmotionClassification(content: string): EmotionClassificati
 // ============================================
 
 class EmotionDetectionService {
-  private deepseekClient: OpenAI | null = null;
   private openaiClient: OpenAI | null = null;
+  private deepseekClient: OpenAI | null = null;
   private geminiApiKey: string | null = null;
-  private apiLimitLogged = false; // Track if we've already logged API limit warnings
+  private apiLimitLogged = false;
   private geminiUnavailableUntil = 0;
   private geminiTransientFailureCount = 0;
   /** Cache user logging permission to avoid repeated DB lookups (5-min TTL) */
@@ -141,28 +141,13 @@ class EmotionDetectionService {
   }
 
   private initializeClients(): void {
-    // Initialize Gemini as primary fallback
+    // Initialize Gemini as primary
     if (env.gemini.apiKey) {
       this.geminiApiKey = env.gemini.apiKey;
-      logger.info('[EmotionDetection] Gemini available (primary fallback)');
+      logger.info('[EmotionDetection] Gemini available (primary)');
     }
 
-    // Initialize DeepSeek for emotion classification
-    if (env.deepseek.apiKey) {
-      try {
-        this.deepseekClient = new OpenAI({
-          apiKey: env.deepseek.apiKey,
-          baseURL: `${env.deepseek.baseUrl}/v1`,
-          timeout: 30000,
-          maxRetries: 1,
-        });
-        logger.info('[EmotionDetection] DeepSeek client initialized');
-      } catch (error) {
-        logger.warn('[EmotionDetection] Failed to initialize DeepSeek client', { error });
-      }
-    }
-
-    // Initialize OpenAI as last fallback
+    // Initialize OpenAI as fallback
     if (env.openai.apiKey) {
       try {
         this.openaiClient = new OpenAI({
@@ -173,6 +158,21 @@ class EmotionDetectionService {
         logger.info('[EmotionDetection] OpenAI client initialized (fallback)');
       } catch (error) {
         logger.warn('[EmotionDetection] Failed to initialize OpenAI client', { error });
+      }
+    }
+
+    // Initialize DeepSeek only when explicitly enabled
+    if (env.deepseek.enabled && env.deepseek.apiKey) {
+      try {
+        this.deepseekClient = new OpenAI({
+          apiKey: env.deepseek.apiKey,
+          baseURL: `${env.deepseek.baseUrl}/v1`,
+          timeout: 30000,
+          maxRetries: 1,
+        });
+        logger.info('[EmotionDetection] DeepSeek client initialized (enabled via env flag)');
+      } catch (error) {
+        logger.warn('[EmotionDetection] Failed to initialize DeepSeek client', { error });
       }
     }
   }
@@ -293,7 +293,7 @@ class EmotionDetectionService {
     }
 
     try {
-      if (!this.geminiApiKey && !this.deepseekClient) {
+      if (!this.geminiApiKey && !this.openaiClient && !this.deepseekClient) {
         logger.warn('[EmotionDetection] No AI providers available, using fallback');
         return this.fallbackEmotionDetection(text);
       }
@@ -340,7 +340,31 @@ Respond with ONLY a JSON object in this exact format:
         }
       }
 
-      // Fallback to DeepSeek
+      // Fallback to OpenAI
+      if (!content && this.openaiClient) {
+        try {
+          const model = env.openai.model || 'gpt-4o-mini';
+          const classificationResponse = await this.openaiClient.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: classSystemPrompt },
+              { role: 'user', content: classificationPrompt },
+            ],
+            temperature: 0.3,
+            ...getTokenParameter(model, 200),
+            response_format: { type: 'json_object' },
+          });
+          content = classificationResponse.choices[0]?.message?.content || '';
+        } catch (openaiError: any) {
+          logger.warn('[EmotionDetection] OpenAI classification also failed', { error: openaiError?.message });
+          if (openaiError?.status === 402 || openaiError?.message?.includes('402') || openaiError?.message?.includes('Insufficient Balance')) {
+            logger.warn('[EmotionDetection] OpenAI billing exhausted, disabling for this session');
+            this.openaiClient = null;
+          }
+        }
+      }
+
+      // Fallback to DeepSeek (only if enabled)
       if (!content && this.deepseekClient) {
         try {
           const model = env.deepseek.model || 'deepseek-chat';
@@ -466,7 +490,8 @@ Provide a brief, empathetic explanation of why this emotion might be present.`;
         confidence: Math.max(0, Math.min(100, Math.round(Number(classificationResult.confidence) || 50))),
         reasoning: reasoning || undefined,
         rawData: {
-          deepseekModel: env.deepseek.model,
+          primaryModel: env.gemini.emotionModel,
+          fallbackModel: env.openai.model,
           classificationResult,
         },
         timestamp: new Date(),

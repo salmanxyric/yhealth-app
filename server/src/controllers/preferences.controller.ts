@@ -181,7 +181,7 @@ function transformPreferencesToAPI(prefs: UserPreferencesRow) {
     },
     voiceAssistant: {
       avatarUrl: prefs.voice_assistant_avatar_url,
-      assistantName: prefs.voice_assistant_name || 'Aurea',
+      assistantName: prefs.voice_assistant_name || 'Cia',
     },
     createdAt: prefs.created_at,
     updatedAt: prefs.updated_at,
@@ -963,7 +963,7 @@ export const updateAllPreferences = asyncHandler(
       }
       if (data.voiceAssistant.assistantName !== undefined) {
         updates.push(`voice_assistant_name = $${paramIndex++}`);
-        const assistantName = (data.voiceAssistant.assistantName || '').trim() || 'Aurea';
+        const assistantName = (data.voiceAssistant.assistantName || '').trim() || 'Cia';
         values.push(assistantName);
       }
     }

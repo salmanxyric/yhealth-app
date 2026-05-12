@@ -17,6 +17,7 @@ import type {
 } from "@shared/types/domain/wiki";
 import * as intelligenceApi from "@/src/shared/services/intelligence-files.service";
 import * as wikiApi from "@/src/shared/services/wiki.service";
+import toast from "react-hot-toast";
 
 type NavigationLevel = "folders" | "list" | "detail";
 
@@ -159,8 +160,10 @@ export function useIntelligenceFiles() {
       if (res.success && res.data?.memory) {
         setMemories((prev) => prev.map((m) => (m.id === id ? res.data!.memory : m)));
       }
+      toast.success("Memory verified");
     } catch (err) {
       console.error("[Intelligence] Failed to verify memory:", err);
+      toast.error("Failed to verify memory");
     }
   }, []);
 
@@ -170,8 +173,10 @@ export function useIntelligenceFiles() {
     );
     try {
       await intelligenceApi.rejectMemory(id, { reason });
+      toast.success("Memory rejected");
     } catch (err) {
       console.error("[Intelligence] Failed to reject memory:", err);
+      toast.error("Failed to reject memory");
     }
   }, []);
 
@@ -181,8 +186,10 @@ export function useIntelligenceFiles() {
     );
     try {
       await intelligenceApi.expireMemory(id);
+      toast.success("Memory expired");
     } catch (err) {
       console.error("[Intelligence] Failed to expire memory:", err);
+      toast.error("Failed to expire memory");
     }
   }, []);
 
@@ -260,11 +267,23 @@ export function useIntelligenceFiles() {
   }, []);
 
   const handleFlagWikiPage = useCallback(async (slug: string, reason: string) => {
-    await wikiApi.flagPage(slug, reason);
+    try {
+      await wikiApi.flagPage(slug, reason);
+      toast.success("Page flagged for review");
+    } catch (err) {
+      console.error("[Wiki] Failed to flag page:", err);
+      toast.error("Failed to flag page");
+    }
   }, []);
 
   const handleVerifyWikiPage = useCallback(async (slug: string) => {
-    await wikiApi.submitFeedback(slug, { action: "verify" });
+    try {
+      await wikiApi.submitFeedback(slug, { action: "verify" });
+      toast.success("Page verified — confidence boosted");
+    } catch (err) {
+      console.error("[Wiki] Failed to verify page:", err);
+      toast.error("Failed to verify page");
+    }
   }, []);
 
   return {

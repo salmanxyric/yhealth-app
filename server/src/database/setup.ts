@@ -182,6 +182,8 @@ const TABLE_FILES = [
   '126-competition-invitations.sql',
   // Mental health screening audit (no raw message body)
   '127-mental-health-screening-events.sql',
+  // Intelligence files system (AI memory & knowledge layer)
+  '130-intelligence.sql',
   // Quick notes
   '130-quick-notes.sql',
   // Wiki system (LLM knowledge layer)

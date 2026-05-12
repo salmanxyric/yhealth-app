@@ -39,9 +39,11 @@ interface UseGoalSetupReturn {
   isGenerating: boolean;
   error: string | null;
   aiReasoning: string | null;
+  showUpgradeModal: boolean;
 
   // Actions
   setExpandedGoal: (goalId: string | null) => void;
+  setShowUpgradeModal: (show: boolean) => void;
   handleToggleGoal: (goal: Goal) => void;
   handleConfidenceChange: (goalId: string, value: number) => void;
   handleStartEdit: (goal: Goal) => void;
@@ -93,6 +95,7 @@ export function useGoalSetup({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const inFlightRequestKeyRef = useRef<string | null>(null);
   const completedRequestKeyRef = useRef<string | null>(null);
 
@@ -149,9 +152,16 @@ export function useGoalSetup({
           setConfidenceValues({ [primaryGoal.id!]: primaryGoal.confidenceLevel || 7 });
         }
         completedRequestKeyRef.current = requestKey;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to generate goals:', err);
-        setError('Failed to generate personalized goals. Please try again.');
+        const status = err?.statusCode || err?.response?.status || err?.status;
+        const code = err?.code || err?.response?.data?.code;
+        if (status === 402 || code === 'CREDITS_EXHAUSTED') {
+          setShowUpgradeModal(true);
+          setError('Insufficient credits to generate goals. Please upgrade your plan.');
+        } else {
+          setError('Failed to generate personalized goals. Please try again.');
+        }
       } finally {
         inFlightRequestKeyRef.current = null;
         setIsGenerating(false);
@@ -203,9 +213,16 @@ export function useGoalSetup({
         confirmGoal(primaryGoal);
         setConfidenceValues({ [primaryGoal.id!]: primaryGoal.confidenceLevel || 7 });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to regenerate goals:', err);
-      setError('Failed to regenerate goals. Please try again.');
+      const status = err?.response?.status || err?.status;
+      const code = err?.response?.data?.code || err?.code;
+      if (status === 402 || code === 'CREDITS_EXHAUSTED') {
+        setShowUpgradeModal(true);
+        setError('Insufficient credits to generate goals. Please upgrade your plan.');
+      } else {
+        setError('Failed to regenerate goals. Please try again.');
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -335,9 +352,11 @@ export function useGoalSetup({
     isGenerating,
     error,
     aiReasoning,
+    showUpgradeModal,
 
     // Actions
     setExpandedGoal,
+    setShowUpgradeModal,
     handleToggleGoal,
     handleConfidenceChange,
     handleStartEdit,

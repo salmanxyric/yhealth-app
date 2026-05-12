@@ -88,11 +88,23 @@ const initialState: OnboardingState = {
   planAccepted: false,
 };
 
-// Helper to serialize state for localStorage (handles Date objects)
+// Helper to serialize state for localStorage (handles Date objects, strips non-serializable values)
 function serializeState(state: OnboardingState): string {
-  return JSON.stringify(state, (_key, value) => {
+  const seen = new WeakSet();
+  return JSON.stringify(state, (key, value) => {
     if (value instanceof Date) {
       return { __type: 'Date', value: value.toISOString() };
+    }
+    if (value instanceof File || value instanceof Blob) {
+      return null;
+    }
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) return undefined;
+      seen.add(value);
+    }
+    // Strip React elements / components that may leak into state
+    if (key === 'Provider' || key === '$$typeof' || typeof value === 'function') {
+      return undefined;
     }
     return value;
   });

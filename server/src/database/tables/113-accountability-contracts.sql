@@ -110,11 +110,11 @@ CREATE TABLE IF NOT EXISTS accountability_contract_checks (
   contract_id UUID NOT NULL REFERENCES accountability_contracts(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   checked_at TIMESTAMPTZ DEFAULT NOW(),
+  check_date DATE NOT NULL DEFAULT CURRENT_DATE,
   result VARCHAR(10) NOT NULL,  -- pass, fail, skip
   confidence_score NUMERIC(3,2),
   snapshot JSONB DEFAULT '{}',
-
-  UNIQUE(contract_id, (checked_at::date))
+  UNIQUE(contract_id, check_date)
 );
 
 CREATE INDEX IF NOT EXISTS idx_acc_contract

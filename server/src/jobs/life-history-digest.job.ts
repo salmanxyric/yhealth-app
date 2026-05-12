@@ -39,11 +39,11 @@ async function processLifeHistoryDigests(): Promise<void> {
        WHERE u.is_active = true
          AND (
            EXISTS (SELECT 1 FROM daily_user_scores WHERE user_id = u.id AND date = dates.activity_date)
-           OR EXISTS (SELECT 1 FROM workout_logs WHERE user_id = u.id AND date = dates.activity_date)
-           OR EXISTS (SELECT 1 FROM meal_logs WHERE user_id = u.id AND date = dates.activity_date)
-           OR EXISTS (SELECT 1 FROM mood_logs WHERE user_id = u.id AND DATE(created_at) = dates.activity_date)
-           OR EXISTS (SELECT 1 FROM journal_entries WHERE user_id = u.id AND DATE(created_at) = dates.activity_date)
-           OR EXISTS (SELECT 1 FROM habit_logs WHERE user_id = u.id AND date = dates.activity_date)
+           OR EXISTS (SELECT 1 FROM workout_logs WHERE user_id = u.id AND scheduled_date = dates.activity_date)
+           OR EXISTS (SELECT 1 FROM meal_logs WHERE user_id = u.id AND eaten_at::date = dates.activity_date)
+           OR EXISTS (SELECT 1 FROM mood_logs WHERE user_id = u.id AND logged_at::date = dates.activity_date)
+           OR EXISTS (SELECT 1 FROM journal_entries WHERE user_id = u.id AND logged_at::date = dates.activity_date)
+           OR EXISTS (SELECT 1 FROM habit_logs WHERE user_id = u.id AND log_date = dates.activity_date)
          )
          AND NOT EXISTS (
            SELECT 1 FROM user_life_history

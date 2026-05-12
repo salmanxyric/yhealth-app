@@ -55,6 +55,9 @@ CREATE TABLE users (
     daily_cycle_day INTEGER, -- Current cycle day
     daily_health_updated_at TIMESTAMP, -- Last update timestamp for daily metrics
 
+    -- Timezone
+    timezone VARCHAR(50) DEFAULT 'UTC',
+
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

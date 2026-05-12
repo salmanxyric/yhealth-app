@@ -6,7 +6,7 @@
  */
 
 import { classifyIntent, TOOL_GROUPS } from '../../../src/services/tool-router.service.js';
-import type { ToolIntent } from '../../../src/services/tool-router.service.js';
+import type { ToolIntent, MessageComplexity } from '../../../src/services/tool-router.service.js';
 
 // ============================================
 // HELPERS
@@ -291,5 +291,258 @@ describe('TOOL_GROUPS', () => {
       const unique = new Set(tools);
       expect(unique.size).toBe(tools.length);
     });
+  });
+});
+
+// ============================================
+// COMPLEXITY CLASSIFICATION
+// ============================================
+
+describe('classifyIntent — complexity classification', () => {
+  describe('TRIVIAL', () => {
+    it.each([
+      'hi',
+      'hello!',
+      'hey',
+      'thanks',
+      'thank you!',
+      'bye',
+      'goodbye',
+      'good morning',
+      'good night',
+      'how are you',
+      'ok',
+      'sure',
+      'yes',
+      'nope',
+      'got it',
+      'cool',
+      'lol',
+      'yo!',
+    ])('should classify "%s" as TRIVIAL', (msg) => {
+      const result = classifyIntent(msg);
+      expect(result.complexity).toBe('TRIVIAL');
+    });
+
+    it('should classify greetings with trailing punctuation as TRIVIAL', () => {
+      expect(classifyIntent('hello!!!').complexity).toBe('TRIVIAL');
+      expect(classifyIntent('hi.').complexity).toBe('TRIVIAL');
+      expect(classifyIntent('hey?').complexity).toBe('TRIVIAL');
+    });
+
+    it('should NOT classify messages with additional content as TRIVIAL', () => {
+      // "hi I want to log my breakfast" starts with "hi" but has more content
+      const result = classifyIntent('hi I want to log my breakfast');
+      expect(result.complexity).not.toBe('TRIVIAL');
+    });
+  });
+
+  describe('SIMPLE_ACTION', () => {
+    it.each([
+      'log my breakfast',
+      'add eggs to my list',
+      'create a new goal',
+      'set a reminder',
+      'delete that note',
+      'remove my alarm',
+      'update my weight',
+      'cancel my reminder',
+    ])('should classify "%s" as SIMPLE_ACTION', (msg) => {
+      const result = classifyIntent(msg);
+      expect(result.complexity).toBe('SIMPLE_ACTION');
+    });
+
+    it('should NOT classify long messages as SIMPLE_ACTION even with action verbs', () => {
+      // Over 60 characters — should not be SIMPLE_ACTION
+      const longMessage = 'log my breakfast and also record my workout and track water intake please';
+      expect(longMessage.length).toBeGreaterThan(60);
+      const result = classifyIntent(longMessage);
+      expect(result.complexity).not.toBe('SIMPLE_ACTION');
+    });
+
+    it('should NOT classify messages without action verbs as SIMPLE_ACTION', () => {
+      // Short and matched, but no action verb
+      const result = classifyIntent('my breakfast');
+      expect(result.complexity).not.toBe('SIMPLE_ACTION');
+    });
+  });
+
+  describe('ANALYTICAL', () => {
+    it.each([
+      'show me the correlation between sleep and mood',
+      'analyze my workout trend over time',
+      'compare my calories this week vs last week',
+      'what factors affect my sleep quality',
+      'give me a deep analysis of my progress',
+      'show me the relationship between stress and workouts',
+      'what drives my mood patterns',
+      'show me insights from my data',
+    ])('should classify "%s" as ANALYTICAL', (msg) => {
+      const result = classifyIntent(msg);
+      expect(result.complexity).toBe('ANALYTICAL');
+    });
+
+    it('should classify messages with analytics keywords as ANALYTICAL', () => {
+      const result = classifyIntent('show me the trend in my data over time');
+      expect(result.complexity).toBe('ANALYTICAL');
+    });
+
+    it('should classify multi-intent messages with strong secondary as ANALYTICAL', () => {
+      // 3+ intents where secondary is >= 70% of primary score
+      const result = classifyIntent('how does my meal plan correlate with workout progress and sleep quality over time');
+      expect(result.complexity).toBe('ANALYTICAL');
+    });
+  });
+
+  describe('CONVERSATIONAL', () => {
+    it('should default to CONVERSATIONAL for general conversation', () => {
+      const result = classifyIntent('tell me about healthy eating habits');
+      expect(result.complexity).toBe('CONVERSATIONAL');
+    });
+
+    it('should classify moderately complex messages without analytical keywords as CONVERSATIONAL', () => {
+      const result = classifyIntent('what should I have for dinner tonight based on my goals');
+      expect(result.complexity).toBe('CONVERSATIONAL');
+    });
+
+    it('should classify questions about status without action verbs as CONVERSATIONAL', () => {
+      const result = classifyIntent('how much water did I drink today');
+      expect(result.complexity).toBe('CONVERSATIONAL');
+    });
+  });
+
+  describe('complexity is always a valid MessageComplexity value', () => {
+    const VALID_COMPLEXITIES: MessageComplexity[] = ['TRIVIAL', 'SIMPLE_ACTION', 'CONVERSATIONAL', 'ANALYTICAL'];
+
+    it.each([
+      '',
+      'hi',
+      'log my meal',
+      'analyze my sleep trends over the past month',
+      'xyzzy gibberish nothing matches',
+      'how is my goal progress on my workout plan',
+    ])('classifyIntent("%s").complexity is a valid MessageComplexity', (msg) => {
+      const result = classifyIntent(msg);
+      expect(VALID_COMPLEXITIES).toContain(result.complexity);
+    });
+  });
+});
+
+// ============================================
+// CONFIDENCE SCORING
+// ============================================
+
+describe('classifyIntent — confidence scoring', () => {
+  it('should return confidence between 0 and 1 inclusive', () => {
+    const messages = [
+      'log my breakfast',
+      'how is my goal progress on my workout plan',
+      'play some music',
+      'xyzzy gibberish',
+      '',
+      'I ate breakfast then did a workout and tracked my water and set a goal',
+    ];
+    for (const msg of messages) {
+      const result = classifyIntent(msg);
+      expect(result.confidence).toBeGreaterThanOrEqual(0);
+      expect(result.confidence).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('should return 0 confidence when no keywords match', () => {
+    const result = classifyIntent('42');
+    expect(result.confidence).toBe(0);
+  });
+
+  it('should return higher confidence for single-intent messages', () => {
+    // "play some music" only matches the music intent
+    const singleIntent = classifyIntent('play some music');
+    // "log my meal and also track my water and set a workout goal" matches multiple intents
+    const multiIntent = classifyIntent('log my meal and also track my water and set a workout goal');
+    expect(singleIntent.confidence).toBeGreaterThan(multiIntent.confidence);
+  });
+
+  it('should return confidence of 1 when only one intent scores', () => {
+    // "play some music" should only trigger music intent keywords
+    const result = classifyIntent('play some music');
+    expect(result.primary).toBe('music');
+    expect(result.confidence).toBe(1);
+  });
+
+  it('should return lower confidence for ambiguous multi-intent messages', () => {
+    const result = classifyIntent('how is my goal progress on my workout plan');
+    // Multiple intents matched, so confidence should be less than 1
+    expect(result.confidence).toBeLessThan(1);
+    expect(result.confidence).toBeGreaterThan(0);
+  });
+
+  it('should return confidence as a number, not a percentage', () => {
+    const result = classifyIntent('log my breakfast');
+    expect(typeof result.confidence).toBe('number');
+    // Confidence is 0-1 ratio, not 0-100 percentage
+    expect(result.confidence).toBeLessThanOrEqual(1);
+  });
+});
+
+// ============================================
+// EXTENDED RESULT SHAPE — complexity & confidence
+// ============================================
+
+describe('classifyIntent — extended result shape', () => {
+  it('should include complexity and confidence on every result', () => {
+    const result = classifyIntent('anything at all');
+    expect(result).toHaveProperty('complexity');
+    expect(result).toHaveProperty('confidence');
+  });
+
+  it('should return all four fields: primary, secondary, complexity, confidence', () => {
+    const result = classifyIntent('log a meal');
+    expect(Object.keys(result)).toEqual(
+      expect.arrayContaining(['primary', 'secondary', 'complexity', 'confidence']),
+    );
+  });
+
+  it('should return complexity as a string', () => {
+    const result = classifyIntent('hello');
+    expect(typeof result.complexity).toBe('string');
+  });
+
+  it('should return confidence as a number', () => {
+    const result = classifyIntent('hello');
+    expect(typeof result.confidence).toBe('number');
+  });
+
+  it('should return well-formed results for empty input', () => {
+    const result = classifyIntent('');
+    expect(result).toHaveProperty('primary');
+    expect(result).toHaveProperty('secondary');
+    expect(result).toHaveProperty('complexity');
+    expect(result).toHaveProperty('confidence');
+    expect(typeof result.primary).toBe('string');
+    expect(Array.isArray(result.secondary)).toBe(true);
+    expect(typeof result.complexity).toBe('string');
+    expect(typeof result.confidence).toBe('number');
+  });
+
+  it('should maintain consistent shape across diverse inputs', () => {
+    const inputs = [
+      'hi',
+      'log my meal',
+      'analyze sleep trends over time',
+      'tell me about my workout history and nutrition plan',
+      '',
+      'xyzzy',
+    ];
+    for (const msg of inputs) {
+      const result = classifyIntent(msg);
+      expect(result).toEqual(
+        expect.objectContaining({
+          primary: expect.any(String),
+          secondary: expect.any(Array),
+          complexity: expect.any(String),
+          confidence: expect.any(Number),
+        }),
+      );
+    }
   });
 });

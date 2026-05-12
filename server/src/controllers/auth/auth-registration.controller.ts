@@ -17,6 +17,7 @@ import type { AuthenticatedRequest } from '../../types/index.js';
 import { notificationService } from '../../services/notification.service.js';
 import { chatService } from '../../services/chat.service.js';
 import { oauthService } from '../../services/oauth.service.js';
+import { ensureWallet } from '../../services/credit.service.js';
 import type {
   RegisterInput,
   SocialAuthInput,
@@ -31,6 +32,7 @@ import {
   createActivationToken,
   mapUserRow,
   getPublicProfile,
+  ensureAdminRole,
 } from './auth.types.js';
 
 /**
@@ -169,6 +171,18 @@ export const verifyRegistration = asyncHandler(
       throw err;
     }
 
+    // Grant initial credits
+    const signupCredits = env.entitlement.defaultSignupCredits;
+    if (signupCredits > 0) {
+      ensureWallet(user.id, { initialPlanCredits: signupCredits }).catch((error) => {
+        logger.warn('Failed to create wallet with signup credits (non-blocking)', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          userId: user.id,
+          credits: signupCredits,
+        });
+      });
+    }
+
     // Send welcome email (non-blocking - don't fail registration if email fails)
     emailService.sendWelcomeEmail(user.email, user.firstName).catch((error) => {
       logger.warn('Failed to send welcome email (non-blocking)', {
@@ -189,6 +203,9 @@ export const verifyRegistration = asyncHandler(
       });
     });
 
+    // Auto-promote to admin if email is in ADMIN_EMAILS
+    user.role = await ensureAdminRole(user.id, user.email, user.role);
+
     // Generate tokens
     const tokens = generateTokens({
       userId: user.id,
@@ -205,6 +222,7 @@ export const verifyRegistration = asyncHandler(
     logger.info('User registered after OTP verification', {
       userId: user.id,
       email: user.email,
+      signupCredits,
     });
 
     ApiResponse.created(
@@ -410,6 +428,18 @@ export const socialAuth = asyncHandler(
       user = newUserResult;
       isNewUser = true;
 
+      // Grant initial credits
+      const signupCredits = env.entitlement.defaultSignupCredits;
+      if (signupCredits > 0) {
+        ensureWallet(user.id, { initialPlanCredits: signupCredits }).catch((error) => {
+          logger.warn('Failed to create wallet with signup credits (non-blocking)', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            userId: user.id,
+            credits: signupCredits,
+          });
+        });
+      }
+
       // Send welcome email
       if (user.firstName) {
         emailService.sendWelcomeEmail(user.email, user.firstName).catch((error) => {
@@ -434,6 +464,9 @@ export const socialAuth = asyncHandler(
 
       logger.info('Social registration', { userId: user.id, provider });
     }
+
+    // Auto-promote to admin if email is in ADMIN_EMAILS
+    user.role = await ensureAdminRole(user.id, user.email, user.role);
 
     // Generate tokens
     const tokens = generateTokens({

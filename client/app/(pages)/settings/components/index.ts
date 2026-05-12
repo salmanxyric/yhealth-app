@@ -24,7 +24,6 @@ export { HelpSupportSettingsSection } from './HelpSupportSettingsSection';
 export { AccountSettingsSection } from './AccountSettingsSection';
 
 // Modals
-export { WhoopTokenModal } from './WhoopTokenModal';
 export { WhoopCredentialsModal } from './WhoopCredentialsModal';
 export { SpotifyCredentialsModal } from './SpotifyCredentialsModal';
 

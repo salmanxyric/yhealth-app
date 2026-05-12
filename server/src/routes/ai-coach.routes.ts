@@ -1,10 +1,14 @@
 import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { aiCoachController } from '../controllers/ai-coach.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { uploadImage } from '../middlewares/upload.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { aiGenerationLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
+import { env } from '../config/env.config.js';
+
+const skipMiddleware = (_req: Request, _res: Response, next: NextFunction) => next();
 import {
   startConversationSchema,
   sendMessageSchema,
@@ -143,8 +147,8 @@ router.post(
   authenticate,
   aiGenerationLimiter,
   validate(generateGoalsSchema),
-  requireFeature('ai.coach.goal_generate'),
-  consumeCredits('ai.coach.goal_generate'),
+  env.entitlement.onboardingCreditUsage ? requireFeature('ai.coach.goal_generate') : skipMiddleware,
+  env.entitlement.onboardingCreditUsage ? consumeCredits('ai.coach.goal_generate') : skipMiddleware,
   aiCoachController.generateGoals
 );
 

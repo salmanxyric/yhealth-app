@@ -82,6 +82,20 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'gender') THEN
     CREATE TYPE gender AS ENUM ('male', 'female', 'non_binary', 'prefer_not_to_say');
   END IF;
+
+  -- Wiki system enums
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'wiki_page_type') THEN
+    CREATE TYPE wiki_page_type AS ENUM ('entity', 'concept', 'pattern', 'journal', 'synthesis', 'source');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'wiki_page_status') THEN
+    CREATE TYPE wiki_page_status AS ENUM ('active', 'stale', 'contradicted', 'archived', 'draft');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'wiki_link_type') THEN
+    CREATE TYPE wiki_link_type AS ENUM ('reference', 'contradicts', 'supports', 'supersedes', 'derived_from', 'see_also');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'wiki_log_operation') THEN
+    CREATE TYPE wiki_log_operation AS ENUM ('ingest', 'update', 'create', 'lint', 'query_filed', 'contradiction_detected', 'stale_marked', 'archived');
+  END IF;
 END $$;
 
 -- ============================================
@@ -264,6 +278,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'metadata') THEN
     ALTER TABLE user_preferences ADD COLUMN metadata JSONB DEFAULT '{}';
   END IF;
+
+  -- AI coach custom name
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'voice_assistant_name') THEN
+    ALTER TABLE user_preferences ADD COLUMN voice_assistant_name VARCHAR(100) DEFAULT 'Cia';
+  END IF;
 END $$;
 
 -- ============================================
@@ -408,7 +427,30 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workout_plans' AND column_name = 'goal_category') THEN
     ALTER TABLE workout_plans ADD COLUMN goal_category goal_category;
   END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workout_plans' AND column_name = 'weeks') THEN
+    ALTER TABLE workout_plans ADD COLUMN weeks JSONB DEFAULT '{}'::jsonb;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workout_plans' AND column_name = 'schedule_days') THEN
+    ALTER TABLE workout_plans ADD COLUMN schedule_days TEXT[] DEFAULT '{}';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workout_plans' AND column_name = 'progressive_overload') THEN
+    ALTER TABLE workout_plans ADD COLUMN progressive_overload JSONB DEFAULT '{"enabled": true, "weight_increment_percent": 5, "reps_increment": 1, "deload_week": 4, "deload_multiplier": 0.85}'::jsonb;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workout_plans' AND column_name = 'current_day') THEN
+    ALTER TABLE workout_plans ADD COLUMN current_day VARCHAR(20);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workout_plans' AND column_name = 'notes') THEN
+    ALTER TABLE workout_plans ADD COLUMN notes TEXT;
+  END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS idx_workout_plans_weeks ON workout_plans USING GIN (weeks);
+CREATE INDEX IF NOT EXISTS idx_workout_plans_schedule_days ON workout_plans USING GIN (schedule_days);
 
 -- ============================================
 -- 12. ai_coach_sessions table — missing columns

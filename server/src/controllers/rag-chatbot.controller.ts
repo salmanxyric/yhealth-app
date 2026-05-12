@@ -71,14 +71,35 @@ function buildClientStreamError(error: unknown): { error: string; errorMessage: 
   const code = String((error as any)?.code || '').toLowerCase();
 
   const isGemini = lower.includes('gemini') || lower.includes('googlegenerativeai') || lower.includes('generativelanguage');
+  const isOpenAI = lower.includes('openai') || lower.includes('gpt-') || lower.includes('chatgpt');
   const isQuota = lower.includes('quota') || lower.includes('billing') || lower.includes('insufficient') || lower.includes('402');
   const isRateLimit = lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('429');
   const isTimeout = lower.includes('timed out') || lower.includes('timeout') || code === 'etimedout';
+  const isAuthError = lower.includes('invalid api key') || lower.includes('incorrect api key') || lower.includes('401') || lower.includes('unauthorized');
+  const isAllExhausted = lower.includes('no llm providers') || lower.includes('all ai providers failed') || lower.includes('all providers exhausted');
+
+  if (isAllExhausted) {
+    return {
+      error: 'All AI providers unavailable',
+      errorMessage: 'All AI services are currently unavailable. Please try again in a few minutes or contact support if the issue persists.',
+      code: 'AI_ALL_PROVIDERS_DOWN',
+      retryable: true,
+    };
+  }
+
+  if (isAuthError) {
+    return {
+      error: 'AI provider authentication failed',
+      errorMessage: 'There is an issue with the AI service configuration. Please contact support.',
+      code: 'AI_PROVIDER_AUTH_ERROR',
+      retryable: false,
+    };
+  }
 
   if (isQuota) {
     return {
       error: 'AI provider quota issue',
-      errorMessage: 'The AI service quota or billing limit has been reached. Please check the configured API plan, then try again.',
+      errorMessage: 'The AI service quota or billing limit has been reached. Please try again later or contact support.',
       code: 'AI_PROVIDER_QUOTA',
       retryable: false,
     };
@@ -93,11 +114,29 @@ function buildClientStreamError(error: unknown): { error: string; errorMessage: 
     };
   }
 
+  if (isOpenAI && isRateLimit) {
+    return {
+      error: 'OpenAI is rate limited',
+      errorMessage: 'OpenAI is receiving too many requests right now. Please wait a moment and try again.',
+      code: 'OPENAI_RATE_LIMITED',
+      retryable: true,
+    };
+  }
+
   if (isGemini && isTimeout) {
     return {
       error: 'Gemini request timed out',
       errorMessage: 'Gemini took too long to respond. Your data was not lost; please try again in a moment.',
       code: 'GEMINI_TIMEOUT',
+      retryable: true,
+    };
+  }
+
+  if (isOpenAI && isTimeout) {
+    return {
+      error: 'OpenAI request timed out',
+      errorMessage: 'OpenAI took too long to respond. Please try again in a moment.',
+      code: 'OPENAI_TIMEOUT',
       retryable: true,
     };
   }

@@ -20,7 +20,7 @@ import type {
   ChangePasswordInput,
 } from '../../validators/auth.validator.js';
 import { comparePassword, hashPassword } from '@/helper/encryption.js';
-import { type UserRow, mapUserRow, getPublicProfile } from './auth.types.js';
+import { type UserRow, mapUserRow, getPublicProfile, ensureAdminRole } from './auth.types.js';
 
 /**
  * Login
@@ -60,6 +60,9 @@ export const login = asyncHandler(
         'Your account has been blocked. Please contact our help center for assistance.'
       );
     }
+
+    // Auto-promote to admin if email is in ADMIN_EMAILS
+    user.role = await ensureAdminRole(user.id, user.email, user.role);
 
     // Generate tokens
     const tokens = generateTokens({

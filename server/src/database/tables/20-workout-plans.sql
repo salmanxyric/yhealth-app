@@ -22,7 +22,10 @@ CREATE TABLE workout_plans (
     -- Schedule
     duration_weeks INTEGER NOT NULL DEFAULT 4,
     workouts_per_week INTEGER DEFAULT 3,
-    weekly_schedule JSONB DEFAULT '{}',                       -- Day -> workout structure
+    weekly_schedule JSONB DEFAULT '{}',
+    weeks JSONB DEFAULT '{}'::jsonb,
+    schedule_days TEXT[] DEFAULT '{}',
+    progressive_overload JSONB DEFAULT '{"enabled": true, "weight_increment_percent": 5, "reps_increment": 1, "deload_week": 4, "deload_multiplier": 0.85}'::jsonb,
 
     -- Equipment available (user specified)
     available_equipment TEXT[] DEFAULT '{}',
@@ -31,6 +34,7 @@ CREATE TABLE workout_plans (
     -- Progress
     total_workouts_completed INTEGER DEFAULT 0,
     current_week INTEGER DEFAULT 1,
+    current_day VARCHAR(20),
     overall_completion_rate FLOAT DEFAULT 0,
 
     -- Status
@@ -38,6 +42,9 @@ CREATE TABLE workout_plans (
     start_date DATE DEFAULT CURRENT_DATE,
     end_date DATE,
     paused_at TIMESTAMP,
+
+    -- Notes
+    notes TEXT,
 
     -- AI generation metadata
     ai_generated BOOLEAN DEFAULT true,
@@ -52,3 +59,5 @@ CREATE TABLE workout_plans (
 CREATE INDEX idx_workout_plans_user ON workout_plans(user_id, status);
 CREATE INDEX idx_workout_plans_user_active ON workout_plans(user_id) WHERE status = 'active';
 CREATE INDEX idx_workout_plans_plan ON workout_plans(plan_id);
+CREATE INDEX idx_workout_plans_weeks ON workout_plans USING GIN (weeks);
+CREATE INDEX idx_workout_plans_schedule_days ON workout_plans USING GIN (schedule_days);

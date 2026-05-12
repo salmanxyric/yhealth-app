@@ -271,8 +271,9 @@ class WorkoutAuditService {
    */
   async populateScheduleTasksFromPlan(workoutPlanId: string): Promise<number> {
     try {
-      // Get workout plan details
-      const planResult = await query<{
+      // Get workout plan details — use a column-safe query that won't break
+      // if migration columns (weeks, schedule_days) haven't been added yet
+      let planResult: { rows: Array<{
         id: string;
         user_id: string;
         start_date: string | Date;
@@ -280,12 +281,40 @@ class WorkoutAuditService {
         weekly_schedule: Record<string, unknown>;
         weeks: Record<string, unknown> | null;
         schedule_days: string[] | null;
-      }>(
-        `SELECT id, user_id, start_date, end_date, weekly_schedule, weeks, schedule_days
-         FROM workout_plans
-         WHERE id = $1`,
-        [workoutPlanId]
-      );
+      }> };
+
+      try {
+        planResult = await query(
+          `SELECT id, user_id, start_date, end_date, weekly_schedule, weeks, schedule_days
+           FROM workout_plans
+           WHERE id = $1`,
+          [workoutPlanId]
+        );
+      } catch (err: any) {
+        if (err?.code === '42703') {
+          // Column doesn't exist — fall back to base columns only
+          logger.warn('[WorkoutAudit] Migration columns missing, using fallback query', {
+            error: err.message,
+          });
+          const fallback = await query<{
+            id: string;
+            user_id: string;
+            start_date: string | Date;
+            end_date: string | Date | null;
+            weekly_schedule: Record<string, unknown>;
+          }>(
+            `SELECT id, user_id, start_date, end_date, weekly_schedule
+             FROM workout_plans
+             WHERE id = $1`,
+            [workoutPlanId]
+          );
+          planResult = {
+            rows: fallback.rows.map(r => ({ ...r, weeks: null, schedule_days: null })),
+          };
+        } else {
+          throw err;
+        }
+      }
 
       if (planResult.rows.length === 0) {
         throw new Error('Workout plan not found');

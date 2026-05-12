@@ -4409,9 +4409,9 @@ Keep the message between ${DATA_GAP_MESSAGE_TYPES.has(context.type) ? '1-3' : '2
         `SELECT voice_assistant_name FROM user_preferences WHERE user_id = $1`,
         [userId]
       );
-      return result.rows[0]?.voice_assistant_name || 'Aurea';
+      return result.rows[0]?.voice_assistant_name || 'Cia';
     } catch {
-      return 'Aurea';
+      return 'Cia';
     }
   }
 }

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { Loader2, Paperclip, Mic, Square, Smile, Image as ImageIcon, ArrowUp, Sparkles, X, Pencil, Check } from 'lucide-react';
@@ -55,7 +55,7 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   isLoading = false,
-  placeholder = 'Ask Aurea...',
+  placeholder = 'Ask Cia...',
   disabled = false,
   chatId,
   replyTo,

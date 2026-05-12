@@ -81,7 +81,7 @@ class IntelligenceFilesController {
       ),
       safeCount(
         `SELECT COUNT(*) as count, MAX(updated_at) as last_modified
-         FROM wiki_pages WHERE user_id = $1 AND status IN ('active', 'verified')`,
+         FROM wiki_pages WHERE user_id = $1 AND status IN ('active', 'draft')`,
         [userId]
       ),
     ]);

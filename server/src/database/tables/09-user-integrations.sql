@@ -20,6 +20,10 @@ CREATE TABLE user_integrations (
     client_id TEXT,
     client_secret TEXT,
 
+    -- Webhook configuration (for real-time data updates)
+    webhook_url TEXT,
+    webhook_secret TEXT,
+
     -- Connection status
     status sync_status DEFAULT 'pending',
     connected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

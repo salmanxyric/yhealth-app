@@ -630,7 +630,7 @@ class ComprehensiveUserContextService {
           user_info AS (
             SELECT
               (u.first_name || ' ' || u.last_name) AS user_name,
-              COALESCE(up.voice_assistant_name, 'Coach') AS assistant_name,
+              COALESCE(up.voice_assistant_name, 'Cia') AS assistant_name,
               COALESCE(NULLIF(TRIM(up.ai_coach_persona), ''), 'gentle_friend') AS ai_coach_persona
             FROM users u
             LEFT JOIN user_preferences up ON up.user_id = u.id
@@ -1398,9 +1398,9 @@ class ComprehensiveUserContextService {
            GROUP BY lg.id`,
           [userId]
         ),
-        query<{ intention_text: string; fulfilled: boolean | null; domain: string | null }>(
-          `SELECT intention_text, fulfilled, domain FROM daily_intentions
-           WHERE user_id = $1 AND intention_date = CURRENT_DATE ORDER BY sort_order ASC`,
+        query<{ intention_text: string; fulfilled: boolean | null }>(
+          `SELECT intention_text, fulfilled FROM daily_intentions
+           WHERE user_id = $1 AND intention_date = CURRENT_DATE ORDER BY created_at ASC`,
           [userId]
         ),
         query<{ total: string; fulfilled: string }>(
@@ -1448,7 +1448,6 @@ class ComprehensiveUserContextService {
         context.todayIntentions = intentionsResult.rows.map(r => ({
           text: r.intention_text,
           fulfilled: r.fulfilled ?? undefined,
-          domain: r.domain ?? undefined,
         }));
       }
 
@@ -2042,7 +2041,7 @@ class ComprehensiveUserContextService {
 
   async getActivityStatusContext(userId: string): Promise<ActivityStatusContext> {
     try {
-      const [currentResult, historyResult, daysResult, overridesResult, patternsResult] = await Promise.all([
+      const [currentResult, historyResult, daysResult, patternsResult] = await Promise.all([
         query<{ current_activity_status: string; activity_status_updated_at: string }>(
           `SELECT current_activity_status, activity_status_updated_at FROM users WHERE id = $1`,
           [userId]
@@ -2059,10 +2058,6 @@ class ComprehensiveUserContextService {
           `SELECT COALESCE(CURRENT_DATE - MAX(status_date), 0)::text AS days
            FROM activity_status_history
            WHERE user_id = $1 AND activity_status IN ('working', 'excellent', 'good')`,
-          [userId]
-        ),
-        query<{ status_overrides: unknown }>(
-          `SELECT status_overrides FROM user_plans WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1`,
           [userId]
         ),
         query<{ status_patterns: StatusPattern[] }>(
@@ -2083,7 +2078,7 @@ class ComprehensiveUserContextService {
           mood: r.mood ?? undefined,
         })),
         patterns: patternsResult.rows[0]?.status_patterns ?? [],
-        activeOverrides: overridesResult.rows[0]?.status_overrides != null,
+        activeOverrides: false,
         daysSinceLastWorkingStatus: parseInt(daysResult.rows[0]?.days ?? '0', 10),
       };
     } catch (error) {

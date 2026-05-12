@@ -107,13 +107,19 @@ Rules:
 
         if (!content && this.provider.visionClient && Date.now() > this.openaiQuotaExhaustedUntil) {
           try {
+            logger.info('[AICoach] Gemini unavailable, attempting OpenAI fallback for MCQ');
             content = await this.generateMCQWithOpenAI(mcqSystemPrompt, userPrompt);
-            contentSource = content ? 'openai' : null;
+            if (content) {
+              contentSource = 'openai';
+              logger.info('[AICoach] OpenAI fallback succeeded for MCQ generation');
+            }
           } catch (openaiError: any) {
             const msg = openaiError?.message || '';
             if (msg.includes('429') || msg.includes('quota')) {
               this.openaiQuotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
               logger.warn('[AICoach] OpenAI quota exhausted, skipping for 5 min');
+            } else {
+              logger.warn('[AICoach] OpenAI fallback also failed for MCQ', { error: msg });
             }
             throw openaiError;
           }
@@ -289,18 +295,31 @@ Rules:
 
     const model = env.openai.model || 'gpt-4o-mini';
     const tokenLimit = this.provider.isReasoningModel(model) ? 700 : 1000;
-    const completion = await this.provider.visionClient.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      ...this.provider.getTemperatureParameter(model, 0.3),
-      ...this.provider.getTokenParameter(model, tokenLimit),
-      ...this.provider.getResponseFormatParameter(model),
-    });
-
-    return completion.choices[0]?.message?.content || null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const completion = await this.provider.visionClient.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          ...this.provider.getTemperatureParameter(model, 0.3),
+          ...this.provider.getTokenParameter(model, tokenLimit),
+          ...this.provider.getResponseFormatParameter(model),
+        },
+        { signal: controller.signal as any },
+      );
+      return completion.choices[0]?.message?.content || null;
+    } catch (err: any) {
+      if (err.name === 'AbortError' || err.name === 'APIConnectionTimeoutError') {
+        throw new Error(`OpenAI MCQ request timed out (15s)`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private parseMCQContent(content: string): { question?: string; options?: Array<{ text: string; insightValue?: string }> } {

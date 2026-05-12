@@ -313,14 +313,30 @@ class PlanScheduleSyncService {
   // ============================================
 
   private async getActiveWorkoutPlan(userId: string): Promise<ActiveWorkoutPlan | null> {
-    const result = await query<ActiveWorkoutPlan>(
-      `SELECT id, name, weekly_schedule, schedule_days, start_date::text
-       FROM workout_plans
-       WHERE user_id = $1 AND status = 'active'
-       ORDER BY created_at DESC LIMIT 1`,
-      [userId],
-    );
-    return result.rows[0] || null;
+    try {
+      const result = await query<ActiveWorkoutPlan>(
+        `SELECT id, name, weekly_schedule, schedule_days, start_date::text
+         FROM workout_plans
+         WHERE user_id = $1 AND status = 'active'
+         ORDER BY created_at DESC LIMIT 1`,
+        [userId],
+      );
+      return result.rows[0] || null;
+    } catch (err: any) {
+      if (err?.code === '42703') {
+        logger.warn('[PlanScheduleSync] Migration columns missing, using fallback query');
+        const result = await query<Omit<ActiveWorkoutPlan, 'schedule_days'>>(
+          `SELECT id, name, weekly_schedule, start_date::text
+           FROM workout_plans
+           WHERE user_id = $1 AND status = 'active'
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId],
+        );
+        if (result.rows.length === 0) return null;
+        return { ...result.rows[0], schedule_days: null };
+      }
+      throw err;
+    }
   }
 
   private async getActiveDietPlan(userId: string): Promise<ActiveDietPlan | null> {

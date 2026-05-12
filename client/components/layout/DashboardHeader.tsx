@@ -2,11 +2,12 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlarmClock, Bell, Check, Loader2, NotebookPen, Settings, X } from 'lucide-react';
+import { AlarmClock, Check, Loader2, NotebookPen, Settings, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { useAlarmRing, ALARMS_OVERVIEW_PATH } from '@/app/providers/AlarmProvider';
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown';
 import { RemainingCreditsChip } from '@/components/subscription/RemainingCreditsChip';
 import { TrialCountdownBanner } from '@/components/subscription/TrialCountdownBanner';
 import { api, ApiError } from '@/lib/api-client';
@@ -327,13 +328,7 @@ export function DashboardHeader() {
           </AnimatePresence>
         </div>
 
-        <Link
-          href="/notifications"
-          className="relative p-2 sm:p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell className="w-4 h-4" />
-        </Link>
+        <NotificationDropdown />
 
         <button
           type="button"

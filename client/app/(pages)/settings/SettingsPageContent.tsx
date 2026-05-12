@@ -37,7 +37,6 @@ import {
   type SettingsSectionId,
   type WhoopStatus,
   type SpotifyStatus,
-  type TokenInfo,
   isValidSettingsSection,
   // Constants
   REDUCE_MOTION_STORAGE_KEY,
@@ -117,7 +116,6 @@ function SettingsPageInner() {
   const [whoopStatus, setWhoopStatus] = useState<WhoopStatus | null>(null);
   const [spotifyStatus, setSpotifyStatus] = useState<SpotifyStatus | null>(null);
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
-  const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
 
   // ---- Preferences state ----
   const [preferences, setPreferences] = useState<UserPreferences>({
@@ -300,11 +298,6 @@ function SettingsPageInner() {
         const sr = await api.get<SpotifyStatus>("/spotify/auth/status");
         setSpotifyStatus(sr.success && sr.data ? sr.data : { isConnected: false, isConfigured: false, hasCredentials: false });
       } catch { setSpotifyStatus({ isConnected: false, isConfigured: false, hasCredentials: false }); }
-
-      try {
-        const tr = await api.get<TokenInfo>("/integrations/whoop/tokens");
-        setTokenInfo(tr.success && tr.data ? tr.data : { hasTokens: false });
-      } catch { setTokenInfo({ hasTokens: false }); }
     } catch (err) {
       if (err instanceof ApiError && err.code !== "NOT_FOUND") console.error("Failed to load preferences:", err);
     } finally {
@@ -454,12 +447,9 @@ function SettingsPageInner() {
                 <IntegrationsSection
                   whoopStatus={whoopStatus}
                   spotifyStatus={spotifyStatus}
-                  tokenInfo={tokenInfo}
                   integrations={integrations}
                   isSpotifyConnecting={isSpotifyConnecting}
-                  setWhoopStatus={setWhoopStatus}
                   setSpotifyStatus={setSpotifyStatus}
-                  setTokenInfo={setTokenInfo}
                   setIsSpotifyConnecting={setIsSpotifyConnecting}
                   fetchPreferences={fetchPreferences}
                 />

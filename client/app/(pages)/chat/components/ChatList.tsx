@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, isToday, isYesterday, isThisWeek, isThisMonth } from 'date-fns';
@@ -155,7 +155,7 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
   const isAICoachChat = (chat: Chat): boolean => {
     if (chat.isGroupChat) return false;
     const title = getChatTitle(chat);
-    return title === 'AI Coach' || title === assistantName || title === 'Aurea';
+    return title === 'AI Coach' || title === assistantName || title === 'Cia';
   };
 
   const getUnreadCount = (chat: Chat): number => {

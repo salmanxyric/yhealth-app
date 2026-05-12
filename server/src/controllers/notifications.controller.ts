@@ -342,7 +342,7 @@ const markAllAsRead = asyncHandler(async (req: AuthenticatedRequest, res: Respon
   const userId = req.user?.userId;
   if (!userId) throw ApiError.unauthorized();
 
-  const { type, category } = req.body;
+  const { type, category } = req.body || {};
 
   let queryStr = `UPDATE notifications
      SET is_read = true, read_at = NOW()

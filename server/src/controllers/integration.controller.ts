@@ -1432,17 +1432,22 @@ export const getWhoopStatus = asyncHandler(
       [key: string]: unknown;
     } | null;
 
+    const clientId = integration.client_id ? String(integration.client_id) : null;
+    const clientIdMasked = clientId && clientId.length > 8
+      ? `${clientId.slice(0, 4)}${'*'.repeat(Math.min(clientId.length - 8, 20))}${clientId.slice(-4)}`
+      : clientId ? '****' : undefined;
+
     const statusResponse = {
       isConnected: integration.status === 'active',
       hasCredentials: hasCredentials,
       hasPerUserCredentials: hasPerUserCredentials,
+      clientIdMasked,
       status: integration.status,
       connectedAt: integration.connected_at,
       lastSyncAt: integration.last_sync_at,
       webhookRegistered: !!integration.webhook_url && String(integration.webhook_url).trim().length > 0,
       initialSyncComplete: integration.initial_sync_complete,
       provider: 'whoop',
-      // Include user profile data if available
       email: deviceInfo?.email,
       whoopUserId: deviceInfo?.whoop_user_id,
       firstName: deviceInfo?.first_name,
@@ -1809,6 +1814,33 @@ export const toggleWhoopTokens = asyncHandler(
   }
 );
 
+/**
+ * GET /api/integrations/whoop/credentials
+ */
+export const getWhoopCredentials = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized();
+
+    const result = await query<{ client_id: string | null; client_secret: string | null }>(
+      `SELECT client_id, client_secret FROM user_integrations WHERE user_id = $1 AND provider = 'whoop' LIMIT 1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].client_id) {
+      ApiResponse.success(res, { hasCredentials: false });
+      return;
+    }
+
+    const { client_id, client_secret } = result.rows[0];
+    ApiResponse.success(res, {
+      hasCredentials: true,
+      clientId: client_id,
+      clientSecret: client_secret,
+    });
+  }
+);
+
 export default {
   getIntegrations,
   selectIntegrations,
@@ -1824,6 +1856,7 @@ export default {
   registerWhoopWebhook,
   getWhoopStatus,
   storeWhoopCredentials,
+  getWhoopCredentials,
   deleteWhoopCredentials,
   manageWhoopTokens,
   getWhoopTokens,

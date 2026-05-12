@@ -265,6 +265,13 @@ const EXPECTED_TABLES = [
   'tool_audit_log',
   // Goal action completions
   'goal_action_completions',
+  // Wiki system (LLM knowledge layer)
+  'wiki_pages',
+  'wiki_links',
+  'wiki_page_sources',
+  'wiki_log',
+  'wiki_index',
+  'wiki_page_versions',
 ];
 
 // List of expected enum types
@@ -303,6 +310,11 @@ const EXPECTED_TYPES = [
   'competition_status',
   'competition_entry_status',
   'leaderboard_type',
+  // Wiki system enums
+  'wiki_page_type',
+  'wiki_page_status',
+  'wiki_link_type',
+  'wiki_log_operation',
 ];
 
 /**
@@ -591,6 +603,10 @@ async function runFullSchema(): Promise<void> {
     '129-user-medications.sql',
     // Intelligence system (8 tables)
     '130-intelligence.sql',
+    // Quick notes
+    '130-quick-notes.sql',
+    // Wiki system (LLM knowledge layer)
+    '131-wiki.sql',
     // Triggers (must be last)
     '99-triggers.sql',
   ];
@@ -943,6 +959,8 @@ const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
   '20260506000000_enable_free_onboarding_goal_generation.sql',
   '20260506001000_harden_workout_alarm_user_integrity.sql',
   '20260507000000_add_journal_rich_content.sql',
+  '20260506000000_wiki.sql',
+  '20260508000000_wiki_reconcile.sql',
   'add-accountability-indexes.sql',
   'add-achievement-constraints.sql',
   'add-buddy-challenge-and-competition-invitations.sql',
@@ -1187,6 +1205,13 @@ export async function autoMigrate(): Promise<{
             'prayer_schedules': '124-prayer-schedules.sql',
             'spending_transactions': '125-finance-tracking.sql',
             'competition_invitations': '126-competition-invitations.sql',
+            // Wiki system
+            'wiki_pages': '131-wiki.sql',
+            'wiki_links': '131-wiki.sql',
+            'wiki_page_sources': '131-wiki.sql',
+            'wiki_log': '131-wiki.sql',
+            'wiki_index': '131-wiki.sql',
+            'wiki_page_versions': '131-wiki.sql',
           };
           
           const tableFile = tableToFileMap[table] || tableFiles.find(f => {

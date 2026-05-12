@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { env } from '../../../config/env.config.js';
 import { logger } from '../../logger.service.js';
+import { modelFactory } from '../../model-factory.service.js';
 
 export class AIProvider {
   visionClient: OpenAI | null = null;
@@ -121,6 +122,7 @@ export class AIProvider {
 
   supportsCustomTemperature(model: string): boolean {
     const modelLower = model.toLowerCase();
+    if (modelLower.includes('mini')) return true;
     const restrictedModels = ['gpt-4o', 'gpt-5'];
     return !restrictedModels.some(prefix => modelLower.startsWith(prefix));
   }
@@ -150,6 +152,9 @@ export class AIProvider {
     maxTokens: number,
     jsonMode: boolean = false,
   ): Promise<string> {
+    if (modelFactory.isProviderRateLimited('gemini')) {
+      throw new Error('Gemini is currently rate-limited in ModelFactory');
+    }
     const VISION_MODELS = [env.gemini.model || 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
     let inlineData: { mimeType: string; data: string } | undefined;
@@ -246,6 +251,9 @@ export class AIProvider {
     jsonMode = false,
   ): Promise<string> {
     if (!this.geminiApiKey) throw new Error('Gemini API key not available');
+    if (modelFactory.isProviderRateLimited('gemini')) {
+      throw new Error('Gemini is currently rate-limited in ModelFactory');
+    }
     const model = env.gemini.model || 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
 
@@ -266,7 +274,7 @@ export class AIProvider {
     };
 
     const controller = new AbortController();
-    const fetchTimeout = setTimeout(() => controller.abort(), 8000);
+    const fetchTimeout = setTimeout(() => controller.abort(), 15000);
     let resp: Response;
     try {
       resp = await fetch(url, {
@@ -277,7 +285,10 @@ export class AIProvider {
       });
     } catch (err: any) {
       clearTimeout(fetchTimeout);
-      if (err.name === 'AbortError') throw new Error('Gemini text request timed out (8s)');
+      if (err.name === 'AbortError') {
+        modelFactory.markProviderRateLimited('gemini', 60_000);
+        throw new Error('Gemini text request timed out (15s)');
+      }
       throw err;
     }
     clearTimeout(fetchTimeout);

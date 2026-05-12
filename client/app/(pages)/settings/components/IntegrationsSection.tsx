@@ -23,33 +23,21 @@ import { GlassCard, SectionHeader } from "./SettingsSharedUI";
 import { GoogleCalendarSection } from "./GoogleCalendarSection";
 import { PrayerTimesSection } from "./PrayerTimesSection";
 import { SpendingTrackerSection } from "./SpendingTrackerSection";
-import { WhoopTokenModal } from "./WhoopTokenModal";
 import { WhoopCredentialsModal } from "./WhoopCredentialsModal";
 import { SpotifyCredentialsModal } from "./SpotifyCredentialsModal";
 
 export function IntegrationsSection({
   whoopStatus,
   spotifyStatus,
-  tokenInfo,
   integrations,
   isSpotifyConnecting,
-  setWhoopStatus: _setWhoopStatus,
   setSpotifyStatus,
-  setTokenInfo,
   setIsSpotifyConnecting,
   fetchPreferences,
 }: IntegrationsSectionProps) {
   // Modal visibility state
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [showCredentialsModal, setShowCredentialsModal] = useState<false | 'add' | 'edit'>(false);
   const [showSpotifyCredentialsModal, setShowSpotifyCredentialsModal] = useState(false);
-
-  // Token form data
-  const [tokenData, setTokenData] = useState({
-    accessToken: "",
-    refreshToken: "",
-    tokenExpiry: "",
-  });
 
   return (
     <div className="space-y-6">
@@ -117,40 +105,6 @@ export function IntegrationsSection({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const response = await api.get<{
-                      hasTokens: boolean;
-                      hasAccessToken?: boolean;
-                      hasRefreshToken?: boolean;
-                      accessTokenMasked?: string;
-                      refreshTokenMasked?: string;
-                      tokenExpiry?: string;
-                      tokenExpiryISO?: string;
-                      status?: string;
-                      connectedAt?: string;
-                    }>("/integrations/whoop/tokens");
-                    if (response.success && response.data?.hasTokens) {
-                      setTokenInfo(response.data);
-                      setTokenData({ accessToken: "", refreshToken: "", tokenExpiry: response.data.tokenExpiry || "" });
-                    } else {
-                      setTokenData({ accessToken: "", refreshToken: "", tokenExpiry: "" });
-                      setTokenInfo(response.success && response.data ? response.data : { hasTokens: false });
-                    }
-                  } catch (err) {
-                    console.log("No tokens found or error fetching:", err);
-                    setTokenData({ accessToken: "", refreshToken: "", tokenExpiry: "" });
-                    setTokenInfo({ hasTokens: false });
-                  }
-                  setShowTokenModal(true);
-                }}
-                className="px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 border border-sky-500/30 transition-colors text-sm font-medium flex items-center gap-2"
-                title="Manage Tokens (Add/Update/Delete/View)"
-              >
-                <Key className="w-4 h-4" /><span>Manage Tokens</span>
-              </button>
               {!whoopStatus?.isConnected ? (
                 <button
                   type="button"
@@ -160,7 +114,7 @@ export function IntegrationsSection({
                       if (response.success && response.data?.authUrl) {
                         window.location.href = response.data.authUrl;
                       } else {
-                        toast.error("Failed to initiate WHOOP connection. Please ensure WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET are configured.");
+                        toast.error("Failed to initiate WHOOP connection. Please ensure credentials are configured.");
                       }
                     } catch (err: unknown) {
                       const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -209,21 +163,45 @@ export function IntegrationsSection({
             </motion.div>
           )}
 
-          {!whoopStatus?.isConnected && !whoopStatus?.hasCredentials && (
+          {!whoopStatus?.hasCredentials && (
             <div className="mt-4 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-              <p className="text-xs text-yellow-400 mb-3">WHOOP OAuth credentials are not configured. Please add your WHOOP Client ID and Client Secret below to connect.</p>
+              <p className="text-xs text-yellow-400 mb-3">WHOOP OAuth credentials are not configured. Please add your WHOOP Client ID and Client Secret to connect.</p>
               <button
                 type="button"
-                onClick={() => setShowCredentialsModal(true)}
+                onClick={() => setShowCredentialsModal('add')}
                 className="px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <Key className="w-4 h-4" /> Add Credentials
               </button>
             </div>
           )}
-          {whoopStatus?.isConnected && !whoopStatus?.hasCredentials && (
-            <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <p className="text-xs text-blue-400">Connected using app-level credentials. You can add your own credentials to manage your connection independently.</p>
+          {whoopStatus?.hasPerUserCredentials && (
+            <div className="mt-3">
+              {whoopStatus.clientIdMasked && (
+                <p className="text-xs text-slate-500 mb-2">Client ID: <span className="text-slate-400 font-mono">{whoopStatus.clientIdMasked}</span></p>
+              )}
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setShowCredentialsModal('edit')} className="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-1"><Key className="w-3 h-3" /> Edit Credentials</button>
+                <span className="text-slate-700">|</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const confirmed = await confirm({ title: "Delete WHOOP Credentials", description: "This will remove your WHOOP Client ID and Client Secret. You will need to add them again to reconnect.", confirmText: "Delete", variant: "destructive" });
+                    if (confirmed) {
+                      try {
+                        await api.delete("/integrations/whoop/credentials");
+                        await fetchPreferences();
+                        toast.success("WHOOP credentials deleted");
+                      } catch {
+                        toast.error("Failed to delete credentials");
+                      }
+                    }
+                  }}
+                  className="text-xs text-red-400/60 hover:text-red-400 transition-colors flex items-center gap-1"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete Credentials
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -423,22 +401,9 @@ export function IntegrationsSection({
       </GlassCard>
 
       {/* Modals */}
-      {showTokenModal && (
-        <WhoopTokenModal
-          tokenInfo={tokenInfo}
-          tokenData={tokenData}
-          setTokenData={setTokenData}
-          setTokenInfo={setTokenInfo}
-          fetchPreferences={fetchPreferences}
-          onClose={() => {
-            setShowTokenModal(false);
-            setTokenData({ accessToken: "", refreshToken: "", tokenExpiry: "" });
-          }}
-        />
-      )}
-
       {showCredentialsModal && (
         <WhoopCredentialsModal
+          isEdit={showCredentialsModal === 'edit'}
           fetchPreferences={fetchPreferences}
           onClose={() => setShowCredentialsModal(false)}
         />

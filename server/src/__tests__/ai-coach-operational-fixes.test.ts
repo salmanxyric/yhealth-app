@@ -27,6 +27,21 @@ describe('AI Coach operational fixes', () => {
     expect(source).not.toContain('resultContent.substring(0, 100)');
   });
 
+  it('keeps tools bound when empty Gemini responses cascade to fallback providers', () => {
+    const source = readSource('services/langgraph-chatbot.service.ts');
+
+    expect(source).toContain('const fallbackLlmWithTools = fallbackLlm.bindTools');
+    expect(source).toContain('response = await fallbackLlmWithTools.invoke(messages)');
+    expect(source).toContain('fallbackLlmWithTools.stream(messages)');
+  });
+
+  it('runs wiki maintenance for stored streaming and non-streaming turns', () => {
+    const source = readSource('services/langgraph-chatbot.service.ts');
+
+    expect(source).toContain('private enqueueWikiMaintenance');
+    expect(source.match(/this\.enqueueWikiMaintenance\(userId, message, responseContent, activeConversationId\);/g)).toHaveLength(2);
+  });
+
   it('guards optional entitlement shadow logging table', () => {
     const source = readSource('middlewares/entitlement.middleware.ts');
 

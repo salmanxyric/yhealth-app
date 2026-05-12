@@ -11,6 +11,19 @@ import { logger } from './logger.service.js';
 import type { ToolTurnContext } from '../types/tool-turn-context.js';
 
 // ============================================
+// MESSAGE COMPLEXITY (for fast-path routing)
+// ============================================
+
+export type MessageComplexity = 'TRIVIAL' | 'SIMPLE_ACTION' | 'CONVERSATIONAL' | 'ANALYTICAL';
+
+export interface IntentClassification {
+  primary: ToolIntent;
+  secondary: ToolIntent[];
+  complexity: MessageComplexity;
+  confidence: number;
+}
+
+// ============================================
 // INTENT TYPES
 // ============================================
 
@@ -372,12 +385,34 @@ const INTENT_KEYWORDS: Record<ToolIntent, string[]> = {
   general: [], // Fallback - no specific keywords
 };
 
+// Trivial messages that need no RAG/context enrichment
+const TRIVIAL_PATTERNS = [
+  /^(hi|hey|hello|yo|sup|hola|salaam|assalam\s*u?\s*alaikum|wassalam|salam)[\s!.,?]*$/i,
+  /^(thanks|thank you|thank u|thx|ty|ok|okay|sure|yes|yep|yeah|no|nope|nah|got it|understood|cool|great|nice|awesome|perfect|alright|right|fine|good|done|bye|goodbye|see you|later|cheers|lol|haha|hmm|ah|oh|wow)[\s!.,?]*$/i,
+  /^(good morning|good afternoon|good evening|good night|gm|gn)[\s!.,?]*$/i,
+  /^(how are you|what's up|whats up|how's it going|how r u)[\s!.,?]*$/i,
+];
+
+// Action verbs indicating a clear, direct tool call
+const SIMPLE_ACTION_PATTERNS = [
+  /\b(log|add|record|track|create|set|delete|remove|update|change|edit|cancel|schedule|plan|play|stop|pause|skip)\b/i,
+];
+
+// Analytical keywords indicating deep analysis/reasoning
+const ANALYTICAL_KEYWORDS = [
+  'correlation', 'correlate', 'trend', 'analyze', 'analysis', 'compare', 'comparison',
+  'anomaly', 'pattern', 'what affects', 'what drives', 'relationship between',
+  'over time', 'deep analysis', 'factor', 'factors', 'multi-factor', 'how does',
+  'why does', 'explain the connection', 'breakdown', 'insights', 'data',
+];
+
 /**
  * Classify user message intent using keyword matching
- * Returns primary intent + any secondary intents detected
+ * Returns primary intent, secondary intents, message complexity, and confidence
  */
-export function classifyIntent(message: string): { primary: ToolIntent; secondary: ToolIntent[] } {
+export function classifyIntent(message: string): IntentClassification {
   const lowerMessage = message.toLowerCase();
+  const trimmedMessage = message.trim();
   const intentScores: Record<ToolIntent, number> = {
     meals: 0,
     workouts: 0,
@@ -405,14 +440,12 @@ export function classifyIntent(message: string): { primary: ToolIntent; secondar
   for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
     for (const keyword of keywords) {
       if (lowerMessage.includes(keyword)) {
-        // Longer keywords get higher weight
         intentScores[intent as ToolIntent] += keyword.length;
       }
     }
   }
 
   // Fuzzy fallback: if no strong match, check for partial keyword matches (min 4 chars)
-  // This catches misspellings like "journling" matching "journal" via shared prefix "journ"
   const hasStrongMatch = Object.values(intentScores).some(s => s >= 4);
   if (!hasStrongMatch) {
     const words = lowerMessage.split(/\s+/);
@@ -431,20 +464,46 @@ export function classifyIntent(message: string): { primary: ToolIntent; secondar
   const sortedIntents = Object.entries(intentScores)
     .filter(([_, score]) => score > 0)
     .sort((a, b) => b[1] - a[1])
-    .map(([intent]) => intent as ToolIntent);
+    .map(([intent, score]) => ({ intent: intent as ToolIntent, score }));
 
-  // Return primary and secondary intents
-  const primary = sortedIntents[0] || 'general';
-  const secondary = sortedIntents.slice(1, 3); // Up to 2 secondary intents
+  const primary = sortedIntents[0]?.intent || 'general';
+  const primaryScore = sortedIntents[0]?.score || 0;
+  const secondaryScore = sortedIntents[1]?.score || 0;
+  const secondary = sortedIntents.slice(1, 3).map(s => s.intent);
+
+  // Confidence: how dominant the primary intent is (0-1)
+  const totalScore = sortedIntents.reduce((sum, s) => sum + s.score, 0);
+  const confidence = totalScore > 0 ? primaryScore / totalScore : 0;
+
+  // Classify message complexity
+  let complexity: MessageComplexity = 'CONVERSATIONAL';
+
+  if (TRIVIAL_PATTERNS.some(p => p.test(trimmedMessage))) {
+    complexity = 'TRIVIAL';
+  } else if (
+    trimmedMessage.length <= 60 &&
+    primaryScore >= 4 &&
+    confidence >= 0.6 &&
+    SIMPLE_ACTION_PATTERNS.some(p => p.test(trimmedMessage))
+  ) {
+    complexity = 'SIMPLE_ACTION';
+  } else if (
+    primary === 'analytics' ||
+    ANALYTICAL_KEYWORDS.some(k => lowerMessage.includes(k)) ||
+    (sortedIntents.length >= 3 && secondaryScore >= primaryScore * 0.7)
+  ) {
+    complexity = 'ANALYTICAL';
+  }
 
   logger.debug('[ToolRouter] Intent classified', {
     message: message.substring(0, 100),
     primary,
     secondary,
-    scores: intentScores,
+    complexity,
+    confidence: Math.round(confidence * 100),
   });
 
-  return { primary, secondary };
+  return { primary, secondary, complexity, confidence };
 }
 
 // ============================================

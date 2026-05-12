@@ -61,8 +61,24 @@ interface AuthContextValue extends AuthState {
 // Create context
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Protected routes that require authentication
-const PROTECTED_ROUTES = ["/dashboard", "/onboarding", "/settings", "/profile"];
+// Public routes that do NOT require authentication
+const PUBLIC_ROUTES = [
+  "/",
+  "/about",
+  "/blogs",
+  "/careers",
+  "/contact",
+  "/cookies",
+  "/faq",
+  "/help",
+  "/hipaa",
+  "/press",
+  "/privacy",
+  "/security",
+  "/terms",
+  "/webinars",
+  "/reset-password",
+];
 
 // Admin routes that require admin role
 const ADMIN_ROUTES = ["/admin"];
@@ -320,16 +336,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
-    const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-      pathname.startsWith(route)
+    const isPublicRoute = PUBLIC_ROUTES.some((route) =>
+      route === "/" ? pathname === "/" : pathname.startsWith(route)
     );
     const isAdminRoute = ADMIN_ROUTES.some((route) =>
       pathname.startsWith(route)
     );
     const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
 
-    // Redirect to signin if trying to access protected route without auth
-    if (isProtectedRoute && !isAuthenticated) {
+    // Redirect to signin if trying to access any non-public route without auth
+    if (!isPublicRoute && !isAuthRoute && !isAuthenticated) {
       const callbackUrl = encodeURIComponent(pathname);
       routerRef.current.push(`/auth/signin?callbackUrl=${callbackUrl}`);
       return;

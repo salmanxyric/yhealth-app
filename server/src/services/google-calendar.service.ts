@@ -116,17 +116,20 @@ function formatError(err: unknown): string {
  * Default redirect URI used when a user hasn't explicitly entered one.
  * Resolution order:
  *   1. `GOOGLE_CALENDAR_REDIRECT_URI` — explicit override (recommended for prod).
- *   2. `${API_URL}/api/calendar/callback` — derived from the public API origin.
- *   3. `http://localhost:9090/api/calendar/callback` — local dev fallback.
- * Users MUST register this exact value under "Authorized redirect URIs" in
- * Google Cloud Console for the OAuth client they configure in the UI.
+ *   2. `${CLIENT_URL}/api/integrations/oauth/callback/google` — derived from the client origin.
+ *   3. `http://localhost:3000/api/integrations/oauth/callback/google` — local dev fallback.
+ *
+ * The OAuth flow routes through the Next.js client (which forwards the code to
+ * the Express server), so the redirect URI must point to the client, NOT the
+ * server directly. Users MUST register this exact value under "Authorized
+ * redirect URIs" in Google Cloud Console.
  */
 function resolveDefaultRedirectUri(): string {
   const explicit = process.env['GOOGLE_CALENDAR_REDIRECT_URI'];
   if (explicit) return explicit;
-  const apiUrl = process.env['API_URL'];
-  if (apiUrl) return `${apiUrl.replace(/\/$/, '')}/api/calendar/callback`;
-  return 'http://localhost:9090/api/calendar/callback';
+  const clientUrl = process.env['CLIENT_URL'];
+  if (clientUrl) return `${clientUrl.replace(/\/$/, '')}/api/integrations/oauth/callback/google`;
+  return 'http://localhost:3000/api/integrations/oauth/callback/google';
 }
 
 const DEFAULT_REDIRECT_URI = resolveDefaultRedirectUri();
@@ -145,7 +148,9 @@ async function getUserCalendarConfig(userId: string) {
   return {
     clientId: row.client_id,
     clientSecret: row.client_secret,
-    redirectUri: row.redirect_uri || DEFAULT_REDIRECT_URI,
+    // Always prefer the resolved default (from env/CLIENT_URL) over the DB value,
+    // which may be stale from a previous configuration.
+    redirectUri: DEFAULT_REDIRECT_URI,
   };
 }
 

@@ -168,29 +168,31 @@ export const env = {
     lightModel: process.env['GEMINI_LIGHT_MODEL'] || 'gemini-2.5-flash-lite',
     emotionModel: process.env['GEMINI_EMOTION_MODEL'] || 'gemini-2.5-flash-lite',
     emotionTimeoutMs: parseInt(process.env['GEMINI_EMOTION_TIMEOUT_MS'] || '8000', 10),
-    visionModel: process.env['GEMINI_VISION_MODEL'] || 'gemini-2.5-flash-lite',
+    visionModel: process.env['GEMINI_VISION_MODEL'] || 'gemini-2.5-pro',
   },
 
-  // Anthropic (fallback LLM provider)
+  // OpenAI (fallback LLM provider + embeddings + classification)
+  openai: {
+    apiKey: process.env['OPENAI_API_KEY'],
+    model: process.env['OPENAI_MODEL'] || 'gpt-4o-mini',
+    maxTokens: parseInt(process.env['OPENAI_MAX_TOKENS'] || '1000', 10),
+  },
+
+  // Anthropic (disabled by default — set ANTHROPIC_ENABLED=true in .env to activate)
   anthropic: {
+    enabled: process.env['ANTHROPIC_ENABLED'] === 'true',
     apiKey: process.env['ANTHROPIC_API_KEY'],
     model: process.env['ANTHROPIC_MODEL'] || 'claude-sonnet-4-6',
     maxTokens: parseInt(process.env['ANTHROPIC_MAX_TOKENS'] || '1000', 10),
   },
 
-  // DeepSeek AI (fallback provider)
+  // DeepSeek AI (disabled by default — set DEEPSEEK_ENABLED=true in .env to activate)
   deepseek: {
+    enabled: process.env['DEEPSEEK_ENABLED'] === 'true',
     apiKey: process.env['DEEPSEEK_API_KEY'],
     model: process.env['DEEPSEEK_MODEL'] || 'deepseek-chat',
     reasoningModel: process.env['DEEPSEEK_REASONING_MODEL'] || 'deepseek-reasoner',
     baseUrl: process.env['DEEPSEEK_BASE_URL'] || 'https://api.deepseek.com',
-  },
-
-  // OpenAI (fallback provider — kept for embeddings)
-  openai: {
-    apiKey: process.env['OPENAI_API_KEY'],
-    model: process.env['OPENAI_MODEL'] || 'gpt-5-mini',
-    maxTokens: parseInt(process.env['OPENAI_MAX_TOKENS'] || '1000', 10),
   },
 
   // Twilio (Voice Calls & WhatsApp)
@@ -280,7 +282,15 @@ export const env = {
       | 'enforce-new'
       | 'enforce-all',
     rolloutStart: process.env['ENTITLEMENT_ROLLOUT_START'] || '',
+    defaultSignupCredits: parseInt(process.env['DEFAULT_SIGNUP_CREDITS'] || '100', 10),
+    onboardingCreditUsage: process.env['ONBOARDING_CREDIT_USAGE'] === 'true',
   },
+
+  // Auto-admin: comma-separated emails that are automatically promoted to admin on login/signup
+  adminEmails: (process.env['ADMIN_EMAILS'] || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean),
 } as const;
 
 export type EnvConfig = typeof env;

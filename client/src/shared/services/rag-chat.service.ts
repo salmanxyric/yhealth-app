@@ -237,7 +237,18 @@ class RAGChatService {
 
     if (!response.ok) {
       const text = await response.text().catch(() => 'Unknown error');
-      throw new Error(`Stream request failed (${response.status}): ${text}`);
+      let code = 'UNKNOWN';
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.code) code = parsed.code;
+      } catch { /* not JSON */ }
+      const err = new Error(`Stream request failed (${response.status}): ${text}`) as Error & {
+        statusCode: number;
+        code: string;
+      };
+      err.statusCode = response.status;
+      err.code = code;
+      throw err;
     }
 
     const reader = response.body?.getReader();

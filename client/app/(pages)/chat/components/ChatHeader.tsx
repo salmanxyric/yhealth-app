@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { MoreVertical, Info, Search, Menu, ArrowLeft, Pencil, X, Trash2, LogOut, LayoutDashboard, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -66,7 +66,7 @@ export function ChatHeader({
   onOpenSettings: _onOpenSettings,
 }: ChatHeaderProps) {
   const router = useRouter();
-  const isAICoach = title === 'AI Coach' || title === 'Aurea';
+  const isAICoach = title === 'AI Coach' || title === 'Cia';
 
   const iconBtnClass = "h-9 w-9 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all duration-200";
 
