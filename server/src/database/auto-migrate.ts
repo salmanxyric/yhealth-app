@@ -39,6 +39,9 @@ const EXPECTED_TABLES = [
   'scheduled_reminders',
   'user_tasks',
   'quick_notes',
+  'push_tokens',
+  'push_subscriptions',
+  'user_communication_preferences',
   'rag_conversations',
   'voice_calls',
   'voice_call_events',
@@ -272,6 +275,8 @@ const EXPECTED_TABLES = [
   'wiki_log',
   'wiki_index',
   'wiki_page_versions',
+  'chat_calls',
+  'ai_coach_call_log',
 ];
 
 // List of expected enum types
@@ -810,6 +815,105 @@ async function runFullSchema(): Promise<void> {
 /**
  * Run a specific migration file
  */
+function stripLeadingComments(sql: string): string {
+  const lines = sql.split('\n');
+  const firstNonComment = lines.findIndex(l => l.trim().length > 0 && !l.trim().startsWith('--'));
+  return firstNonComment >= 0 ? lines.slice(firstNonComment).join('\n').trim() : '';
+}
+
+function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let dollarQuoteTag: string | null = null;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      current += char;
+      if (char === '\n') {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      current += char;
+      if (char === '*' && next === '/') {
+        current += next;
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && !dollarQuoteTag && char === '-' && next === '-') {
+      current += char + next;
+      i++;
+      inLineComment = true;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && !dollarQuoteTag && char === '/' && next === '*') {
+      current += char + next;
+      i++;
+      inBlockComment = true;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && char === '$') {
+      const tagMatch = sql.slice(i).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+      if (tagMatch) {
+        const tag = tagMatch[0];
+        current += tag;
+        i += tag.length - 1;
+        dollarQuoteTag = dollarQuoteTag === tag ? null : tag;
+        continue;
+      }
+    }
+
+    if (!dollarQuoteTag && !inDoubleQuote && char === "'") {
+      current += char;
+      if (inSingleQuote && next === "'") {
+        current += next;
+        i++;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    if (!dollarQuoteTag && !inSingleQuote && char === '"') {
+      current += char;
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && !dollarQuoteTag && char === ';') {
+      const cleaned = stripLeadingComments(current);
+      if (cleaned) {
+        statements.push(`${cleaned};`);
+      }
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  const cleaned = stripLeadingComments(current);
+  if (cleaned) {
+    statements.push(cleaned);
+  }
+
+  return statements;
+}
+
 async function runMigration(migrationFile: string): Promise<void> {
   const migrationPath = join(__dirname, 'migrations', migrationFile);
 
@@ -831,22 +935,10 @@ async function runMigration(migrationFile: string): Promise<void> {
     let lastIndex = 0;
     let match;
 
-    // Helper: strip leading comment lines from a SQL chunk
-    const stripLeadingComments = (s: string): string => {
-      const lines = s.split('\n');
-      const firstNonComment = lines.findIndex(l => l.trim().length > 0 && !l.trim().startsWith('--'));
-      return firstNonComment >= 0 ? lines.slice(firstNonComment).join('\n').trim() : '';
-    };
-
     while ((match = doBlockRegex.exec(migration)) !== null) {
       const between = migration.substring(lastIndex, match.index).trim();
       if (between) {
-        between.split(';').forEach(s => {
-          const cleaned = stripLeadingComments(s);
-          if (cleaned) {
-            blocks.push(cleaned + ';');
-          }
-        });
+        blocks.push(...splitSqlStatements(between));
       }
       blocks.push(match[0]);
       lastIndex = match.index + match[0].length;
@@ -854,12 +946,7 @@ async function runMigration(migrationFile: string): Promise<void> {
 
     const afterLastBlock = migration.substring(lastIndex).trim();
     if (afterLastBlock) {
-      afterLastBlock.split(';').forEach(s => {
-        const cleaned = stripLeadingComments(s);
-        if (cleaned) {
-          blocks.push(cleaned + ';');
-        }
-      });
+      blocks.push(...splitSqlStatements(afterLastBlock));
     }
 
     let successCount = 0;
@@ -889,15 +976,7 @@ async function runMigration(migrationFile: string): Promise<void> {
   // Split by semicolons and execute each statement separately to avoid syntax errors
   // Strip leading comment lines from each chunk before filtering — a chunk like
   // "-- comment\nCREATE TABLE ..." should NOT be discarded.
-  const statements = migration
-    .split(';')
-    .map(s => {
-      // Remove leading comment lines (lines starting with --)
-      const lines = s.split('\n');
-      const firstNonComment = lines.findIndex(l => l.trim().length > 0 && !l.trim().startsWith('--'));
-      return firstNonComment >= 0 ? lines.slice(firstNonComment).join('\n').trim() : '';
-    })
-    .filter(s => s.length > 0);
+  const statements = splitSqlStatements(migration);
 
   logger.info(`Running migration: ${migrationFile} (${statements.length} statements)`);
 
@@ -955,12 +1034,20 @@ const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
   '20260428300000_user_files.sql',
   '20260428400000_proactive_check_ins.sql',
   '20260430000000_intelligence-files.sql',
+  '20260504000000_add_weekly_targets_to_milestones.sql',
+  '20260504000001_add_checkout_session_id.sql',
   '20260505000000_ai_coach_no_pgvector_fallbacks.sql',
   '20260506000000_enable_free_onboarding_goal_generation.sql',
   '20260506001000_harden_workout_alarm_user_integrity.sql',
+  '20260506002000_create_quick_notes.sql',
   '20260507000000_add_journal_rich_content.sql',
   '20260506000000_wiki.sql',
   '20260508000000_wiki_reconcile.sql',
+  '20260508000000_add_plan_source_to_schedule_items.sql',
+  '20260508100000_add_push_subscriptions.sql',
+  '20260512000000_chat_calls.sql',
+  '20260512001000_add_buddy_suggested_challenge.sql',
+  '20260512002000_push_tokens_user_communication_preferences.sql',
   'add-accountability-indexes.sql',
   'add-achievement-constraints.sql',
   'add-buddy-challenge-and-competition-invitations.sql',
@@ -972,6 +1059,7 @@ const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
   // Listed here because all expected tables exist on most envs, so the
   // missing-tables branch that auto-runs `add-*` files never fires.
   'add-status-awareness-fields.sql',
+  '20260513_ai_coach_call_log.sql',
 ];
 
 async function runSupplementaryMigrations(): Promise<void> {
