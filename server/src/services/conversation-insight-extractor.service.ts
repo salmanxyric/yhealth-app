@@ -168,6 +168,8 @@ class ConversationInsightExtractorService {
     candidate: MemoryCandidate,
     evidence: MemoryEvidence
   ): Promise<void> {
+    const escapedTitle = escapeLikePattern(candidate.title);
+    const escapedPrefix = escapeLikePattern(candidate.title.split(' ').slice(0, 3).join(' '));
     const existing = await query(
       `SELECT id, occurrence_count, evidence, promoted_memory_id
        FROM intelligence_pending_signals
@@ -175,11 +177,7 @@ class ConversationInsightExtractorService {
          AND (title ILIKE $3 OR title ILIKE $4)
          AND promoted_memory_id IS NULL
        LIMIT 1`,
-      ...(() => {
-        const escapedTitle = escapeLikePattern(candidate.title);
-        const escapedPrefix = escapeLikePattern(candidate.title.split(' ').slice(0, 3).join(' '));
-        return [userId, candidate.category, `%${escapedTitle}%`, `%${escapedPrefix}%`];
-      })()
+      [userId, candidate.category, `%${escapedTitle}%`, `%${escapedPrefix}%`]
     );
 
     if (existing.rows.length > 0) {
