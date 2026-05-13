@@ -13,8 +13,6 @@ const CHECKIN_MISS_SKIP_THRESHOLD = process.env.CHECKIN_MISS_SKIP_THRESHOLD
   ? parseInt(process.env.CHECKIN_MISS_SKIP_THRESHOLD, 10)
   : 3;
 
-const AI_COACH_CALL_BULLMQ_ENABLED = process.env.AI_COACH_CALL_BULLMQ_ENABLED !== 'false';
-
 interface SkipResult {
   skip: true;
   reason: string;
@@ -28,7 +26,7 @@ type GateResult = SkipResult | PassResult;
 async function runGateChecks(job: Job<AICoachCallJobData>): Promise<GateResult> {
   const { userId, scheduledTimeHHMM, timezone } = job.data;
 
-  if (!AI_COACH_CALL_BULLMQ_ENABLED) {
+  if (process.env.AI_COACH_CALL_BULLMQ_ENABLED !== 'true') {
     return { skip: true, reason: 'feature_flag_disabled', status: 'skipped' };
   }
 

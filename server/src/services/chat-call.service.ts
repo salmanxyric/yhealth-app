@@ -14,6 +14,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { transformMessageForSocket } from '../utils/message-transform.util.js';
 import { communicationPreferencesService } from './communication-preferences.service.js';
 import { pushNotificationService } from './push-notification.service.js';
+import { getUserLocalHour } from '../lib/user-timezone.js';
 
 type ChatCallType = 'voice' | 'video';
 type ChatCallStatus = 'ringing' | 'active' | 'ended' | 'declined' | 'missed' | 'cancelled';
@@ -646,6 +647,14 @@ class ChatCallService {
     if (!targetUserId) return;
 
     try {
+      // Resolve user-local hour (must match the worker's scheduledTimeHHMM hour)
+      const tzResult = await query<{ timezone: string | null }>(
+        `SELECT timezone FROM users WHERE id = $1`,
+        [targetUserId],
+      );
+      const userTimezone = tzResult.rows[0]?.timezone || 'UTC';
+      const localHour = getUserLocalHour(userTimezone);
+
       if (status === 'ended' && call.startedAt) {
         await query(
           `UPDATE ai_coach_call_log
@@ -666,8 +675,7 @@ class ChatCallService {
           ],
         );
 
-        const hour = call.createdAt.getUTCHours();
-        await communicationPreferencesService.recordAnswer(targetUserId, hour);
+        await communicationPreferencesService.recordAnswer(targetUserId, localHour);
 
       } else if (status === 'missed' || status === 'declined' || status === 'cancelled') {
         await query(
@@ -686,10 +694,9 @@ class ChatCallService {
           ],
         );
 
-        const hour = call.createdAt.getUTCHours();
-        await communicationPreferencesService.recordMiss(targetUserId, hour);
+        await communicationPreferencesService.recordMiss(targetUserId, localHour);
 
-        await this.sendMissedCallFollowUp(targetUserId, call);
+        await this.sendMissedCallFollowUp(targetUserId, call, userTimezone);
       }
     } catch (error) {
       logger.error('[ChatCall] Failed to update ai_coach_call_log', {
@@ -702,18 +709,20 @@ class ChatCallService {
   private async sendMissedCallFollowUp(
     userId: string,
     call: ChatCallSession,
+    userTimezone: string,
   ): Promise<void> {
     try {
       const chatId = call.chatId;
-      const hour = call.createdAt.getUTCHours();
+      const localHour = getUserLocalHour(userTimezone);
       const timeStr = call.createdAt.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
+        timeZone: userTimezone,
       });
 
       const prefs = await communicationPreferencesService.getForUser(userId);
-      const missCount = prefs.checkin_miss_count_by_hour?.[String(hour)] || 0;
+      const missCount = prefs.checkin_miss_count_by_hour?.[String(localHour)] || 0;
 
       let content: string;
       if (missCount >= 3) {

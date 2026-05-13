@@ -48,6 +48,9 @@ vi.mock('bullmq', () => ({
   }),
 }));
 
+// Feature flag defaults to disabled; enable for tests
+process.env.AI_COACH_CALL_BULLMQ_ENABLED = 'true';
+
 import { processAICoachCallJob } from '../ai-coach-call.worker.js';
 import { query } from '../../config/database.config.js';
 import { communicationPreferencesService } from '../../services/communication-preferences.service.js';
