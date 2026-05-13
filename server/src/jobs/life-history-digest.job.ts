@@ -15,8 +15,8 @@ import { lifeHistoryEmbeddingService } from '../services/life-history-embedding.
 
 const JOB_INTERVAL_MS = 6 * 60 * 60 * 1000; // Every 6 hours
 const STARTUP_DELAY_MS = 180 * 1000; // 180s — staggered after daily-analysis (90s)
-const BATCH_SIZE = 10;
-const INTER_BATCH_DELAY_MS = 2000; // 2 seconds between batches
+const BATCH_SIZE = 3;
+const INTER_BATCH_DELAY_MS = 3000; // 3 seconds between batches
 let isRunning = false;
 let intervalId: NodeJS.Timeout | null = null;
 

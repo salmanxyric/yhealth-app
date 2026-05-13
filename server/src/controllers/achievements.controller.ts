@@ -523,7 +523,7 @@ async function getUserStats(userId: string): Promise<UserStats> {
     ),
     streak_calc AS (
       SELECT scheduled_date,
-        scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::int AS grp
+        scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::INTEGER AS grp
       FROM daily_completions WHERE completed > 0
     ),
     longest_streak_calc AS (
@@ -536,7 +536,7 @@ async function getUserStats(userId: string): Promise<UserStats> {
         SELECT scheduled_date, ROW_NUMBER() OVER (ORDER BY scheduled_date DESC) as rn
         FROM daily_completions WHERE completed > 0
       ) sub
-      WHERE scheduled_date >= CURRENT_DATE - rn::int
+      WHERE scheduled_date >= CURRENT_DATE - rn::INTEGER
     ),
     integration_stats AS (
       SELECT COUNT(*) as integrations_connected

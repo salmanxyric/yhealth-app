@@ -768,9 +768,9 @@ class AccountabilityContractService {
     snapshot: Record<string, unknown>
   ): Promise<void> {
     await query(
-      `INSERT INTO accountability_contract_checks (contract_id, user_id, result, confidence_score, snapshot)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (contract_id, (checked_at::date)) DO UPDATE SET
+      `INSERT INTO accountability_contract_checks (contract_id, user_id, check_date, result, confidence_score, snapshot)
+       VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
+       ON CONFLICT (contract_id, check_date) DO UPDATE SET
          result = $3, confidence_score = $4, snapshot = $5, checked_at = NOW()`,
       [contractId, userId, result, confidence, JSON.stringify(snapshot)]
     );

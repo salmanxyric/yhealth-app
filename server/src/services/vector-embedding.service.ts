@@ -79,36 +79,58 @@ class GeminiDirectEmbeddings extends Embeddings {
   }
 
   private async _embed(text: string, taskType: GeminiTaskType): Promise<number[]> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:embedContent?key=${this.apiKey}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: `models/${this.model}`,
-          content: { parts: [{ text }] },
-          taskType,
-          outputDimensionality: this.outputDimensionality,
-        }),
-        signal: controller.signal,
-      });
-    } catch (err: any) {
-      clearTimeout(timeout);
-      if (err.name === 'AbortError') throw new Error('Gemini embedding request timed out (10s)');
-      throw err;
-    }
-    clearTimeout(timeout);
+    const maxRetries = 3;
+    const baseDelayMs = 1000;
+    const timeoutMs = 15_000;
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Gemini embedding error (${response.status}): ${errorBody}`);
-    }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:embedContent?key=${this.apiKey}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: `models/${this.model}`,
+            content: { parts: [{ text }] },
+            taskType,
+            outputDimensionality: this.outputDimensionality,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
 
-    const data = await response.json() as { embedding: { values: number[] } };
-    return data.embedding.values;
+        if (response.status === 429 || response.status >= 500) {
+          const errorBody = await response.text();
+          if (attempt < maxRetries) {
+            const delay = baseDelayMs * Math.pow(2, attempt);
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          throw new Error(`Gemini embedding error (${response.status}): ${errorBody}`);
+        }
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`Gemini embedding error (${response.status}): ${errorBody}`);
+        }
+
+        const data = await response.json() as { embedding: { values: number[] } };
+        return data.embedding.values;
+      } catch (err: any) {
+        clearTimeout(timeout);
+        const isTimeout = err.name === 'AbortError';
+        if (attempt < maxRetries && (isTimeout || err.message?.includes('fetch failed'))) {
+          const delay = baseDelayMs * Math.pow(2, attempt);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        if (isTimeout) throw new Error(`Gemini embedding request timed out (${timeoutMs / 1000}s) after ${attempt + 1} attempts`);
+        throw err;
+      }
+    }
+    throw new Error('Gemini embedding failed: max retries exceeded');
   }
 }
 
@@ -576,41 +598,58 @@ class VectorEmbeddingService {
   // Gemini 768-dim Embedding (for life history)
   // ============================================================================
 
+  /** OpenAI fallback for 768-dim life-history embeddings */
+  private openAiFallbackEmbeddings: OpenAIEmbeddings | null = null;
+
   /**
-   * Generate a 768-dim embedding using Gemini Embedding 2 (gemini-embedding-2-preview).
-   * Separate from the main embedding pipeline (which uses OpenAI 1536-dim).
-   * Used exclusively for the user_life_history table.
-   *
-   * @param text - Text to embed
-   * @param taskType - 'RETRIEVAL_DOCUMENT' for storage, 'RETRIEVAL_QUERY' for search
-   * @returns 768-dimensional embedding array
+   * Generate a 768-dim embedding for life history.
+   * Primary: Gemini Embedding 2. Fallback: OpenAI text-embedding-3-small (768-dim).
    */
   async embedWithGemini(
     text: string,
     taskType: GeminiTaskType = 'RETRIEVAL_DOCUMENT',
   ): Promise<number[]> {
-    if (!this.geminiEmbeddings) {
-      if (!env.gemini.apiKey) {
-        throw new Error('[VectorEmbedding] Gemini API key not configured — cannot generate life history embeddings');
+    const cleanText = this.preprocessText(text);
+
+    // Try Gemini first
+    if (env.gemini.apiKey) {
+      if (!this.geminiEmbeddings) {
+        this.geminiEmbeddings = new GeminiDirectEmbeddings({
+          apiKey: env.gemini.apiKey,
+          model: 'gemini-embedding-2-preview',
+          taskType,
+        });
       }
-      this.geminiEmbeddings = new GeminiDirectEmbeddings({
-        apiKey: env.gemini.apiKey,
-        model: 'gemini-embedding-2-preview',
-        taskType,
-      });
+      try {
+        this.geminiEmbeddings.taskType = taskType;
+        const embedding = await this.geminiEmbeddings.embedQuery(cleanText);
+        logger.debug('Generated Gemini embedding', { textLength: text.length, dimensions: embedding.length, taskType });
+        return embedding;
+      } catch (error) {
+        logger.warn('Gemini embedding failed, trying OpenAI fallback', { error: (error as Error).message, taskType });
+      }
     }
 
-    const cleanText = this.preprocessText(text);
-    try {
-      // Update taskType for this call (document vs query)
-      this.geminiEmbeddings.taskType = taskType;
-      const embedding = await this.geminiEmbeddings.embedQuery(cleanText);
-      logger.debug('Generated Gemini embedding', { textLength: text.length, dimensions: embedding.length, taskType });
-      return embedding;
-    } catch (error) {
-      logger.error('Failed to generate Gemini embedding', { error: (error as Error).message, taskType });
-      throw error;
+    // Fallback to OpenAI with matching 768 dimensions
+    if (env.openai.apiKey) {
+      if (!this.openAiFallbackEmbeddings) {
+        this.openAiFallbackEmbeddings = new OpenAIEmbeddings({
+          openAIApiKey: env.openai.apiKey,
+          modelName: 'text-embedding-3-small',
+          dimensions: 768,
+        });
+      }
+      try {
+        const embedding = await this.openAiFallbackEmbeddings.embedQuery(cleanText);
+        logger.info('Generated OpenAI fallback embedding (768-dim)', { textLength: text.length, dimensions: embedding.length });
+        return embedding;
+      } catch (fallbackError) {
+        logger.error('OpenAI fallback embedding also failed', { error: (fallbackError as Error).message });
+        throw fallbackError;
+      }
     }
+
+    throw new Error('[VectorEmbedding] No embedding provider available for life history (both Gemini and OpenAI failed or unconfigured)');
   }
 
   // ============================================================================

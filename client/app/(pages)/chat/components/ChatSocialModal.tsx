@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Clock, Loader2, Search, Sparkles, Target, Trophy, UserPlus, Users, X, Zap, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -299,8 +301,8 @@ export function ChatSocialModal({
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+  return createPortal(
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
       <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0b1020]/95 shadow-2xl shadow-black/60">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -323,11 +325,9 @@ export function ChatSocialModal({
           <TabButton active={tab === 'search'} onClick={() => setTab('search')}>Search</TabButton>
         </div>
 
-        <div className="min-h-[360px] flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-90 flex-1 overflow-y-auto px-5 py-4">
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-emerald-300" />
-            </div>
+            <LoadingSkeleton tab={tab} />
           ) : error ? (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
           ) : (
@@ -366,7 +366,7 @@ export function ChatSocialModal({
                     <EmptyState icon={Sparkles} title="No suggestions yet" description="Enable buddy discovery and active goals to improve matches." />
                   ) : (
                     <>
-                      <div className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.06] p-3">
+                      <div className="rounded-2xl border border-amber-400/15 bg-amber-400/6 p-3">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <p className="text-sm font-semibold text-amber-100">Create AI group challenge</p>
@@ -426,11 +426,11 @@ export function ChatSocialModal({
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
                       placeholder="Search by name or email..."
-                      className="h-11 rounded-2xl border-white/10 bg-white/[0.04] pl-10 text-white placeholder:text-slate-500"
+                      className="h-11 rounded-2xl border-white/10 bg-white/4 pl-10 text-white placeholder:text-slate-500"
                     />
                   </div>
                   {searching ? (
-                    <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+                    <LoadingSkeleton tab="search" />
                   ) : query.trim().length < 2 ? (
                     <EmptyState icon={Search} title="Search users" description="Type at least two characters to find people." />
                   ) : searchResults.length === 0 ? (
@@ -455,7 +455,8 @@ export function ChatSocialModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -476,7 +477,7 @@ function TabButton({
       onClick={onClick}
       className={cn(
         'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-colors',
-        active ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/[0.06] hover:text-white',
+        active ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/6 hover:text-white',
       )}
     >
       {children}
@@ -505,7 +506,7 @@ function PersonRow({
   actions: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3">
+    <div className="rounded-2xl border border-white/6 bg-white/3 p-3.5">
       <div className="flex items-start gap-3">
         <button
           type="button"
@@ -513,7 +514,7 @@ function PersonRow({
           disabled={!onSelect}
           aria-label={onSelect ? `Select ${name}` : undefined}
           className={cn(
-            'flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 text-sm font-bold text-white',
+            'flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-linear-to-br from-emerald-500/20 to-cyan-500/10 text-sm font-bold text-white',
             selected ? 'border-emerald-300 ring-2 ring-emerald-400/30' : 'border-white/10',
             !onSelect && 'cursor-default',
           )}
@@ -531,8 +532,68 @@ function PersonRow({
           <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-slate-400">{subtitle}</p>
           {extra}
         </div>
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
       </div>
+      <div className="mt-3 flex items-center justify-end gap-2 border-t border-white/5 pt-3">{actions}</div>
+    </div>
+  );
+}
+
+function CardSkeleton({ showBadge = false, showExtra = false }: { showBadge?: boolean; showExtra?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-white/6 bg-white/3 p-3.5">
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-11 w-11 shrink-0 rounded-2xl bg-white/6" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-24 rounded bg-white/8" />
+            {showBadge && <Skeleton className="h-4 w-16 rounded-full bg-emerald-400/10" />}
+          </div>
+          <Skeleton className="h-3 w-full rounded bg-white/4" />
+          <Skeleton className="h-3 w-3/4 rounded bg-white/4" />
+          {showExtra && (
+            <div className="flex gap-2 pt-1">
+              <Skeleton className="h-3 w-20 rounded bg-white/4" />
+              <Skeleton className="h-3 w-24 rounded bg-white/4" />
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-2 border-t border-white/5 pt-3">
+        <Skeleton className="h-8 w-20 rounded-md bg-white/6" />
+        <Skeleton className="h-8 w-16 rounded-md bg-white/4" />
+      </div>
+    </div>
+  );
+}
+
+function LoadingSkeleton({ tab }: { tab: Tab }) {
+  if (tab === 'search') {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-11 w-full rounded-2xl bg-white/4" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <CardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  if (tab === 'suggestions') {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-20 w-full rounded-2xl bg-amber-400/6" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <CardSkeleton key={i} showBadge showExtra />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <CardSkeleton key={i} showBadge />
+      ))}
     </div>
   );
 }
@@ -548,7 +609,7 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-14 text-center">
-      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/6 bg-white/3">
         <Icon className="h-6 w-6 text-slate-500" />
       </div>
       <p className="text-sm font-semibold text-slate-300">{title}</p>

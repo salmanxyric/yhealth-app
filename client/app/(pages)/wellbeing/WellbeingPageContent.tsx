@@ -133,38 +133,49 @@ function KPICard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay }}
-      className="rounded-xl border border-white/[0.06] bg-[#0f0f18] p-4 hover:border-white/[0.1] transition-colors"
+      whileHover={{ y: -2 }}
+      className="group relative overflow-hidden rounded-2xl border p-5 transition-all duration-300 hover:shadow-lg"
+      style={{
+        borderColor: `${color}20`,
+        background: `linear-gradient(135deg, ${color}08 0%, #0c0c14 50%, ${color}05 100%)`,
+      }}
     >
+      {/* Ambient corner glow */}
+      <div
+        className="absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ backgroundColor: `${color}15` }}
+      />
+
       {loading ? (
         <div className="space-y-3">
           <div className="h-4 w-20 rounded bg-white/[0.04] animate-pulse" />
           <div className="h-8 w-16 rounded bg-white/[0.04] animate-pulse" />
         </div>
       ) : (
-        <>
+        <div className="relative">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
               {title}
             </span>
             <div
-              className="flex h-7 w-7 items-center justify-center rounded-lg"
+              className="flex h-8 w-8 items-center justify-center rounded-xl"
               style={{ backgroundColor: `${color}18` }}
             >
-              <Icon className="h-3.5 w-3.5" style={{ color }} />
+              <Icon className="h-4 w-4" style={{ color }} />
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white tabular-nums">
+            <span className="text-3xl font-bold text-white tabular-nums tracking-tight">
               {value}
             </span>
             {unit && (
-              <span className="text-xs text-slate-500">{unit}</span>
+              <span className="text-sm text-slate-500 font-medium">{unit}</span>
             )}
           </div>
-          <div className="mt-2">
+          <div className="mt-3">
             <TrendBadge value={trendVal} trend={trend} />
           </div>
-        </>
+        </div>
       )}
     </motion.div>
   );
@@ -201,21 +212,33 @@ function QuickInsightBanner({
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
-      className="flex items-center gap-3 rounded-xl border bg-white/[0.02] p-3.5"
-      style={{ borderColor: `${accent}25` }}
+      className="relative overflow-hidden rounded-2xl border p-4"
+      style={{
+        borderColor: `${accent}20`,
+        background: `linear-gradient(135deg, ${accent}0a 0%, #0c0c1400 40%, ${accent}06 100%)`,
+      }}
     >
+      {/* Subtle animated shimmer */}
       <div
-        className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
-        style={{ backgroundColor: `${accent}18` }}
-      >
-        <Brain className="h-4 w-4" style={{ color: accent }} />
+        className="absolute inset-0 opacity-30"
+        style={{
+          background: `radial-gradient(ellipse 50% 80% at 80% 20%, ${accent}12, transparent)`,
+        }}
+      />
+      <div className="relative flex items-center gap-3">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-xl shrink-0"
+          style={{ backgroundColor: `${accent}18` }}
+        >
+          <Brain className="h-4.5 w-4.5" style={{ color: accent }} />
+        </div>
+        <p className="text-[13px] text-slate-300 leading-relaxed flex-1">
+          {message}
+        </p>
+        <span className="px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider bg-violet-500/15 text-violet-400 border border-violet-500/15 shrink-0">
+          AI
+        </span>
       </div>
-      <p className="text-xs text-slate-400 leading-relaxed flex-1">
-        {message}
-      </p>
-      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-500/20 text-violet-400 border border-violet-500/20">
-        AI
-      </span>
     </motion.div>
   );
 }
@@ -488,12 +511,12 @@ function WellbeingContent() {
 
         {/* ── Content ── */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 space-y-5">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-6">
             {/* AI Insight Banner */}
             <QuickInsightBanner stats={stats} loading={loading} />
 
             {/* KPI Row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <KPICard
                 title="Mood"
                 value={
@@ -568,19 +591,22 @@ function WellbeingContent() {
 
             {/* Analytics Charts */}
             {!loading && stats && (stats.moodChart.length > 1 || stats.energyChart.length > 1) && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Mood Trend */}
                 {stats.moodChart.length > 1 && (
                   <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.15 }}
-                    className="rounded-xl border border-white/[0.06] bg-[#0f0f18] p-5"
+                    className="relative overflow-hidden rounded-2xl border border-pink-500/[0.12] p-5"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(236,72,153,0.06) 0%, #0c0c14 60%, rgba(236,72,153,0.03) 100%)",
+                    }}
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-pink-500/15">
-                          <Smile className="h-3 w-3 text-pink-400" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-500/15">
+                          <Smile className="h-3.5 w-3.5 text-pink-400" />
                         </div>
                         <h3 className="text-xs font-semibold text-white">Mood Trend</h3>
                       </div>
@@ -641,12 +667,15 @@ function WellbeingContent() {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="rounded-xl border border-white/[0.06] bg-[#0f0f18] p-5"
+                    className="relative overflow-hidden rounded-2xl border border-amber-500/[0.12] p-5"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(245,158,11,0.06) 0%, #0c0c14 60%, rgba(245,158,11,0.03) 100%)",
+                    }}
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/15">
-                          <Zap className="h-3 w-3 text-amber-400" />
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15">
+                          <Zap className="h-3.5 w-3.5 text-amber-400" />
                         </div>
                         <h3 className="text-xs font-semibold text-white">Energy Trend</h3>
                       </div>
@@ -705,16 +734,16 @@ function WellbeingContent() {
 
             {/* Module Filter + Grid */}
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
                   <h2 className="text-sm font-semibold text-white">
                     Wellbeing Modules
                   </h2>
-                  <span className="text-[10px] text-slate-600 tabular-nums">
+                  <span className="text-[10px] text-slate-600 tabular-nums bg-white/[0.03] px-2 py-0.5 rounded-full">
                     {filteredModules.length} modules
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <Filter className="h-3 w-3 text-slate-600 mr-1" />
                   {(
                     [
@@ -726,10 +755,10 @@ function WellbeingContent() {
                     <button
                       key={f.key}
                       onClick={() => setModuleFilter(f.key)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all duration-200 ${
                         moduleFilter === f.key
                           ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
-                          : "text-slate-500 hover:text-slate-300 border border-transparent"
+                          : "text-slate-500 hover:text-slate-300 hover:bg-white/[0.04] border border-transparent"
                       }`}
                     >
                       {f.label}
@@ -741,70 +770,97 @@ function WellbeingContent() {
               <WellbeingModulesGrid modules={filteredModules} />
             </div>
 
-            {/* Quick Actions Row */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="grid grid-cols-1 sm:grid-cols-3 gap-3"
-            >
-              <button
-                onClick={() => router.push("/competitions")}
-                className="group flex items-center gap-3 p-4 rounded-xl border border-amber-500/15 bg-gradient-to-r from-amber-500/[0.06] to-orange-500/[0.04] hover:from-amber-500/[0.1] hover:to-orange-500/[0.08] hover:border-amber-500/25 transition-all text-left"
+            {/* Quick Actions */}
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-white">
+                Quick Actions
+              </h2>
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="grid grid-cols-1 sm:grid-cols-3 gap-4"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 shrink-0">
-                  <span className="text-lg">🏆</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white group-hover:text-amber-100 transition-colors">
-                    Wellbeing Challenge
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Compete with others
-                  </p>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-amber-500/20 text-amber-400 border border-amber-500/20">
-                  Join
-                </span>
-              </button>
+                <motion.button
+                  whileHover={{ y: -3 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  onClick={() => router.push("/competitions")}
+                  className="group relative overflow-hidden flex flex-col items-start gap-4 p-6 rounded-2xl border border-amber-500/15 text-left transition-all duration-300 hover:border-amber-400/30 hover:shadow-lg hover:shadow-amber-500/10"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(245,158,11,0.08) 0%, #0c0c14 50%, rgba(249,115,22,0.05) 100%)",
+                  }}
+                >
+                  <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-amber-500/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative flex items-center justify-between w-full">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 shadow-lg shadow-amber-500/20">
+                      <span className="text-xl">🏆</span>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                      Join
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <p className="text-sm font-semibold text-white group-hover:text-amber-100 transition-colors mb-1">
+                      Wellbeing Challenge
+                    </p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Compete with others and earn rewards for healthy habits
+                    </p>
+                  </div>
+                </motion.button>
 
-              <button
-                onClick={() => router.push("/wellbeing/breathing")}
-                className="group flex items-center gap-3 p-4 rounded-xl border border-cyan-500/15 bg-gradient-to-r from-cyan-500/[0.06] to-teal-500/[0.04] hover:from-cyan-500/[0.1] hover:to-teal-500/[0.08] hover:border-cyan-500/25 transition-all text-left"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15 shrink-0">
-                  <span className="text-lg">🌬️</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white group-hover:text-cyan-100 transition-colors">
-                    Quick Breathwork
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    5-min guided session
-                  </p>
-                </div>
-              </button>
+                <motion.button
+                  whileHover={{ y: -3 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  onClick={() => router.push("/wellbeing/breathing")}
+                  className="group relative overflow-hidden flex flex-col items-start gap-4 p-6 rounded-2xl border border-cyan-500/15 text-left transition-all duration-300 hover:border-cyan-400/30 hover:shadow-lg hover:shadow-cyan-500/10"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(6,182,212,0.08) 0%, #0c0c14 50%, rgba(20,184,166,0.05) 100%)",
+                  }}
+                >
+                  <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-cyan-500/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500 shadow-lg shadow-cyan-500/20">
+                    <span className="text-xl">🌬️</span>
+                  </div>
+                  <div className="relative">
+                    <p className="text-sm font-semibold text-white group-hover:text-cyan-100 transition-colors mb-1">
+                      Quick Breathwork
+                    </p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      5-minute guided breathing session to relieve stress
+                    </p>
+                  </div>
+                </motion.button>
 
-              <button
-                onClick={() => router.push("/wellbeing/insights")}
-                className="group flex items-center gap-3 p-4 rounded-xl border border-violet-500/15 bg-gradient-to-r from-violet-500/[0.06] to-purple-500/[0.04] hover:from-violet-500/[0.1] hover:to-purple-500/[0.08] hover:border-violet-500/25 transition-all text-left"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 shrink-0">
-                  <Brain className="h-5 w-5 text-violet-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white group-hover:text-violet-100 transition-colors">
-                    AI Insights
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Health correlations
-                  </p>
-                </div>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-violet-500/20 text-violet-400 border border-violet-500/20">
-                  AI
-                </span>
-              </button>
-            </motion.div>
+                <motion.button
+                  whileHover={{ y: -3 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  onClick={() => router.push("/wellbeing/insights")}
+                  className="group relative overflow-hidden flex flex-col items-start gap-4 p-6 rounded-2xl border border-violet-500/15 text-left transition-all duration-300 hover:border-violet-400/30 hover:shadow-lg hover:shadow-violet-500/10"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, #0c0c14 50%, rgba(168,85,247,0.05) 100%)",
+                  }}
+                >
+                  <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-violet-500/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative flex items-center justify-between w-full">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 shadow-lg shadow-violet-500/20">
+                      <Brain className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                      AI
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <p className="text-sm font-semibold text-white group-hover:text-violet-100 transition-colors mb-1">
+                      AI Insights
+                    </p>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Health correlations and patterns from your data
+                    </p>
+                  </div>
+                </motion.button>
+              </motion.div>
+            </div>
           </div>
         </div>
       </div>

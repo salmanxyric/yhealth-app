@@ -1060,6 +1060,7 @@ const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
   // missing-tables branch that auto-runs `add-*` files never fires.
   'add-status-awareness-fields.sql',
   '20260513_ai_coach_call_log.sql',
+  'add-voice-schedule-prefs.sql',
 ];
 
 async function runSupplementaryMigrations(): Promise<void> {

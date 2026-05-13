@@ -283,7 +283,39 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'voice_assistant_name') THEN
     ALTER TABLE user_preferences ADD COLUMN voice_assistant_name VARCHAR(100) DEFAULT 'Cia';
   END IF;
+
+  -- Voice schedule preferences (AI coach calling)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'voice_id') THEN
+    ALTER TABLE user_preferences ADD COLUMN voice_id VARCHAR(50) DEFAULT 'alloy';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'speech_pace') THEN
+    ALTER TABLE user_preferences ADD COLUMN speech_pace DECIMAL(3,2) DEFAULT 1.0 CHECK (speech_pace >= 0.5 AND speech_pace <= 2.0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'voice_preview_played') THEN
+    ALTER TABLE user_preferences ADD COLUMN voice_preview_played BOOLEAN DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'quiet_hours_enabled') THEN
+    ALTER TABLE user_preferences ADD COLUMN quiet_hours_enabled BOOLEAN DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'quiet_hours_start') THEN
+    ALTER TABLE user_preferences ADD COLUMN quiet_hours_start TIME DEFAULT '22:00';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'quiet_hours_end') THEN
+    ALTER TABLE user_preferences ADD COLUMN quiet_hours_end TIME DEFAULT '07:00';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'dnd_days') THEN
+    ALTER TABLE user_preferences ADD COLUMN dnd_days INTEGER[] DEFAULT '{}';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'ai_call_frequency') THEN
+    ALTER TABLE user_preferences ADD COLUMN ai_call_frequency VARCHAR(20) DEFAULT 'moderate' CHECK (ai_call_frequency IN ('off', 'minimal', 'moderate', 'proactive'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_preferences' AND column_name = 'preferred_call_times') THEN
+    ALTER TABLE user_preferences ADD COLUMN preferred_call_times TIME[] DEFAULT '{}';
+  END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS idx_user_preferences_quiet_hours
+ON user_preferences(quiet_hours_enabled, quiet_hours_start, quiet_hours_end);
 
 -- ============================================
 -- 4. user_goals table — missing columns
@@ -1604,6 +1636,93 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_acc_checks_passed
   ON accountability_contract_checks (contract_id, passed, checked_at DESC);
+
+-- ============================================
+-- Recent additive schema sync (May 2026)
+-- ============================================
+
+ALTER TABLE life_goal_milestones
+  ADD COLUMN IF NOT EXISTS week_number integer,
+  ADD COLUMN IF NOT EXISTS daily_breakdown jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_life_goal_milestones_week
+  ON life_goal_milestones (life_goal_id, week_number)
+  WHERE week_number IS NOT NULL;
+
+ALTER TABLE user_subscriptions
+  ADD COLUMN IF NOT EXISTS checkout_session_id VARCHAR(120);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_subscriptions_checkout_session_id
+  ON user_subscriptions (checkout_session_id)
+  WHERE checkout_session_id IS NOT NULL;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'schedule_items_source_check'
+      AND pg_get_constraintdef(oid) NOT LIKE '%plan%'
+  ) THEN
+    ALTER TABLE schedule_items DROP CONSTRAINT schedule_items_source_check;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'schedule_items_source_check'
+  ) THEN
+    ALTER TABLE schedule_items
+      ADD CONSTRAINT schedule_items_source_check
+      CHECK (source IN ('manual', 'google', 'prayer', 'plan'));
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  keys_p256dh TEXT NOT NULL,
+  keys_auth TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, endpoint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id
+  ON push_subscriptions(user_id);
+
+CREATE TABLE IF NOT EXISTS chat_calls (
+  id UUID PRIMARY KEY,
+  chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  initiator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  call_type VARCHAR(16) NOT NULL CHECK (call_type IN ('voice', 'video')),
+  status VARCHAR(24) NOT NULL CHECK (status IN ('ringing', 'active', 'ended', 'declined', 'missed', 'cancelled')),
+  is_group_call BOOLEAN NOT NULL DEFAULT false,
+  invited_user_ids UUID[] NOT NULL DEFAULT '{}',
+  accepted_user_ids UUID[] NOT NULL DEFAULT '{}',
+  declined_user_ids UUID[] NOT NULL DEFAULT '{}',
+  participants JSONB NOT NULL DEFAULT '[]'::jsonb,
+  started_at TIMESTAMP,
+  ended_at TIMESTAMP,
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_calls_chat_created
+  ON chat_calls(chat_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_chat_calls_initiator_created
+  ON chat_calls(initiator_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_chat_calls_status_active
+  ON chat_calls(status, created_at DESC)
+  WHERE status IN ('ringing', 'active');
+
+CREATE INDEX IF NOT EXISTS idx_chat_calls_message
+  ON chat_calls(message_id)
+  WHERE message_id IS NOT NULL;
 
 -- ============================================
 -- MIGRATION COMPLETE

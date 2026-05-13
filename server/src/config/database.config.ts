@@ -202,7 +202,11 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
+let poolEnded = false;
+
 export async function closePool(): Promise<void> {
+  if (poolEnded) return;
+  poolEnded = true;
   await pool.end();
   logger.info('PostgreSQL pool closed');
 }
@@ -225,9 +229,6 @@ class DatabaseConnection {
   private constructor(options: ConnectionOptions = {}) {
     this.maxRetries = options.maxRetries ?? 5;
     this.retryDelay = options.retryDelay ?? 5000;
-
-    process.on('SIGINT', () => this.gracefulShutdown('SIGINT'));
-    process.on('SIGTERM', () => this.gracefulShutdown('SIGTERM'));
   }
 
   public static getInstance(options?: ConnectionOptions): DatabaseConnection {
@@ -310,21 +311,6 @@ class DatabaseConnection {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       throw error;
-    }
-  }
-
-  private async gracefulShutdown(signal: string): Promise<void> {
-    logger.info(`Received ${signal}. Closing PostgreSQL connection...`);
-
-    try {
-      await this.disconnect();
-      logger.info('PostgreSQL connection closed due to app termination');
-      process.exit(0);
-    } catch (error) {
-      logger.error('Error during graceful shutdown', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      process.exit(1);
     }
   }
 

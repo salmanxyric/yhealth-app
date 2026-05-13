@@ -59,10 +59,10 @@ async function ensureTable(): Promise<void> {
         rarity VARCHAR(20) DEFAULT 'common',
         xp_reward INTEGER DEFAULT 25,
         detected_at TIMESTAMPTZ DEFAULT NOW(),
-        dismissed BOOLEAN DEFAULT FALSE,
-        UNIQUE(user_id, type, metric, (detected_at::date))
+        dismissed BOOLEAN DEFAULT FALSE
       )
     `);
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_micro_wins_unique_per_day ON micro_wins(user_id, type, metric, (detected_at::date))`);
     await query(`CREATE INDEX IF NOT EXISTS idx_micro_wins_user ON micro_wins(user_id, detected_at DESC)`);
     tableEnsured = true;
   } catch (error) {
@@ -147,7 +147,7 @@ const detectStreakRecovery: DetectionRule = async ({ userId }) => {
         SELECT *, ROW_NUMBER() OVER (ORDER BY scheduled_date DESC) as rn
         FROM daily WHERE active = 1
       ) sub
-      WHERE scheduled_date >= CURRENT_DATE - sub.rn
+      WHERE scheduled_date >= CURRENT_DATE - sub.rn::INTEGER
     ),
     breaks AS (
       SELECT COUNT(*) as had_break
@@ -277,7 +277,7 @@ const detectPersonalBest: DetectionRule = async ({ userId }) => {
     ),
     streak_groups AS (
       SELECT scheduled_date, active,
-        scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::int AS grp
+        scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::INTEGER AS grp
       FROM daily WHERE active = 1
     ),
     streaks AS (

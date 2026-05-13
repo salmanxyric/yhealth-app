@@ -6,7 +6,9 @@ import {
   Volume2,
   Play,
   Pause,
-
+  Clock,
+  Plus,
+  X,
   Calendar,
   Bell,
   BellOff,
@@ -162,6 +164,36 @@ export function VoiceCustomizationPanel() {
       toast.error("Failed to update frequency");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAddCallTime = async (time: string) => {
+    if (!preferences || preferences.preferredCallTimes.includes(time)) return;
+
+    const newTimes = [...preferences.preferredCallTimes, time].sort();
+    setPreferences({ ...preferences, preferredCallTimes: newTimes });
+
+    try {
+      await voiceScheduleService.updateScheduleSettings({ preferredCallTimes: newTimes });
+      toast.success("Call time added");
+    } catch (_err) {
+      setPreferences({ ...preferences });
+      toast.error("Failed to add call time");
+    }
+  };
+
+  const handleRemoveCallTime = async (time: string) => {
+    if (!preferences) return;
+
+    const newTimes = preferences.preferredCallTimes.filter(t => t !== time);
+    setPreferences({ ...preferences, preferredCallTimes: newTimes });
+
+    try {
+      await voiceScheduleService.updateScheduleSettings({ preferredCallTimes: newTimes });
+      toast.success("Call time removed");
+    } catch (_err) {
+      setPreferences({ ...preferences });
+      toast.error("Failed to remove call time");
     }
   };
 
@@ -334,6 +366,7 @@ export function VoiceCustomizationPanel() {
               <h4 className="text-sm font-medium text-white">Schedule Settings</h4>
               <p className="text-xs text-slate-400">
                 {preferences.quietHoursEnabled ? `Quiet ${formatTime(preferences.quietHoursStart)} - ${formatTime(preferences.quietHoursEnd)}` : 'No quiet hours'} • {frequencyOptions.find(f => f.id === preferences.aiCallFrequency)?.label}
+                {preferences.preferredCallTimes.length > 0 && ` • ${preferences.preferredCallTimes.length} call time${preferences.preferredCallTimes.length > 1 ? 's' : ''}`}
               </p>
             </div>
           </div>
@@ -444,6 +477,67 @@ export function VoiceCustomizationPanel() {
                     ))}
                   </div>
                 </div>
+
+                {/* Preferred Call Times */}
+                {preferences.aiCallFrequency !== 'off' && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4 text-blue-400" />
+                      <p className="text-xs text-slate-500 uppercase tracking-wider">Preferred Call Times</p>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3">
+                      Set the times you&apos;d like your AI coach to call you for check-ins.
+                    </p>
+
+                    {/* Existing times */}
+                    {preferences.preferredCallTimes.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {preferences.preferredCallTimes.map((time) => (
+                          <div
+                            key={time}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30"
+                          >
+                            <Clock className="w-3 h-3 text-blue-400" />
+                            <span className="text-sm text-white">{formatTime(time)}</span>
+                            <button
+                              onClick={() => handleRemoveCallTime(time)}
+                              className="p-0.5 rounded hover:bg-white/10 transition-colors"
+                            >
+                              <X className="w-3 h-3 text-slate-400 hover:text-red-400" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add new time */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="time"
+                        id="new-call-time"
+                        defaultValue="09:00"
+                        className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:border-blue-500 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          const input = document.getElementById('new-call-time') as HTMLInputElement;
+                          if (input?.value) handleAddCallTime(input.value);
+                        }}
+                        disabled={isSaving}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add
+                      </button>
+                    </div>
+
+                    {preferences.preferredCallTimes.length === 0 && (
+                      <p className="text-xs text-slate-500 mt-2">
+                        No call times set. Add times above to receive AI coach check-ins.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

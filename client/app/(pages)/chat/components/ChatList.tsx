@@ -169,11 +169,25 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
     };
   }, [user?.id]);
 
+  const isAICoachChat = (chat: Chat): boolean => {
+    if (chat.isGroupChat) return false;
+    if (chat.participants && user) {
+      const other = chat.participants.find((p) => p.user && p.user.id !== user.id);
+      if (other?.user?.email) {
+        return other.user.email.includes('ai-coach') || other.user.email.includes('balencia.system');
+      }
+    }
+    return false;
+  };
+
   const getChatTitle = (chat: Chat): string => {
     if (chat.isGroupChat) return chat.chatName || 'Group Chat';
     if (chat.participants && user) {
       const other = chat.participants.find((p) => p.user && p.user.id !== user.id);
-      if (other?.user) return `${other.user.firstName} ${other.user.lastName}`.trim() || other.user.email;
+      if (other?.user) {
+        if (isAICoachChat(chat)) return assistantName || 'AI Coach';
+        return `${other.user.firstName} ${other.user.lastName}`.trim() || other.user.email;
+      }
     }
     return assistantName || 'AI Coach';
   };
@@ -186,12 +200,6 @@ export function ChatList({ selectedChatId, onSelectChat, onOpenChatSettings }: C
       if (other?.user?.avatar) return other.user.avatar;
     }
     return null;
-  };
-
-  const isAICoachChat = (chat: Chat): boolean => {
-    if (chat.isGroupChat) return false;
-    const title = getChatTitle(chat);
-    return title === 'AI Coach' || title === assistantName || title === 'Cia';
   };
 
   const getUnreadCount = (chat: Chat): number => {

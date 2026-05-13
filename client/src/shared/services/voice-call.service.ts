@@ -115,7 +115,9 @@ export const voiceCallService = {
    * Initiate a new voice call
    */
   initiate: (data: CallInitiationRequest) =>
-    api.post<CallInitiationResponse>('/voice-calls/initiate', data),
+    api.post<CallInitiationResponse>('/voice-calls/initiate', data, {
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+    }),
 
   /**
    * Get call status

@@ -2938,7 +2938,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   /**
    * Retrieve RAG context for the user's query (includes activity logs with mood data)
    */
-  private async retrieveContext(userId: string, queryText: string, timeoutMs = 2500): Promise<string> {
+  private async retrieveContext(userId: string, queryText: string, timeoutMs = 1500): Promise<string> {
     const CONTEXT_TIMEOUT_MS = timeoutMs; // Per-operation timeout to keep slow context fetches from blocking first token
     const withTimeout = <T>(promise: Promise<T>, fallback: T): Promise<T> =>
       Promise.race([
@@ -2947,19 +2947,29 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       ]);
 
     try {
+      // Lazy-import wiki context service once (avoid repeated dynamic import overhead)
+      let wikiContextPromise: Promise<string> = Promise.resolve('');
+      try {
+        const { wikiContextService } = await import('./wiki-context.service.js');
+        wikiContextPromise = withTimeout(
+          wikiContextService.getContextForQuery(userId, queryText, { maxTokens: 2000, maxPages: 3 }),
+          '',
+        );
+      } catch {
+        // Wiki context is optional
+      }
+
       const [
         relevantKnowledge,
-        userProfile,
         previousConversations,
         userDataEmbeddings,
         activityLogsWithMood,
+        wikiContext,
       ] = await Promise.all([
         withTimeout(
           vectorEmbeddingService.searchKnowledge({ queryText, limit: 5 }),
           [],
         ),
-        // User profile data is already loaded via comprehensiveUserContext in buildPersonalizedSystemPrompt
-        Promise.resolve([] as { section: string; content: string; similarity: number }[]),
         withTimeout(
           vectorEmbeddingService.searchConversationHistory({ userId, queryText, limit: 5 }),
           [],
@@ -2968,7 +2978,6 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           vectorEmbeddingService.searchSimilar({ queryText, userId, limit: 8, minSimilarity: 0.6 }),
           [],
         ),
-        // Get recent activity logs with mood data (last 7 days)
         withTimeout(query<{
           activity_id: string;
           scheduled_date: Date;
@@ -2984,17 +2993,14 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           LIMIT 10`,
           [userId]
         ), { rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] }),
+        wikiContextPromise,
       ]);
 
       const sections: string[] = [];
 
-      // Add user profile context
-      if (userProfile.length > 0 || userDataEmbeddings.length > 0) {
+      // Add user data embeddings as profile context
+      if (userDataEmbeddings.length > 0) {
         sections.push('USER PROFILE:');
-        userProfile.forEach((p) => {
-          sections.push(`[${p.section}] ${p.content}`);
-        });
-        // Include relevant user data (plans, workouts, meals, tasks) in profile context
         userDataEmbeddings
           .filter((e) => ['user_plan', 'diet_plan', 'workout_plan', 'user_task', 'meal_log', 'workout_log'].includes(e.sourceType))
           .forEach((e) => {
@@ -3009,7 +3015,6 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           const dateStr = new Date(log.scheduled_date).toLocaleDateString();
           const moodStr = log.mood !== null ? ` (mood: ${log.mood}/5)` : '';
           const notesStr = log.user_notes ? ` - ${log.user_notes}` : '';
-          // Format activity_id to readable name
           const activityName = log.activity_id
             .replace(/-/g, ' ')
             .replace(/\b\w/g, l => l.toUpperCase());
@@ -3026,17 +3031,8 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       }
 
       // Add wiki knowledge (journal patterns, life insights, etc.)
-      try {
-        const { wikiContextService } = await import('./wiki-context.service.js');
-        const wikiContext = await withTimeout(
-          wikiContextService.getContextForQuery(userId, queryText, { maxTokens: 2000, maxPages: 3 }),
-          '',
-        );
-        if (wikiContext) {
-          sections.push(`\n${wikiContext}`);
-        }
-      } catch {
-        // Wiki context is optional — don't block on failure
+      if (wikiContext) {
+        sections.push(`\n${wikiContext}`);
       }
 
       // Add previous conversation snippets
@@ -4996,7 +4992,7 @@ I'm listening. What's happening right now?`;
       const contextStartTime = Date.now();
       const contextPhaseTimings: Record<string, number> = {};
 
-      const PRE_LLM_TIMEOUT_MS = 2500;
+      const PRE_LLM_TIMEOUT_MS = 1500;
       const raceTimeout = <T>(promise: Promise<T>, fallback: T): Promise<T> =>
         Promise.race([
           promise,
@@ -5103,7 +5099,7 @@ I'm listening. What's happening right now?`;
               this.getFallbackSystemPrompt(userId)
                 .catch(() => BASE_HUMAN_LIKE_PROMPT)
                 .then(resolve);
-            }, 4000)),
+            }, 2500)),
           ])),
           timedPhase('lifeAreaRouting', raceTimeout(
             routeCoachIntent({

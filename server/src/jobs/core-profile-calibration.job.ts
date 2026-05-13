@@ -42,7 +42,7 @@ const CALIBRATION_RULES: CalibrationRule[] = [
   {
     section: 'targets',
     key: 'weekly_workout_days',
-    sql: `SELECT COUNT(DISTINCT date) / 4.0 as value, COUNT(*) as n FROM workout_logs WHERE user_id = $1 AND date >= CURRENT_DATE - 30`,
+    sql: `SELECT COUNT(DISTINCT scheduled_date) / 4.0 as value, COUNT(*) as n FROM workout_logs WHERE user_id = $1 AND scheduled_date >= CURRENT_DATE - 30`,
     unit: 'days/week',
   },
   {

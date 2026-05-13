@@ -389,7 +389,7 @@ class DeepAnalysisEngineService {
         dateCol: 'date',
       },
       workout_intensity: {
-        sql: `SELECT date::text as date, AVG(intensity) as value FROM workout_logs WHERE user_id = $1 AND date >= CURRENT_DATE - $2::int GROUP BY date ORDER BY date`,
+        sql: `SELECT scheduled_date::text as date, AVG(difficulty_rating) as value FROM workout_logs WHERE user_id = $1 AND scheduled_date >= CURRENT_DATE - $2::int AND difficulty_rating IS NOT NULL GROUP BY scheduled_date ORDER BY scheduled_date`,
         dateCol: 'date',
       },
       total_calories: {

@@ -34,6 +34,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { subscribeToChatEvents, subscribeToUserEvents, getSocket } from '@/lib/socket-client';
 import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
 import { useChatCall } from '@/app/providers/ChatCallProvider';
+import { voiceCallService } from '@/src/shared/services/voice-call.service';
 import { api } from '@/lib/api-client';
 
 interface MessagesViewProps {
@@ -436,6 +437,10 @@ export function MessagesView({
         (p) => p.user && p.user.id !== user.id
       );
       if (otherParticipant?.user) {
+        const isAICoach = otherParticipant.user.email?.includes('ai-coach') ||
+          otherParticipant.user.email?.includes('balencia.system');
+        if (isAICoach) return assistantName || 'AI Coach';
+
         const firstName = otherParticipant.user.firstName || '';
         const lastName = otherParticipant.user.lastName || '';
         const fullName = `${firstName} ${lastName}`.trim();
@@ -443,7 +448,6 @@ export function MessagesView({
       }
     }
 
-    // For 1-on-1 chats with no other participant (AI coach), use assistant name
     return assistantName || 'AI Coach';
   };
 
@@ -469,9 +473,23 @@ export function MessagesView({
   const isGroupAdmin = isAdmin || isCreator;
   const isAiChat = isAiChatRef.current;
   const canStartVoiceCall = !!chat && !isAiChat;
+  const canStartAiVoiceCall = !!chat && isAiChat;
   const canStartVideoCall = !!chat && !chat.isGroupChat && !isAiChat && !!chat.participants?.some(
     (p) => p.user && p.user.id !== user?.id
   );
+
+  const handleAiCoachCall = useCallback(async () => {
+    try {
+      const res = await voiceCallService.initiate({ channel: 'mobile_app' });
+      if (res.success) {
+        toast({ title: 'Connecting to your coach...' });
+      } else {
+        toast({ title: 'Could not start call', description: res.error?.message, variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Call failed', description: 'Please try again.', variant: 'destructive' });
+    }
+  }, [toast]);
 
   // Calculate if user can send messages (for group permissions)
   const canSendMessages = useMemo(() => {
@@ -923,6 +941,7 @@ export function MessagesView({
         <ChatHeader
           title={getChatTitle(chat)}
           subtitle={getChatSubtitle(chat)}
+          isAICoach={isAiChatRef.current}
           onMenuClick={onMenuClick}
           onOpenSettings={
             onOpenChatSettings ? () => onOpenChatSettings('general') : undefined
@@ -984,6 +1003,7 @@ export function MessagesView({
         title={getChatTitle(chat)}
         subtitle={getChatSubtitle(chat)}
         avatar={chat?.avatar || undefined}
+        isAICoach={isAiChatRef.current}
         onMenuClick={onMenuClick}
         onOpenSettings={
           onOpenChatSettings ? () => onOpenChatSettings('general') : undefined
@@ -998,7 +1018,7 @@ export function MessagesView({
         onLeaveGroup={chat?.isGroupChat && !isGroupAdmin ? handleLeaveGroup : undefined}
         // Only show delete option for admin/creator
         onDelete={chat?.isGroupChat && isGroupAdmin ? handleDeleteChat : !chat?.isGroupChat ? handleDeleteChat : undefined}
-        onVoiceCall={canStartVoiceCall && chatId ? () => startCall(chatId, 'voice') : undefined}
+        onVoiceCall={canStartAiVoiceCall ? handleAiCoachCall : canStartVoiceCall && chatId ? () => startCall(chatId, 'voice') : undefined}
         onVideoCall={canStartVideoCall && chatId ? () => startCall(chatId, 'video') : undefined}
         onOpenSocial={() => setShowSocialModal(true)}
         pendingFriendRequestCount={pendingFriendRequestCount}

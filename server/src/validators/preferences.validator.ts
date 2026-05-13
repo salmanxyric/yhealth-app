@@ -9,7 +9,7 @@ const coachingStyleEnum = z.enum(['supportive', 'direct', 'analytical', 'motivat
 // Coaching intensity
 const coachingIntensityEnum = z.enum(['light', 'moderate', 'intensive']);
 
-const aiCoachPersonaEnum = z.enum(['drill_sergeant', 'gentle_friend', 'data_driven_neutral']);
+const aiCoachPersonaEnum = z.enum(['commander', 'friend', 'data_nerd', 'guardian', 'drill_sergeant', 'gentle_friend', 'data_driven_neutral']);
 
 // S01.5.1: Engagement & Notification Preferences
 export const notificationPreferencesSchema = z.object({

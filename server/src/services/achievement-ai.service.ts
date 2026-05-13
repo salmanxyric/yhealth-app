@@ -288,7 +288,7 @@ Create a personalized achievement card celebrating this specific improvement. Ma
       ),
       streak_calc AS (
         SELECT scheduled_date,
-          scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::int AS grp
+          scheduled_date - (ROW_NUMBER() OVER (ORDER BY scheduled_date))::INTEGER AS grp
         FROM (
           SELECT scheduled_date
           FROM activity_logs WHERE user_id = $1 AND status = 'completed'
@@ -299,7 +299,7 @@ Create a personalized achievement card celebrating this specific improvement. Ma
         SELECT COUNT(*) as val FROM (
           SELECT scheduled_date, ROW_NUMBER() OVER (ORDER BY scheduled_date DESC) as rn
           FROM (SELECT DISTINCT scheduled_date FROM activity_logs WHERE user_id = $1 AND status = 'completed') d
-        ) sub WHERE scheduled_date >= CURRENT_DATE - rn::int
+        ) sub WHERE scheduled_date >= CURRENT_DATE - rn::INTEGER
       ),
       longest_streak AS (
         SELECT COALESCE(MAX(c), 0) as val

@@ -168,9 +168,9 @@ function createEssentialReadTools(userId: string): DynamicStructuredTool[] {
           let sql = 'SELECT * FROM workout_logs WHERE user_id = $1';
           const values: any[] = [userId];
           if (planId) { sql += ` AND workout_plan_id = $${values.length + 1}`; values.push(planId); }
-          if (startDate) { sql += ` AND logged_at >= $${values.length + 1}`; values.push(startDate); }
-          if (endDate) { sql += ` AND logged_at <= $${values.length + 1}`; values.push(endDate); }
-          sql += ` ORDER BY logged_at DESC LIMIT ${limit || 20}`;
+          if (startDate) { sql += ` AND scheduled_date >= $${values.length + 1}`; values.push(startDate); }
+          if (endDate) { sql += ` AND scheduled_date <= $${values.length + 1}`; values.push(endDate); }
+          sql += ` ORDER BY scheduled_date DESC LIMIT ${limit || 20}`;
           const result = await query(sql, values);
           return JSON.stringify({ workoutLogs: result.rows });
         } catch (error) {
