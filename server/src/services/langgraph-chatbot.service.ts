@@ -1924,7 +1924,8 @@ class LangGraphChatbotService {
     _language?: string, // Support any language code
     wellbeingContext?: any,
     wellnessQuestion?: { question: string; type: string; context?: string },
-    promptTier: 'minimal' | 'standard' | 'deep' = 'deep'
+    promptTier: 'minimal' | 'standard' | 'deep' = 'deep',
+    userMessage?: string,
   ): Promise<string> {
     const startTime = Date.now();
     const emptyContext = this.getEmptyComprehensiveContext();
@@ -2166,6 +2167,13 @@ class LangGraphChatbotService {
 - Today is ${currentLocalDate} (${currentLocalDateTime})
 - When the user says "today", "my today schedule", or "today's plan", use ${currentLocalDate}. Do not infer today from conversation history or older tool results.
 - For schedule tools, omit the date for today or pass "today"; never pass an old explicit date unless the user explicitly named that date.`;
+
+    // Attach intelligence context (requires current message for semantic search)
+    if (userMessage) {
+      comprehensiveContext.intelligenceContext = await comprehensiveUserContextService
+        .getIntelligenceContext(userId, userMessage)
+        .catch(() => undefined);
+    }
 
     // Add comprehensive user context (includes WHOOP, workouts, nutrition, lifestyle, goals, chat history)
     const comprehensiveContextStr = comprehensiveUserContextService.formatContextForPrompt(comprehensiveContext);
@@ -3692,7 +3700,9 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
               callPurpose,
               undefined,
               wellbeingContext,
-              undefined
+              undefined,
+              'deep',
+              message,
             );
           } catch (error) {
             logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
@@ -5148,6 +5158,10 @@ I'm listening. What's happening right now?`;
               conversationDetails?.sessionType || undefined,
               effectiveCallPurpose,
               language,
+              undefined,
+              undefined,
+              'deep',
+              message,
             ).catch((error) => {
               logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
               return this.getFallbackSystemPrompt(userId);
