@@ -14,6 +14,11 @@ import type {
 } from '@shared/types/domain/turn-insights.js';
 
 const MIN_MESSAGE_LENGTH = 10;
+const SIGNAL_PROMOTION_THRESHOLD = 3;
+
+function escapeLikePattern(text: string): string {
+  return text.replace(/[%_\\]/g, '\\$&');
+}
 
 const EXTRACTION_PROMPT = `You are an insight extraction engine for a health coaching AI. Given a conversation turn between a user and their AI health coach, extract structured insights.
 
@@ -121,7 +126,7 @@ class ConversationInsightExtractorService {
         { role: 'user', content: prompt },
       ],
       temperature: 0,
-      max_tokens: 500,
+      max_tokens: 1000,
     });
 
     const content = response.choices[0]?.message?.content ?? '';
@@ -170,7 +175,11 @@ class ConversationInsightExtractorService {
          AND (title ILIKE $3 OR title ILIKE $4)
          AND promoted_memory_id IS NULL
        LIMIT 1`,
-      [userId, candidate.category, `%${candidate.title}%`, `%${candidate.title.split(' ').slice(0, 3).join(' ')}%`]
+      ...(() => {
+        const escapedTitle = escapeLikePattern(candidate.title);
+        const escapedPrefix = escapeLikePattern(candidate.title.split(' ').slice(0, 3).join(' '));
+        return [userId, candidate.category, `%${escapedTitle}%`, `%${escapedPrefix}%`];
+      })()
     );
 
     if (existing.rows.length > 0) {
@@ -187,7 +196,7 @@ class ConversationInsightExtractorService {
         [row.id, newCount, JSON.stringify(mergedEvidence)]
       );
 
-      if (newCount >= 3 && !row.promoted_memory_id) {
+      if (newCount >= SIGNAL_PROMOTION_THRESHOLD && !row.promoted_memory_id) {
         await this.promoteSignal(userId, row.id as string, candidate, mergedEvidence);
       }
     } else {
@@ -337,10 +346,11 @@ class ConversationInsightExtractorService {
 
     try {
       const moodRating = Math.round(insights.mood.intensity * 10);
+      const clampedRating = Math.max(1, Math.min(10, moodRating));
       await query(
         `INSERT INTO mood_logs (user_id, mood_rating, context_note, mode, logged_at)
          VALUES ($1, $2, $3, 'light', NOW())`,
-        [userId, moodRating, `AI-extracted: ${insights.mood.state}`]
+        [userId, clampedRating, `AI-extracted: ${insights.mood.state}`]
       );
     } catch (error) {
       logger.debug('[InsightExtractor] Mood log insert failed', {
