@@ -62,6 +62,7 @@ export const QueueNames = {
   EXERCISE_INGESTION: 'exercise-ingestion',
   EMAIL: 'email-delivery',
   STREAK_EVENTS: 'streak-events',
+  AI_COACH_CALL: 'ai-coach-call',
 } as const;
 
 // ============================================================================
@@ -88,6 +89,7 @@ export const JobTypes = {
   // Streak engine
   STREAK_ACTIVITY: 'streak-activity',
   STREAK_MILESTONE: 'streak-milestone',
+  INITIATE_AI_CALL: 'initiate-ai-call',
 } as const;
 
 // ============================================================================
