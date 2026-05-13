@@ -46,6 +46,7 @@ import { memoryExtractionJob } from "./jobs/memory-extraction.job.js";
 import { coreProfileCalibrationJob } from "./jobs/core-profile-calibration.job.js";
 import { wikiSynthesisJob } from "./jobs/wiki-synthesis.job.js";
 import { wikiLintJob } from "./jobs/wiki-lint.job.js";
+import { aiCoachCallReconcilerJob } from "./jobs/ai-coach-call-reconciler.job.js";
 import { activityEventProcessor } from "./workers/activity-event-processor.worker.js";
 import { ensureDefaultPlans } from "./services/subscription.service.js";
 import { runGraceExpirationJob } from "./jobs/graceExpirationJob.js";
@@ -57,6 +58,8 @@ import { runMonthlyCreditResetJob } from "./jobs/monthly-credit-reset.job.js";
 let embeddingWorker: { close: () => Promise<void> } | null = null;
 let emailWorker: { close: () => Promise<void> } | null = null;
 let embeddingQueueService: { close: () => Promise<void> } | null = null;
+let aiCoachCallWorker: { close: () => Promise<void> } | null = null;
+let aiCoachCallQueueServiceRef: { close: () => Promise<void> } | null = null;
 
 const numCPUs = os.cpus().length;
 const ENABLE_CLUSTERING =
@@ -177,6 +180,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
     if (emailWorker) await emailWorker.close();
     logger.info("Email worker closed");
 
+    // Close AI coach call worker and queue (if started)
+    if (aiCoachCallWorker) await aiCoachCallWorker.close();
+    if (aiCoachCallQueueServiceRef) await aiCoachCallQueueServiceRef.close();
+    logger.info("AI coach call worker and queue closed");
+
+    aiCoachCallReconcilerJob.stop();
+    logger.info("AI coach call reconciler stopped");
+
     // Stop accepting new connections
     if (server) {
       await new Promise<void>((resolve, reject) => {
@@ -265,6 +276,18 @@ async function startServer(): Promise<void> {
         logger.info("Email worker started (Redis available)");
       } catch (err) {
         logger.warn("Failed to start email worker", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      // Start AI coach call worker
+      try {
+        const { startAICoachCallWorker } = await import("./workers/ai-coach-call.worker.js");
+        const { aiCoachCallQueueService } = await import("./services/ai-coach-call-queue.service.js");
+        aiCoachCallWorker = startAICoachCallWorker();
+        aiCoachCallQueueServiceRef = aiCoachCallQueueService;
+        logger.info("AI coach call worker started (Redis available)");
+      } catch (err) {
+        logger.warn("Failed to start AI coach call worker", {
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -466,6 +489,11 @@ async function startServer(): Promise<void> {
           wikiLintJob.start();
           logger.info("Wiki lint job started (staggered 1800s)");
         }, 1800_000);
+
+        setTimeout(() => {
+          aiCoachCallReconcilerJob.start();
+          logger.info("AI coach call reconciler job started (staggered 1860s)");
+        }, 1860_000);
 
         // ── Subscription lifecycle jobs ──
 

@@ -1,11 +1,10 @@
 import { Worker, Job } from 'bullmq';
-import { redisConnection, QueueNames, JobTypes } from '../config/queue.config.js';
+import { redisConnection, QueueNames } from '../config/queue.config.js';
 import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { communicationPreferencesService } from '../services/communication-preferences.service.js';
 import { voiceScheduleService } from '../services/voice-schedule.service.js';
 import { chatCallService } from '../services/chat-call.service.js';
-import { pushNotificationService } from '../services/push-notification.service.js';
 import { socketService } from '../services/socket.service.js';
 import { getUserLocalHour } from '../lib/user-timezone.js';
 import type { AICoachCallJobData } from '../services/ai-coach-call-queue.service.js';
