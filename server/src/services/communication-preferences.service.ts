@@ -140,9 +140,20 @@ class CommunicationPreferencesService {
     return this.getForUser(userId);
   }
 
-  /**
-   * Whether this notification category may be sent as a mobile push.
-   */
+  async recordMiss(userId: string, hour: number): Promise<void> {
+    const prefs = await this.getForUser(userId);
+    const counts = { ...(prefs.checkin_miss_count_by_hour || {}) };
+    counts[String(hour)] = (counts[String(hour)] || 0) + 1;
+    await this.upsert(userId, { checkin_miss_count_by_hour: counts });
+  }
+
+  async recordAnswer(userId: string, hour: number): Promise<void> {
+    const prefs = await this.getForUser(userId);
+    const counts = { ...(prefs.checkin_miss_count_by_hour || {}) };
+    counts[String(hour)] = 0;
+    await this.upsert(userId, { checkin_miss_count_by_hour: counts });
+  }
+
   async allowsPushCategory(userId: string, category: string | null | undefined): Promise<boolean> {
     const p = await this.getForUser(userId);
     const c = (category || '').toLowerCase();
