@@ -12,6 +12,8 @@ import { socketService } from './socket.service.js';
 import { logger } from './logger.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import { transformMessageForSocket } from '../utils/message-transform.util.js';
+import { communicationPreferencesService } from './communication-preferences.service.js';
+import { pushNotificationService } from './push-notification.service.js';
 
 type ChatCallType = 'voice' | 'video';
 type ChatCallStatus = 'ringing' | 'active' | 'ended' | 'declined' | 'missed' | 'cancelled';
@@ -346,6 +348,114 @@ class ChatCallService {
     }
   }
 
+  async initiateAICoachCall(
+    targetUserId: string,
+    context: { preCallContext: string; sessionType: string },
+  ): Promise<ChatCallSession> {
+    const chatId = await this.findOrCreateAICoachChat(targetUserId);
+
+    const aiCoachProfile = await query<{ first_name: string; last_name: string; avatar: string | null }>(
+      `SELECT first_name, last_name, avatar FROM users WHERE id = $1`,
+      [AI_COACH_USER_ID],
+    );
+    const aiProfile = aiCoachProfile.rows[0];
+    const aiName = aiProfile ? displayName(aiProfile) : 'AI Coach';
+
+    const targetProfile = await query<{ first_name: string; last_name: string; avatar: string | null }>(
+      `SELECT first_name, last_name, avatar FROM users WHERE id = $1`,
+      [targetUserId],
+    );
+    const targetUser = targetProfile.rows[0];
+    const targetName = targetUser ? displayName(targetUser) : 'User';
+
+    const call: ChatCallSession = {
+      id: randomUUID(),
+      chatId,
+      chatName: aiName,
+      callType: 'voice',
+      isGroupCall: false,
+      initiatorId: AI_COACH_USER_ID,
+      initiatorName: aiName,
+      initiatorAvatar: aiProfile?.avatar ?? null,
+      participantProfiles: new Map([
+        [AI_COACH_USER_ID, { name: aiName, avatar: aiProfile?.avatar ?? null }],
+        [targetUserId, { name: targetName, avatar: targetUser?.avatar ?? null }],
+      ]),
+      participantIds: [AI_COACH_USER_ID, targetUserId],
+      invitedUserIds: [targetUserId],
+      acceptedUserIds: new Set([AI_COACH_USER_ID]),
+      declinedUserIds: new Set(),
+      status: 'ringing',
+      createdAt: new Date(),
+      startedAt: null,
+      endedAt: null,
+      mediaState: new Map([
+        [AI_COACH_USER_ID, { audioEnabled: true, videoEnabled: false }],
+      ]),
+    };
+
+    call.timeout = setTimeout(() => {
+      this.timeoutCall(call.id).catch((error) => {
+        logger.error('[ChatCall] AI coach call timeout failed', {
+          callId: call.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }, CALL_TIMEOUT_MS);
+
+    this.calls.set(call.id, call);
+
+    if (socketService.isUserConnected(targetUserId)) {
+      socketService.emitToUser(targetUserId, EVENTS.INCOMING, this.toPayload(call, targetUserId));
+    } else {
+      await notificationEngine.send({
+        userId: targetUserId,
+        type: 'chat_call',
+        title: `${aiName} is calling`,
+        message: 'Your coach wants to check in. Tap to answer.',
+        icon: 'phone',
+        actionUrl: `/chat?chatId=${chatId}`,
+        actionLabel: 'Answer',
+        category: 'coaching',
+        priority: 'high',
+        relatedEntityType: 'chat_call',
+        relatedEntityId: call.id,
+        metadata: { callId: call.id, chatId, callType: 'voice' },
+        expiresAt: new Date(Date.now() + CALL_TIMEOUT_MS).toISOString(),
+      });
+    }
+
+    await this.persistCallStart(call);
+
+    logger.info('[ChatCall] AI coach call initiated', {
+      callId: call.id,
+      chatId,
+      targetUserId,
+      sessionType: context.sessionType,
+    });
+
+    return call;
+  }
+
+  private async findOrCreateAICoachChat(userId: string): Promise<string> {
+    const result = await query<{ id: string }>(
+      `SELECT c.id FROM chats c
+       JOIN chat_participants cp1 ON cp1.chat_id = c.id AND cp1.user_id = $1
+       JOIN chat_participants cp2 ON cp2.chat_id = c.id AND cp2.user_id = $2
+       WHERE c.is_group_chat = false AND cp1.left_at IS NULL AND cp2.left_at IS NULL
+       LIMIT 1`,
+      [AI_COACH_USER_ID, userId],
+    );
+    if (result.rows[0]) return result.rows[0].id;
+
+    const chat = await chatService.createOrGetChat({
+      userId: AI_COACH_USER_ID,
+      otherUserId: userId,
+      isGroupChat: false,
+    });
+    return chat.id;
+  }
+
   private async timeoutCall(callId: string): Promise<void> {
     const call = this.calls.get(callId);
     if (!call || call.status !== 'ringing') return;
@@ -372,6 +482,17 @@ class ChatCallService {
     });
 
     this.calls.delete(call.id);
+
+    // Durable AI coach call outcome tracking
+    if (call.initiatorId === AI_COACH_USER_ID) {
+      this.handleAICoachCallOutcome(call, status).catch((err) => {
+        logger.error('[ChatCall] AI coach outcome handling failed', {
+          callId: call.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+
     logger.info('[ChatCall] Call finished', {
       callId: call.id,
       chatId: call.chatId,
@@ -515,6 +636,120 @@ class ChatCallService {
       code,
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+
+  private async handleAICoachCallOutcome(
+    call: ChatCallSession,
+    status: ChatCallStatus,
+  ): Promise<void> {
+    const targetUserId = call.participantIds.find((id) => id !== AI_COACH_USER_ID);
+    if (!targetUserId) return;
+
+    try {
+      if (status === 'ended' && call.startedAt) {
+        await query(
+          `UPDATE ai_coach_call_log
+           SET status = 'answered', answered_at = $1, ended_at = $2,
+               call_duration_seconds = $3, chat_call_id = $4, updated_at = NOW()
+           WHERE id = (
+             SELECT id FROM ai_coach_call_log
+             WHERE chat_call_id = $4 OR
+                   (user_id = $5 AND status = 'initiated' AND scheduled_date = CURRENT_DATE)
+             LIMIT 1
+           )`,
+          [
+            call.startedAt,
+            call.endedAt || new Date(),
+            this.durationSeconds(call),
+            call.id,
+            targetUserId,
+          ],
+        );
+
+        const hour = call.createdAt.getUTCHours();
+        await communicationPreferencesService.recordAnswer(targetUserId, hour);
+
+      } else if (status === 'missed' || status === 'declined' || status === 'cancelled') {
+        await query(
+          `UPDATE ai_coach_call_log
+           SET status = $1, chat_call_id = $2, ended_at = NOW(), updated_at = NOW()
+           WHERE id = (
+             SELECT id FROM ai_coach_call_log
+             WHERE chat_call_id = $2 OR
+                   (user_id = $3 AND status = 'initiated' AND scheduled_date = CURRENT_DATE)
+             LIMIT 1
+           )`,
+          [
+            status === 'cancelled' ? 'missed' : status,
+            call.id,
+            targetUserId,
+          ],
+        );
+
+        const hour = call.createdAt.getUTCHours();
+        await communicationPreferencesService.recordMiss(targetUserId, hour);
+
+        await this.sendMissedCallFollowUp(targetUserId, call);
+      }
+    } catch (error) {
+      logger.error('[ChatCall] Failed to update ai_coach_call_log', {
+        callId: call.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async sendMissedCallFollowUp(
+    userId: string,
+    call: ChatCallSession,
+  ): Promise<void> {
+    try {
+      const chatId = call.chatId;
+      const hour = call.createdAt.getUTCHours();
+      const timeStr = call.createdAt.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      const prefs = await communicationPreferencesService.getForUser(userId);
+      const missCount = prefs.checkin_miss_count_by_hour?.[String(hour)] || 0;
+
+      let content: string;
+      if (missCount >= 3) {
+        content = `Hey! I tried calling at ${timeStr} but couldn't reach you. I've noticed this time doesn't seem to work well — would you like to pick a different time for our check-ins?`;
+      } else if (missCount === 2) {
+        content = `I tried to call at ${timeStr} — no worries if you were busy! Is this still a good time for check-ins, or should we try a different slot?`;
+      } else {
+        content = `Hey, I tried reaching you at ${timeStr} for a quick check-in! Whenever you're free, I'm here. How's your day going?`;
+      }
+
+      const message = await messageService.sendMessage({
+        chatId,
+        senderId: AI_COACH_USER_ID,
+        content,
+        contentType: 'text',
+      });
+
+      await query(
+        `UPDATE ai_coach_call_log SET followup_message_id = $1, updated_at = NOW()
+         WHERE chat_call_id = $2`,
+        [message.id, call.id],
+      );
+
+      await pushNotificationService.deliverForUser(userId, {
+        title: 'Missed check-in',
+        body: 'Your coach tried to call. Tap to chat.',
+        type: 'missed_checkin',
+        category: 'coaching',
+        actionUrl: `/chat?chatId=${chatId}`,
+      });
+    } catch (error) {
+      logger.error('[ChatCall] Failed to send missed call follow-up', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private durationSeconds(call: ChatCallSession): number {
