@@ -256,6 +256,7 @@ const EXPECTED_TABLES = [
   'intelligence_analyses',
   'intelligence_session_context',
   'intelligence_feedback',
+  'intelligence_pending_signals',
   // Entitlement & subscription hardening
   'entitlement_shadow_log',
   'user_entitlements_cache',
@@ -1060,6 +1061,7 @@ const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
   // missing-tables branch that auto-runs `add-*` files never fires.
   'add-status-awareness-fields.sql',
   '20260513_ai_coach_call_log.sql',
+  '20260513_intelligence_pending_signals.sql',
 ];
 
 async function runSupplementaryMigrations(): Promise<void> {
