@@ -5,6 +5,7 @@
 
 import { logger } from './logger.service.js';
 import { query } from '../config/database.config.js';
+import { aiCoachCallQueueService } from './ai-coach-call-queue.service.js';
 
 // ============================================================================
 // Types
@@ -338,6 +339,23 @@ class VoiceScheduleService {
           `UPDATE user_preferences SET ${updates.join(', ')} WHERE user_id = $${paramIndex}`,
           values
         );
+      }
+
+      // Sync BullMQ jobs when call-related preferences change
+      if (
+        settings.preferredCallTimes !== undefined ||
+        settings.aiCallFrequency !== undefined ||
+        settings.dndDays !== undefined ||
+        settings.quietHoursEnabled !== undefined
+      ) {
+        try {
+          await aiCoachCallQueueService.syncUserSchedule(userId);
+        } catch (syncError) {
+          logger.warn('[VoiceSchedule] BullMQ sync failed (non-blocking)', {
+            userId,
+            error: syncError instanceof Error ? syncError.message : 'Unknown',
+          });
+        }
       }
 
       // Return updated settings
