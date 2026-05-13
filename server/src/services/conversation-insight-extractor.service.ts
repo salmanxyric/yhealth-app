@@ -346,9 +346,9 @@ class ConversationInsightExtractorService {
       const moodRating = Math.round(insights.mood.intensity * 10);
       const clampedRating = Math.max(1, Math.min(10, moodRating));
       await query(
-        `INSERT INTO mood_logs (user_id, mood_rating, context_note, mode, logged_at)
-         VALUES ($1, $2, $3, 'light', NOW())`,
-        [userId, clampedRating, `AI-extracted: ${insights.mood.state}`]
+        `INSERT INTO mood_logs (user_id, mood_rating, happiness_rating, context_note, mode, logged_at)
+         VALUES ($1, $2, $3, $4, 'deep', NOW())`,
+        [userId, clampedRating, clampedRating, `AI-extracted: ${insights.mood.state}`]
       );
     } catch (error) {
       logger.debug('[InsightExtractor] Mood log insert failed', {

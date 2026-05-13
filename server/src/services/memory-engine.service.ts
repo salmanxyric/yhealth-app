@@ -474,7 +474,7 @@ class MemoryEngineService {
            AND (title ILIKE $3 OR description ILIKE $3)
          ORDER BY confidence DESC
          LIMIT $4`,
-        [userId, category, `%${searchText}%`, limit]
+        [userId, category, `%${searchText.replace(/[%_\\]/g, '\\$&')}%`, limit]
       );
 
       return result.rows.map(mapRow);
