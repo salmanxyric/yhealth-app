@@ -59,6 +59,7 @@ import {
 import { artifactGenerationService } from './artifact-generation.service.js';
 import { wikiCompilerService } from './wiki-compiler.service.js';
 import { wikiIngestService } from './wiki-ingest.service.js';
+import { conversationInsightExtractorService } from './conversation-insight-extractor.service.js';
 
 const lifeAreaRouterOpenAI: OpenAI | null = env.openai.apiKey
   ? new OpenAI({ apiKey: env.openai.apiKey })
@@ -4687,6 +4688,19 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
 
       this.enqueueWikiMaintenance(userId, message, responseContent, activeConversationId);
 
+      // Extract and persist conversation insights (fire-and-forget, never blocks response)
+      conversationInsightExtractorService.extractAndPersist({
+        userId,
+        userMessage: message,
+        coachResponse: responseContent,
+        conversationId: activeConversationId,
+      }).catch((error) => {
+        logger.warn('[LangGraphChatbot] Insight extraction failed (non-critical)', {
+          error: error instanceof Error ? error.message : 'Unknown',
+          userId,
+        });
+      });
+
       // Auto-inject suggestedAction from musicManager tool results into actions
       if (toolCalls.length > 0) {
         for (const tc of toolCalls) {
@@ -6183,6 +6197,19 @@ I'm listening. What's happening right now?`;
       });
 
       this.enqueueWikiMaintenance(userId, message, responseContent, activeConversationId);
+
+      // Extract and persist conversation insights (fire-and-forget, never blocks response)
+      conversationInsightExtractorService.extractAndPersist({
+        userId,
+        userMessage: message,
+        coachResponse: responseContent,
+        conversationId: activeConversationId,
+      }).catch((error) => {
+        logger.warn('[LangGraphChatbot] Insight extraction failed (non-critical)', {
+          error: error instanceof Error ? error.message : 'Unknown',
+          userId,
+        });
+      });
 
       // Questions are now integrated naturally into the response via system prompt
       // No need to append them here - the LLM includes them naturally in its response
