@@ -8,7 +8,7 @@ import { withErrorHandling } from '../utils.js';
 // ============================================
 
 const PAGE_TYPES = ['entity', 'concept', 'pattern', 'journal', 'synthesis', 'source'] as const;
-const CATEGORIES = ['fitness', 'nutrition', 'sleep', 'wellbeing', 'lifestyle', 'behavioral', 'cross_domain', 'medical', 'mental_health', 'goals', 'preferences', 'relationships', 'general'] as const;
+const CATEGORIES = ['fitness', 'nutrition', 'sleep', 'wellbeing', 'lifestyle', 'behavioral', 'cross_domain', 'medical', 'mental_health', 'goals', 'coaching', 'meta', 'preferences', 'relationships', 'general'] as const;
 const LINK_TYPES = ['reference', 'contradicts', 'supports', 'supersedes', 'derived_from', 'see_also'] as const;
 
 // ============================================

@@ -110,7 +110,11 @@ export async function flagPage(slug: string, reason: string) {
 
 export async function submitFeedback(
   slug: string,
-  data: { action: string; details?: string },
+  data: { action: string; correction?: string; comment?: string; details?: string },
 ) {
-  return api.post<null>(`${BASE}/pages/${slug}/feedback`, data);
+  const { details, ...payload } = data;
+  return api.post<null>(`${BASE}/pages/${slug}/feedback`, {
+    ...payload,
+    comment: payload.comment ?? details,
+  });
 }
