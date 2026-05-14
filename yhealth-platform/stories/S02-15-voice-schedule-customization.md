@@ -8,8 +8,9 @@ feature: F2.6
 feature_name: Voice Preferences
 product: yhealth-platform
 priority: P0
-status: Draft
+status: Done
 created: 2025-12-07
+implemented: 2026-05-14
 ---
 
 # S02.6.1: Voice & Schedule Customization
