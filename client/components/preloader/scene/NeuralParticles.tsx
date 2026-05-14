@@ -249,27 +249,19 @@ export function NeuralParticles({ dissolve = 0 }: NeuralParticlesProps) {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          array={positions}
-          count={totalPoints}
-          itemSize={3}
+          args={[positions, 3]}
         />
         <bufferAttribute
           attach="attributes-aSize"
-          array={sizes}
-          count={totalPoints}
-          itemSize={1}
+          args={[sizes, 1]}
         />
         <bufferAttribute
           attach="attributes-aOpacity"
-          array={opacities}
-          count={totalPoints}
-          itemSize={1}
+          args={[opacities, 1]}
         />
         <bufferAttribute
           attach="attributes-aColor"
-          array={colors}
-          count={totalPoints}
-          itemSize={3}
+          args={[colors, 3]}
         />
       </bufferGeometry>
       <shaderMaterial

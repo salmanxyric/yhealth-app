@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, Poppins, Cinzel, Nunito, Instrument_Serif } from "next/font/google";
-import dynamic from "next/dynamic";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { VoiceAssistantModal } from "@/components/common/voice-assistant-modal";
@@ -10,11 +9,8 @@ import { VisitorTracker } from "@/components/VisitorTracker";
 import { PersistentPlayer } from "@/components/music/PersistentPlayer";
 import { organizationJsonLd, webSiteJsonLd } from "@/lib/structured-data";
 import { ChatCallProvider } from "./providers/ChatCallProvider";
-
-const CinematicSplash = dynamic(
-  () => import("@/components/preloader/CinematicSplash").then((m) => ({ default: m.CinematicSplash })),
-  { ssr: false }
-);
+import { CinematicSplashWrapper } from "@/components/preloader/CinematicSplashWrapper";
+import { HydrationSignal } from "@/components/preloader/HydrationSignal";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -111,14 +107,6 @@ export const metadata: Metadata = {
   },
 };
 
-function HydrationSignal() {
-  "use client";
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("app-hydrated"));
-  }
-  return null;
-}
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -146,7 +134,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${poppins.variable} ${cinzel.variable} ${nunito.variable} ${instrumentSerif.variable} font-sans antialiased`}
       >
-        <CinematicSplash />
+        <CinematicSplashWrapper />
         <Providers>
           <HydrationSignal />
           <AlarmProvider>

@@ -65,9 +65,7 @@ export function AmbientParticles({ dissolve = 0 }: AmbientParticlesProps) {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          array={positions}
-          count={AMBIENT_PARTICLES.count}
-          itemSize={3}
+          args={[positions, 3]}
         />
       </bufferGeometry>
       <pointsMaterial
