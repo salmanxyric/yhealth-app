@@ -28,7 +28,7 @@ export function CinematicSplash() {
   const { phase, alreadyShown } = useSplashState(progress);
 
   const [dissolve, setDissolve] = useState(0);
-  const [bloomIntensity, setBloomIntensity] = useState(1.5);
+  const [bloomIntensity, setBloomIntensity] = useState(1.0);
   const [webGLSupported, setWebGLSupported] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -39,16 +39,8 @@ export function CinematicSplash() {
     try {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("webgl2") || canvas.getContext("webgl");
-      if (!ctx) {
-        setWebGLSupported(false);
-        return;
-      }
+      if (!ctx) setWebGLSupported(false);
     } catch {
-      setWebGLSupported(false);
-      return;
-    }
-
-    if (navigator.hardwareConcurrency < 4) {
       setWebGLSupported(false);
     }
   }, []);
@@ -59,7 +51,7 @@ export function CinematicSplash() {
   useEffect(() => {
     if (phase !== "dissolving") return;
 
-    const dissolveTarget = { value: 0, bloom: 1.5 };
+    const dissolveTarget = { value: 0, bloom: 1.0 };
     const tl = gsap.timeline();
 
     // Phase 1: Flash — bloom intensifies

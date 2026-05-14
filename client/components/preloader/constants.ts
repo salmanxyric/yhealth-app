@@ -187,7 +187,7 @@ export const CAMERA = {
 export const POST_PROCESSING = {
   bloom: {
     luminanceThreshold: 0.2,
-    intensity: 1.5,
+    intensity: 1.0,
     mipmapBlur: true,
   },
   depthOfField: {
@@ -247,8 +247,8 @@ export const LIGHTING = {
 // ---------------------------------------------------------------------------
 
 export const TIMING = {
-  minDisplayMs: 2500,
-  maxDisplayMs: 8000,
+  minDisplayMs: 5000,
+  maxDisplayMs: 10000,
   dissolutionDurationMs: 1500,
   flashDurationMs: 400,
   shatterDurationMs: 600,

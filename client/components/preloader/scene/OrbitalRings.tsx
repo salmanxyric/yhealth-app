@@ -113,6 +113,7 @@ function SingleRing({
             <sphereGeometry args={[config.nodeRadius, 16, 16]} />
             <meshStandardMaterial
               color={config.color}
+              emissive={config.color}
               emissiveIntensity={1.5}
               transparent
               opacity={1 - dissolve}

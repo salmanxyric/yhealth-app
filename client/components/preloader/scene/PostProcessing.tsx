@@ -1,7 +1,7 @@
 "use client";
 
 import { Vector2 } from "three";
-import { EffectComposer, Bloom, DepthOfField, Vignette, ChromaticAberration, Noise } from "@react-three/postprocessing";
+import { EffectComposer, Bloom, Vignette, ChromaticAberration, Noise } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
 import { POST_PROCESSING } from "../constants";
 
@@ -18,11 +18,6 @@ export function PostProcessingEffects({
         luminanceThreshold={POST_PROCESSING.bloom.luminanceThreshold}
         intensity={bloomIntensity ?? POST_PROCESSING.bloom.intensity}
         mipmapBlur={POST_PROCESSING.bloom.mipmapBlur}
-      />
-      <DepthOfField
-        focusDistance={POST_PROCESSING.depthOfField.focusDistance}
-        focalLength={POST_PROCESSING.depthOfField.focalLength}
-        bokehScale={POST_PROCESSING.depthOfField.bokehScale}
       />
       <Vignette
         offset={POST_PROCESSING.vignette.offset}
