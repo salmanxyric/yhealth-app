@@ -2,14 +2,10 @@
  * AI Coach Call Worker — Unit Tests
  *
  * Tests the 8 gate checks and call initiation flow.
- * Uses jest.unstable_mockModule for ESM compatibility.
+ * Uses beforeEach re-import pattern for resetMocks compatibility.
  */
 
-import { jest } from '@jest/globals';
-
-// ============================================
-// MOCKS
-// ============================================
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 const mockQuery = jest.fn<any>();
 const mockLogger = {
@@ -22,63 +18,84 @@ const mockGetPreferences = jest.fn<any>();
 const mockGetForUser = jest.fn<any>();
 const mockIsUserConnected = jest.fn<any>();
 const mockInitiateAICoachCall = jest.fn<any>();
-const mockGetUserLocalHour = jest.fn<any>().mockReturnValue(21);
+const mockGetUserLocalHour = jest.fn<any>();
 
-jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
-  query: mockQuery,
-}));
+let processAICoachCallJob: any;
 
-jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
-  logger: mockLogger,
-}));
+beforeEach(async () => {
+  jest.restoreAllMocks();
 
-jest.unstable_mockModule('../../../src/services/voice-schedule.service.js', () => ({
-  voiceScheduleService: { getPreferences: mockGetPreferences },
-}));
+  jest.unstable_mockModule('../../../src/config/database.config', () => ({
+    query: (...args: unknown[]) => mockQuery(...args),
+  }));
 
-jest.unstable_mockModule('../../../src/services/communication-preferences.service.js', () => ({
-  communicationPreferencesService: { getForUser: mockGetForUser },
-}));
+  jest.unstable_mockModule('../../../src/services/logger.service', () => ({
+    logger: mockLogger,
+  }));
 
-jest.unstable_mockModule('../../../src/services/socket.service.js', () => ({
-  socketService: { isUserConnected: mockIsUserConnected },
-}));
+  jest.unstable_mockModule('../../../src/services/voice-schedule.service', () => ({
+    voiceScheduleService: { getPreferences: (...args: unknown[]) => mockGetPreferences(...args) },
+  }));
 
-jest.unstable_mockModule('../../../src/services/chat-call.service.js', () => ({
-  chatCallService: { initiateAICoachCall: mockInitiateAICoachCall },
-}));
+  jest.unstable_mockModule('../../../src/services/communication-preferences.service', () => ({
+    communicationPreferencesService: { getForUser: (...args: unknown[]) => mockGetForUser(...args) },
+  }));
 
-jest.unstable_mockModule('../../../src/lib/user-timezone.js', () => ({
-  getUserLocalHour: mockGetUserLocalHour,
-}));
+  jest.unstable_mockModule('../../../src/services/socket.service', () => ({
+    socketService: { isUserConnected: (...args: unknown[]) => mockIsUserConnected(...args) },
+  }));
 
-jest.unstable_mockModule('../../../src/config/queue.config.js', () => ({
-  redisConnection: {},
-  QueueNames: { AI_COACH_CALL: 'ai-coach-call' },
-  JobTypes: { INITIATE_AI_CALL: 'initiate-ai-call' },
-}));
+  jest.unstable_mockModule('../../../src/services/chat-call.service', () => ({
+    chatCallService: { initiateAICoachCall: (...args: unknown[]) => mockInitiateAICoachCall(...args) },
+  }));
 
-jest.unstable_mockModule('bullmq', () => ({
-  Worker: jest.fn().mockImplementation(() => ({
-    on: jest.fn().mockReturnThis(),
-    close: jest.fn(),
-  })),
-}));
+  jest.unstable_mockModule('../../../src/lib/user-timezone', () => ({
+    getUserLocalHour: (...args: unknown[]) => mockGetUserLocalHour(...args),
+  }));
 
-// Feature flag must be set before importing the module
-process.env['AI_COACH_CALL_BULLMQ_ENABLED'] = 'true';
+  jest.unstable_mockModule('../../../src/config/env.config', () => ({
+    env: { redis: { enabled: true } },
+  }));
 
-// ============================================
-// DYNAMIC IMPORT (after mocks)
-// ============================================
+  jest.unstable_mockModule('../../../src/config/queue.config', () => ({
+    redisConnection: {},
+    queueConfig: { defaultJobOptions: {} },
+    QueueNames: { AI_COACH_CALL: 'ai-coach-call' },
+    JobTypes: { INITIATE_AI_CALL: 'initiate-ai-call' },
+  }));
 
-const { processAICoachCallJob } = await import(
-  '../../../src/workers/ai-coach-call.worker.js'
-);
+  jest.unstable_mockModule('bullmq', () => ({
+    Worker: jest.fn().mockImplementation(() => ({
+      on: jest.fn().mockReturnThis(),
+      close: jest.fn(),
+    })),
+    Queue: jest.fn().mockImplementation(() => ({
+      add: jest.fn(),
+      getJob: jest.fn(),
+      close: jest.fn<any>().mockResolvedValue(undefined),
+      on: jest.fn(),
+    })),
+    QueueEvents: jest.fn().mockImplementation(() => ({
+      on: jest.fn(),
+      close: jest.fn<any>().mockResolvedValue(undefined),
+    })),
+  }));
 
-// ============================================
-// HELPERS
-// ============================================
+  process.env['AI_COACH_CALL_BULLMQ_ENABLED'] = 'true';
+
+  jest.resetModules();
+  mockQuery.mockReset();
+  mockGetPreferences.mockReset();
+  mockGetForUser.mockReset();
+  mockIsUserConnected.mockReset();
+  mockInitiateAICoachCall.mockReset();
+  mockGetUserLocalHour.mockReset();
+
+  mockGetUserLocalHour.mockReturnValue(21);
+
+  const mod = await import('../../../src/workers/ai-coach-call.worker');
+  processAICoachCallJob = mod.processAICoachCallJob;
+});
 
 function makeJob(overrides: Record<string, unknown> = {}) {
   return {
@@ -98,18 +115,15 @@ function makeJob(overrides: Record<string, unknown> = {}) {
 }
 
 function defaultMocks() {
-  // User active
   mockQuery
     .mockResolvedValueOnce({
       rows: [{ id: 'user-1', is_active: true }],
       rowCount: 1, command: '', oid: 0, fields: [],
     })
-    // Daily cap: 0 calls today
     .mockResolvedValueOnce({
       rows: [{ c: '0' }],
       rowCount: 1, command: '', oid: 0, fields: [],
     })
-    // Update to initiated
     .mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -137,19 +151,9 @@ function defaultMocks() {
   mockInitiateAICoachCall.mockResolvedValue({ id: 'call-1' });
 }
 
-// ============================================
-// TESTS
-// ============================================
-
 describe('AI Coach Call Worker', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    process.env['AI_COACH_CALL_BULLMQ_ENABLED'] = 'true';
-  });
-
   it('initiates a call when all gates pass', async () => {
     defaultMocks();
-    // Extra mock for UPDATE chat_call_id
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -165,14 +169,11 @@ describe('AI Coach Call Worker', () => {
   it('skips when feature flag is disabled', async () => {
     process.env['AI_COACH_CALL_BULLMQ_ENABLED'] = 'false';
     defaultMocks();
-
-    // Update log to skipped
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
 
     await processAICoachCallJob(makeJob());
-
     expect(mockInitiateAICoachCall).not.toHaveBeenCalled();
   });
 
@@ -181,7 +182,6 @@ describe('AI Coach Call Worker', () => {
       rows: [{ id: 'user-1', is_active: false }],
       rowCount: 1, command: '', oid: 0, fields: [],
     });
-    // Update log to skipped
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -215,7 +215,6 @@ describe('AI Coach Call Worker', () => {
       aiCallFrequency: 'off',
       preferredCallTimes: [],
     });
-    // Update log to skipped
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -232,7 +231,6 @@ describe('AI Coach Call Worker', () => {
       max_checkins_per_day: 3,
       checkin_miss_count_by_hour: {},
     });
-    // Update log to skipped
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -244,7 +242,6 @@ describe('AI Coach Call Worker', () => {
   it('skips when user is offline and logs skipped_offline', async () => {
     defaultMocks();
     mockIsUserConnected.mockReturnValue(false);
-    // Update log to skipped_offline
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -261,7 +258,6 @@ describe('AI Coach Call Worker', () => {
       max_checkins_per_day: 3,
       checkin_miss_count_by_hour: { '21': 3 },
     });
-    // Update log to skipped
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -271,10 +267,7 @@ describe('AI Coach Call Worker', () => {
   });
 
   it('skips when daily cap is reached', async () => {
-    defaultMocks();
-    // Override daily cap query to return 3 (equals max_checkins_per_day)
     mockQuery
-      .mockReset()
       .mockResolvedValueOnce({
         rows: [{ id: 'user-1', is_active: true }],
         rowCount: 1, command: '', oid: 0, fields: [],
@@ -283,10 +276,20 @@ describe('AI Coach Call Worker', () => {
         rows: [{ c: '3' }],
         rowCount: 1, command: '', oid: 0, fields: [],
       })
-      // Update log to skipped
       .mockResolvedValueOnce({
         rows: [], rowCount: 1, command: '', oid: 0, fields: [],
       });
+
+    mockGetPreferences.mockResolvedValue({
+      voiceId: 'alloy', speechPace: 1.0, voicePreviewPlayed: false,
+      quietHoursEnabled: false, quietHoursStart: '22:00', quietHoursEnd: '07:00',
+      dndDays: [], aiCallFrequency: 'moderate', preferredCallTimes: ['21:00'],
+    });
+    mockGetForUser.mockResolvedValue({
+      user_id: 'user-1', checkin_push_enabled: true,
+      max_checkins_per_day: 3, checkin_miss_count_by_hour: {},
+    });
+    mockIsUserConnected.mockReturnValue(true);
 
     await processAICoachCallJob(makeJob());
     expect(mockInitiateAICoachCall).not.toHaveBeenCalled();
@@ -306,7 +309,6 @@ describe('AI Coach Call Worker', () => {
       preferredCallTimes: ['21:00'],
     });
     mockGetUserLocalHour.mockReturnValue(21);
-    // Update log to skipped
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -318,7 +320,6 @@ describe('AI Coach Call Worker', () => {
   it('records error in log when call initiation fails', async () => {
     defaultMocks();
     mockInitiateAICoachCall.mockRejectedValue(new Error('WebRTC failed'));
-    // Update log to error status
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
