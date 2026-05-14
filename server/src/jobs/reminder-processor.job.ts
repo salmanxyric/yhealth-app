@@ -17,7 +17,7 @@ import { taskService } from '../services/task.service.js';
 import { workoutAlarmService } from '../services/workout-alarm.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { socketService } from '../services/socket.service.js';
-import { mailHelper } from '../helper/mail.js';
+import { emailEngine } from '../services/email-engine.service.js';
 import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { formatTime12h } from '../lib/user-timezone.js';
@@ -371,72 +371,30 @@ async function sendAlarmEmail(
 
     const user = userResult.rows[0];
     const emailContent = message || "It's time for your scheduled workout! Stay consistent and keep pushing towards your goals.";
+    const appUrl = process.env['APP_URL'] || 'http://localhost:3000';
 
-    // Send email using the mail helper
-    await mailHelper.send({
-      email: user.email,
-      subject: `⏰ ${title} - Balencia`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${title}</title>
-        </head>
-        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
-            <tr>
-              <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                  <!-- Header -->
-                  <tr>
-                    <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-                      <h1 style="color: #ffffff; margin: 0; font-size: 28px;">⏰ ${title}</h1>
-                    </td>
-                  </tr>
-                  <!-- Content -->
-                  <tr>
-                    <td style="padding: 40px 30px;">
-                      <p style="color: #333333; font-size: 18px; line-height: 1.6; margin: 0 0 20px 0;">
-                        Hey ${user.first_name}! 👋
-                      </p>
-                      <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-                        ${emailContent}
-                      </p>
-                      <!-- CTA Button -->
-                      <table width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td align="center">
-                            <a href="${mailHelper.getAppUrl()}/dashboard?tab=workouts"
-                               style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-size: 16px; font-weight: 600;">
-                              Start Your Workout 💪
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                  <!-- Footer -->
-                  <tr>
-                    <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center;">
-                      <p style="color: #999999; font-size: 14px; margin: 0;">
-                        You're receiving this because you have alarm notifications enabled.
-                        <br>
-                        <a href="${mailHelper.getAppUrl()}/dashboard?tab=alarms" style="color: #667eea;">Manage your alarms</a>
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `,
+    await emailEngine.send({
+      userId,
+      template: 'taskReminder',
+      recipient: user.email,
+      subject: `${title} - Balencia`,
+      data: {
+        firstName: user.first_name || 'there',
+        taskTitle: title,
+        taskDescription: emailContent,
+        scheduledTime: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        priority: 'medium',
+        priorityIcon: '⏰',
+        category: 'fitness',
+        categoryIcon: '💪',
+        dashboardUrl: `${appUrl}/dashboard?tab=workouts`,
+        completeUrl: `${appUrl}/dashboard?tab=workouts`,
+      },
+      category: 'engagement',
+      priority: 'normal',
     });
 
-    logger.info('[ReminderJob] Sent alarm email', { userId, email: user.email, title });
+    logger.info('[ReminderJob] Sent alarm email via engine', { userId, email: user.email, title });
   } catch (error) {
     logger.error('[ReminderJob] Failed to send alarm email', {
       userId,

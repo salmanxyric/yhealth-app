@@ -189,9 +189,9 @@ async function gracefulShutdown(signal: string): Promise<void> {
     logger.info("AI coach call reconciler stopped");
 
     // Stop accepting new connections
-    if (server) {
+    if (global.server) {
       await new Promise<void>((resolve, reject) => {
-        server.close((err) => {
+        global.server!.close((err) => {
           if (err) reject(err);
           else resolve();
         });
@@ -589,9 +589,6 @@ async function startServer(): Promise<void> {
     process.exit(1);
   }
 }
-
-// Server reference for graceful shutdown
-let server: ReturnType<typeof createServer> | undefined;
 
 // Cluster mode for production
 if (ENABLE_CLUSTERING && cluster.isPrimary) {

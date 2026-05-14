@@ -1450,9 +1450,18 @@ export async function verifySchema(): Promise<{
 }
 
 /**
- * Lightweight startup sync — runs ONLY sync-missing-columns.sql.
+ * Critical table migrations that must exist before workers/reconcilers start.
+ * All are idempotent (CREATE TABLE IF NOT EXISTS).
+ */
+const STARTUP_TABLE_MIGRATIONS: readonly string[] = [
+  '20260512000000_chat_calls.sql',
+  '20260513_ai_coach_call_log.sql',
+];
+
+/**
+ * Lightweight startup sync — runs sync-missing-columns.sql plus any critical
+ * table migrations needed by workers that start before full autoMigrate.
  * Safe to call on every startup (idempotent, fast, non-blocking).
- * Ensures all columns/constraints exist even when full auto-migrate is disabled.
  */
 export async function runColumnSync(): Promise<void> {
   try {
@@ -1462,6 +1471,16 @@ export async function runColumnSync(): Promise<void> {
     logger.warn('[AutoMigrate] Column sync had issues (non-fatal)', {
       error: err?.message,
     });
+  }
+
+  for (const migration of STARTUP_TABLE_MIGRATIONS) {
+    try {
+      await runMigration(migration);
+    } catch (err: any) {
+      logger.warn(`[AutoMigrate] Startup migration ${migration} had issues (non-fatal)`, {
+        error: err?.message,
+      });
+    }
   }
 }
 

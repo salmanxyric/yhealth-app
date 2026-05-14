@@ -12,6 +12,7 @@ import { ApiError } from '../utils/ApiError.js';
 const WHOOP_API_BASE = 'https://api.prod.whoop.com/developer';
 const WHOOP_OAUTH_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
 const WHOOP_OAUTH_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token';
+const WHOOP_FETCH_TIMEOUT_MS = 15_000;
 
 interface WhoopTokens {
   accessToken: string;
@@ -32,6 +33,46 @@ interface WhoopOAuthParams {
   userId: string;
   redirectUri: string;
   scopes?: string[];
+}
+
+function getErrorProperty(error: unknown, property: string): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+
+  const value = (error as Record<string, unknown>)[property];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function formatWhoopFetchError(operation: string, error: unknown): Error {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  const cause = error instanceof Error ? error.cause : undefined;
+  const causeCode = getErrorProperty(cause, 'code');
+  const causeMessage = cause instanceof Error
+    ? cause.message
+    : getErrorProperty(cause, 'message');
+  const details = [causeCode, causeMessage].filter(Boolean).join(': ');
+  const suffix = details ? ` (${details})` : '';
+
+  return new Error(`${operation} failed: ${message}${suffix}`, { cause: error });
+}
+
+export async function fetchWhoop(
+  url: string,
+  options: RequestInit = {},
+  operation = 'WHOOP API request'
+): Promise<Response> {
+  const timeoutSignal = AbortSignal.timeout(WHOOP_FETCH_TIMEOUT_MS);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, timeoutSignal])
+    : timeoutSignal;
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal,
+    });
+  } catch (error) {
+    throw formatWhoopFetchError(operation, error);
+  }
 }
 
 export interface WhoopRecoveryData {
@@ -140,9 +181,6 @@ export async function initiateWhoopOAuth(
   // Use provided credentials or fall back to environment variables
   const finalClientId = clientId || process.env.WHOOP_CLIENT_ID;
   const finalClientSecret = clientSecret || process.env.WHOOP_CLIENT_SECRET;
-
-  console.log('finalClientId:', finalClientId);
-  console.log('finalClientSecret:', finalClientSecret);
   
   if (!finalClientId || !finalClientSecret) {
     throw ApiError.internal('WHOOP OAuth not configured. Please provide client ID and secret, or set WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET environment variables.');
@@ -256,13 +294,13 @@ export async function exchangeWhoopOAuthCode(
     hasClientSecret: !!finalClientSecret,
   });
   
-  const tokenResponse = await fetch(WHOOP_OAUTH_TOKEN_URL, {
+  const tokenResponse = await fetchWhoop(WHOOP_OAUTH_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: tokenParams,
-  });
+  }, 'WHOOP token exchange request');
   
   logger.debug('WHOOP token exchange response status', {
     userId,
@@ -360,13 +398,13 @@ export async function fetchWhoopUserProfile(
   accessToken: string
 ): Promise<WhoopUserProfile | null> {
   try {
-    const profileResponse = await fetch(`${WHOOP_API_BASE}/v2/user/profile/basic`, {
+    const profileResponse = await fetchWhoop(`${WHOOP_API_BASE}/v2/user/profile/basic`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-    });
+    }, 'WHOOP profile request');
 
     if (!profileResponse.ok) {
       const error = await profileResponse.text();
@@ -449,19 +487,20 @@ export async function refreshWhoopToken(
     hasClientSecret: !!finalClientSecret,
     bodyParams: {
       grant_type: 'refresh_token',
-      refresh_token: refreshToken ? `${refreshToken.substring(0, 20)}...` : 'missing',
-      client_id: finalClientId || 'missing',
-      client_secret: finalClientSecret ? '***' : 'missing',
+      hasRefreshToken: !!refreshToken,
+      hasClientId: !!finalClientId,
+      hasClientSecret: !!finalClientSecret,
+      hasRedirectUri: !!finalRedirectUri,
     },
   });
   
-  const tokenResponse = await fetch(WHOOP_OAUTH_TOKEN_URL, {
+  const tokenResponse = await fetchWhoop(WHOOP_OAUTH_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: requestBody,
-  });
+  }, 'WHOOP token refresh request');
   
   if (!tokenResponse.ok) {
     const errorText = await tokenResponse.text();
@@ -842,6 +881,11 @@ export async function getWhoopAccessToken(
     logger.warn('WHOOP integration still pending', { userId });
     throw ApiError.badRequest('WHOOP integration is still pending. Please complete the OAuth flow.');
   }
+
+  if (!integration.access_token) {
+    logger.error('WHOOP access token missing', { userId });
+    throw ApiError.badRequest('Access token not available. Please reconnect your WHOOP account.');
+  }
   
   // If status is not 'active', log warning but continue (for backwards compatibility)
   if (integration.status !== 'active') {
@@ -921,7 +965,7 @@ export async function getWhoopAccessToken(
       // Double-check token status from DB (another process may have refreshed)
       // Don't filter by status='active' - check current status to avoid refreshing invalid tokens
       const recheckResult = await query<{
-        access_token: string;
+        access_token: string | null;
         refresh_token: string | null;
         token_expiry: Date | null;
         status: string;
@@ -952,8 +996,15 @@ export async function getWhoopAccessToken(
       if (!recheckIntegration.refresh_token) {
         throw ApiError.badRequest('Refresh token not available. Please reconnect your WHOOP account.');
       }
+
+      if (!recheckIntegration.access_token) {
+        throw ApiError.badRequest('Access token not available. Please reconnect your WHOOP account.');
+      }
+
       const recheckExpiry = recheckIntegration.token_expiry;
-      const stillNeedsRefresh = recheckExpiry && now >= new Date(recheckExpiry.getTime() - 5 * 60 * 1000);
+      const stillNeedsRefresh =
+        !recheckExpiry ||
+        now >= new Date(recheckExpiry.getTime() - 5 * 60 * 1000);
       
       if (!stillNeedsRefresh) {
         // Token was refreshed by another process
