@@ -14,6 +14,8 @@ import { HealthOrbitSection } from "@/components/landing/health-orbit-section";
 import { ComparisonTableSection } from "@/components/landing/comparison-table-section";
 import { PricingSection } from "@/components/landing/pricing-section";
 import { CTASection } from "@/components/landing/cta-section";
+import { CinematicSplashWrapper } from "@/components/preloader/CinematicSplashWrapper";
+
 // import { CinematicOverlays } from "@/components/landing/CinematicOverlays";
 
 export const metadata = SEO.home;
@@ -23,6 +25,7 @@ export default function HomePage() {
     <MainLayout>
       {/* <CinematicOverlays /> */}
       <HeroSection />
+      <CinematicSplashWrapper />
       <TrustBarSection />
       <ProblemPainSection />
       <LifeDomainsCarouselSection />

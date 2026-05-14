@@ -7,7 +7,6 @@ import { Bot, User, Loader2, CheckCircle2, AlertCircle, Copy, Pencil, Check, X }
 import toast from "react-hot-toast";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
 import { parseActionsFromResponse, ActionExecutionResult } from "@/src/shared/services/action-handler.service";
 import { cleanCoachDisplayText } from "@/src/shared/utils/coach-message-display";
 
@@ -126,7 +125,7 @@ export function AICoachMessages({
   function renderContentWithWikiLinks(content: string): React.ReactNode {
     if (!onOpenWikiPage || !content.includes("[[")) {
       return (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {content}
         </ReactMarkdown>
       );
@@ -140,7 +139,7 @@ export function AICoachMessages({
       }
       if (!part) return null;
       return (
-        <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+        <ReactMarkdown key={i} remarkPlugins={[remarkGfm]}>
           {part}
         </ReactMarkdown>
       );

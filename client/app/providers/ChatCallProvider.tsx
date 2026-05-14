@@ -17,6 +17,7 @@ import { getSocket, initSocket } from '@/lib/socket-client';
 import { cn } from '@/lib/utils';
 import { ChatCallClient } from '@/lib/webrtc/chat-call-client';
 import { useAuth } from '@/app/context/AuthContext';
+import { useRingtone } from '@/hooks/use-ringtone';
 
 interface ChatCallPayload {
   id: string;
@@ -94,6 +95,7 @@ function StreamVideo({
 export function ChatCallProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+  const ringtone = useRingtone();
   const [incomingCall, setIncomingCall] = useState<ChatCallPayload | null>(null);
   const [outgoingCall, setOutgoingCall] = useState<ChatCallPayload | null>(null);
   const [activeCall, setActiveCall] = useState<ChatCallPayload | null>(null);
@@ -294,6 +296,15 @@ export function ChatCallProvider({ children }: { children: ReactNode }) {
     };
   }, [clearCall, ensureClient, isAuthenticated, isLoading, toast]);
 
+  // Play ringtone for incoming/outgoing ringing state, stop on answer/end
+  useEffect(() => {
+    if (incomingCall || (outgoingCall && !activeCall)) {
+      ringtone.play(true);
+    } else {
+      ringtone.stop();
+    }
+  }, [incomingCall, outgoingCall, activeCall, ringtone]);
+
   useEffect(() => {
     if (!callStartedAt) return;
     const interval = window.setInterval(() => {
@@ -379,8 +390,25 @@ export function ChatCallProvider({ children }: { children: ReactNode }) {
   const remoteStream = remoteStreams.values().next().value as MediaStream | undefined;
   const visibleCall = activeCall || outgoingCall || incomingCall;
 
+  // Play remote audio for voice calls via a hidden <audio> element
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !remoteStream) {
+      if (audio) audio.srcObject = null;
+      return;
+    }
+    audio.srcObject = remoteStream;
+    audio.play().catch(() => {});
+    return () => {
+      if (audio.srcObject === remoteStream) audio.srcObject = null;
+    };
+  }, [remoteStream]);
+
   return (
     <ChatCallContext.Provider value={value}>
+      {/* Hidden audio element for playing remote audio in voice calls */}
+      <audio ref={audioRef} autoPlay playsInline />
       {children}
 
       {incomingCall && (

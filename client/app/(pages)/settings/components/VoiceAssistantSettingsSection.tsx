@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { MessageSquare, Phone, Clock, Plus, X, Bell, BellOff } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { MessageSquare, Phone, Clock, Plus, X, Bell, BellOff, Music, Play, Square, Check } from "lucide-react";
 import { LanguageSelector } from "@/components/common/language-selector";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -13,6 +13,170 @@ import {
   getShortDayName,
   formatScheduleTime as formatTime,
 } from "@/src/shared/services/voice-schedule.service";
+import { useRingtone, type RingtoneOption } from "@/hooks/use-ringtone";
+
+// ============================================
+// Ringtone waveform bars (decorative visualizer)
+// ============================================
+function WaveformBars({ active, color }: { active: boolean; color: string }) {
+  const bars = [0.4, 0.7, 1, 0.6, 0.85, 0.5, 0.9, 0.35, 0.75, 0.55, 0.8, 0.45];
+  return (
+    <div className="flex items-end gap-[2px] h-8">
+      {bars.map((h, i) => (
+        <div
+          key={i}
+          className={`w-[3px] rounded-full transition-all duration-300 ${color}`}
+          style={{
+            height: active ? `${h * 100}%` : '16%',
+            opacity: active ? 0.9 : 0.25,
+            animationName: active ? 'ringtoneWave' : 'none',
+            animationDuration: `${0.4 + (i % 3) * 0.15}s`,
+            animationTimingFunction: 'ease-in-out',
+            animationIterationCount: 'infinite',
+            animationDirection: 'alternate',
+            animationDelay: `${i * 0.05}s`,
+          }}
+        />
+      ))}
+      <style jsx>{`
+        @keyframes ringtoneWave {
+          0% { transform: scaleY(0.4); }
+          100% { transform: scaleY(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ============================================
+// Ringtone selector component
+// ============================================
+function RingtoneSelector() {
+  const { selectedRingtone, ringtones, preview, stop, select } = useRingtone();
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handlePreview = useCallback(
+    (ringtoneId: string) => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+      if (playingId === ringtoneId) {
+        stop();
+        setPlayingId(null);
+        return;
+      }
+      preview(ringtoneId);
+      setPlayingId(ringtoneId);
+      timeoutRef.current = setTimeout(() => {
+        setPlayingId(null);
+      }, 4000);
+    },
+    [playingId, preview, stop],
+  );
+
+  const handleSelect = useCallback(
+    (ringtoneId: string) => {
+      select(ringtoneId);
+      toast.success("Ringtone updated");
+    },
+    [select],
+  );
+
+  useEffect(() => {
+    return () => {
+      stop();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [stop]);
+
+  const gradients: Record<string, { bg: string; bar: string; ring: string; glow: string }> = {
+    ring1: { bg: 'from-violet-500/10 to-fuchsia-500/10', bar: 'bg-violet-400', ring: 'ring-violet-500/30 border-violet-500/40', glow: 'shadow-violet-500/20' },
+    ring2: { bg: 'from-sky-500/10 to-cyan-500/10', bar: 'bg-sky-400', ring: 'ring-sky-500/30 border-sky-500/40', glow: 'shadow-sky-500/20' },
+    ring3: { bg: 'from-emerald-500/10 to-teal-500/10', bar: 'bg-emerald-400', ring: 'ring-emerald-500/30 border-emerald-500/40', glow: 'shadow-emerald-500/20' },
+  };
+
+  return (
+    <GlassCard>
+      <SectionHeader
+        icon={<Music className="w-5 h-5" />}
+        title="Call Ringtone"
+        gradient="from-fuchsia-500 to-pink-500"
+      />
+      <p className="text-slate-400 text-sm mb-5">
+        Choose a ringtone for incoming and outgoing calls.
+      </p>
+
+      <div className="grid gap-3">
+        {ringtones.map((tone) => {
+          const isSelected = selectedRingtone === tone.id;
+          const isPlaying = playingId === tone.id;
+          const g = gradients[tone.id] || gradients.ring1;
+
+          return (
+            <div
+              key={tone.id}
+              className={`group relative flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                isSelected
+                  ? `bg-gradient-to-r ${g.bg} ${g.ring} ring-1 shadow-lg ${g.glow}`
+                  : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04] hover:border-white/[0.1]'
+              }`}
+              onClick={() => handleSelect(tone.id)}
+            >
+              {/* Play/Stop button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePreview(tone.id);
+                }}
+                className={`relative flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                  isPlaying
+                    ? `bg-gradient-to-br ${g.bg} ${g.ring} ring-1`
+                    : 'bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08]'
+                }`}
+                aria-label={isPlaying ? `Stop ${tone.label}` : `Preview ${tone.label}`}
+              >
+                {isPlaying ? (
+                  <Square className="w-4 h-4 text-white fill-current" />
+                ) : (
+                  <Play className="w-4 h-4 text-slate-300 ml-0.5" />
+                )}
+              </button>
+
+              {/* Waveform + label */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                    {tone.label}
+                  </span>
+                  {isSelected && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.08] text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                      <Check className="w-3 h-3" />
+                      Active
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2">
+                  <WaveformBars active={isPlaying} color={g.bar} />
+                </div>
+              </div>
+
+              {/* Selection indicator */}
+              <div
+                className={`flex-shrink-0 w-5 h-5 rounded-full border-2 transition-all duration-200 flex items-center justify-center ${
+                  isSelected
+                    ? 'border-emerald-400 bg-emerald-400'
+                    : 'border-white/20 group-hover:border-white/40'
+                }`}
+              >
+                {isSelected && <Check className="w-3 h-3 text-black" />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </GlassCard>
+  );
+}
 
 interface VoiceAssistantSettingsSectionProps {
   assistantName: string;
@@ -130,6 +294,9 @@ export function VoiceAssistantSettingsSection({
           </div>
         </div>
       </GlassCard>
+
+      {/* Ringtone Section */}
+      <RingtoneSelector />
 
       {/* Call Schedule Section */}
       {prefs && (
