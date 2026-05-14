@@ -34,7 +34,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { subscribeToChatEvents, subscribeToUserEvents, getSocket } from '@/lib/socket-client';
 import { useVoiceAssistant } from '@/app/context/VoiceAssistantContext';
 import { useChatCall } from '@/app/providers/ChatCallProvider';
-import { voiceCallService } from '@/src/shared/services/voice-call.service';
+
 import { api } from '@/lib/api-client';
 
 interface MessagesViewProps {
@@ -478,18 +478,10 @@ export function MessagesView({
     (p) => p.user && p.user.id !== user?.id
   );
 
-  const handleAiCoachCall = useCallback(async () => {
-    try {
-      const res = await voiceCallService.initiate({ channel: 'mobile_app' });
-      if (res.success) {
-        toast({ title: 'Connecting to your coach...' });
-      } else {
-        toast({ title: 'Could not start call', description: res.error?.message, variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Call failed', description: 'Please try again.', variant: 'destructive' });
-    }
-  }, [toast]);
+  const handleAiCoachCall = useCallback(() => {
+    if (!chatId) return;
+    startCall(chatId, 'voice');
+  }, [chatId, startCall]);
 
   // Calculate if user can send messages (for group permissions)
   const canSendMessages = useMemo(() => {

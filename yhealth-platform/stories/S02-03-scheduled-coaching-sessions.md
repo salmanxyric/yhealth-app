@@ -8,8 +8,9 @@ feature: F2.1
 feature_name: Voice Call Initiation
 product: yhealth-platform
 priority: P0
-status: Draft
+status: Done
 created: 2025-12-07
+implemented: 2026-05-14
 ---
 
 # S02.1.3: Scheduled Coaching Sessions

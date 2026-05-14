@@ -39,6 +39,10 @@ router.get('/plans/:id', intelligenceFilesController.getPlan);
 // Logs
 router.get('/logs', intelligenceFilesController.listLogs);
 
+// Transparency
+router.get('/transparency/:messageId', intelligenceFilesController.getMessageTransparency);
+router.post('/transparency/:messageId/feedback', intelligenceFilesController.submitTransparencyFeedback);
+
 // Feedback
 router.post('/feedback', intelligenceFilesController.submitFeedback);
 

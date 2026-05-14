@@ -361,12 +361,20 @@ class WikiService {
     queryText: string,
     filters?: WikiSearchFilters
   ): Promise<WikiSearchResult[]> {
-    const conditions: string[] = ['user_id = $1', `status != 'archived'`];
+    const conditions: string[] = ['user_id = $1'];
     const params: QueryParam[] = [userId];
     let paramIdx = 2;
 
+    if (filters?.status) {
+      conditions.push(`status = $${paramIdx++}`);
+      params.push(filters.status);
+    } else {
+      conditions.push(`status != 'archived'`);
+    }
+
     const pattern = `%${queryText}%`;
-    conditions.push(`(title ILIKE $${paramIdx} OR summary ILIKE $${paramIdx} OR body ILIKE $${paramIdx})`);
+    const patternParam = paramIdx;
+    conditions.push(`(title ILIKE $${patternParam} OR summary ILIKE $${patternParam} OR body ILIKE $${patternParam})`);
     params.push(pattern);
     paramIdx++;
 
@@ -389,8 +397,8 @@ class WikiService {
     const result = await query<Record<string, unknown>>(
       `SELECT *,
               CASE
-                WHEN title ILIKE $2 THEN 1.0
-                WHEN summary ILIKE $2 THEN 0.8
+                WHEN title ILIKE $${patternParam} THEN 1.0
+                WHEN summary ILIKE $${patternParam} THEN 0.8
                 ELSE 0.5
               END AS similarity
        FROM wiki_pages

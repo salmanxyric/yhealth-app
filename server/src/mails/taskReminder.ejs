@@ -1,84 +1,56 @@
 <%# Task Reminder Template %>
 <%
-  const _catIcon = categoryIcon || '📋';
-  const _priIcon = priorityIcon || '';
-  const _pri = priority || 'normal';
-  const _priBg = _pri === 'urgent' ? '#FEE2E2' : _pri === 'high' ? '#FFEDD5' : _pri === 'medium' ? '#FEF3C7' : '#DBEAFE';
-  const _priColor = _pri === 'urgent' ? '#DC2626' : _pri === 'high' ? '#EA580C' : _pri === 'medium' ? '#CA8A04' : '#2563EB';
-  const _cat = category || 'general';
-  const _catLabel = _cat.charAt(0).toUpperCase() + _cat.slice(1);
-  const _hasDesc = taskDescription && taskDescription !== 'No description provided';
-  const _descHtml = _hasDesc ? `<p style="margin: 0 0 16px 0; font-size: 14px; color: #6B7280; text-align: center;">${taskDescription}</p>` : '';
+  const priorityValue = priority || 'normal';
+  const priorityBg = priorityValue === 'urgent' ? '#fee2e2' : priorityValue === 'high' ? '#ffedd5' : priorityValue === 'medium' ? '#fef3c7' : '#ecfdf5';
+  const priorityColor = priorityValue === 'urgent' ? '#dc2626' : priorityValue === 'high' ? '#ea580c' : priorityValue === 'medium' ? '#ca8a04' : '#047857';
+  const categoryValue = category || 'general';
+  const categoryLabel = categoryValue.charAt(0).toUpperCase() + categoryValue.slice(1);
+  const hasDescription = taskDescription && taskDescription !== 'No description provided';
 %>
 <%- include('./layouts/base', {
-  title: 'Task Reminder - yHealth',
-  preheader: `${firstName}, you have a task coming up: ${taskTitle}`,
-  greeting: `Hi ${firstName}!`,
+  title: 'Task Reminder - Balencia',
+  preheader: `${firstName}, you have a task coming up: ${taskTitle}.`,
+  eyebrow: 'Task reminder',
+  greeting: `A task is coming up, ${firstName}.`,
   content: `
-    <div style="text-align: center; margin-bottom: 24px;">
-      <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%); border-radius: 50%; margin: 0 auto 16px; line-height: 80px;">
-        <span style="font-size: 40px;">${_catIcon}</span>
-      </div>
-    </div>
-
-    <p style="margin: 0 0 24px 0; text-align: center; font-size: 18px; color: #1F2937;">
-      You have a task scheduled - don't miss it!
+    <p style="margin:0 0 22px; font-size:16px; line-height:26px;">
+      Stay close to the plan. This task is scheduled and ready for your next action.
     </p>
 
-    <!-- Task Card -->
-    <div style="background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%); border-radius: 12px; padding: 24px; margin: 24px 0;">
-      <!-- Priority Badge -->
-      <div style="text-align: center; margin-bottom: 16px;">
-        <span style="display: inline-block; background: ${_priBg}; color: ${_priColor}; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-          ${_priIcon} ${_pri} Priority
-        </span>
-      </div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:26px 0; background:linear-gradient(135deg,#fff7ed 0%,#ecfdf5 100%); border-radius:18px; border:1px solid #fed7aa;">
+      <tr>
+        <td style="padding:26px; text-align:center;">
+          <span style="display:inline-block; background:${priorityBg}; color:${priorityColor}; padding:5px 13px; border-radius:999px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.5px;">
+            ${escapeFn(priorityValue)} priority
+          </span>
+          <p style="margin:18px 0 8px; font-size:23px; line-height:30px; font-weight:800; color:#111827;">${escapeFn(taskTitle)}</p>
+          ${hasDescription ? `<p style="margin:0 0 18px; font-size:14px; line-height:22px; color:#6b7280;">${escapeFn(taskDescription)}</p>` : ''}
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#ffffff; border-radius:12px; border:1px solid #ffedd5;">
+            <tr>
+              <td style="padding:16px; text-align:center;">
+                <p style="margin:0 0 4px; font-size:12px; color:#9a3412; text-transform:uppercase; letter-spacing:1.3px; font-weight:800;">Scheduled for</p>
+                <p style="margin:0; font-size:18px; font-weight:800; color:#ea580c;">${escapeFn(scheduledTime)}</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:16px 0 0; font-size:12px; color:#57534e;">Category: ${escapeFn(categoryLabel)}</p>
+        </td>
+      </tr>
+    </table>
 
-      <!-- Task Title -->
-      <p style="margin: 0 0 8px 0; font-size: 22px; font-weight: 700; color: #1F2937; text-align: center;">
-        ${taskTitle}
-      </p>
-
-      <!-- Task Description -->
-      ${_descHtml}
-
-      <!-- Scheduled Time -->
-      <div style="background: white; border-radius: 8px; padding: 16px; text-align: center;">
-        <p style="margin: 0 0 4px 0; font-size: 12px; color: #9CA3AF; text-transform: uppercase; letter-spacing: 1px;">
-          Scheduled For
-        </p>
-        <p style="margin: 0; font-size: 18px; font-weight: 600; color: #7C3AED;">
-          🕐 ${scheduledTime}
-        </p>
-      </div>
-
-      <!-- Category -->
-      <div style="text-align: center; margin-top: 16px;">
-        <span style="display: inline-block; background: #F3F4F6; color: #4B5563; padding: 4px 12px; border-radius: 12px; font-size: 12px;">
-          ${_catIcon} ${_catLabel}
-        </span>
-      </div>
-    </div>
-
-    <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 26px; text-align: center;">
-      Stay organized and productive! Click below to view your task or mark it as complete.
-    </p>
-
-    <!-- Quick Actions -->
-    <div style="text-align: center; margin: 24px 0;">
-      <a href="${completeUrl}" style="display: inline-block; background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 0 8px 8px 0;">
-        ✓ Mark Complete
+    <div style="text-align:center; margin:24px 0;">
+      <a href="${escapeFn(completeUrl)}" style="display:inline-block; background:linear-gradient(135deg,#10b981 0%,#059669 100%); color:#ffffff; padding:12px 24px; border-radius:999px; text-decoration:none; font-weight:800; font-size:14px;">
+        Mark Complete
       </a>
     </div>
 
-    <p style="margin: 24px 0 0 0; font-size: 14px; font-style: italic; color: #6B7280; text-align: center;">
+    <p style="margin:24px 0 0; font-size:14px; font-style:italic; color:#6b7280; text-align:center;">
       "The key is not to prioritize what's on your schedule, but to schedule your priorities." - Stephen Covey
     </p>
   `,
   ctaButton: {
     text: 'View Task Details',
-    url: dashboardUrl,
-    color: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)'
+    url: dashboardUrl
   },
-  footerText: "You're doing great! Keep up the momentum."
+  footerText: 'Keep the momentum visible and simple.'
 }) %>

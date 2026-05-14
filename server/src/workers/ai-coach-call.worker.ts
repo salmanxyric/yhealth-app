@@ -5,7 +5,6 @@ import { logger } from '../services/logger.service.js';
 import { communicationPreferencesService } from '../services/communication-preferences.service.js';
 import { voiceScheduleService } from '../services/voice-schedule.service.js';
 import { chatCallService } from '../services/chat-call.service.js';
-import { socketService } from '../services/socket.service.js';
 import { getUserLocalHour } from '../lib/user-timezone.js';
 import type { AICoachCallJobData } from '../services/ai-coach-call-queue.service.js';
 
@@ -81,20 +80,27 @@ async function runGateChecks(job: Job<AICoachCallJobData>): Promise<GateResult> 
   }
 
   // Gate 7: Daily cap
+  // Use the higher of max_checkins_per_day and the user's preferred_call_times count,
+  // because the default max_checkins_per_day (1) is too low for users with multiple times.
+  const timesResult = await query<{ cnt: string }>(
+    `SELECT COALESCE(array_length(preferred_call_times, 1), 0)::text AS cnt
+     FROM user_preferences WHERE user_id = $1`,
+    [userId],
+  );
+  const preferredTimesCount = parseInt(timesResult.rows[0]?.cnt || '0', 10);
+  const effectiveCap = Math.max(commPrefs.max_checkins_per_day, preferredTimesCount);
+
   const capResult = await query<{ c: string }>(
     `SELECT COUNT(*)::text AS c FROM ai_coach_call_log
      WHERE user_id = $1 AND scheduled_date = $2::DATE
        AND status IN ('initiated', 'answered')`,
     [userId, job.data.scheduledDate],
   );
-  if (parseInt(capResult.rows[0]?.c || '0', 10) >= commPrefs.max_checkins_per_day) {
+  if (parseInt(capResult.rows[0]?.c || '0', 10) >= effectiveCap) {
     return { skip: true, reason: 'daily_cap', status: 'skipped' };
   }
 
-  // Gate 8: User online
-  if (!socketService.isUserConnected(userId)) {
-    return { skip: true, reason: 'offline', status: 'skipped_offline' };
-  }
+  // Gate 8 removed: initiateAICoachCall handles offline users via push notification.
 
   return { skip: false };
 }

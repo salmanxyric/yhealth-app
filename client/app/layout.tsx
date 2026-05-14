@@ -9,6 +9,8 @@ import { VisitorTracker } from "@/components/VisitorTracker";
 import { PersistentPlayer } from "@/components/music/PersistentPlayer";
 import { organizationJsonLd, webSiteJsonLd } from "@/lib/structured-data";
 import { ChatCallProvider } from "./providers/ChatCallProvider";
+import { CinematicSplashWrapper } from "@/components/preloader/CinematicSplashWrapper";
+import { HydrationSignal } from "@/components/preloader/HydrationSignal";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -132,7 +134,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${poppins.variable} ${cinzel.variable} ${nunito.variable} ${instrumentSerif.variable} font-sans antialiased`}
       >
+        <CinematicSplashWrapper />
         <Providers>
+          <HydrationSignal />
           <AlarmProvider>
             <ConfirmDialogProvider>
               <ChatCallProvider>

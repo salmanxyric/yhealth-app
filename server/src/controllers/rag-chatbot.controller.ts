@@ -264,7 +264,7 @@ class RAGChatbotController {
     ApiResponse.success(res, {
       message: result.response,
       conversationId: result.conversationId,
-      messageId: `msg-${Date.now()}`, // Generate message ID
+      messageId: resultAny.messageId,
       actions: resultAny.actions, // Include actions if any
       toolCalls: resultAny.toolCalls, // Include tool calls if any
       emotion: emotionDetected ? {
@@ -556,6 +556,7 @@ class RAGChatbotController {
         done: true,
         message: finalMessage,
         conversationId: result.conversationId,
+        messageId: resultAny.messageId,
         actions: resultAny.actions,
         toolCalls: resultAny.toolCalls,
         context: result.context,

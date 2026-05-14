@@ -438,6 +438,15 @@ class ChatCallService {
     return call;
   }
 
+  async isAICoachChat(chatId: string, aiCoachUserId: string): Promise<boolean> {
+    const result = await query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt FROM chat_participants
+       WHERE chat_id = $1 AND user_id = $2 AND left_at IS NULL`,
+      [chatId, aiCoachUserId],
+    );
+    return parseInt(result.rows[0]?.cnt || '0', 10) > 0;
+  }
+
   private async findOrCreateAICoachChat(userId: string): Promise<string> {
     const result = await query<{ id: string }>(
       `SELECT c.id FROM chats c

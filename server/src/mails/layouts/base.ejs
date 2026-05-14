@@ -17,194 +17,149 @@
   </noscript>
   <![endif]-->
   <style>
-    /* Reset styles */
     html, body { margin: 0 !important; padding: 0 !important; height: 100% !important; width: 100% !important; }
     * { -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt !important; mso-table-rspace: 0pt !important; }
     table { border-spacing: 0 !important; border-collapse: collapse !important; table-layout: fixed !important; margin: 0 auto !important; }
-    img { -ms-interpolation-mode: bicubic; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
     a { text-decoration: none; }
+    p, h1, h2, h3 { margin-top: 0; }
 
-    /* Progressive Enhancement */
     @media screen and (max-width: 600px) {
       .email-container { width: 100% !important; margin: auto !important; }
-      .fluid { max-width: 100% !important; height: auto !important; margin-left: auto !important; margin-right: auto !important; }
-      .stack-column, .stack-column-center { display: block !important; width: 100% !important; max-width: 100% !important; direction: ltr !important; }
-      .stack-column-center { text-align: center !important; }
-      .center-on-narrow { text-align: center !important; display: block !important; margin-left: auto !important; margin-right: auto !important; float: none !important; }
-      table.center-on-narrow { display: inline-block !important; }
+      .mobile-shell { padding: 18px 12px !important; }
+      .mobile-padding { padding: 28px 22px !important; }
       .email-container p { font-size: 16px !important; line-height: 26px !important; }
-      .mobile-padding { padding: 20px !important; }
+      .brand-title { font-size: 30px !important; }
     }
 
-    /* Dark Mode */
     @media (prefers-color-scheme: dark) {
-      .email-bg { background: #1a1a2e !important; }
-      .darkmode-bg { background: #16213e !important; }
-      .darkmode-text { color: #f5f5f5 !important; }
+      .email-bg { background: #1c120b !important; }
+      .darkmode-bg { background: #211813 !important; }
+      .darkmode-text { color: #fff7ed !important; }
+      .darkmode-muted { color: #fed7aa !important; }
     }
   </style>
 </head>
-<body width="100%" style="margin: 0; padding: 0 !important; mso-line-height-rule: exactly; background-color: #F9FAFB;" class="email-bg">
-
-  <!-- Preheader Text -->
-  <div style="display: none; font-size: 1px; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all;">
+<body width="100%" style="margin:0; padding:0 !important; mso-line-height-rule:exactly; background-color:#fff7ed;" class="email-bg">
+  <div style="display:none; font-size:1px; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">
     <%= typeof preheader !== 'undefined' ? preheader : '' %>
   </div>
 
-  <center role="article" aria-roledescription="email" lang="en" style="width: 100%; background-color: #F9FAFB;" class="email-bg">
-
-    <!-- Email Container -->
-    <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="margin: auto;" class="email-container">
-
-      <!-- Header with Logo -->
+  <center role="article" aria-roledescription="email" lang="en" style="width:100%; background-color:#fff7ed;" class="email-bg">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:linear-gradient(180deg,#fff7ed 0%,#ffedd5 48%,#f8fafc 100%);">
       <tr>
-        <td style="padding: 30px 0; text-align: center;">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+        <td align="center" style="padding:34px 16px 42px;" class="mobile-shell">
+          <table align="center" role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="width:600px; max-width:600px;" class="email-container">
             <tr>
-              <td style="text-align: center;">
-                <!-- Logo -->
-                <div style="font-size: 32px; font-weight: 800; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; letter-spacing: -1px;">
-                  <span style="color: #6366F1;">y</span><span style="color: #1F2937;">Health</span>
+              <td style="padding:0 0 22px; text-align:center;">
+                <div class="brand-title" style="font-family:Georgia,'Times New Roman',serif; font-size:34px; line-height:38px; font-weight:700; letter-spacing:0; color:#111827;">
+                  <span style="color:#f97316;">Bal</span>encia
                 </div>
-                <div style="font-size: 12px; color: #6B7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin-top: 4px; text-transform: uppercase; letter-spacing: 2px;">
-                  Your AI Life Coach
+                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:11px; line-height:16px; color:#9a3412; margin-top:6px; text-transform:uppercase; letter-spacing:2.4px; font-weight:700;">
+                  Premium AI Life Coaching
                 </div>
               </td>
             </tr>
-          </table>
-        </td>
-      </tr>
 
-      <!-- Main Content Card -->
-      <tr>
-        <td style="padding: 0 20px;">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);" class="darkmode-bg">
-
-            <!-- Gradient Top Bar -->
             <tr>
-              <td style="height: 6px; background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A855F7 100%); border-radius: 16px 16px 0 0;"></td>
-            </tr>
-
-            <!-- Content -->
-            <tr>
-              <td style="padding: 40px 40px 20px 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;" class="mobile-padding">
-
-                <% if (typeof greeting !== 'undefined' && greeting) { %>
-                <!-- Greeting -->
-                <h1 style="margin: 0 0 24px 0; font-size: 28px; font-weight: 700; color: #1F2937; line-height: 1.3;" class="darkmode-text">
-                  <%= greeting %>
-                </h1>
-                <% } %>
-
-                <!-- Main Content -->
-                <div style="font-size: 16px; line-height: 26px; color: #4B5563;" class="darkmode-text">
-                  <%- content %>
-                </div>
-
-                <% if (typeof ctaButton !== 'undefined' && ctaButton) { %>
-                <!-- CTA Button -->
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 32px 0;">
+              <td style="padding:0;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#ffffff; border-radius:22px; overflow:hidden; border:1px solid #fed7aa; box-shadow:0 18px 42px rgba(154,52,18,0.14);" class="darkmode-bg">
                   <tr>
-                    <td align="center">
-                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                    <td style="height:8px; background:linear-gradient(135deg,#f97316 0%,#ea580c 42%,#f59e0b 72%,#10b981 100%);"></td>
+                  </tr>
+                  <tr>
+                    <td style="padding:42px 42px 24px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;" class="mobile-padding">
+                      <% if (typeof eyebrow !== 'undefined' && eyebrow) { %>
+                      <p style="margin:0 0 12px; font-size:11px; line-height:16px; color:#c2410c; text-transform:uppercase; letter-spacing:2px; font-weight:800;">
+                        <%= eyebrow %>
+                      </p>
+                      <% } %>
+
+                      <% if (typeof greeting !== 'undefined' && greeting) { %>
+                      <h1 style="margin:0 0 22px; font-family:Georgia,'Times New Roman',serif; font-size:31px; line-height:39px; font-weight:700; color:#111827; letter-spacing:0;" class="darkmode-text">
+                        <%= greeting %>
+                      </h1>
+                      <% } %>
+
+                      <div style="font-size:16px; line-height:26px; color:#4b5563;" class="darkmode-text">
+                        <%- content %>
+                      </div>
+
+                      <% if (typeof ctaButton !== 'undefined' && ctaButton) { %>
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:34px 0 8px;">
                         <tr>
-                          <td style="border-radius: 12px; background: <%= ctaButton.color || 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A855F7 100%)' %>;">
-                            <a href="<%= ctaButton.url %>" target="_blank" style="display: inline-block; padding: 16px 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 12px;">
-                              <%= ctaButton.text %>
-                            </a>
+                          <td align="center">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                              <tr>
+                                <td style="border-radius:999px; background:<%= ctaButton.color || 'linear-gradient(135deg,#f97316 0%,#ea580c 58%,#f59e0b 100%)' %>; box-shadow:0 12px 28px rgba(234,88,12,0.28);">
+                                  <a href="<%= ctaButton.url %>" target="_blank" style="display:inline-block; padding:16px 34px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:15px; line-height:18px; font-weight:800; color:#ffffff; text-decoration:none; border-radius:999px;">
+                                    <%= ctaButton.text %>
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                      <% } %>
+
+                      <% if (typeof secondaryContent !== 'undefined' && secondaryContent) { %>
+                      <div style="font-size:14px; line-height:22px; color:#6b7280; margin-top:26px; padding-top:24px; border-top:1px solid #ffedd5;" class="darkmode-muted">
+                        <%- secondaryContent %>
+                      </div>
+                      <% } %>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding:0 42px 40px;" class="mobile-padding">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                        <tr>
+                          <td style="padding-top:22px; border-top:1px solid #ffedd5;">
+                            <p style="margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:#78716c;" class="darkmode-muted">
+                              <%= typeof footerText !== 'undefined' ? footerText : 'Need help? Reply to this email or contact support@balencia.app.' %>
+                            </p>
                           </td>
                         </tr>
                       </table>
                     </td>
                   </tr>
                 </table>
-                <% } %>
-
-                <% if (typeof secondaryContent !== 'undefined' && secondaryContent) { %>
-                <!-- Secondary Content -->
-                <div style="font-size: 14px; line-height: 22px; color: #6B7280; margin-top: 24px; padding-top: 24px; border-top: 1px solid #E5E7EB;" class="darkmode-text">
-                  <%- secondaryContent %>
-                </div>
-                <% } %>
-
               </td>
             </tr>
 
-            <!-- Footer inside card -->
             <tr>
-              <td style="padding: 20px 40px 40px 40px;" class="mobile-padding">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <td style="padding:28px 22px 0; text-align:center;">
+                <% if (typeof showSocial === 'undefined' || showSocial !== false) { %>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin-bottom:18px;">
                   <tr>
-                    <td style="padding-top: 24px; border-top: 1px solid #E5E7EB;">
-                      <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; color: #6B7280;">
-                        <%= typeof footerText !== 'undefined' ? footerText : 'Need help? Reply to this email or contact us at support@yhealth.app' %>
-                      </p>
-                    </td>
+                    <td style="padding:0 6px;"><a href="https://twitter.com/balenciaapp" style="display:inline-block; width:34px; height:34px; border-radius:999px; background:#ffedd5; color:#9a3412; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:34px; font-weight:800;">X</a></td>
+                    <td style="padding:0 6px;"><a href="https://instagram.com/balenciaapp" style="display:inline-block; width:34px; height:34px; border-radius:999px; background:#ffedd5; color:#9a3412; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:34px; font-weight:800;">IG</a></td>
+                    <td style="padding:0 6px;"><a href="https://linkedin.com/company/balenciaapp" style="display:inline-block; width:34px; height:34px; border-radius:999px; background:#ffedd5; color:#9a3412; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:34px; font-weight:800;">in</a></td>
                   </tr>
                 </table>
+                <% } %>
+                <p style="margin:0 0 6px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:18px; color:#9a3412; font-weight:700;">
+                  Balencia by Xyric Solutions
+                </p>
+                <p style="margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:18px; color:#a8a29e;">
+                  High-touch coaching, powered by invisible intelligence.
+                </p>
+
+                <% if (typeof showUnsubscribe === 'undefined' || showUnsubscribe !== false) { %>
+                <p style="margin:16px 0 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:11px; line-height:18px; color:#a8a29e;">
+                  <a href="<%= typeof unsubscribeUrl !== 'undefined' ? unsubscribeUrl : '#' %>" style="color:#a8a29e; text-decoration:underline;">Unsubscribe</a>
+                  &nbsp;|&nbsp;
+                  <a href="<%= typeof preferencesUrl !== 'undefined' ? preferencesUrl : '#' %>" style="color:#a8a29e; text-decoration:underline;">Email Preferences</a>
+                </p>
+                <% } %>
               </td>
             </tr>
-
           </table>
         </td>
       </tr>
-
-      <!-- Footer -->
-      <tr>
-        <td style="padding: 30px 20px;">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-
-            <% if (typeof showSocial === 'undefined' || showSocial !== false) { %>
-            <!-- Social Links -->
-            <tr>
-              <td style="text-align: center; padding-bottom: 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
-                  <tr>
-                    <td style="padding: 0 8px;">
-                      <a href="https://twitter.com/yhealthapp" style="display: inline-block; width: 36px; height: 36px; background: #E5E7EB; border-radius: 50%; text-align: center; line-height: 36px; color: #6B7280; font-size: 14px;">X</a>
-                    </td>
-                    <td style="padding: 0 8px;">
-                      <a href="https://instagram.com/yhealthapp" style="display: inline-block; width: 36px; height: 36px; background: #E5E7EB; border-radius: 50%; text-align: center; line-height: 36px; color: #6B7280; font-size: 14px;">IG</a>
-                    </td>
-                    <td style="padding: 0 8px;">
-                      <a href="https://linkedin.com/company/yhealthapp" style="display: inline-block; width: 36px; height: 36px; background: #E5E7EB; border-radius: 50%; text-align: center; line-height: 36px; color: #6B7280; font-size: 14px;">in</a>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            <% } %>
-
-            <!-- Company Info -->
-            <tr>
-              <td style="text-align: center;">
-                <p style="margin: 0 0 8px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; color: #6B7280;">
-                  yHealth by Xyric Solutions
-                </p>
-                <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 12px; color: #9CA3AF;">
-                  Your AI Life Coach - Powered by invisible intelligence
-                </p>
-              </td>
-            </tr>
-
-            <% if (typeof showUnsubscribe === 'undefined' || showUnsubscribe !== false) { %>
-            <!-- Unsubscribe -->
-            <tr>
-              <td style="text-align: center; padding-top: 16px;">
-                <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 11px; color: #9CA3AF;">
-                  <a href="<%= typeof unsubscribeUrl !== 'undefined' ? unsubscribeUrl : '#' %>" style="color: #9CA3AF; text-decoration: underline;">Unsubscribe</a> | <a href="<%= typeof preferencesUrl !== 'undefined' ? preferencesUrl : '#' %>" style="color: #9CA3AF; text-decoration: underline;">Email Preferences</a>
-                </p>
-              </td>
-            </tr>
-            <% } %>
-
-          </table>
-        </td>
-      </tr>
-
     </table>
-
   </center>
 </body>
 </html>

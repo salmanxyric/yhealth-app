@@ -8,7 +8,23 @@ import { z } from 'zod';
 export const pageTypeEnum = z.enum(['entity', 'concept', 'pattern', 'journal', 'synthesis', 'source']);
 export const pageStatusEnum = z.enum(['active', 'stale', 'contradicted', 'archived', 'draft']);
 export const linkTypeEnum = z.enum(['reference', 'contradicts', 'supports', 'supersedes', 'derived_from', 'see_also']);
-export const categoryEnum = z.enum(['fitness', 'nutrition', 'sleep', 'wellbeing', 'lifestyle', 'behavioral', 'cross_domain']);
+export const categoryEnum = z.enum([
+  'fitness',
+  'nutrition',
+  'sleep',
+  'wellbeing',
+  'lifestyle',
+  'behavioral',
+  'cross_domain',
+  'medical',
+  'mental_health',
+  'goals',
+  'coaching',
+  'meta',
+  'preferences',
+  'relationships',
+  'general',
+]);
 
 const wikiPageSourceSchema = z.object({
   sourceType: z.string().min(1).max(64),

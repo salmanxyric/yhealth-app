@@ -33,7 +33,10 @@ function VoiceFallback() {
             className="w-1 rounded-full bg-gradient-to-t from-indigo-500 to-violet-400"
             style={{
               height: `${20 + Math.sin(i * 0.8) * 30}px`,
-              animation: `pulse ${1.5 + Math.random()}s ease-in-out infinite`,
+              animationName: "pulse",
+              animationDuration: `${1.5 + Math.random()}s`,
+              animationTimingFunction: "ease-in-out",
+              animationIterationCount: "infinite",
               animationDelay: `${i * 0.08}s`,
             }}
           />

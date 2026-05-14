@@ -13,6 +13,7 @@ import {
   normalizeWorkoutData,
   getWhoopAccessToken,
   refreshWhoopToken,
+  fetchWhoop,
 } from './whoop.service.js';
 import type { WhoopRecoveryData, WhoopSleepData, WhoopWorkoutData } from './whoop.service.js';
 import { dailBalenciaMetricsService } from './daily-health-metrics.service.js';
@@ -493,14 +494,14 @@ async function fetchWithAuthRetry(
   options: RequestInit = {}
 ): Promise<Response> {
   const makeRequest = async (token: string): Promise<Response> => {
-    return fetch(url, {
+    return fetchWhoop(url, {
       ...options,
       headers: {
         ...options.headers,
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-    });
+    }, 'WHOOP data API request');
   };
 
   let response = await makeRequest(currentToken);
@@ -644,7 +645,17 @@ export function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     // Network errors
-    if (msg.includes('fetch failed') || msg.includes('econnreset') || msg.includes('etimedout') || msg.includes('enotfound')) {
+    if (
+      msg.includes('fetch failed') ||
+      msg.includes('econnreset') ||
+      msg.includes('etimedout') ||
+      msg.includes('enotfound') ||
+      msg.includes('eai_again') ||
+      msg.includes('econnrefused') ||
+      msg.includes('und_err') ||
+      msg.includes('timeout') ||
+      msg.includes('aborted')
+    ) {
       return true;
     }
     // Rate limit or server errors encoded in message

@@ -99,6 +99,8 @@ async function processProactiveMessages(): Promise<void> {
       life_goal_checkin: 0, life_goal_stalled: 0, life_goal_milestone: 0, life_goal_encouragement: 0,
       intention_reminder: 0, intention_reflection: 0,
       free_window_suggestion: 0, busy_day_support: 0, holiday_adjustment: 0, post_busy_day_checkin: 0,
+      status_followup_sick: 0, status_followup_injury: 0, status_followup_travel: 0,
+      status_followup_vacation: 0, status_followup_stress: 0, status_return: 0, status_stale: 0,
     };
     let errors = 0;
     let skippedCapped = 0;
@@ -133,6 +135,10 @@ async function processProactiveMessages(): Promise<void> {
 
             // Fetch comprehensive context ONCE per user
             const context = await comprehensiveUserContextService.getComprehensiveContext(user.id);
+
+            // Attach local time info so handlers can pass it to generateProactiveMessage
+            (context as any)._proactiveHour = userHour;
+            (context as any)._proactiveTz = user.timezone;
 
             // Score all message types and pick the highest-impact ones
             const candidates = await proactiveMessagingService.scoreMessageCandidates(user.id, context, cooldown, userHour, userIsSunday);
@@ -216,6 +222,15 @@ async function processProactiveMessages(): Promise<void> {
                 case 'data_gap_dinner': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_dinner', context, cooldown); break;
                 case 'data_gap_mood': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_mood', context, cooldown); break;
                 case 'data_gap_workout_feedback': sent = await proactiveMessagingService.checkAndSendDataGapMessage(user.id, 'data_gap_workout_feedback', context, cooldown); break;
+                // Activity-status messages
+                case 'status_followup_sick':
+                case 'status_followup_injury':
+                case 'status_followup_travel':
+                case 'status_followup_vacation':
+                case 'status_followup_stress':
+                case 'status_return':
+                case 'status_stale':
+                  sent = await proactiveMessagingService.checkAndSendStatusMessage(user.id, candidate.type, context, cooldown); break;
               }
               if (sent) {
                 counters[candidate.type]++;

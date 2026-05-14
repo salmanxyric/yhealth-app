@@ -7,7 +7,7 @@ import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { stressService } from '../services/stress.service.js';
-import { mailHelper } from '../helper/mail.js';
+import { emailEngine } from '../services/email-engine.service.js';
 
 // ============================================
 // CONFIGURATION
@@ -141,53 +141,27 @@ async function processStressReminders(): Promise<void> {
         // Send email notification if push not enabled or as fallback
         if (!notificationChannels.push || notificationChannels.email) {
           try {
-            await mailHelper.send({
-              email: user.email,
-              subject: 'How was your stress today? - Balencia',
-              html: `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                  <meta charset="utf-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <title>Stress Check-in Reminder</title>
-                </head>
-                <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
-                    <tr>
-                      <td align="center">
-                        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                          <tr>
-                            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
-                              <h1 style="color: #ffffff; margin: 0; font-size: 28px;">😌 How was your stress today?</h1>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding: 40px 30px;">
-                              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                                Hi ${user.first_name || 'there'},
-                              </p>
-                              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                                It's time for your evening stress check-in. Taking a moment to reflect on your stress levels helps you understand patterns and take better care of your mental wellbeing.
-                              </p>
-                              <div style="text-align: center; margin: 30px 0;">
-                                <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?tab=wellbeing" 
-                                   style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 16px;">
-                                  Log Stress Level
-                                </a>
-                              </div>
-                              <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
-                                This reminder helps you build a consistent habit of tracking your stress. You can log your stress level anytime from the dashboard.
-                              </p>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                </body>
-                </html>
-              `,
+            const appUrl = process.env['APP_URL'] || 'http://localhost:3000';
+
+            await emailEngine.send({
+              userId: user.id,
+              template: 'taskReminder',
+              recipient: user.email,
+              subject: 'How was your stress today? - yHealth',
+              data: {
+                firstName: user.first_name || 'there',
+                taskTitle: 'Evening Stress Check-in',
+                taskDescription: "It's time for your evening stress check-in. Taking a moment to reflect on your stress levels helps you understand patterns and take better care of your mental wellbeing.",
+                scheduledTime: '8:00 PM',
+                priority: 'medium',
+                priorityIcon: '😌',
+                category: 'wellbeing',
+                categoryIcon: '🧘',
+                dashboardUrl: `${appUrl}/dashboard?tab=wellbeing`,
+                completeUrl: `${appUrl}/dashboard?tab=wellbeing`,
+              },
+              category: 'engagement',
+              priority: 'normal',
             });
 
             logger.info('[StressReminderJob] Email notification sent', {

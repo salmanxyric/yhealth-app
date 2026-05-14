@@ -6,7 +6,7 @@ import type { WebRTCOffer, WebRTCAnswer, RTCIceServer } from '../types/voice-cal
  * WebRTC Signaling Service
  * Handles WebRTC offer/answer exchange and ICE candidate management
  * 
- * Currently uses basic WebRTC. Can be extended with Twilio or other services.
+ * Delegates offer processing to a configured signaling backend.
  */
 class WebRTCSignalingService {
   /**
@@ -31,37 +31,34 @@ class WebRTCSignalingService {
   }
 
   /**
-   * Process WebRTC offer and generate answer
-   * In a full implementation, this would:
-   * 1. Validate the offer SDP
-   * 2. Create a peer connection on the server side
-   * 3. Generate an answer SDP
-   * 4. Return the answer
-   * 
-   * For now, this is a placeholder that will be implemented with:
-   * - Twilio Programmable Voice SDK
-   * - Or a self-hosted WebRTC server (Janus/Mediasoup)
+   * Process WebRTC offer and generate answer.
    */
   async processOffer(offer: WebRTCOffer, callId: string): Promise<WebRTCAnswer> {
     try {
       logger.info('[WebRTCSignaling] Processing offer', { callId, offerType: offer.type });
 
-      // TODO: Implement actual WebRTC offer processing
-      // This would involve:
-      // 1. Creating a peer connection
-      // 2. Setting remote description (offer)
-      // 3. Creating answer
-      // 4. Returning answer SDP
+      const signalingUrl = process.env.VOICE_SIGNALING_URL;
+      if (!signalingUrl) {
+        throw new Error('VOICE_SIGNALING_URL is not configured');
+      }
 
-      // For MVP, return a mock answer
-      // In production, this will be replaced with actual WebRTC implementation
-      const answer: WebRTCAnswer = {
-        sdp: 'mock-answer-sdp', // Replace with actual SDP
-        type: 'answer',
-      };
+      const response = await fetch(`${signalingUrl.replace(/\/$/, '')}/calls/${callId}/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offer }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Signaling backend returned ${response.status}`);
+      }
+
+      const answer = await response.json() as Partial<WebRTCAnswer>;
+      if (answer.type !== 'answer' || typeof answer.sdp !== 'string' || answer.sdp.trim().length === 0) {
+        throw new Error('Signaling backend returned an invalid answer');
+      }
 
       logger.info('[WebRTCSignaling] Offer processed, answer generated', { callId });
-      return answer;
+      return { type: 'answer', sdp: answer.sdp };
     } catch (error) {
       logger.error('[WebRTCSignaling] Error processing offer', { error, callId });
       throw error;
@@ -77,12 +74,8 @@ class WebRTCSignalingService {
       throw new Error('Twilio credentials not configured');
     }
 
-    // TODO: Implement Twilio token generation
-    // This would use Twilio SDK to generate a token for TURN server access
     logger.info('[WebRTCSignaling] Generating Twilio token', { identity, roomName });
-    
-    // Placeholder - will be implemented with Twilio SDK
-    return 'mock-twilio-token';
+    throw new Error('Twilio token generation requires Twilio SDK integration');
   }
 
   /**
@@ -94,4 +87,3 @@ class WebRTCSignalingService {
 }
 
 export const webrtcSignalingService = new WebRTCSignalingService();
-

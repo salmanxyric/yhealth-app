@@ -2,9 +2,10 @@
  * AI Coach Call Reconciler — Unit Tests
  *
  * Tests stuck-initiated recovery and batch scheduling.
+ * Uses beforeEach re-import pattern for resetMocks compatibility.
  */
 
-import { describe, it, expect, jest, beforeAll, beforeEach, afterAll } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 const mockQuery = jest.fn<any>();
 const mockScheduleCall = jest.fn<any>();
@@ -12,42 +13,41 @@ const mockIsAvailable = jest.fn<any>();
 
 let aiCoachCallReconcilerJob: any;
 
-beforeAll(async () => {
-  await jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
+beforeEach(async () => {
+  jest.restoreAllMocks();
+
+  jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
     query: (...args: unknown[]) => mockQuery(...args),
   }));
 
-  await jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
+  jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
     logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
   }));
 
-  await jest.unstable_mockModule('../../../src/services/ai-coach-call-queue.service.js', () => ({
+  jest.unstable_mockModule('../../../src/services/ai-coach-call-queue.service.js', () => ({
     aiCoachCallQueueService: {
       isAvailable: (...args: unknown[]) => mockIsAvailable(...args),
       scheduleCall: (...args: unknown[]) => mockScheduleCall(...args),
     },
   }));
 
-  await jest.unstable_mockModule('../../../src/lib/user-timezone.js', () => ({
+  jest.unstable_mockModule('../../../src/lib/user-timezone.js', () => ({
     getUserLocalDateISO: () => '2026-05-13',
   }));
 
   jest.resetModules();
+  mockQuery.mockReset();
+  mockScheduleCall.mockReset();
+  mockIsAvailable.mockReset();
+
+  mockIsAvailable.mockReturnValue(true);
+  mockScheduleCall.mockResolvedValue(undefined);
+
   const mod = await import('../../../src/jobs/ai-coach-call-reconciler.job.js');
   aiCoachCallReconcilerJob = mod.aiCoachCallReconcilerJob;
 });
 
 describe('AI Coach Call Reconciler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockIsAvailable.mockReturnValue(true);
-    mockScheduleCall.mockResolvedValue(undefined);
-  });
-
-  afterAll(() => {
-    aiCoachCallReconcilerJob.stop();
-  });
-
   it('recovers stuck initiated rows and schedules jobs for eligible users', async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 2, command: '', oid: 0, fields: [],
