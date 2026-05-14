@@ -81,7 +81,7 @@ class AICoachCallQueueService {
       return;
     }
 
-    const jobId = `ai-call:${userId}:${targetDate}:${timeHHMM}`;
+    const jobId = `ai-call_${userId}_${targetDate}_${timeHHMM.replace(/:/g, '-')}`;
     const jobData: AICoachCallJobData = {
       userId,
       scheduledTimeHHMM: timeHHMM,

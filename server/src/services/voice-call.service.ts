@@ -567,18 +567,43 @@ class VoiceCallService {
         offer_type: offer.type,
       });
 
-      // In a real implementation, this would:
-      // 1. Process the WebRTC offer
-      // 2. Generate an answer using WebRTC signaling server
-      // 3. Return the answer SDP
-      
-      // For now, return a mock answer (will be replaced with actual WebRTC implementation)
-      const answer: WebRTCAnswer = {
-        sdp: 'mock-answer-sdp', // Replace with actual SDP from signaling server
-        type: 'answer',
-      };
+      const signalingUrl = process.env.VOICE_SIGNALING_URL;
+      if (!signalingUrl) {
+        await this.logCallEvent(callId, 'error_occurred', {
+          reason: 'VOICE_SIGNALING_URL is not configured',
+        });
+        throw ApiError.serviceUnavailable('Voice signaling server is not configured');
+      }
 
-      return answer;
+      const response = await fetch(`${signalingUrl.replace(/\/$/, '')}/calls/${callId}/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          offer,
+          call: {
+            id: call.id,
+            channel: call.channel,
+            session_type: (call as VoiceCall & { session_type?: string }).session_type,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        await this.logCallEvent(callId, 'error_occurred', {
+          reason: 'signaling_failed',
+          status: response.status,
+        });
+        throw ApiError.serviceUnavailable('Voice signaling server failed to establish connection');
+      }
+
+      const answer = await response.json() as Partial<WebRTCAnswer>;
+      if (answer.type !== 'answer' || typeof answer.sdp !== 'string' || answer.sdp.trim().length === 0) {
+        await this.logCallEvent(callId, 'error_occurred', { reason: 'signaling_invalid_answer' });
+        throw ApiError.serviceUnavailable('Voice signaling server returned an invalid answer');
+      }
+
+      return { type: 'answer', sdp: answer.sdp };
     } catch (error) {
       logger.error('[VoiceCallService] Error establishing connection', { error, callId });
       if (error instanceof ApiError) {
