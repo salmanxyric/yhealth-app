@@ -138,6 +138,47 @@ export class SessionService {
   }
 
   /**
+   * Get a specific session owned by a user.
+   */
+  async getSessionById(userId: string, sessionId: string): Promise<AICoachSession | null> {
+    try {
+      const result = await query<{
+        id: string;
+        user_id: string;
+        goal_category: string;
+        session_type: string;
+        messages: ChatMessage[] | unknown;
+        extracted_insights: ExtractedInsight[] | unknown;
+        conversation_phase: string;
+        message_count: number;
+        user_message_count: number;
+        is_complete: boolean;
+        session_summary: string | null;
+        key_takeaways: string[] | null;
+        completed_at: Date | null;
+        created_at: Date | null;
+        updated_at: Date | null;
+      }>(
+        `SELECT * FROM ai_coach_sessions WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        [sessionId, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return this.mapSessionRow(result.rows[0]);
+    } catch (error) {
+      logger.error('[AICoach] Error getting session by id', {
+        userId,
+        sessionId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw ApiError.internal('Failed to retrieve session');
+    }
+  }
+
+  /**
    * Create a new AI coach session in the database
    */
   async createSession(
@@ -209,11 +250,46 @@ export class SessionService {
   }
 
   /**
-   * Generate a personalized diet plan
-   * Stub -- will be implemented with full AI prompt logic
+   * Generate a personalized diet plan from coach assessment inputs.
    */
-  async generateDietPlan(_request: DietPlanRequest): Promise<GeneratedDietPlan> {
-    throw new Error('Not implemented');
+  async generateDietPlan(request: DietPlanRequest): Promise<GeneratedDietPlan> {
+    const goal = request.goalCategory || request.goal || 'general_wellness';
+    const preferences = request.preferences || {};
+    const dietaryRestrictions = this.getStringArrayPreference(preferences, 'dietaryRestrictions');
+    const allergies = this.getStringArrayPreference(preferences, 'allergies');
+    const cuisinePreferences = this.getStringArrayPreference(preferences, 'cuisinePreferences');
+    const mealsPerDay = this.clampNumberPreference(preferences, 'mealsPerDay', 3, 1, 6);
+    const targets = this.buildNutritionTargets(goal);
+    const mealTimes = this.buildMealTimes(mealsPerDay);
+    const weeklyMeals = this.buildWeeklyMeals(mealsPerDay, dietaryRestrictions, allergies, cuisinePreferences, goal);
+    const insightTips = (request.insights || [])
+      .filter((insight) => insight.confidence >= 0.5)
+      .slice(0, 3)
+      .map((insight) => `Account for this coaching insight: ${insight.text}`);
+
+    return {
+      source: 'rule_based',
+      plan: {
+        name: `${this.toTitle(goal)} Nutrition Plan`,
+        description: `A practical ${this.toTitle(goal).toLowerCase()} plan generated from AI Coach assessment context.`,
+        dailyCalories: targets.dailyCalories,
+        proteinGrams: targets.proteinGrams,
+        carbsGrams: targets.carbsGrams,
+        fatGrams: targets.fatGrams,
+        fiberGrams: targets.fiberGrams,
+        mealsPerDay,
+        snacksPerDay: mealsPerDay >= 4 ? 1 : 2,
+        mealTimes,
+        weeklyMeals,
+        tips: [
+          'Prioritize protein at each main meal.',
+          'Keep hydration visible with water near each meal.',
+          'Review adherence weekly and adjust portions before changing foods.',
+          ...insightTips,
+        ],
+        shoppingList: this.buildShoppingList(dietaryRestrictions, allergies),
+      },
+    };
   }
 
   /**
@@ -222,15 +298,33 @@ export class SessionService {
   async saveDietPlan(userId: string, plan: GeneratedDietPlan, goal: GoalCategory): Promise<string> {
     try {
       const result = await query<{ id: string }>(
-        `INSERT INTO diet_plans (user_id, name, goal_category, weekly_meals, ai_generated, ai_model, generation_params)
-         VALUES ($1, $2, $3, $4, true, 'gpt-5-mini', $5)
+        `INSERT INTO diet_plans (
+          user_id, name, description, goal_category,
+          daily_calories, protein_grams, carbs_grams, fat_grams, fiber_grams,
+          dietary_preferences, allergies,
+          meals_per_day, snacks_per_day, meal_times, weekly_meals,
+          shopping_list, ai_generated, ai_model, generation_params
+        )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, true, 'rule-based-coach-v1', $17)
          RETURNING id`,
         [
           userId,
-          `AI Diet Plan - ${goal}`,
+          plan.plan.name,
+          plan.plan.description,
           goal,
-          JSON.stringify(plan),
-          JSON.stringify({ goal }),
+          plan.plan.dailyCalories,
+          plan.plan.proteinGrams,
+          plan.plan.carbsGrams,
+          plan.plan.fatGrams,
+          plan.plan.fiberGrams,
+          JSON.stringify([]),
+          JSON.stringify([]),
+          plan.plan.mealsPerDay,
+          plan.plan.snacksPerDay,
+          JSON.stringify(plan.plan.mealTimes),
+          JSON.stringify(plan.plan.weeklyMeals),
+          JSON.stringify(plan.plan.shoppingList),
+          JSON.stringify({ goal, source: plan.source }),
         ]
       );
 
@@ -243,6 +337,107 @@ export class SessionService {
       });
       throw ApiError.internal('Failed to save diet plan');
     }
+  }
+
+  private getStringArrayPreference(preferences: Record<string, unknown>, key: string): string[] {
+    const value = preferences[key];
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+
+  private clampNumberPreference(
+    preferences: Record<string, unknown>,
+    key: string,
+    fallback: number,
+    min: number,
+    max: number
+  ): number {
+    const value = preferences[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(value)));
+  }
+
+  private buildNutritionTargets(goal: GoalCategory): {
+    dailyCalories: number;
+    proteinGrams: number;
+    carbsGrams: number;
+    fatGrams: number;
+    fiberGrams: number;
+  } {
+    switch (goal) {
+      case 'weight_loss':
+        return { dailyCalories: 1900, proteinGrams: 140, carbsGrams: 170, fatGrams: 60, fiberGrams: 32 };
+      case 'muscle_gain':
+        return { dailyCalories: 2700, proteinGrams: 180, carbsGrams: 310, fatGrams: 80, fiberGrams: 35 };
+      case 'endurance':
+        return { dailyCalories: 2500, proteinGrams: 150, carbsGrams: 320, fatGrams: 70, fiberGrams: 34 };
+      case 'nutrition':
+        return { dailyCalories: 2200, proteinGrams: 150, carbsGrams: 230, fatGrams: 70, fiberGrams: 35 };
+      default:
+        return { dailyCalories: 2200, proteinGrams: 145, carbsGrams: 235, fatGrams: 70, fiberGrams: 30 };
+    }
+  }
+
+  private buildMealTimes(mealsPerDay: number): Record<string, string> {
+    const mealTimes: Record<string, string> = {
+      breakfast: '07:30',
+      lunch: '12:30',
+      dinner: '19:00',
+    };
+    if (mealsPerDay >= 4) mealTimes.snack = '16:00';
+    if (mealsPerDay >= 5) mealTimes.eveningSnack = '21:00';
+    if (mealsPerDay >= 6) mealTimes.preWorkout = '10:00';
+    return mealTimes;
+  }
+
+  private buildWeeklyMeals(
+    mealsPerDay: number,
+    dietaryRestrictions: string[],
+    allergies: string[],
+    cuisinePreferences: string[],
+    goal: GoalCategory
+  ): Record<string, Record<string, string>> {
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const protein = dietaryRestrictions.some((item) => ['vegetarian', 'vegan'].includes(item.toLowerCase()))
+      ? 'lentils, tofu, Greek yogurt, beans, and eggs where appropriate'
+      : 'chicken, fish, eggs, lean beef, Greek yogurt, and legumes';
+    const cuisine = cuisinePreferences.length > 0 ? cuisinePreferences.slice(0, 2).join(' or ') : 'balanced whole-food';
+    const allergyNote = allergies.length > 0 ? ` Avoid ${allergies.join(', ')}.` : '';
+    const focus = goal === 'weight_loss' ? 'controlled portions' : goal === 'muscle_gain' ? 'larger protein portions' : 'steady energy';
+
+    return Object.fromEntries(days.map((day, index) => {
+      const meals: Record<string, string> = {
+        breakfast: `${cuisine} breakfast with high-fiber carbs and ${protein}.${allergyNote}`,
+        lunch: `Lean protein bowl with vegetables, slow carbs, and ${focus}.`,
+        dinner: `Simple dinner built around ${protein}, vegetables, and healthy fats.`,
+      };
+      if (mealsPerDay >= 4) meals.snack = index % 2 === 0 ? 'Fruit with yogurt or nuts.' : 'Protein smoothie or hummus with vegetables.';
+      if (mealsPerDay >= 5) meals.eveningSnack = 'Light recovery snack with protein and fiber.';
+      if (mealsPerDay >= 6) meals.preWorkout = 'Small carb-forward pre-workout snack.';
+      return [day, meals];
+    }));
+  }
+
+  private buildShoppingList(dietaryRestrictions: string[], allergies: string[]): string[] {
+    const vegetarian = dietaryRestrictions.some((item) => ['vegetarian', 'vegan'].includes(item.toLowerCase()));
+    const base = vegetarian
+      ? ['tofu', 'lentils', 'beans', 'Greek yogurt', 'eggs']
+      : ['chicken breast', 'salmon', 'eggs', 'Greek yogurt', 'lentils'];
+    return [
+      ...base,
+      'oats',
+      'brown rice',
+      'leafy greens',
+      'berries',
+      'olive oil',
+      'mixed vegetables',
+    ].filter((item) => !allergies.some((allergy) => item.toLowerCase().includes(allergy.toLowerCase())));
+  }
+
+  private toTitle(value: string): string {
+    return value
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
   /**
