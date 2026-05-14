@@ -115,6 +115,7 @@ export interface ActionCommand {
 interface ChatResponse {
   conversationId: string;
   response: string;
+  messageId?: string;
   toolCalls?: Array<{ tool: string; result: string }>;
   actions?: ActionCommand[]; // Array of actions to execute on frontend
   context?: {
@@ -440,10 +441,10 @@ const WIKI_KNOWLEDGE_BASE_PROMPT = `
 You maintain a personal wiki for this user — a structured collection of interlinked pages that captures everything you've learned about them. The wiki is your long-term analytical notebook.
 
 ### When to use the wiki:
-- ALWAYS search the wiki first (search_wiki_pages) before answering complex health questions
+- ALWAYS search the wiki first (searchWikiPages) before answering complex health questions
 - When you discover a new pattern about the user → create a wiki page
-- When you notice a contradiction between wiki claims → flag it with flag_wiki_contradiction
-- When a user asks a great question and your answer is insightful → file it with file_query_as_wiki_page
+- When you notice a contradiction between wiki claims -> flag it with flagWikiContradiction
+- When a user asks a great question and your answer is insightful -> file it with fileQueryAsWikiPage
 - When new data changes what you know → update the relevant wiki page
 
 ### Wiki page conventions:
@@ -666,7 +667,7 @@ class LangGraphChatbotService {
     baseSequenceNumber: number;
     metadata?: Record<string, unknown>;
     toolCalls?: Record<string, unknown>;
-  }): Promise<void> {
+  }): Promise<{ userMessageId: string | null; assistantMessageId: string | null }> {
     const { conversationId, userId, userContent, assistantContent, baseSequenceNumber, metadata = {}, toolCalls } = params;
 
     try {
@@ -700,7 +701,13 @@ class LangGraphChatbotService {
       );
 
       // Queue embeddings only for substantive messages
+      let userMessageId: string | null = null;
+      let assistantMessageId: string | null = null;
+
       for (const row of result.rows) {
+        if (row.role === 'user') userMessageId = row.id;
+        if (row.role === 'assistant') assistantMessageId = row.id;
+
         const content = row.role === 'user' ? userContent : assistantContent;
         if (!this.isWorthEmbedding(content)) continue;
 
@@ -715,10 +722,12 @@ class LangGraphChatbotService {
           vectorEmbeddingService.updateMessageEmbedding(row.id, content).catch(() => {});
         }
       }
+
+      return { userMessageId, assistantMessageId };
     } catch (error) {
       logger.error('[LangGraphChatbot] Error storing message pair', { error: String(error), conversationId });
       // Fallback to individual inserts
-      await Promise.all([
+      const [userMessageId, assistantMessageId] = await Promise.all([
         this.storeMessageAndQueueEmbedding({
           conversationId, userId, role: 'user', content: userContent,
           sequenceNumber: baseSequenceNumber, metadata,
@@ -728,7 +737,39 @@ class LangGraphChatbotService {
           sequenceNumber: baseSequenceNumber + 1, metadata, toolCalls,
         }),
       ]);
+      return { userMessageId, assistantMessageId };
     }
+  }
+
+  private recordTransparencyUsageForAssistantMessage(
+    userId: string,
+    conversationId: string,
+    assistantMessageId: string | null
+  ): void {
+    if (!assistantMessageId) return;
+
+    const ctx = (this as {
+      _lastIntelligenceCtx?: {
+        memoriesUsed: Parameters<typeof transparencyService.recordUsage>[3]['memoriesUsed'];
+        coreProfileUsed: Parameters<typeof transparencyService.recordUsage>[3]['coreProfileUsed'];
+        overallConfidence: number;
+      };
+    })._lastIntelligenceCtx;
+
+    if (!ctx) return;
+
+    transparencyService.recordUsage(userId, conversationId, assistantMessageId, {
+      memoriesUsed: ctx.memoriesUsed,
+      coreProfileUsed: ctx.coreProfileUsed,
+      overallConfidence: ctx.overallConfidence,
+    }).catch((error) => {
+      logger.warn('[LangGraphChatbot] Failed to record transparency usage', {
+        userId,
+        conversationId,
+        assistantMessageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   /**
@@ -4667,7 +4708,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
 
       // Store messages as a batched pair (1 INSERT + 1 UPDATE instead of 2+2)
       // Embedding is selective — only substantive messages get embedded
-      this.storeMessagePair({
+      const storedMessages = await this.storeMessagePair({
         conversationId: activeConversationId,
         userId,
         userContent: message,
@@ -4679,7 +4720,9 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         } : undefined,
       }).catch((error) => {
         logger.error('[LangGraphChatbot] Error storing messages', { error, userId });
+        return { userMessageId: null, assistantMessageId: null };
       });
+      this.recordTransparencyUsageForAssistantMessage(userId, activeConversationId, storedMessages.assistantMessageId);
 
       this.enqueueWikiMaintenance(userId, message, responseContent, activeConversationId);
 
@@ -4700,6 +4743,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       return {
         conversationId: activeConversationId,
         response: responseContent,
+        messageId: storedMessages.assistantMessageId || undefined,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         actions: actions.length > 0 ? actions : undefined,
         context: contextStats,
@@ -6164,7 +6208,7 @@ I'm listening. What's happening right now?`;
       const currentMessageCount = conversationDataForContext?.conversation?.messageCount ?? 0;
 
       // Store messages as batched pair (non-blocking, selective embedding)
-      this.storeMessagePair({
+      const storedMessages = await this.storeMessagePair({
         conversationId: activeConversationId,
         userId,
         userContent: message,
@@ -6176,7 +6220,9 @@ I'm listening. What's happening right now?`;
         } : undefined,
       }).catch((error) => {
         logger.error('[LangGraphChatbot] Error storing messages', { error, userId });
+        return { userMessageId: null, assistantMessageId: null };
       });
+      this.recordTransparencyUsageForAssistantMessage(userId, activeConversationId, storedMessages.assistantMessageId);
 
       this.enqueueWikiMaintenance(userId, message, responseContent, activeConversationId);
 
@@ -6200,6 +6246,7 @@ I'm listening. What's happening right now?`;
       return {
         conversationId: activeConversationId,
         response: responseContent,
+        messageId: storedMessages.assistantMessageId || undefined,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         actions: actions.length > 0 ? actions : undefined,
         context: contextStats,

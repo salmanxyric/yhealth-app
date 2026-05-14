@@ -59,5 +59,20 @@ export interface DietPlanRequest {
 }
 
 export interface GeneratedDietPlan {
-  plan: unknown;
+  plan: {
+    name: string;
+    description: string;
+    dailyCalories: number;
+    proteinGrams: number;
+    carbsGrams: number;
+    fatGrams: number;
+    fiberGrams: number;
+    mealsPerDay: number;
+    snacksPerDay: number;
+    mealTimes: Record<string, string>;
+    weeklyMeals: Record<string, Record<string, string>>;
+    tips: string[];
+    shoppingList: string[];
+  };
+  source: 'rule_based';
 }

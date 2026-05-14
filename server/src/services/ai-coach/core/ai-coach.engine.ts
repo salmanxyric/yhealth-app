@@ -96,6 +96,10 @@ export class AICoachEngine {
     return this.sessionModule.getActiveSession(userId, goal, sessionType);
   }
 
+  async getSessionById(userId: string, sessionId: string): Promise<AICoachSession | null> {
+    return this.sessionModule.getSessionById(userId, sessionId);
+  }
+
   async createSession(userId: string, goal: GoalCategory, sessionType: string): Promise<AICoachSession> {
     return this.sessionModule.createSession(userId, goal, sessionType);
   }

@@ -69,25 +69,25 @@ function getSmtpConnectionHint(): string {
 export const EMAIL_SUBJECTS = {
   'verification': 'Verify Your Email - Balencia',
   'resend-verification': 'New Verification Link - Balencia',
-  'email-verified': 'Email Verified! - Balencia',
+  'email-verified': 'Email Verified - Balencia',
   'password-reset': 'Reset Your Password - Balencia',
   'password-changed': 'Password Changed - Balencia',
   'password-reset-otp': 'Your Password Reset Code - Balencia',
   'registration-otp': 'Your Verification Code - Balencia',
   'security-alert': 'Security Alert - Balencia',
-  'welcome': 'Welcome to Balencia - Your AI Life Coach!',
+  'welcome': 'Welcome to Balencia - Your AI Life Coach',
   'assessment-reminder': 'Complete Your Assessment - Balencia',
   'integration-reminder': 'Connect Your Devices - Balencia',
-  'goal-set': 'Goal Set! - Balencia',
-  'onboarding-complete': "You're All Set! - Balencia",
+  'goal-set': 'Goal Set - Balencia',
+  'onboarding-complete': "You're All Set - Balencia",
   'weekly-progress': 'Your Weekly Progress - Balencia',
-  'milestone-achieved': 'Milestone Achieved! - Balencia',
-  'streak-milestone': 'Streak Milestone! - Balencia',
-  're-engagement': 'We Miss You! - Balencia',
+  'milestone-achieved': 'Milestone Achieved - Balencia',
+  'streak-milestone': 'Streak Milestone - Balencia',
+  're-engagement': 'We Miss You - Balencia',
   'task-reminder': 'Task Reminder - Balencia',
   'contact-confirmation': 'We Received Your Message - Balencia',
   'contact-admin-note': 'Update on Your Inquiry - Balencia',
-  'subscription-confirmation': 'You\'re In! Your Balencia Subscription is Active',
+  'subscription-confirmation': 'Your Balencia Subscription is Active',
   'subscription-invoice': 'Your Balencia Invoice is Ready',
   'payment-failed': 'Action Required: Payment Failed - Balencia',
   // Email engine templates
@@ -949,7 +949,7 @@ class MailHelper {
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #1F2937; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A855F7 100%); padding: 20px; border-radius: 8px 8px 0 0; }
+          .header { background: linear-gradient(135deg, #f97316 0%, #ea580c 60%, #10b981 100%); padding: 20px; border-radius: 8px 8px 0 0; }
           .content { background: #FFFFFF; padding: 30px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
           .message { background: #F9FAFB; padding: 20px; border-radius: 8px; margin: 20px 0; white-space: pre-wrap; }
           .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #6B7280; }
@@ -1197,7 +1197,7 @@ class MailHelper {
           <!-- Footer -->
           <tr>
             <td align="center" style="padding:28px 24px;">
-              <p style="margin:0; font-size:12px; color:#9ca3af;">Balencia by Xyric Solutions · Your AI Life Coach</p>
+              <p style="margin:0; font-size:12px; color:#9ca3af;">Balencia by Xyric Solutions - Your AI Life Coach</p>
             </td>
           </tr>
         </table>

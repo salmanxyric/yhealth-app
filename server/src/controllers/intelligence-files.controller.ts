@@ -12,6 +12,7 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { query } from '../config/database.config.js';
 import { coreProfileKernelService } from '../services/core-profile-kernel.service.js';
+import { transparencyService } from '../services/transparency.service.js';
 import {
   createMemorySchema,
   updateMemorySchema,
@@ -579,6 +580,37 @@ class IntelligenceFilesController {
   // ============================================
   // FEEDBACK
   // ============================================
+
+  getMessageTransparency = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized('Authentication required');
+
+    const { messageId } = req.params;
+    if (!messageId) throw ApiError.badRequest('Message ID is required');
+
+    const transparency = await transparencyService.getMessageTransparency(userId, messageId);
+    if (!transparency) throw ApiError.notFound('Transparency data not found');
+
+    ApiResponse.success(res, { transparency }, 'Transparency data retrieved', undefined, req);
+  });
+
+  submitTransparencyFeedback = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) throw ApiError.unauthorized('Authentication required');
+
+    const { messageId } = req.params;
+    if (!messageId) throw ApiError.badRequest('Message ID is required');
+
+    const wasHelpful = req.body?.wasHelpful;
+    if (typeof wasHelpful !== 'boolean') {
+      throw ApiError.badRequest('wasHelpful must be a boolean');
+    }
+
+    const correction = typeof req.body?.correction === 'string' ? req.body.correction : undefined;
+    await transparencyService.submitHelpfulness(userId, messageId, wasHelpful, correction);
+
+    ApiResponse.success(res, { messageId }, 'Transparency feedback submitted', undefined, req);
+  });
 
   submitFeedback = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.userId;

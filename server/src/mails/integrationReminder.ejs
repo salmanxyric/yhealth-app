@@ -1,68 +1,52 @@
 <%# Integration Reminder Template %>
+<%
+  const connectedText = connectedCount > 0
+    ? `You have connected ${connectedCount} device${connectedCount > 1 ? 's' : ''}. Add more signals to unlock richer cross-domain insights.`
+    : "Connect your health devices and apps to unlock Balencia's cross-domain intelligence.";
+  const integrations = Array.isArray(availableIntegrations) && availableIntegrations.length
+    ? availableIntegrations
+    : ['WHOOP', 'Fitbit', 'Garmin', 'Oura', 'Apple Health', 'Google Fit'];
+  const integrationItems = integrations.slice(0, 6).map((item) => `
+    <td width="50%" style="padding:8px;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#ffffff; border:1px solid #ffedd5; border-radius:12px;">
+        <tr>
+          <td style="padding:14px; text-align:center; font-size:13px; color:#111827; font-weight:800;">${escapeFn(item)}</td>
+        </tr>
+      </table>
+    </td>
+  `);
+  const integrationRows = [];
+  for (let index = 0; index < integrationItems.length; index += 2) {
+    integrationRows.push(`<tr>${integrationItems[index]}${integrationItems[index + 1] || '<td width="50%" style="padding:8px;"></td>'}</tr>`);
+  }
+%>
 <%- include('./layouts/base', {
-  title: 'Connect Your Devices - yHealth',
-  preheader: `${firstName}, connect your devices to unlock powerful health insights`,
-  greeting: `Hi ${firstName},`,
+  title: 'Connect Your Devices - Balencia',
+  preheader: `${firstName}, connect devices to unlock stronger health insights.`,
+  eyebrow: 'Connected intelligence',
+  greeting: `Bring your health signals together, ${firstName}.`,
   content: `
-    <div style="text-align: center; margin-bottom: 32px;">
-      <div style="font-size: 48px; margin-bottom: 8px;">🔗</div>
-    </div>
-
-    <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 26px;">
-      <%= connectedCount > 0
-        ? 'Great job connecting ' + connectedCount + ' device' + (connectedCount > 1 ? 's' : '') + '! Want to unlock even more insights?'
-        : "Connect your fitness devices and apps to unlock the full power of yHealth's cross-domain insights." %>
+    <p style="margin:0 0 22px; font-size:16px; line-height:26px;">
+      ${escapeFn(connectedText)}
     </p>
 
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
-      <tr>
-        <td style="padding: 16px; background: #ECFDF5; border-radius: 12px; border-left: 4px solid #10B981;">
-          <p style="margin: 0; font-size: 14px; color: #065F46;">
-            <strong>Did you know?</strong> Users who connect 2+ devices discover 3x more actionable insights about their health patterns.
-          </p>
-        </td>
-      </tr>
+    ${include('./partials/alert-box', {
+      type: 'success',
+      message: 'The strongest recommendations come from seeing sleep, recovery, training, nutrition, and routine in one place.'
+    })}
+
+    <h2 style="margin:30px 0 16px; font-size:18px; color:#111827;">Available integrations</h2>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#fff7ed; border-radius:16px; padding:8px; margin:0 0 22px;">
+      ${integrationRows.join('')}
     </table>
 
-    <h2 style="margin: 24px 0 16px 0; font-size: 18px; color: #1F2937;">Available integrations:</h2>
-
-    <!-- Integration Icons Grid -->
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background: #F3F4F6; border-radius: 12px; margin-bottom: 24px;">
-      <tr>
-        <td width="25%" style="text-align: center; padding: 16px;">
-          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
-            <span style="font-size: 24px;">⌚</span>
-          </div>
-          <p style="margin: 0; font-size: 11px; color: #6B7280;">WHOOP</p>
-        </td>
-        <td width="25%" style="text-align: center; padding: 16px;">
-          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
-            <span style="font-size: 24px;">⌚</span>
-          </div>
-          <p style="margin: 0; font-size: 11px; color: #6B7280;">Fitbit</p>
-        </td>
-        <td width="25%" style="text-align: center; padding: 16px;">
-          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
-            <span style="font-size: 24px;">⌚</span>
-          </div>
-          <p style="margin: 0; font-size: 11px; color: #6B7280;">Garmin</p>
-        </td>
-        <td width="25%" style="text-align: center; padding: 16px;">
-          <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 8px; line-height: 48px;">
-            <span style="font-size: 24px;">💍</span>
-          </div>
-          <p style="margin: 0; font-size: 11px; color: #6B7280;">Oura</p>
-        </td>
-      </tr>
-    </table>
-
-    <p style="margin: 0; font-size: 14px; color: #6B7280; text-align: center;">
-      + Strava, Apple Health, Google Fit, and more...
+    <p style="margin:0; font-size:14px; line-height:22px; color:#6b7280; text-align:center;">
+      You stay in control. Your connected data is used to personalize coaching and can be disconnected anytime.
     </p>
   `,
   ctaButton: {
     text: 'Connect Devices',
     url: integrationsUrl
   },
-  footerText: 'Your data is always encrypted and under your control.'
+  footerText: 'Your data is encrypted and always under your control.'
 }) %>

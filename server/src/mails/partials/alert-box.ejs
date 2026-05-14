@@ -1,18 +1,17 @@
 <%# Alert/Notification Box Component %>
-<%# Usage: <%- include('../partials/alert-box', { type: 'info|warning|success|error', message: 'Your message' }) %> %>
 <%
 const colors = {
-  info: { bg: '#EEF2FF', border: '#6366F1', textColor: '#3730A3' },
-  warning: { bg: '#FFFBEB', border: '#F59E0B', textColor: '#92400E' },
-  success: { bg: '#ECFDF5', border: '#10B981', textColor: '#065F46' },
-  error: { bg: '#FEF2F2', border: '#EF4444', textColor: '#991B1B' }
+  info: { bg: '#fff7ed', border: '#f97316', textColor: '#9a3412' },
+  warning: { bg: '#fffbeb', border: '#f59e0b', textColor: '#92400e' },
+  success: { bg: '#ecfdf5', border: '#10b981', textColor: '#065f46' },
+  error: { bg: '#fef2f2', border: '#ef4444', textColor: '#991b1b' }
 };
 const style = colors[type] || colors.info;
 %>
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 20px 0;">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:20px 0;">
   <tr>
-    <td style="background: <%= style.bg %>; border-left: 4px solid <%= style.border %>; border-radius: 0 8px 8px 0; padding: 16px 20px;">
-      <p style="margin: 0; font-size: 14px; color: <%= style.textColor %>; line-height: 20px;">
+    <td style="background:<%= style.bg %>; border-left:4px solid <%= style.border %>; border-radius:0 12px 12px 0; padding:16px 18px;">
+      <p style="margin:0; font-size:14px; color:<%= style.textColor %>; line-height:21px;">
         <%- message %>
       </p>
     </td>

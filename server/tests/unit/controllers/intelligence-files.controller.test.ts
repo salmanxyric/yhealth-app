@@ -135,27 +135,28 @@ describe('getFolders', () => {
     expect(err.statusCode).toBe(401);
   });
 
-  it('returns all 6 folder summaries with counts and lastModified', async () => {
+  it('returns all folder summaries with counts and lastModified', async () => {
     const req = createAuthReq();
     const res = createRes();
     const next = createNext();
 
-    // 6 parallel COUNT queries: memories, artifacts, plans, core, logs, notes
+    // 7 parallel COUNT queries: memories, artifacts, plans, core, logs, notes, wiki
     mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(12)]));
     mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(5)]));
     mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(3)]));
     mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(8)]));
     mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(20)]));
     mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(2)]));
+    mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(4)]));
 
     await callHandler(controller.getFolders, req, res, next);
 
     expect(next).not.toHaveBeenCalled();
     const body = getJsonBody(res);
     expect(body.success).toBe(true);
-    expect(body.data.folders).toHaveLength(6);
+    expect(body.data.folders).toHaveLength(7);
 
-    const [memories, notes, artifacts, plans, core, logs] = body.data.folders;
+    const [memories, notes, artifacts, plans, core, logs, wiki] = body.data.folders;
     expect(memories.id).toBe('memories');
     expect(memories.itemCount).toBe(12);
     expect(notes.id).toBe('notes');
@@ -168,6 +169,8 @@ describe('getFolders', () => {
     expect(core.itemCount).toBe(8);
     expect(logs.id).toBe('logs');
     expect(logs.itemCount).toBe(20);
+    expect(wiki.id).toBe('wiki');
+    expect(wiki.itemCount).toBe(4);
   });
 
   it('returns zero counts and null lastModified for empty folders', async () => {
@@ -175,7 +178,7 @@ describe('getFolders', () => {
     const res = createRes();
     const next = createNext();
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(0, null)]));
     }
 

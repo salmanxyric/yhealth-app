@@ -76,7 +76,7 @@ describe('wikiContextService', () => {
       expect(result).toContain('WIKI KNOWLEDGE');
       expect(result).toContain(page.title);
       expect(result).toContain(page.summary);
-      expect(mockSearchPages).toHaveBeenCalledWith('user-1', 'how do I sleep better?', { limit: 5 });
+      expect(mockSearchPages).toHaveBeenCalledWith('user-1', 'how do I sleep better?', { limit: 8 });
       expect(mockGetPage).toHaveBeenCalledWith('user-1', page.slug);
     });
 

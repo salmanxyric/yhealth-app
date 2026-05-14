@@ -7,7 +7,7 @@
 import { query, pool } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { notificationService } from './notification.service.js';
-import { mailHelper } from '../helper/mail.js';
+import { emailEngine } from './email-engine.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
 import { JobPriorities } from '../config/queue.config.js';
 
@@ -547,13 +547,15 @@ class TaskService {
         }
       }
 
-      // Send email notification
+      // Send email notification via EmailEngine (respects dedup, throttle, quiet hours)
       if (task.notifyEmail && user.email) {
         try {
-          const emailSent = await mailHelper.send({
-            email: user.email,
-            subject: `${priorityIcon} Task Reminder: ${task.title} - Balencia`,
+          const appUrl = process.env['APP_URL'] || 'http://localhost:3000';
+          const logId = await emailEngine.send({
+            userId: task.userId,
             template: 'taskReminder',
+            recipient: user.email,
+            subject: `${priorityIcon} Task Reminder: ${task.title} - yHealth`,
             data: {
               firstName: user.first_name,
               taskTitle: task.title,
@@ -563,12 +565,14 @@ class TaskService {
               priorityIcon,
               category: task.category,
               categoryIcon,
-              dashboardUrl: `${mailHelper.getAppUrl()}/tasks`,
-              completeUrl: `${mailHelper.getAppUrl()}/tasks/${task.id}/complete`,
+              dashboardUrl: `${appUrl}/tasks`,
+              completeUrl: `${appUrl}/tasks/${task.id}/complete`,
             },
+            category: 'engagement',
+            priority: task.priority === 'urgent' ? 'high' : 'normal',
           });
 
-          if (emailSent) {
+          if (logId) {
             await client.query(
               `INSERT INTO task_reminder_logs (task_id, user_id, channel, status)
                VALUES ($1, $2, 'email', 'sent')`,
@@ -577,7 +581,11 @@ class TaskService {
 
             logger.info('[Tasks] Email notification sent', { taskId: task.id, userId: task.userId, email: user.email });
           } else {
-            throw new Error('Email send returned false');
+            await client.query(
+              `INSERT INTO task_reminder_logs (task_id, user_id, channel, status, error_message)
+               VALUES ($1, $2, 'email', 'skipped', 'Suppressed by email engine (dedup/throttle/preferences)')`,
+              [task.id, task.userId]
+            );
           }
         } catch (error) {
           logger.error('[Tasks] Email notification failed', {

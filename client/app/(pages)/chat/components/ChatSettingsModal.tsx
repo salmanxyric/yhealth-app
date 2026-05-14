@@ -11,11 +11,12 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import api, { ApiError } from '@/lib/api-client';
-import { Loader2, Shield, Palette, ExternalLink, Heart, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Shield, Palette, ExternalLink, Heart, Image as ImageIcon, Music, Play, Square, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { CHAT_WALLPAPERS } from '../constants/wallpapers';
 import { useChatWallpaper } from '../hooks/useChatWallpaper';
+import { useRingtone } from '@/hooks/use-ringtone';
 
 type TabId = 'general' | 'privacy';
 
@@ -53,6 +54,9 @@ export function ChatSettingsModal({ open, onOpenChange, initialTab = 'general' }
   const [saving, setSaving] = useState(false);
 
   const { id: wallpaperId, setWallpaper } = useChatWallpaper();
+  const ringtone = useRingtone();
+  const [previewingRingtone, setPreviewingRingtone] = useState<string | null>(null);
+  const ringtoneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('dark');
   const [shareProgress, setShareProgress] = useState(true);
   const [anonymousAnalytics, setAnonymousAnalytics] = useState(false);
@@ -61,7 +65,12 @@ export function ChatSettingsModal({ open, onOpenChange, initialTab = 'general' }
 
   useEffect(() => {
     if (open) setTab(initialTab);
-  }, [open, initialTab]);
+    if (!open) {
+      ringtone.stop();
+      setPreviewingRingtone(null);
+      if (ringtoneTimeoutRef.current) clearTimeout(ringtoneTimeoutRef.current);
+    }
+  }, [open, initialTab, ringtone]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -235,6 +244,74 @@ export function ChatSettingsModal({ open, onOpenChange, initialTab = 'general' }
                         <span className="absolute bottom-1 left-1 right-1 text-[10px] text-white/90 bg-black/50 rounded px-1 py-0.5 text-center truncate">
                           {w.name}
                         </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Music className="h-4 w-4 text-fuchsia-400" />
+                  <p className="text-sm font-medium text-white">Call ringtone</p>
+                </div>
+                <p className="text-xs text-slate-500 mb-3">Plays when receiving or placing a call.</p>
+                <div className="space-y-1.5">
+                  {ringtone.ringtones.map((tone) => {
+                    const isSelected = ringtone.selectedRingtone === tone.id;
+                    const isPlaying = previewingRingtone === tone.id;
+                    return (
+                      <button
+                        key={tone.id}
+                        type="button"
+                        onClick={() => {
+                          ringtone.select(tone.id);
+                          toast({ title: 'Ringtone updated', variant: 'default' });
+                        }}
+                        className={cn(
+                          'w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all',
+                          isSelected
+                            ? 'border-fuchsia-500/40 bg-fuchsia-500/10'
+                            : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (ringtoneTimeoutRef.current) clearTimeout(ringtoneTimeoutRef.current);
+                            if (isPlaying) {
+                              ringtone.stop();
+                              setPreviewingRingtone(null);
+                              return;
+                            }
+                            ringtone.preview(tone.id);
+                            setPreviewingRingtone(tone.id);
+                            ringtoneTimeoutRef.current = setTimeout(() => setPreviewingRingtone(null), 4000);
+                          }}
+                          className={cn(
+                            'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors',
+                            isPlaying
+                              ? 'bg-fuchsia-500/20 border border-fuchsia-500/40'
+                              : 'bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1]'
+                          )}
+                          aria-label={isPlaying ? `Stop ${tone.label}` : `Preview ${tone.label}`}
+                        >
+                          {isPlaying ? (
+                            <Square className="w-3 h-3 text-fuchsia-300 fill-current" />
+                          ) : (
+                            <Play className="w-3 h-3 text-slate-300 ml-0.5" />
+                          )}
+                        </button>
+                        <span className="flex-1 text-sm font-medium text-white">{tone.label}</span>
+                        <div
+                          className={cn(
+                            'w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors',
+                            isSelected ? 'border-fuchsia-400 bg-fuchsia-400' : 'border-slate-600'
+                          )}
+                        >
+                          {isSelected && <Check className="w-2.5 h-2.5 text-black" />}
+                        </div>
                       </button>
                     );
                   })}

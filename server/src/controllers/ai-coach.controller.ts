@@ -51,6 +51,19 @@ async function routerLlm(prompt: string): Promise<string> {
   }
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatHtmlText(value: unknown): string {
+  return escapeHtml(value).replace(/\r?\n/g, '<br>');
+}
+
 /**
  * AI Coach Controller
  * Handles deep assessment conversations with OpenAI
@@ -375,14 +388,7 @@ class AICoachController extends BaseController {
       throw ApiError.badRequest('Session ID is required');
     }
 
-    // Get all sessions and find the one matching
-    const sessions = await aiCoachService.getPreviousSessions(userId, 100);
-    const session = sessions.find(s => s.id === sessionId);
-
-    // Also check active session
-    const activeSession = await aiCoachService.getActiveSession(userId);
-
-    const targetSession = session || (activeSession?.id === sessionId ? activeSession : null);
+    const targetSession = await aiCoachService.getSessionById(userId, sessionId);
 
     if (!targetSession) {
       throw ApiError.notFound('Session not found');
@@ -403,11 +409,7 @@ class AICoachController extends BaseController {
       throw ApiError.badRequest('Session ID is required');
     }
 
-    // Get the session
-    const sessions = await aiCoachService.getPreviousSessions(userId, 100);
-    const session = sessions.find(s => s.id === sessionId);
-    const activeSession = await aiCoachService.getActiveSession(userId);
-    const targetSession = session || (activeSession?.id === sessionId ? activeSession : null);
+    const targetSession = await aiCoachService.getSessionById(userId, sessionId);
 
     if (!targetSession) {
       throw ApiError.notFound('Session not found');
@@ -426,7 +428,7 @@ class AICoachController extends BaseController {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>AI Coach Session - ${goalTitle}</title>
+  <title>AI Coach Session - ${escapeHtml(goalTitle)}</title>
   <style>
     body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; line-height: 1.6; color: #333; }
     h1 { color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px; }
@@ -450,8 +452,8 @@ class AICoachController extends BaseController {
 <body>
   <h1>🧠 AI Coach Session</h1>
   <div class="meta">
-    <strong>Goal:</strong> ${goalTitle}<br>
-    <strong>Date:</strong> ${date}<br>
+    <strong>Goal:</strong> ${escapeHtml(goalTitle)}<br>
+    <strong>Date:</strong> ${escapeHtml(date)}<br>
     <strong>Messages:</strong> ${targetSession.messageCount}<br>
     <strong>Status:</strong> ${targetSession.isComplete ? '✅ Completed' : '🔄 In Progress'}
   </div>
@@ -465,7 +467,7 @@ class AICoachController extends BaseController {
       htmlContent += `
   <div class="message ${isAI ? 'ai' : 'user'}">
     <div class="role">${isAI ? '🤖 AI Coach' : '👤 You'}</div>
-    <div class="content">${msg.content.replace(/\n/g, '<br>')}</div>
+    <div class="content">${formatHtmlText(msg.content)}</div>
   </div>`;
     }
 
@@ -477,7 +479,7 @@ class AICoachController extends BaseController {
       for (const insight of targetSession.extractedInsights) {
         htmlContent += `
     <div class="insight-item">
-      <span class="insight-category">${insight.category.replace(/_/g, ' ')}:</span> ${insight.text}
+      <span class="insight-category">${escapeHtml(insight.category.replace(/_/g, ' '))}:</span> ${formatHtmlText(insight.text)}
     </div>`;
       }
       htmlContent += `
@@ -489,7 +491,7 @@ class AICoachController extends BaseController {
       htmlContent += `
   <div class="summary">
     <h2>📋 Summary</h2>
-    <p>${targetSession.sessionSummary}</p>
+    <p>${formatHtmlText(targetSession.sessionSummary)}</p>
   </div>`;
     }
 
@@ -500,7 +502,7 @@ class AICoachController extends BaseController {
     <h2>🎯 Key Takeaways</h2>
     <ul>`;
       for (const takeaway of targetSession.keyTakeaways) {
-        htmlContent += `<li>${takeaway}</li>`;
+        htmlContent += `<li>${formatHtmlText(takeaway)}</li>`;
       }
       htmlContent += `
     </ul>
@@ -626,11 +628,17 @@ class AICoachController extends BaseController {
 
     // Get or create session
     let session = sessionId
-      ? await aiCoachService.getActiveSession(userId, goal)
+      ? await aiCoachService.getSessionById(userId, sessionId)
       : null;
+
+    if (sessionId && !session) {
+      throw ApiError.notFound('Session not found');
+    }
 
     if (!session) {
       session = await aiCoachService.createSession(userId, goal, 'assessment');
+    } else if (session.goalCategory !== goal) {
+      throw ApiError.badRequest('Session goal does not match request goal');
     }
 
     // Build historical context from previous sessions
@@ -800,11 +808,17 @@ class AICoachController extends BaseController {
 
     // Get or create session
     let session = sessionId
-      ? await aiCoachService.getActiveSession(userId, goal)
+      ? await aiCoachService.getSessionById(userId, sessionId)
       : null;
+
+    if (sessionId && !session) {
+      throw ApiError.notFound('Session not found');
+    }
 
     if (!session) {
       session = await aiCoachService.createSession(userId, goal, 'assessment');
+    } else if (session.goalCategory !== goal) {
+      throw ApiError.badRequest('Session goal does not match request goal');
     }
 
     this.log('info', `Processing chat with image`, {

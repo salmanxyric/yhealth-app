@@ -163,6 +163,13 @@ function getTimezoneOffsetMs(date: Date, timezone: string): number {
   return fmt(timezone) - fmt('UTC');
 }
 
+export function getTimeOfDayLabel(hour: number): { label: string; greeting: string } {
+  if (hour >= 5 && hour < 12) return { label: 'morning', greeting: 'Good morning' };
+  if (hour >= 12 && hour < 17) return { label: 'afternoon', greeting: 'Good afternoon' };
+  if (hour >= 17 && hour < 21) return { label: 'evening', greeting: 'Good evening' };
+  return { label: 'night', greeting: 'Hey' };
+}
+
 export function addDaysToISODate(dateISO: string, days: number): string {
   const [year, month, day] = dateISO.split('-').map((part) => parseInt(part, 10));
   if (!year || !month || !day) return dateISO;

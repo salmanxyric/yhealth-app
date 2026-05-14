@@ -378,11 +378,23 @@ class SocketService {
       async (data: { chatId: string; callType: 'voice' | 'video' }) => {
         if (!socket.user?.userId || !data?.chatId || !data?.callType) return;
         try {
-          const call = await chatCallService.invite(
-            data.chatId,
-            socket.user.userId,
-            data.callType,
-          );
+          // Detect AI Coach chat and route to initiateAICoachCall
+          const AI_COACH_USER_ID = process.env.AI_COACH_USER_ID || '00000000-0000-0000-0000-000000000001';
+          const isAiCoachChat = await chatCallService.isAICoachChat(data.chatId, AI_COACH_USER_ID);
+
+          let call;
+          if (isAiCoachChat) {
+            call = await chatCallService.initiateAICoachCall(socket.user.userId, {
+              preCallContext: 'User-initiated voice call from chat',
+              sessionType: 'quick_checkin',
+            });
+          } else {
+            call = await chatCallService.invite(
+              data.chatId,
+              socket.user.userId,
+              data.callType,
+            );
+          }
           socket.join(`chat:call:${call.id}`);
         } catch (error) {
           socket.emit('chat:call:error', {
