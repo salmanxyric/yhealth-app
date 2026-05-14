@@ -1,69 +1,53 @@
 <%# Streak Milestone Template %>
+<%
+  const feature = (icon, title, description) => include('./partials/feature-box', { icon, title, description });
+  const daysAway = typeof nextMilestone !== 'undefined' && nextMilestone ? nextMilestone - streakDays : null;
+%>
 <%- include('./layouts/base', {
-  title: 'Streak Milestone! - yHealth',
-  preheader: `${firstName}, you're on fire! ${streakDays} day streak achieved!`,
-  greeting: `You're on fire, ${firstName}! 🔥`,
+  title: 'Streak Milestone - Balencia',
+  preheader: `${firstName}, your ${streakDays} day streak is live.`,
+  eyebrow: 'Consistency milestone',
+  greeting: `${streakDays} days in a row, ${firstName}.`,
   content: `
-    <div style="text-align: center; margin-bottom: 32px;">
-      <div style="width: 120px; height: 120px; background: linear-gradient(135deg, #EF4444 0%, #DC2626 50%, #B91C1C 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 40px rgba(239, 68, 68, 0.3);">
-        <span style="font-size: 60px; line-height: 120px;">🔥</span>
-      </div>
-    </div>
-
-    <!-- Streak Counter -->
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 0 26px;">
       <tr>
-        <td style="text-align: center; background: linear-gradient(135deg, #FEF2F2 0%, #FECACA 100%); border-radius: 16px; padding: 32px;">
-          <p style="margin: 0 0 8px 0; font-size: 72px; font-weight: 800; color: #DC2626; line-height: 1;"><%= streakDays %></p>
-          <p style="margin: 0; font-size: 18px; color: #991B1B; font-weight: 600;">Day Streak!</p>
+        <td style="text-align:center; background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%); border-radius:18px; padding:34px 24px; border:1px solid #fed7aa;">
+          <p style="margin:0 0 8px; font-size:72px; font-weight:800; color:#ea580c; line-height:1;">${escapeFn(streakDays)}</p>
+          <p style="margin:0; font-size:18px; color:#9a3412; font-weight:800;">Day streak</p>
         </td>
       </tr>
     </table>
 
-    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px; text-align: center;">
-      <strong>Consistency is the key to success</strong>, and you're proving it every single day. This dedication to your health is truly inspiring!
+    <p style="margin:0 0 24px; font-size:16px; line-height:26px; text-align:center;">
+      Consistency is the strongest signal you can give your coach. This streak gives Balencia better context and gives you more momentum.
     </p>
 
-    <!-- Motivation Message -->
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:24px 0;">
       <tr>
-        <td style="padding: 24px; background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%); border-radius: 12px; text-align: center;">
-          <p style="margin: 0; font-size: 16px; color: #FFFFFF; font-style: italic; line-height: 24px;">
-            "<%= typeof motivationalQuote !== 'undefined' ? motivationalQuote : 'The secret of your success is found in your daily routine.' %>"
+        <td style="padding:24px; background:linear-gradient(135deg,#f97316 0%,#ea580c 100%); border-radius:16px; text-align:center;">
+          <p style="margin:0; font-size:16px; color:#ffffff; font-style:italic; line-height:24px;">
+            "${escapeFn(typeof motivationalQuote !== 'undefined' ? motivationalQuote : 'The secret of your success is found in your daily routine.')}"
           </p>
-          <% if (typeof quoteAuthor !== 'undefined' && quoteAuthor) { %>
-          <p style="margin: 12px 0 0 0; font-size: 14px; color: #C7D2FE;">— <%= quoteAuthor %></p>
-          <% } %>
+          ${typeof quoteAuthor !== 'undefined' && quoteAuthor ? `<p style="margin:12px 0 0; font-size:14px; color:#ffedd5;">- ${escapeFn(quoteAuthor)}</p>` : ''}
         </td>
       </tr>
     </table>
 
-    <% if (streakDays >= 7) { %>
-    <!-- Streak Benefits -->
-    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">What your streak unlocks:</h2>
+    ${streakDays >= 7 ? `
+      <h2 style="margin:30px 0 16px; font-size:18px; color:#111827;">What your streak unlocks</h2>
+      ${feature('01', 'Better pattern recognition', 'Your coach can identify more meaningful trends from repeated check-ins.')}
+      ${feature('02', 'Sharper insights', 'More data creates more accurate and actionable recommendations.')}
+      ${feature('03', 'Stronger habit design', 'You are building routines that can survive busy days.')}
+    ` : ''}
 
-    <%- include('../partials/feature-box', { icon: '📊', title: 'Better Pattern Recognition', description: 'Your AI coach can now identify more meaningful trends in your data' }) %>
-    <%- include('../partials/feature-box', { icon: '🎯', title: 'Personalized Insights', description: 'More data means more accurate and actionable recommendations' }) %>
-    <%- include('../partials/feature-box', { icon: '💪', title: 'Habit Formation', description: "You're building lasting habits that will transform your health" }) %>
-    <% } %>
-
-    <!-- Next Milestone -->
-    <% if (typeof nextMilestone !== 'undefined' && nextMilestone) { %>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
-      <tr>
-        <td style="padding: 16px; background: #ECFDF5; border-radius: 12px; border-left: 4px solid #10B981;">
-          <p style="margin: 0; font-size: 14px; color: #065F46;">
-            <strong>Next milestone:</strong> <%= nextMilestone %> days! You're only <%= nextMilestone - streakDays %> days away. Keep going!
-          </p>
-        </td>
-      </tr>
-    </table>
-    <% } %>
+    ${daysAway !== null ? include('./partials/alert-box', {
+      type: 'success',
+      message: `Next milestone: <strong>${escapeFn(nextMilestone)}</strong> days. You are ${escapeFn(daysAway)} day${daysAway === 1 ? '' : 's'} away.`
+    }) : ''}
   `,
   ctaButton: {
     text: 'Keep the Streak Going',
-    url: dashboardUrl,
-    color: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)'
+    url: dashboardUrl
   },
-  footerText: "Don't break the chain! Your AI coach is rooting for you."
+  footerText: 'Protect the routine, then let the results compound.'
 }) %>

@@ -1,74 +1,58 @@
 <%# Re-engagement Email Template %>
+<%
+  const feature = (icon, title, description) => include('./partials/feature-box', { icon, title, description });
+  const newFeatureRows = Array.isArray(newFeatures) ? newFeatures.map((featureName) => `
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:10px 0;">
+      <tr>
+        <td style="padding:14px 16px; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px;">
+          <p style="margin:0; font-size:14px; color:#4b5563; font-weight:700;">${escapeFn(featureName)}</p>
+        </td>
+      </tr>
+    </table>
+  `).join('') : '';
+%>
 <%- include('./layouts/base', {
-  title: 'We Miss You! - yHealth',
-  preheader: `${firstName}, your AI Life Coach misses you! Come back and continue your journey.`,
-  greeting: `Hey ${firstName}, we miss you!`,
+  title: 'We Miss You - Balencia',
+  preheader: `${firstName}, your AI Life Coach is ready when you are.`,
+  eyebrow: 'Come back gently',
+  greeting: `Ready for a clean restart, ${firstName}?`,
   content: `
-    <div style="text-align: center; margin-bottom: 32px;">
-      <div style="font-size: 64px; margin-bottom: 16px;">👋</div>
-    </div>
-
-    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px;">
-      It's been <strong><%= daysAway %> days</strong> since we last saw you on yHealth. Life gets busy - we totally understand! But your AI Life Coach is here, ready and waiting to help you get back on track.
+    <p style="margin:0 0 24px; font-size:16px; line-height:26px;">
+      It has been <strong>${escapeFn(daysAway)}</strong> days since your last Balencia session. No guilt, no reset penalty. Your progress is saved and your coach is ready to help you continue from here.
     </p>
 
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:24px 0;">
       <tr>
-        <td style="padding: 24px; background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%); border-radius: 12px; text-align: center;">
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #6B7280;">Your progress is still saved</p>
-          <p style="margin: 0; font-size: 20px; font-weight: 700; color: #1F2937;">Pick up right where you left off</p>
+        <td style="padding:24px; background:linear-gradient(135deg,#fff7ed 0%,#ecfdf5 100%); border-radius:16px; text-align:center; border:1px solid #fed7aa;">
+          <p style="margin:0 0 8px; font-size:14px; color:#78716c;">Your progress is still saved</p>
+          <p style="margin:0; font-size:20px; line-height:28px; font-weight:800; color:#111827;">Pick up right where you left off</p>
         </td>
       </tr>
     </table>
 
-    <% if (typeof lastActivity !== 'undefined' && lastActivity) { %>
-    <p style="margin: 0 0 24px 0; font-size: 14px; color: #6B7280;">
-      <strong>Last activity:</strong> <%= lastActivity %>
-    </p>
-    <% } %>
+    ${typeof lastActivity !== 'undefined' && lastActivity ? `
+      <p style="margin:0 0 24px; font-size:14px; color:#6b7280;"><strong>Last activity:</strong> ${escapeFn(lastActivity)}</p>
+    ` : ''}
 
-    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">Here's what you can do in just 30 seconds:</h2>
+    <h2 style="margin:30px 0 16px; font-size:18px; color:#111827;">A 30-second restart</h2>
+    ${feature('01', 'Quick check-in', 'Tell your AI coach how you feel today and what has changed.')}
+    ${feature('02', 'Review your goals', 'Keep what still fits and adjust anything that no longer matches your life.')}
+    ${feature('03', 'Read the latest insight', 'Your coach can help identify a simple next action from your saved context.')}
 
-    <%- include('../partials/feature-box', { icon: '💬', title: 'Quick Check-in', description: 'Tell your AI coach how you\\'re feeling today - that\\'s it!' }) %>
-    <%- include('../partials/feature-box', { icon: '🎯', title: 'Review Your Goals', description: 'See your progress and adjust goals if needed' }) %>
-    <%- include('../partials/feature-box', { icon: '📊', title: 'View Your Insights', description: 'Your AI coach has new observations to share' }) %>
+    ${newFeatureRows ? `<h2 style="margin:30px 0 16px; font-size:18px; color:#111827;">New since you were away</h2>${newFeatureRows}` : ''}
 
-    <% if (typeof newFeatures !== 'undefined' && newFeatures.length > 0) { %>
-    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">What's new since you've been away:</h2>
-    <% newFeatures.forEach(function(feature) { %>
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 12px 0;">
-      <tr>
-        <td style="padding: 12px 16px; background: #F9FAFB; border-radius: 8px;">
-          <p style="margin: 0; font-size: 14px; color: #4B5563;">
-            ✨ <%= feature %>
-          </p>
-        </td>
-      </tr>
-    </table>
-    <% }); %>
-    <% } %>
-
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 32px 0;">
-      <tr>
-        <td style="padding: 20px; background: linear-gradient(135deg, #10B981 0%, #059669 100%); border-radius: 12px; text-align: center;">
-          <p style="margin: 0; font-size: 16px; color: #FFFFFF; font-weight: 500;">
-            🌱 Remember: Every day is a new opportunity to invest in your health.
-          </p>
-        </td>
-      </tr>
-    </table>
+    ${include('./partials/alert-box', {
+      type: 'success',
+      message: 'Every day is a fresh chance to invest in your health. Start small and let the system rebuild momentum.'
+    })}
   `,
   ctaButton: {
     text: 'Come Back & Check In',
     url: dashboardUrl
   },
   secondaryContent: `
-    <p style="margin: 0 0 8px 0; font-size: 14px; color: #6B7280;">
-      <strong>Need a fresh start?</strong>
-    </p>
-    <p style="margin: 0; font-size: 13px; color: #9CA3AF;">
-      No judgment here. If your goals have changed, your AI coach can help you set new ones that fit your current life. Just log in and let's chat!
-    </p>
+    <p style="margin:0 0 8px; font-size:14px; color:#111827; font-weight:800;">Need a fresh start?</p>
+    <p style="margin:0; font-size:13px; color:#78716c;">Your goals can change. Log in and your coach will help reshape the plan around your current life.</p>
   `,
-  footerText: "We believe in you. Your AI Life Coach is always here when you're ready."
+  footerText: 'Your AI Life Coach is always here when you are ready.'
 }) %>

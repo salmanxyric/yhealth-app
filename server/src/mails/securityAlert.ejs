@@ -1,113 +1,73 @@
 <%# Security Alert Template %>
+<%
+  const activityRows = [
+    ['When', activityTime],
+    typeof ipAddress !== 'undefined' && ipAddress ? ['IP address', ipAddress] : null,
+    typeof location !== 'undefined' && location ? ['Location', location] : null,
+    typeof device !== 'undefined' && device ? ['Device', device] : null
+  ].filter(Boolean).map(([label, value]) => `
+    <tr>
+      <td style="padding:10px 0; border-top:1px solid #fee2e2;">
+        <span style="color:#78716c; font-size:14px;">${escapeFn(label)}:</span>
+        <span style="color:#111827; font-size:14px; font-weight:800; float:right;">${escapeFn(value)}</span>
+      </td>
+    </tr>
+  `).join('');
+%>
 <%- include('./layouts/base', {
-  title: 'Security Alert - yHealth',
-  preheader: `${firstName}, we detected unusual activity on your yHealth account`,
-  greeting: `Security Alert, ${firstName}`,
+  title: 'Security Alert - Balencia',
+  preheader: `${firstName}, we detected account activity on Balencia.`,
+  eyebrow: 'Security alert',
+  greeting: `Please review this account activity, ${firstName}.`,
   content: `
-    <div style="text-align: center; margin-bottom: 32px;">
-      <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
-        <span style="font-size: 40px; line-height: 80px;">🚨</span>
-      </div>
-    </div>
-
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 24px 0;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 0 24px;">
       <tr>
-        <td style="padding: 20px; background: #FEF2F2; border-radius: 12px; border: 2px solid #EF4444;">
-          <p style="margin: 0; font-size: 16px; color: #991B1B; font-weight: 600;">
-            We detected <%= alertType %> on your account
+        <td style="padding:20px; background:#fef2f2; border-radius:16px; border:1px solid #fecaca;">
+          <p style="margin:0; font-size:16px; color:#991b1b; font-weight:800;">
+            We detected ${escapeFn(alertType)} on your account.
           </p>
         </td>
       </tr>
     </table>
 
-    <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 26px;">
-      We're letting you know about this activity to keep your account secure. Please review the details below and take action if this wasn't you.
+    <p style="margin:0 0 22px; font-size:16px; line-height:26px;">
+      We are sending this notice to help keep your account secure. Review the details below and secure your account if this activity was not yours.
     </p>
 
-    <!-- Activity Details -->
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0; background: #F9FAFB; border-radius: 12px;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:24px 0; background:#fff7ed; border-radius:16px; border:1px solid #fed7aa;">
       <tr>
-        <td style="padding: 20px;">
-          <h3 style="margin: 0 0 16px 0; font-size: 14px; color: #6B7280; text-transform: uppercase; letter-spacing: 1px;">Activity Details</h3>
+        <td style="padding:22px;">
+          <p style="margin:0 0 8px; font-size:12px; color:#c2410c; text-transform:uppercase; letter-spacing:1.5px; font-weight:800;">Activity details</p>
           <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-            <tr>
-              <td style="padding: 8px 0;">
-                <span style="color: #6B7280; font-size: 14px;">When:</span>
-                <span style="color: #1F2937; font-size: 14px; font-weight: 600; float: right;"><%= activityTime %></span>
-              </td>
-            </tr>
-            <% if (typeof ipAddress !== 'undefined' && ipAddress) { %>
-            <tr>
-              <td style="padding: 8px 0; border-top: 1px solid #E5E7EB;">
-                <span style="color: #6B7280; font-size: 14px;">IP Address:</span>
-                <span style="color: #1F2937; font-size: 14px; font-weight: 600; float: right;"><%= ipAddress %></span>
-              </td>
-            </tr>
-            <% } %>
-            <% if (typeof location !== 'undefined' && location) { %>
-            <tr>
-              <td style="padding: 8px 0; border-top: 1px solid #E5E7EB;">
-                <span style="color: #6B7280; font-size: 14px;">Location:</span>
-                <span style="color: #1F2937; font-size: 14px; font-weight: 600; float: right;"><%= location %></span>
-              </td>
-            </tr>
-            <% } %>
-            <% if (typeof device !== 'undefined' && device) { %>
-            <tr>
-              <td style="padding: 8px 0; border-top: 1px solid #E5E7EB;">
-                <span style="color: #6B7280; font-size: 14px;">Device:</span>
-                <span style="color: #1F2937; font-size: 14px; font-weight: 600; float: right;"><%= device %></span>
-              </td>
-            </tr>
-            <% } %>
+            ${activityRows}
           </table>
         </td>
       </tr>
     </table>
 
-    <h2 style="margin: 32px 0 16px 0; font-size: 18px; color: #1F2937;">Was this you?</h2>
-
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 16px 0;">
-      <tr>
-        <td style="padding: 16px; background: #ECFDF5; border-radius: 12px; border-left: 4px solid #10B981;">
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #065F46; font-weight: 600;">
-            ✓ Yes, this was me
-          </p>
-          <p style="margin: 0; font-size: 13px; color: #047857;">
-            Great! No action needed. You can safely ignore this email.
-          </p>
-        </td>
-      </tr>
-    </table>
-
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 16px 0;">
-      <tr>
-        <td style="padding: 16px; background: #FEF2F2; border-radius: 12px; border-left: 4px solid #EF4444;">
-          <p style="margin: 0 0 8px 0; font-size: 14px; color: #991B1B; font-weight: 600;">
-            ✗ No, this wasn't me
-          </p>
-          <p style="margin: 0; font-size: 13px; color: #B91C1C;">
-            Your account may be compromised. Click the button below to secure your account immediately.
-          </p>
-        </td>
-      </tr>
-    </table>
+    ${include('./partials/alert-box', {
+      type: 'success',
+      message: 'If this was you, no action is needed.'
+    })}
+    ${include('./partials/alert-box', {
+      type: 'error',
+      message: 'If this was not you, secure your account immediately and review recent activity.'
+    })}
   `,
   ctaButton: {
     text: 'Secure My Account',
     url: secureAccountUrl,
-    color: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)'
+    color: 'linear-gradient(135deg,#ef4444 0%,#dc2626 100%)'
   },
   secondaryContent: `
-    <p style="margin: 0 0 12px 0; font-size: 14px; color: #1F2937; font-weight: 600;">
-      Security recommendations:
-    </p>
-    <ul style="margin: 0; padding: 0 0 0 20px; font-size: 13px; color: #6B7280; line-height: 22px;">
-      <li>Change your password immediately</li>
-      <li>Enable two-factor authentication</li>
-      <li>Review recent account activity</li>
-      <li>Sign out of all devices if needed</li>
+    <p style="margin:0 0 12px; font-size:14px; color:#111827; font-weight:800;">Security recommendations</p>
+    <ul style="margin:0; padding:0 0 0 20px; font-size:13px; color:#6b7280; line-height:22px;">
+      <li>Change your password if you do not recognize this activity.</li>
+      <li>Enable two-factor authentication when available.</li>
+      <li>Review active sessions and connected devices.</li>
     </ul>
   `,
-  footerText: 'If you have concerns about your account security, contact support@yhealth.app immediately.'
+  footerText: 'If you have concerns about account security, contact support@balencia.app immediately.',
+  showSocial: false,
+  showUnsubscribe: false
 }) %>

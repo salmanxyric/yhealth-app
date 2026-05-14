@@ -1,10 +1,13 @@
 /**
  * Email Engine Service
  * Centralized orchestrator for all outbound email.
- * Routes emails through preferences check → logging → queue (or inline fallback).
+ * Routes emails through: dedup → throttle → quiet hours → preferences → logging → queue.
+ *
+ * ALL email sends MUST go through this engine. Direct mailHelper.send() calls
+ * bypass rate limiting, deduplication, and preference checks.
  */
 
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { query } from '../config/database.config.js';
 import { logger } from './logger.service.js';
 import { mailHelper, EMAIL_SUBJECTS } from '../helper/mail.js';
@@ -22,6 +25,8 @@ export interface SendEmailOptions {
   data: Record<string, unknown>;
   category?: EmailCategory;
   priority?: EmailPriority;
+  /** Skip dedup check (use sparingly — OTPs, security alerts) */
+  skipDedup?: boolean;
 }
 
 export interface EmailPreference {
@@ -40,11 +45,117 @@ export interface EmailAnalytics {
 }
 
 // ============================================================================
+// Priority Classification
+// ============================================================================
+
+const PRIORITY_CONFIG = {
+  critical: { bypassThrottle: true, bypassQuietHours: true, bypassDedup: true },
+  high:     { bypassThrottle: false, bypassQuietHours: true, bypassDedup: false },
+  normal:   { bypassThrottle: false, bypassQuietHours: false, bypassDedup: false },
+  low:      { bypassThrottle: false, bypassQuietHours: false, bypassDedup: false },
+} as const;
+
+/** Templates that are always transactional — never throttled or deduped */
+const TRANSACTIONAL_TEMPLATES = new Set([
+  'emailVerification', 'resendVerification', 'emailVerified',
+  'passwordReset', 'passwordResetOTP', 'passwordChanged',
+  'registrationOTP', 'securityAlert',
+]);
+
+/** Per-template dedup windows (seconds). Missing = use default. */
+const DEDUP_WINDOWS: Record<string, number> = {
+  coachingInsight:   3600,     // 1 hour — coaching nudges
+  digestSummary:     86400,    // 24 hours — weekly digest
+  reEngagement:      2592000,  // 30 days
+  weeklyProgress:    518400,   // 6 days
+  assessmentReminder: 86400,   // 24 hours
+  integrationReminder: 86400,  // 24 hours
+  taskReminder:      1800,     // 30 min — same task reminder
+  milestoneAchieved: 3600,     // 1 hour — same milestone
+  streakMilestone:   3600,     // 1 hour
+  goalSet:           600,      // 10 min
+  welcome:           86400,    // 24 hours — prevent multiple welcome emails
+};
+
+const DEFAULT_DEDUP_WINDOW_S = 1800; // 30 minutes
+
+/** Minimum seconds between any two non-transactional emails to the same user */
+const MIN_EMAIL_SPACING_S = 900; // 15 minutes
+
+/** Soft daily cap for non-transactional emails */
+const DAILY_SOFT_CAP = 5;
+
+/** Hard daily cap — even high-priority stops here (critical still bypasses) */
+const DAILY_HARD_CAP = 8;
+
+// ============================================================================
+// In-Memory Dedup Cache
+// ============================================================================
+
+interface DedupEntry {
+  timestamp: number;
+  contentHash: string;
+}
+
+class DedupCache {
+  private cache = new Map<string, DedupEntry>();
+
+  constructor() {
+    setInterval(() => this.cleanup(), 5 * 60_000);
+  }
+
+  /**
+   * Returns true if this email should be suppressed (is a duplicate).
+   */
+  isDuplicate(userId: string, template: string, data: Record<string, unknown>): boolean {
+    const key = `${userId}:${template}`;
+    const contentHash = this.hashContent(data);
+    const entry = this.cache.get(key);
+
+    if (!entry) return false;
+
+    const windowS = DEDUP_WINDOWS[template] ?? DEFAULT_DEDUP_WINDOW_S;
+    const elapsed = (Date.now() - entry.timestamp) / 1000;
+
+    if (elapsed < windowS) {
+      // Within window — check if content is same or similar
+      if (entry.contentHash === contentHash) return true;
+      // Even different content within a tight window (5 min) for same template
+      if (elapsed < 300) return true;
+    }
+
+    return false;
+  }
+
+  record(userId: string, template: string, data: Record<string, unknown>): void {
+    const key = `${userId}:${template}`;
+    this.cache.set(key, {
+      timestamp: Date.now(),
+      contentHash: this.hashContent(data),
+    });
+  }
+
+  private hashContent(data: Record<string, unknown>): string {
+    const stable = JSON.stringify(data, Object.keys(data).sort());
+    return createHash('sha256').update(stable).digest('hex').substring(0, 16);
+  }
+
+  private cleanup(): void {
+    const maxAge = Math.max(...Object.values(DEDUP_WINDOWS), DEFAULT_DEDUP_WINDOW_S) * 1000;
+    const cutoff = Date.now() - maxAge;
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.timestamp < cutoff) this.cache.delete(key);
+    }
+  }
+}
+
+// ============================================================================
 // Email Engine
 // ============================================================================
 
 class EmailEngine {
   private static instance: EmailEngine;
+  private dedupCache = new DedupCache();
 
   private constructor() {}
 
@@ -56,8 +167,8 @@ class EmailEngine {
   }
 
   /**
-   * Core send method — all email goes through here.
-   * Returns the email log ID, or null if skipped/failed.
+   * Core send method — ALL email goes through here.
+   * Pipeline: classify → dedup → throttle → quiet hours → preferences → log → queue
    */
   async send(options: SendEmailOptions): Promise<string | null> {
     const {
@@ -68,34 +179,65 @@ class EmailEngine {
       data,
       category = 'engagement',
       priority = 'normal',
+      skipDedup = false,
     } = options;
 
-    // Skip system users
+    const isTransactional = category === 'transactional' || TRANSACTIONAL_TEMPLATES.has(template);
+    const priorityConfig = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.normal;
+
+    // 1. Skip system users
     if (recipient.endsWith('@balencia.system')) {
-      logger.debug('[EmailEngine] Email skipped — system user', { recipient, template });
       return null;
     }
 
-    // Check preferences for non-transactional emails
-    if (userId && category !== 'transactional') {
+    // Non-transactional pipeline for authenticated users
+    if (userId && !isTransactional) {
+      // 2. Deduplication
+      if (!skipDedup && !priorityConfig.bypassDedup) {
+        if (this.dedupCache.isDuplicate(userId, template, data)) {
+          logger.debug('[EmailEngine] Deduped', { userId, template });
+          return null;
+        }
+      }
+
+      // 3. Preference check
       const allowed = await this.checkPreferences(userId, category);
       if (!allowed) {
-        logger.debug('[EmailEngine] Email skipped — user opted out', {
-          userId,
-          category,
-          template,
-        });
+        logger.debug('[EmailEngine] Opted out', { userId, category, template });
         return null;
       }
 
-      // Rate limit: max 3 non-transactional emails per user per day
-      const dailyCount = await this.getDailyEmailCount(userId);
-      if (dailyCount >= 3) {
-        logger.debug('[EmailEngine] Email skipped — daily limit reached', {
-          userId,
-          template,
-          dailyCount,
-        });
+      // 4. Frequency preference check (user may want weekly-only)
+      const frequency = await this.getUserFrequency(userId, category);
+      if (frequency === 'never') return null;
+      if (frequency === 'weekly' && category !== 'digest') {
+        // Suppress non-digest emails for weekly-preference users
+        logger.debug('[EmailEngine] Suppressed — user prefers weekly', { userId, template });
+        return null;
+      }
+
+      // 5. Rate limiting — adaptive throttle
+      if (!priorityConfig.bypassThrottle) {
+        const throttleResult = await this.checkThrottle(userId, priority);
+        if (throttleResult.blocked) {
+          logger.debug('[EmailEngine] Throttled', { userId, template, reason: throttleResult.reason });
+          return null;
+        }
+      }
+
+      // 6. Quiet hours — defer low/normal priority during sleep
+      if (!priorityConfig.bypassQuietHours) {
+        const inQuietHours = await this.isInQuietHours(userId);
+        if (inQuietHours) {
+          logger.debug('[EmailEngine] Quiet hours — suppressed', { userId, template });
+          return null;
+        }
+      }
+
+      // 7. Engagement-based suppression
+      const engagementOk = await this.checkEngagement(userId, category);
+      if (!engagementOk) {
+        logger.debug('[EmailEngine] Low engagement — suppressed', { userId, template, category });
         return null;
       }
     }
@@ -103,7 +245,7 @@ class EmailEngine {
     try {
       // Generate unsubscribe token for non-transactional
       let unsubscribeToken: string | undefined;
-      if (userId && category !== 'transactional') {
+      if (userId && !isTransactional) {
         unsubscribeToken = await this.ensureUnsubscribeToken(userId, category);
       }
 
@@ -118,10 +260,15 @@ class EmailEngine {
           template,
           subject,
           recipient,
-          category,
+          isTransactional ? 'transactional' : category,
           JSON.stringify({ priority, templateData: Object.keys(data) }),
         ]
       );
+
+      // Record in dedup cache
+      if (userId) {
+        this.dedupCache.record(userId, template, data);
+      }
 
       // Route: queue (if Redis available) or inline fallback
       if (emailQueueService.isAvailable()) {
@@ -132,7 +279,7 @@ class EmailEngine {
           recipient,
           subject,
           data,
-          category,
+          category: isTransactional ? 'transactional' : category,
           priority,
           unsubscribeToken,
         };
@@ -162,7 +309,6 @@ class EmailEngine {
     const { userId, template, recipient, subject = this.resolveSubject(template), data } = options;
 
     try {
-      // Log it
       const logId = randomUUID();
       await query(
         `INSERT INTO email_logs (id, user_id, template, subject, recipient, status, category)
@@ -209,6 +355,7 @@ class EmailEngine {
         data: {
           ...data,
           unsubscribeUrl: unsubscribeToken ? `${appUrl}/api/email/unsubscribe/${unsubscribeToken}` : undefined,
+          preferencesUrl: `${appUrl}/settings/notifications`,
         },
       });
 
@@ -236,28 +383,164 @@ class EmailEngine {
   }
 
   // ============================================================================
-  // Preferences
+  // Throttling & Rate Limiting
+  // ============================================================================
+
+  private async checkThrottle(
+    userId: string,
+    priority: EmailPriority
+  ): Promise<{ blocked: boolean; reason?: string }> {
+    try {
+      // Check daily count
+      const dailyCount = await this.getDailyEmailCount(userId);
+
+      // Hard cap — block everything except critical
+      if (dailyCount >= DAILY_HARD_CAP) {
+        return { blocked: true, reason: `hard_cap_${DAILY_HARD_CAP}` };
+      }
+
+      // Soft cap — block low/normal, allow high
+      if (dailyCount >= DAILY_SOFT_CAP && priority !== 'high') {
+        return { blocked: true, reason: `soft_cap_${DAILY_SOFT_CAP}` };
+      }
+
+      // Minimum spacing — no two emails within MIN_EMAIL_SPACING_S
+      const lastSentAt = await this.getLastEmailTimestamp(userId);
+      if (lastSentAt) {
+        const elapsedS = (Date.now() - lastSentAt.getTime()) / 1000;
+        if (elapsedS < MIN_EMAIL_SPACING_S) {
+          return { blocked: true, reason: `spacing_${Math.round(MIN_EMAIL_SPACING_S - elapsedS)}s_remaining` };
+        }
+      }
+
+      return { blocked: false };
+    } catch {
+      return { blocked: false };
+    }
+  }
+
+  private async getLastEmailTimestamp(userId: string): Promise<Date | null> {
+    try {
+      const result = await query<{ sent_at: Date }>(
+        `SELECT sent_at FROM email_logs
+         WHERE user_id = $1
+         AND category != 'transactional'
+         AND status = 'sent'
+         AND sent_at IS NOT NULL
+         ORDER BY sent_at DESC
+         LIMIT 1`,
+        [userId]
+      );
+      return result.rows[0]?.sent_at || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // Quiet Hours
+  // ============================================================================
+
+  private async isInQuietHours(userId: string): Promise<boolean> {
+    try {
+      const result = await query<{ quiet_hours_start: number | null; quiet_hours_end: number | null }>(
+        `SELECT quiet_hours_start, quiet_hours_end
+         FROM user_communication_preferences
+         WHERE user_id = $1`,
+        [userId]
+      );
+
+      if (result.rows.length === 0) return false;
+
+      const { quiet_hours_start, quiet_hours_end } = result.rows[0];
+      if (quiet_hours_start === null || quiet_hours_end === null) return false;
+
+      const now = new Date();
+      const currentHour = now.getUTCHours();
+
+      // Handle overnight ranges (e.g., 22:00 → 07:00)
+      if (quiet_hours_start > quiet_hours_end) {
+        return currentHour >= quiet_hours_start || currentHour < quiet_hours_end;
+      }
+
+      return currentHour >= quiet_hours_start && currentHour < quiet_hours_end;
+    } catch {
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // Engagement-Based Suppression
   // ============================================================================
 
   /**
-   * Check if user has opted in for a category (default: true if no preference exists)
+   * Check if user is engaged enough to warrant sending this category.
+   * Suppresses marketing/engagement emails for users with zero opens in 30 days.
    */
+  private async checkEngagement(userId: string, category: string): Promise<boolean> {
+    // Never suppress digest or coaching — those are core value
+    if (category === 'digest' || category === 'coaching' || category === 'transactional') {
+      return true;
+    }
+
+    try {
+      // Count emails sent vs opened in last 30 days
+      const result = await query<{ sent: string; opened: string }>(
+        `SELECT
+           COUNT(*) as sent,
+           COUNT(*) FILTER (WHERE opened_at IS NOT NULL) as opened
+         FROM email_logs
+         WHERE user_id = $1
+           AND category != 'transactional'
+           AND created_at >= NOW() - INTERVAL '30 days'`,
+        [userId]
+      );
+
+      const sent = parseInt(result.rows[0]?.sent || '0');
+      const opened = parseInt(result.rows[0]?.opened || '0');
+
+      // New users (< 5 emails sent) — always send
+      if (sent < 5) return true;
+
+      // Zero opens in 30 days across 5+ emails — suppress engagement/marketing
+      if (opened === 0 && (category === 'engagement' || category === 'marketing')) {
+        return false;
+      }
+
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  // ============================================================================
+  // Preferences
+  // ============================================================================
+
   async checkPreferences(userId: string, category: string): Promise<boolean> {
     try {
       const result = await query<{ enabled: boolean }>(
         `SELECT enabled FROM email_preferences WHERE user_id = $1 AND category = $2`,
         [userId, category]
       );
-      // Default to enabled if no preference set
       return result.rows.length === 0 || result.rows[0].enabled;
     } catch {
-      return true; // Default to sending on error
+      return true;
     }
   }
 
-  /**
-   * Get all email preferences for a user
-   */
+  private async getUserFrequency(userId: string, category: string): Promise<string> {
+    try {
+      const result = await query<{ frequency: string }>(
+        `SELECT frequency FROM email_preferences WHERE user_id = $1 AND category = $2`,
+        [userId, category]
+      );
+      return result.rows[0]?.frequency || 'immediate';
+    } catch {
+      return 'immediate';
+    }
+  }
+
   async getPreferences(userId: string): Promise<EmailPreference[]> {
     const categories: EmailCategory[] = ['transactional', 'engagement', 'digest', 'coaching', 'marketing'];
 
@@ -270,21 +553,17 @@ class EmailEngine {
 
     return categories.map(cat => ({
       category: cat,
-      enabled: existing.get(cat)?.enabled ?? (cat === 'transactional' ? true : true),
+      enabled: existing.get(cat)?.enabled ?? true,
       frequency: existing.get(cat)?.frequency ?? 'immediate',
     }));
   }
 
-  /**
-   * Update a preference for a user + category
-   */
   async updatePreference(
     userId: string,
     category: string,
     enabled: boolean,
     frequency?: string,
   ): Promise<void> {
-    // Don't allow disabling transactional emails
     if (category === 'transactional' && !enabled) {
       throw new Error('Cannot disable transactional emails');
     }
@@ -304,9 +583,6 @@ class EmailEngine {
   // Unsubscribe
   // ============================================================================
 
-  /**
-   * Ensure an unsubscribe token exists for a user + category, return it
-   */
   private async ensureUnsubscribeToken(userId: string, category: string): Promise<string> {
     const result = await query<{ unsubscribe_token: string }>(
       `SELECT unsubscribe_token FROM email_preferences
@@ -318,7 +594,6 @@ class EmailEngine {
       return result.rows[0].unsubscribe_token;
     }
 
-    // Generate and upsert
     const token = randomUUID();
     await query(
       `INSERT INTO email_preferences (user_id, category, unsubscribe_token)
@@ -332,9 +607,6 @@ class EmailEngine {
     return token;
   }
 
-  /**
-   * Process unsubscribe via token (public, no auth)
-   */
   async processUnsubscribe(token: string): Promise<{ success: boolean; category: string | null }> {
     try {
       const result = await query<{ user_id: string; category: string }>(
@@ -366,9 +638,6 @@ class EmailEngine {
   // Analytics
   // ============================================================================
 
-  /**
-   * Get email analytics with optional filters
-   */
   async getAnalytics(filters?: {
     userId?: string;
     template?: string;
@@ -439,16 +708,13 @@ class EmailEngine {
   // Helpers
   // ============================================================================
 
-  /**
-   * Count non-transactional emails sent to a user today
-   */
   private async getDailyEmailCount(userId: string): Promise<number> {
     try {
       const result = await query<{ count: string }>(
         `SELECT COUNT(*) as count FROM email_logs
          WHERE user_id = $1
          AND category != 'transactional'
-         AND status = 'sent'
+         AND status IN ('sent', 'queued')
          AND created_at >= CURRENT_DATE`,
         [userId]
       );
@@ -460,7 +726,7 @@ class EmailEngine {
 
   private resolveSubject(template: string): string {
     const key = template as keyof typeof EMAIL_SUBJECTS;
-    return EMAIL_SUBJECTS[key] || `Balencia — ${template.replace(/[-_]/g, ' ')}`;
+    return EMAIL_SUBJECTS[key] || `yHealth — ${template.replace(/[-_]/g, ' ')}`;
   }
 }
 
