@@ -103,8 +103,8 @@ export const NEURAL_PARTICLES = {
   travelTimeMin: 2,
   travelTimeMax: 4,
   trailLength: 4,
-  sizeMin: 1.5,
-  sizeMax: 6.0,
+  sizeMin: 0.8,
+  sizeMax: 2.5,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -186,8 +186,8 @@ export const CAMERA = {
 
 export const POST_PROCESSING = {
   bloom: {
-    luminanceThreshold: 0.2,
-    intensity: 1.0,
+    luminanceThreshold: 0.4,
+    intensity: 0.6,
     mipmapBlur: true,
   },
   depthOfField: {

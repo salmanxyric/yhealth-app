@@ -28,7 +28,7 @@ export function CinematicSplash() {
   const { phase, alreadyShown } = useSplashState(progress);
 
   const [dissolve, setDissolve] = useState(0);
-  const [bloomIntensity, setBloomIntensity] = useState(1.0);
+  const [bloomIntensity, setBloomIntensity] = useState(0.6);
   const [webGLSupported, setWebGLSupported] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -51,12 +51,12 @@ export function CinematicSplash() {
   useEffect(() => {
     if (phase !== "dissolving") return;
 
-    const dissolveTarget = { value: 0, bloom: 1.0 };
+    const dissolveTarget = { value: 0, bloom: 0.6 };
     const tl = gsap.timeline();
 
     // Phase 1: Flash — bloom intensifies
     tl.to(dissolveTarget, {
-      bloom: 2.5,
+      bloom: 1.5,
       duration: TIMING.flashDurationMs / 1000,
       ease: "power2.in",
       onUpdate: () => setBloomIntensity(dissolveTarget.bloom),

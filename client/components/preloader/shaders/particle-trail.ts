@@ -11,7 +11,7 @@ export const particleVertex = /* glsl */`
     vColor = aColor;
 
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = max(1.0, aSize * (200.0 / -mvPosition.z));
+    gl_PointSize = max(1.0, aSize * (80.0 / -mvPosition.z));
     gl_Position = projectionMatrix * mvPosition;
   }
 `;

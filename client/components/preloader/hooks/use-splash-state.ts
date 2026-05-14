@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { TIMING, SPLASH_SHOWN_KEY } from "../constants";
+import { TIMING } from "../constants";
 
 export type SplashPhase = "loading" | "ready" | "dissolving" | "done";
 
@@ -10,12 +10,6 @@ export function useSplashState(progress: number): {
   alreadyShown: boolean;
 } {
   const alreadyShown = useRef(false);
-
-  // Determine if already shown (SSR-safe)
-  if (typeof window !== "undefined") {
-    alreadyShown.current =
-      sessionStorage.getItem(SPLASH_SHOWN_KEY) === "true";
-  }
 
   const [phase, setPhase] = useState<SplashPhase>(() =>
     alreadyShown.current ? "done" : "loading"
@@ -35,9 +29,6 @@ export function useSplashState(progress: number): {
   // When phase transitions to "dissolving", write storage and schedule "done"
   useEffect(() => {
     if (phase === "dissolving") {
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem(SPLASH_SHOWN_KEY, "true");
-      }
       const timer = setTimeout(() => {
         setPhase("done");
       }, TIMING.dissolutionDurationMs);
