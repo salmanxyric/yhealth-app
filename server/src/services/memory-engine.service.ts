@@ -454,6 +454,37 @@ class MemoryEngineService {
   }
 
   /**
+   * Find memories that share a title or description substring within a category.
+   * Used by the Conversation Insight Extractor as a dedup check before creating
+   * a pending signal — avoids surfacing a candidate that already exists.
+   */
+  async findSimilarMemories(
+    userId: string,
+    category: IntelligenceCategory,
+    searchText: string,
+    limit: number = 5
+  ): Promise<IntelligenceMemory[]> {
+    if (!(await hasMemoryTable())) return [];
+
+    try {
+      const result = await query(
+        `SELECT * FROM intelligence_memories
+         WHERE user_id = $1 AND category = $2
+           AND status IN ('active', 'verified')
+           AND (title ILIKE $3 OR description ILIKE $3)
+         ORDER BY confidence DESC
+         LIMIT $4`,
+        [userId, category, `%${searchText.replace(/[%_\\]/g, '\\$&')}%`, limit]
+      );
+
+      return result.rows.map(mapRow);
+    } catch (error) {
+      if (isMissingMemoryTable(error)) return [];
+      throw error;
+    }
+  }
+
+  /**
    * Apply time-based confidence decay to all active memories for a user.
    * Called by the memory-decay background job.
    */

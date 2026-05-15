@@ -44,6 +44,7 @@ async function processLifeHistoryDigests(): Promise<void> {
            OR EXISTS (SELECT 1 FROM mood_logs WHERE user_id = u.id AND logged_at::date = dates.activity_date)
            OR EXISTS (SELECT 1 FROM journal_entries WHERE user_id = u.id AND logged_at::date = dates.activity_date)
            OR EXISTS (SELECT 1 FROM habit_logs WHERE user_id = u.id AND log_date = dates.activity_date)
+           OR EXISTS (SELECT 1 FROM daily_analysis_reports WHERE user_id = u.id AND report_date = dates.activity_date AND insights IS NOT NULL AND insights != '[]'::jsonb)
          )
          AND NOT EXISTS (
            SELECT 1 FROM user_life_history
