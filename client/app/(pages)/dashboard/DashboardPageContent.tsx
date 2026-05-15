@@ -5,9 +5,8 @@ import { Suspense, useEffect, useState, useCallback } from "react";
 import {
   ChevronRight,
   Sparkles,
-  RefreshCw,
-  AlertCircle,
 } from "lucide-react";
+import { ErrorState } from "@/components/common/error-state";
 import { DashboardPageSkeleton } from "@/components/loading";
 import Link from "next/link";
 import { useAuth } from "@/app/context/AuthContext";
@@ -487,28 +486,10 @@ function DashboardContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full text-center"
-        >
-          <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-red-500/20 flex items-center justify-center">
-            <AlertCircle className="w-10 h-10 text-red-400" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-3">
-            Something went wrong
-          </h1>
-          <p className="text-slate-400 mb-8">{error}</p>
-          <button
-            onClick={fetchDashboardData}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 text-white font-medium rounded-xl hover:bg-slate-700 transition-colors"
-          >
-            <RefreshCw className="w-5 h-5" />
-            Try Again
-          </button>
-        </motion.div>
-      </div>
+      <ErrorState
+        message={error}
+        onRetry={fetchDashboardData}
+      />
     );
   }
 

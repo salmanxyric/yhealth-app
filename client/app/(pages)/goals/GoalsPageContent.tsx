@@ -3,11 +3,10 @@
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
-  AlertCircle,
-  RotateCcw,
   Lightbulb,
   Star,
 } from "lucide-react";
+import { ErrorState } from "@/components/common/error-state";
 import { DashboardLayout } from "@/components/layout";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { useGoals } from "./hooks/useGoals";
@@ -113,26 +112,10 @@ export default function GoalsPageContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] px-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full text-center"
-        >
-          <div className="w-20 h-20 mx-auto mb-6 rounded-3xl bg-red-500/20 flex items-center justify-center">
-            <AlertCircle className="w-10 h-10 text-red-400" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-3">Something went wrong</h1>
-          <p className="text-slate-400 mb-8">{error}</p>
-          <button
-            onClick={fetchGoals}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-slate-800 text-white font-medium rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-5 h-5" />
-            Try Again
-          </button>
-        </motion.div>
-      </div>
+      <ErrorState
+        message={error}
+        onRetry={fetchGoals}
+      />
     );
   }
 

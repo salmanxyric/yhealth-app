@@ -18,6 +18,9 @@ import type { MotivationTier } from '@shared/types/domain/wellbeing.js';
 import { personaFromCoachingStyle } from '@shared/types/domain/coach-persona.js';
 import { buildPersonaDirectiveBlock } from './coach-persona-prompt.service.js';
 import type { ActivityStatusContext, StatusPattern } from '../types/activity-status.types.js';
+import { memoryEngineService } from './memory-engine.service.js';
+import { vectorEmbeddingService } from './vector-embedding.service.js';
+import type { IntelligenceContext } from '@shared/types/domain/turn-insights.js';
 
 // ============================================
 // TYPES
@@ -346,6 +349,7 @@ export interface ComprehensiveUserContext {
   activityStatus: ActivityStatusContext;
   crossDomainCorrelation?: CrossDomainCorrelationContext;
   contextState?: import('./correlation-engine.service.js').UserContextState;
+  intelligenceContext?: IntelligenceContext;
 }
 
 // ============================================
@@ -2095,11 +2099,64 @@ class ComprehensiveUserContextService {
     }
   }
 
+  async getIntelligenceContext(userId: string, userMessage: string): Promise<IntelligenceContext> {
+    try {
+      const [structuredMemories, semanticResults] = await Promise.all([
+        memoryEngineService.getMemoriesForContext(userId, userMessage, 10),
+        vectorEmbeddingService.searchSimilar({
+          queryText: userMessage,
+          sourceType: 'insight_extraction',
+          userId,
+          limit: 5,
+          minSimilarity: 0.7,
+        }).catch(() => []),
+      ]);
+
+      const semanticInsights = semanticResults.map((r) => ({
+        content: typeof r.content === 'string' ? r.content : JSON.stringify(r.content),
+        similarity: r.similarity,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+        sourceType: r.sourceType,
+      }));
+
+      return { structuredMemories, semanticInsights };
+    } catch (error) {
+      logger.warn('[ComprehensiveContext] Intelligence context retrieval failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+      return { structuredMemories: [], semanticInsights: [] };
+    }
+  }
+
   /**
    * Format comprehensive context for system prompt
    */
   formatContextForPrompt(context: ComprehensiveUserContext): string {
     const sections: string[] = [];
+
+    // Intelligence Memory (persistent user knowledge)
+    if (context.intelligenceContext) {
+      const { structuredMemories, semanticInsights } = context.intelligenceContext;
+
+      if (structuredMemories.length > 0) {
+        sections.push('INTELLIGENCE MEMORY:');
+        sections.push(memoryEngineService.formatMemoriesForPrompt(structuredMemories));
+        sections.push('');
+      }
+
+      if (semanticInsights.length > 0) {
+        sections.push('RELATED CONTEXT (semantic):');
+        for (const insight of semanticInsights.slice(0, 5)) {
+          const daysAgo = Math.floor(
+            (Date.now() - new Date(insight.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const timeLabel = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`;
+          sections.push(`- ${timeLabel}: ${insight.content.substring(0, 200)}`);
+        }
+        sections.push('');
+      }
+    }
 
     // Unified Life State (inline format — no dynamic import needed)
     if (context.contextState) {
