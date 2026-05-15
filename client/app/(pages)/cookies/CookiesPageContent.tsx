@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, useInView } from "framer-motion";
 import {
   Cookie,
@@ -189,10 +190,20 @@ export default function CookiesPageContent() {
               </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={heroInView ? { opacity: 1, scale: 1 } : {}} transition={{ duration: 0.5, delay: 0.1, type: "spring", stiffness: 200 }}>
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center mx-auto">
-                <Cookie className="w-10 h-10 text-amber-400" />
-              </div>
+            <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={heroInView ? { opacity: 1, scale: 1 } : {}} transition={{ duration: 0.5, delay: 0.1, type: "spring", stiffness: 200 }} className="relative">
+              <motion.div
+                aria-hidden
+                className="absolute inset-0 -inset-x-12 -inset-y-12 rounded-full blur-[80px] mx-auto"
+                style={{ background: "linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(249, 115, 22, 0.1))" }}
+                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.85, 0.5] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              />
+              <motion.div
+                animate={{ y: [0, -5, 0] }}
+                transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <Image src="/cookies.png" width={180} height={180} alt="Cookie policy illustration" priority className="relative mx-auto drop-shadow-[0_0_40px_rgba(245,158,11,0.2)]" />
+              </motion.div>
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={heroInView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5, delay: 0.15 }}>
