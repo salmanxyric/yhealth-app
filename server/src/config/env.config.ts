@@ -167,14 +167,20 @@ export const env = {
     reasoningModel: process.env['GEMINI_REASONING_MODEL'] || 'gemini-2.5-pro',
     lightModel: process.env['GEMINI_LIGHT_MODEL'] || 'gemini-2.5-flash-lite',
     emotionModel: process.env['GEMINI_EMOTION_MODEL'] || 'gemini-2.5-flash-lite',
-    emotionTimeoutMs: parseInt(process.env['GEMINI_EMOTION_TIMEOUT_MS'] || '8000', 10),
+    emotionTimeoutMs: parseInt(process.env['GEMINI_EMOTION_TIMEOUT_MS'] || '5000', 10),
     visionModel: process.env['GEMINI_VISION_MODEL'] || 'gemini-2.5-pro',
   },
 
   // OpenAI (fallback LLM provider + embeddings + classification)
   openai: {
     apiKey: process.env['OPENAI_API_KEY'],
-    model: process.env['OPENAI_MODEL'] || 'gpt-4o-mini',
+    model: process.env['OPENAI_MODEL'] || 'gpt-5.4-mini',
+    reasoningModel: process.env['OPENAI_REASONING_MODEL'] || 'gpt-5.5',
+    lightModel: process.env['OPENAI_LIGHT_MODEL'] || 'gpt-5.4-mini',
+    nanoModel: process.env['OPENAI_NANO_MODEL'] || 'gpt-5.4-nano',
+    visionModel: process.env['OPENAI_VISION_MODEL'] || 'gpt-5.5',
+    visionLightModel: process.env['OPENAI_VISION_LIGHT_MODEL'] || 'gpt-5.4-mini',
+    realtimeModel: process.env['OPENAI_REALTIME_MODEL'] || 'gpt-realtime-2',
     maxTokens: parseInt(process.env['OPENAI_MAX_TOKENS'] || '1000', 10),
   },
 
@@ -195,7 +201,7 @@ export const env = {
     baseUrl: process.env['DEEPSEEK_BASE_URL'] || 'https://api.deepseek.com',
   },
 
-  // Twilio (Voice Calls & WhatsApp)
+  // Twilio (SMS & WhatsApp — NOT used for voice calling)
   twilio: {
     accountSid: process.env['TWILIO_ACCOUNT_SID'],
     authToken: process.env['TWILIO_AUTH_TOKEN'],
@@ -219,6 +225,12 @@ export const env = {
   // AssemblyAI (Speech-to-Text)
   assemblyai: {
     apiKey: process.env['ASSEMBLY_VOICE_API_KEY'] || '',
+  },
+
+  // Feature Flags
+  featureFlags: {
+    voiceCalls: process.env['ENABLE_VOICE_CALLS'] !== 'false',
+    chatCalls: process.env['ENABLE_CHAT_CALLS'] !== 'false',
   },
 
   // ExerciseDB / RapidAPI (Exercise Data Ingestion)
