@@ -294,23 +294,27 @@ describe('KnowledgeGraphService', () => {
   });
 
   describe('getNodeDetail', () => {
-    it('should return node detail for valid node', async () => {
+    it('should return node detail with neighbors and edges for valid node', async () => {
       const workoutRow = makeWorkoutRow();
       mockDbQuery.mockResolvedValue({ rows: [workoutRow] });
 
       const detail = await knowledgeGraphService.getNodeDetail('user-1', 'w-001', 'workout_session');
 
-      if (detail) {
-        expect(detail.id).toBe('w-001');
+      expect(detail).toBeDefined();
+      expect(detail).toHaveProperty('node');
+      expect(detail).toHaveProperty('neighbors');
+      expect(detail).toHaveProperty('edges');
+      if (detail.node) {
+        expect(detail.node.id).toBe('w-001');
       }
     });
 
-    it('should return null for nonexistent node', async () => {
+    it('should return null node for nonexistent node', async () => {
       mockDbQuery.mockResolvedValue({ rows: [] });
 
       const detail = await knowledgeGraphService.getNodeDetail('user-1', 'nonexistent', 'workout_session');
 
-      expect(detail).toBeNull();
+      expect(detail.node).toBeNull();
     });
   });
 });

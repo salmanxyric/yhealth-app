@@ -3,16 +3,16 @@ import { jest } from '@jest/globals';
 // --- Register all mocks BEFORE dynamic imports ---
 
 const mockQuery = jest.fn();
-jest.unstable_mockModule('../../config/database.config.js', () => ({
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
   query: (...args: unknown[]) => mockQuery(...args),
 }));
 
-jest.unstable_mockModule('../logger.service.js', () => ({
+jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 
 // --- Dynamic imports AFTER mocks are registered ---
-const { memoryEngineService } = await import('../memory-engine.service.js');
+const { memoryEngineService } = await import('../../../src/services/memory-engine.service.js');
 
 describe('memoryEngineService.findSimilarMemories', () => {
   beforeEach(() => {

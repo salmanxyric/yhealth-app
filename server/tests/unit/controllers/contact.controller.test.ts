@@ -198,7 +198,7 @@ describe('getAdminContactById', () => {
     expect(body.success).toBe(true);
     expect(body.data.id).toBe('c-1');
     // Should have been marked as read
-    expect(mockContactService.updateContact).toHaveBeenCalledWith('c-1', { status: 'read' }, undefined);
+    expect(mockContactService.updateContact).toHaveBeenCalledWith('c-1', { status: 'read' }, 'admin-1');
   });
 
   it('does not mark as read if status is not new', async () => {
@@ -357,7 +357,7 @@ describe('sendContactReply', () => {
       params: { id: 'c-1' },
       body: { message: 'We will help you' },
     });
-    (req as any).user = { ...((req as any).user), id: 'admin-1' };
+    // userId is already set by createAuthReq({ userId: 'admin-1' })
     const res = createRes();
     const next = createNext();
 
@@ -379,7 +379,7 @@ describe('sendContactReply', () => {
       params: { id: 'c-1' },
       body: { message: 'We will help you' },
     });
-    (req as any).user = { ...((req as any).user), id: 'admin-1' };
+    // userId is already set by createAuthReq({ userId: 'admin-1' })
     const res = createRes();
     const next = createNext();
 

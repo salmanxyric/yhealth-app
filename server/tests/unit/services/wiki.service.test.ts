@@ -610,7 +610,13 @@ describe('WikiService', () => {
     });
 
     it('should return empty stats when wiki table does not exist', async () => {
-      mockDbQuery.mockResolvedValueOnce({ rows: [{ exists: false }] });
+      // The wikiTableExistsCache may already be true from the previous test,
+      // so hasWikiTable() won't query again. Instead, the Promise.all queries
+      // fire and we simulate a 42P01 (table missing) error on one of them,
+      // which is caught by the try/catch in getStats and returns emptyStats().
+      const tableError = new Error('relation "wiki_pages" does not exist');
+      (tableError as Error & { code?: string }).code = '42P01';
+      mockDbQuery.mockRejectedValueOnce(tableError);
 
       const stats = await wikiService.getStats('user-1');
 

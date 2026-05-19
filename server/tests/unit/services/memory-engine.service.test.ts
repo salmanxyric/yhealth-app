@@ -97,6 +97,14 @@ function makeCreateInput(overrides: Record<string, unknown> = {}) {
 // SETUP
 // ============================================
 
+/**
+ * Reset the module-level memoryTableExistsCache between tests.
+ * The cache is a module-scoped `let` inside memory-engine.service.ts.
+ * Since getMemoriesForContext and findSimilarMemories call hasMemoryTable(),
+ * we need to ensure the cache doesn't leak between test sections.
+ * We do this by mocking the table-check query to return { exists: true }
+ * wherever it fires, or by setting the cache via an initial call.
+ */
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -330,6 +338,18 @@ describe('getActiveMemories', () => {
 // ============================================
 
 describe('getMemoriesForContext', () => {
+  // Prime the memoryTableExistsCache so hasMemoryTable() doesn't
+  // consume an extra mock on the first call in this describe block.
+  beforeAll(async () => {
+    // Mock 1: hasMemoryTable() -> SELECT to_regclass(...)
+    mockQuery.mockResolvedValueOnce(pgResult([{ exists: true }]));
+    // Mock 2: the actual SELECT query inside getMemoriesForContext
+    mockQuery.mockResolvedValueOnce(pgEmpty());
+    // Trigger hasMemoryTable() to cache the result
+    await memoryEngineService.getMemoriesForContext('prime-cache-user', 'prime');
+    jest.clearAllMocks();
+  });
+
   it('returns ranked memories for user message', async () => {
     const rows = [
       makeMemoryRow({ id: 'mem-1', confidence: 0.9 }),

@@ -2,23 +2,31 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { TourTooltip } from "../TourTooltip";
 import type { TourStepConfig } from "../types";
 
-// Mock framer-motion
-jest.mock("framer-motion", () => ({
-  motion: {
+// Mock framer-motion — filter motion-specific props so they don't leak to the DOM
+jest.mock("framer-motion", () => {
+  const motionProps = new Set([
+    "animate", "initial", "exit", "transition", "variants",
+    "whileHover", "whileTap", "whileFocus", "whileInView",
+    "layout", "layoutId", "onAnimationComplete",
+  ]);
+  const forwardMotion = (Tag: string) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    div: ({ children, className, style, ...rest }: any) => (
-      <div className={className} style={style} {...rest}>
-        {children}
-      </div>
-    ),
+    const MotionStub = ({ children, ...props }: any) => {
+      const safe: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(props)) {
+        if (!motionProps.has(k)) safe[k] = v;
+      }
+      return <Tag {...safe}>{children}</Tag>;
+    };
+    MotionStub.displayName = `motion.${Tag}`;
+    return MotionStub;
+  };
+  return {
+    motion: { div: forwardMotion("div"), p: forwardMotion("p") },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    p: ({ children, className, ...rest }: any) => (
-      <p className={className} {...rest}>{children}</p>
-    ),
-  },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  AnimatePresence: ({ children }: any) => <>{children}</>,
-}));
+    AnimatePresence: ({ children }: any) => <>{children}</>,
+  };
+});
 
 function makeDOMRect(x: number, y: number, w: number, h: number): DOMRect {
   return {

@@ -88,6 +88,21 @@ jest.unstable_mockModule('../../../src/services/notification.service.js', () => 
   notificationService: mockNotificationService,
 }));
 
+// ── oauth service mock ─────────────────────────────────────────
+const mockOauthService = {
+  verifySocialToken: jest.fn<any>().mockResolvedValue({
+    provider: 'google',
+    providerId: 'google-id-123',
+    email: 'test@example.com',
+    firstName: 'Test',
+    lastName: 'User',
+    avatar: 'https://avatar.url/pic.jpg',
+  }),
+};
+jest.unstable_mockModule('../../../src/services/oauth.service.js', () => ({
+  oauthService: mockOauthService,
+}));
+
 // ── user.helpers mock ───────────────────────────────────────────
 const mockGetPublicProfile = jest.fn<any>().mockImplementation((user: any) => ({
   id: user.id,
@@ -176,6 +191,14 @@ describe('AuthController', () => {
       isEmailVerified: user.isEmailVerified,
       onboardingStatus: user.onboardingStatus,
     }));
+    mockOauthService.verifySocialToken.mockResolvedValue({
+      provider: 'google',
+      providerId: 'google-id-123',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+      avatar: 'https://avatar.url/pic.jpg',
+    });
   });
 
   // ── register ──────────────────────────────────────────────────
@@ -791,14 +814,24 @@ describe('AuthController', () => {
 
   describe('socialAuth', () => {
     it('creates new social user and returns 201', async () => {
-      // No existing user
-      mockQuery.mockResolvedValueOnce(pgEmpty());
-
       const newUser = buildAuthUserRow({
         auth_provider: 'google',
         onboarding_status: 'consent_pending',
         is_email_verified: true,
       });
+
+      // Mock verifySocialToken to return profile matching this user
+      mockOauthService.verifySocialToken.mockResolvedValueOnce({
+        provider: 'google',
+        providerId: 'google-id-123',
+        email: newUser.email,
+        firstName: newUser.first_name,
+        lastName: newUser.last_name,
+        avatar: 'https://avatar.url/pic.jpg',
+      });
+
+      // No existing user
+      mockQuery.mockResolvedValueOnce(pgEmpty());
 
       // Transaction: INSERT user, then INSERT preferences
       mockQuery
@@ -810,6 +843,7 @@ describe('AuthController', () => {
         body: {
           email: newUser.email,
           provider: 'google',
+          idToken: 'mock-google-id-token',
           providerId: 'google-id-123',
           firstName: newUser.first_name,
           lastName: newUser.last_name,
@@ -829,6 +863,16 @@ describe('AuthController', () => {
 
     it('signs in existing social user (200)', async () => {
       const existingUser = buildAuthUserRow({ auth_provider: 'google' });
+
+      // Mock verifySocialToken to return profile matching this user
+      mockOauthService.verifySocialToken.mockResolvedValueOnce({
+        provider: 'google',
+        providerId: 'google-id-123',
+        email: existingUser.email,
+        firstName: existingUser.first_name,
+        lastName: existingUser.last_name,
+      });
+
       mockQuery
         .mockResolvedValueOnce(pgResult([existingUser]))   // SELECT existing user
         .mockResolvedValueOnce(pgResult([]))                // UPDATE provider info
@@ -839,6 +883,7 @@ describe('AuthController', () => {
         body: {
           email: existingUser.email,
           provider: 'google',
+          idToken: 'mock-google-id-token',
           providerId: 'google-id-123',
         },
       });

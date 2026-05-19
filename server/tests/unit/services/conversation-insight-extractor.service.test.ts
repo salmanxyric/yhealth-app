@@ -14,24 +14,24 @@ jest.unstable_mockModule('openai', () => ({
 }));
 
 const mockQuery = jest.fn();
-jest.unstable_mockModule('../../config/database.config.js', () => ({
+jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
   query: (...args: unknown[]) => mockQuery(...args),
 }));
 
-jest.unstable_mockModule('../../config/env.config.js', () => ({
+jest.unstable_mockModule('../../../src/config/env.config.js', () => ({
   env: {
     openai: { apiKey: 'test-key', model: 'gpt-5.4-mini' },
   },
 }));
 
-jest.unstable_mockModule('../logger.service.js', () => ({
+jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 
 const mockGetMemoriesForContext = jest.fn();
 const mockFindSimilarMemories = jest.fn();
 const mockFindOrCreatePattern = jest.fn();
-jest.unstable_mockModule('../memory-engine.service.js', () => ({
+jest.unstable_mockModule('../../../src/services/memory-engine.service.js', () => ({
   memoryEngineService: {
     getMemoriesForContext: mockGetMemoriesForContext,
     findSimilarMemories: mockFindSimilarMemories,
@@ -40,7 +40,7 @@ jest.unstable_mockModule('../memory-engine.service.js', () => ({
 }));
 
 const mockEnqueueEmbedding = jest.fn();
-jest.unstable_mockModule('../embedding-queue.service.js', () => ({
+jest.unstable_mockModule('../../../src/services/embedding-queue.service.js', () => ({
   embeddingQueueService: {
     enqueueEmbedding: mockEnqueueEmbedding,
     isAvailable: jest.fn().mockReturnValue(true),
@@ -48,14 +48,14 @@ jest.unstable_mockModule('../embedding-queue.service.js', () => ({
 }));
 
 const mockUpdateValue = jest.fn();
-jest.unstable_mockModule('../core-profile-kernel.service.js', () => ({
+jest.unstable_mockModule('../../../src/services/core-profile-kernel.service.js', () => ({
   coreProfileKernelService: {
     updateValue: mockUpdateValue,
   },
 }));
 
 // --- Dynamic imports AFTER mocks are registered ---
-const { conversationInsightExtractorService } = await import('../conversation-insight-extractor.service.js');
+const { conversationInsightExtractorService } = await import('../../../src/services/conversation-insight-extractor.service.js');
 
 describe('conversationInsightExtractorService', () => {
   beforeEach(() => {

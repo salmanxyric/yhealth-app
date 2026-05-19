@@ -41,6 +41,13 @@ jest.unstable_mockModule('../../../src/services/google-calendar.service.js', () 
   },
 }));
 
+jest.unstable_mockModule('../../../src/services/plan-schedule-sync.service.js', () => ({
+  planScheduleSyncService: {
+    syncToExistingSchedule: jest.fn<any>().mockResolvedValue({ workoutItems: 0, mealItems: 0, conflictsPending: 0 }),
+    upsertApprovedPlanItem: jest.fn<any>().mockResolvedValue(undefined),
+  },
+}));
+
 // ============================================
 // IMPORTS
 // ============================================

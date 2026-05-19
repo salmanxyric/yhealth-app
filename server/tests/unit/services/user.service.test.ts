@@ -11,6 +11,13 @@ import { jest } from '@jest/globals';
 // ============================================
 
 const mockQuery = jest.fn<any>();
+const mockClientQuery = jest.fn<any>();
+const mockClientRelease = jest.fn();
+const mockClient = {
+  query: mockClientQuery,
+  release: mockClientRelease,
+};
+const mockGetClient = jest.fn<any>().mockResolvedValue(mockClient);
 const mockLogger = { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
 
 jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
@@ -18,7 +25,7 @@ jest.unstable_mockModule('../../../src/config/database.config.js', () => ({
   transaction: jest.fn(),
   pool: { query: mockQuery, end: jest.fn() },
   database: { healthCheck: jest.fn() },
-  getClient: jest.fn(),
+  getClient: mockGetClient,
   closePool: jest.fn(),
   testConnection: jest.fn(),
   getPoolStats: jest.fn(),
@@ -89,6 +96,9 @@ const sampleUser = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Re-wire getClient mock after clearAllMocks resets it
+  mockGetClient.mockResolvedValue(mockClient);
+  mockClientQuery.mockResolvedValue({ rows: [], rowCount: 0 });
 });
 
 describe('getUserById', () => {
@@ -230,14 +240,17 @@ describe('updateUser', () => {
 });
 
 describe('deleteUser', () => {
-  it('deletes user when found', async () => {
+  it('deletes user when found using a transaction', async () => {
     const existingRow = { ...sampleUser, role: 'user', blog_count: '0' };
     mockQuery.mockResolvedValueOnce(pgResult([existingRow]));
-    mockQuery.mockResolvedValueOnce(pgResult([]));
 
     await deleteUser('u-001');
 
-    expect(mockQuery).toHaveBeenCalledWith('DELETE FROM users WHERE id = $1', ['u-001']);
+    expect(mockGetClient).toHaveBeenCalled();
+    expect(mockClientQuery).toHaveBeenCalledWith('BEGIN');
+    expect(mockClientQuery).toHaveBeenCalledWith('DELETE FROM users WHERE id = $1', ['u-001']);
+    expect(mockClientQuery).toHaveBeenCalledWith('COMMIT');
+    expect(mockClientRelease).toHaveBeenCalled();
     expect(mockLogger.info).toHaveBeenCalledWith('User deleted', { userId: 'u-001' });
   });
 
@@ -249,21 +262,21 @@ describe('deleteUser', () => {
 });
 
 describe('bulkDeleteUsers', () => {
-  it('deletes multiple users by ids', async () => {
-    mockQuery.mockResolvedValueOnce(pgResult([]));
-
+  it('deletes multiple users by ids using a transaction', async () => {
     await bulkDeleteUsers(['u-001', 'u-002']);
 
-    expect(mockQuery).toHaveBeenCalledWith(
-      'DELETE FROM users WHERE id = ANY($1)',
-      [['u-001', 'u-002']],
-    );
+    expect(mockGetClient).toHaveBeenCalled();
+    expect(mockClientQuery).toHaveBeenCalledWith('BEGIN');
+    expect(mockClientQuery).toHaveBeenCalledWith('DELETE FROM users WHERE id = ANY($1)', [['u-001', 'u-002']]);
+    expect(mockClientQuery).toHaveBeenCalledWith('COMMIT');
+    expect(mockClientRelease).toHaveBeenCalled();
   });
 
   it('does nothing for empty id list', async () => {
     await bulkDeleteUsers([]);
 
     expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockGetClient).not.toHaveBeenCalled();
   });
 });
 

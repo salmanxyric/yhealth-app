@@ -65,6 +65,7 @@ const mockNormalizeRecoveryData = jest.fn<typeof recoveryNormalizer>();
 const mockNormalizeSleepData = jest.fn<typeof sleepNormalizer>();
 const mockNormalizeWorkoutData = jest.fn();
 const mockRefreshWhoopToken = jest.fn();
+const mockFetchWhoop = jest.fn();
 
 // Mock external API calls but use real database
 jest.unstable_mockModule('../../src/services/whoop.service.js', () => ({
@@ -73,6 +74,13 @@ jest.unstable_mockModule('../../src/services/whoop.service.js', () => ({
   normalizeSleepData: mockNormalizeSleepData,
   normalizeWorkoutData: mockNormalizeWorkoutData,
   refreshWhoopToken: mockRefreshWhoopToken,
+  fetchWhoop: mockFetchWhoop,
+  generatePKCE: jest.fn().mockReturnValue({ codeVerifier: 'test', codeChallenge: 'test' }),
+  initiateWhoopOAuth: jest.fn(),
+  exchangeWhoopOAuthCode: jest.fn(),
+  fetchWhoopUserProfile: jest.fn(),
+  registerWhoopWebhook: jest.fn(),
+  default: {},
 }));
 
 jest.unstable_mockModule('../../src/services/logger.service.js', () => ({
@@ -81,6 +89,21 @@ jest.unstable_mockModule('../../src/services/logger.service.js', () => ({
     warn: jest.fn(),
     error: jest.fn(),
     debug: jest.fn(),
+  },
+}));
+
+// Mock daily-health-metrics to prevent real DB calls to daily_health_metrics table
+jest.unstable_mockModule('../../src/services/daily-health-metrics.service.js', () => ({
+  dailBalenciaMetricsService: {
+    updateDailyMetrics: jest.fn().mockResolvedValue(undefined),
+    getDailyMetricsHistory: jest.fn().mockResolvedValue([]),
+  },
+}));
+
+// Mock proactive-messaging to prevent side-effects
+jest.unstable_mockModule('../../src/services/proactive-messaging.service.js', () => ({
+  proactiveMessagingService: {
+    checkAndSendSleepMessage: jest.fn().mockResolvedValue(undefined),
   },
 }));
 

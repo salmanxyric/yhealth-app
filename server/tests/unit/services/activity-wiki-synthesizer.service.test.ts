@@ -81,6 +81,8 @@ function makeExistingPage(overrides: Record<string, unknown> = {}) {
 describe('ActivityWikiSynthesizerService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Re-set mock implementations (resetMocks in jest.config clears them between tests)
+    mockGetModel.mockReturnValue({ invoke: mockLlmInvoke });
     mockLlmInvoke.mockResolvedValue({
       content: '# Fitness Profile\n\nUser works out 4x per week after adding strength training.',
     });
@@ -345,7 +347,10 @@ describe('ActivityWikiSynthesizerService', () => {
 
   describe('error handling', () => {
     it('should not throw — errors are caught and logged', async () => {
-      mockGetPage.mockRejectedValue(new Error('DB down'));
+      // getPage for today-digest returns null so it tries createPage
+      mockGetPage.mockResolvedValue(null);
+      // createPage throws a non-duplicate error to trigger the outer catch
+      mockCreatePage.mockRejectedValue(new Error('DB down'));
 
       await expect(
         activityWikiSynthesizer.synthesize(makeEvent({ userId: 'user-err' }))

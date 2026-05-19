@@ -17,7 +17,7 @@ jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
 jest.unstable_mockModule('../../../src/config/env.config.js', () => ({
   env: {
     gemini: { apiKey: '', model: 'gemini-2.5-flash' },
-    openai: { apiKey: '', model: 'gpt-4o-mini', maxTokens: 1000 },
+    openai: { apiKey: '', model: 'gpt-5.4-mini', maxTokens: 1000 },
   },
 }));
 

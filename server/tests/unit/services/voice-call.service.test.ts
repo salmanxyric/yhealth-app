@@ -40,6 +40,12 @@ beforeEach(async () => {
     vectorEmbeddingService: mockVectorEmbedding,
   }));
 
+  jest.unstable_mockModule('../../../src/services/call-summary.service.js', () => ({
+    callSummaryService: {
+      generateSummary: jest.fn<any>().mockResolvedValue({ summary: 'AI-generated summary' }),
+    },
+  }));
+
   jest.unstable_mockModule('../../../src/utils/ApiError.js', () => {
     class ApiError extends Error {
       statusCode: number;
@@ -579,7 +585,7 @@ describe('VoiceCallService', () => {
 
       const result = await voiceCallService.endCall('call-1', 'user-1');
 
-      expect(result.summary).toBe('Call completed with 2 messages exchanged.');
+      expect(result.summary).toBe('AI-generated summary');
     });
 
     it('uses "Call completed" fallback when conversation title is null', async () => {
