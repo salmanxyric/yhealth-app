@@ -4,8 +4,17 @@ import { authenticate } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
 import { z } from 'zod';
+import { env } from '../config/env.config.js';
+import { ApiError } from '../utils/ApiError.js';
 
 const router = Router();
+
+router.use((_req, _res, next) => {
+  if (!env.featureFlags.voiceCalls) {
+    throw ApiError.serviceUnavailable('Voice calling is currently disabled');
+  }
+  next();
+});
 
 // ============================================================================
 // Validation Schemas
