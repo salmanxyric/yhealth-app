@@ -17,7 +17,7 @@ import type {
   SessionType,
 } from '../types/voice-call.types.js';
 import { vectorEmbeddingService } from './vector-embedding.service.js';
-import { env } from '../config/env.config.js';
+
 
 const RETRY_CONFIG = {
   maxRetries: 3,
@@ -1023,25 +1023,14 @@ class VoiceCallService {
     signalingUrl: string;
     iceServers: RTCIceServer[];
   }> {
-    // Default STUN servers (public)
-    const defaultIceServers: RTCIceServer[] = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ];
-
-    // If Twilio is configured, use Twilio TURN servers
-    if (env.twilio.accountSid && env.twilio.authToken) {
-      // In production, generate Twilio token for TURN servers
-      // For now, use default STUN servers
-      return {
-        signalingUrl: `/api/voice-calls/${callId}/signaling`,
-        iceServers: defaultIceServers,
-      };
-    }
-
     return {
       signalingUrl: `/api/voice-calls/${callId}/signaling`,
-      iceServers: defaultIceServers,
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+      ],
     };
   }
 
