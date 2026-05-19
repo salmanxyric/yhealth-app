@@ -66,7 +66,7 @@ class AIProviderService {
    */
   private isReasoningModel(model: string): boolean {
     const modelLower = model.toLowerCase();
-    return modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower === 'gpt-5';
+    return modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower.startsWith('gpt-5.5');
   }
 
   /**

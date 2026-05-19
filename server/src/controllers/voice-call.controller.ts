@@ -13,6 +13,8 @@ import type {
   CallInitiationRequest,
   WebRTCOffer,
   RTCIceCandidate,
+  WebRTCQualityMetrics,
+  CallTranscriptSegment,
 } from '../types/voice-call.types.js';
 
 class VoiceCallController {
@@ -421,6 +423,88 @@ class VoiceCallController {
       },
       'Emergency protocol triggered successfully'
     );
+  });
+
+  /**
+   * @route   POST /api/voice-calls/:callId/quality-metrics
+   * @desc    Report WebRTC quality metrics
+   * @access  Private
+   */
+  reportQualityMetrics = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    const { callId } = req.params;
+    if (!callId) {
+      throw ApiError.badRequest('Call ID is required');
+    }
+
+    const metrics = req.body as WebRTCQualityMetrics;
+    await voiceCallService.reportQualityMetrics(callId, userId, metrics);
+    ApiResponse.success(res, { success: true }, 'Quality metrics reported');
+  });
+
+  /**
+   * @route   GET /api/voice-calls/:callId/quality-metrics
+   * @desc    Get call quality metrics
+   * @access  Private
+   */
+  getQualityMetrics = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    const { callId } = req.params;
+    if (!callId) {
+      throw ApiError.badRequest('Call ID is required');
+    }
+
+    const result = await voiceCallService.getQualityMetrics(callId, userId);
+    ApiResponse.success(res, result, 'Quality metrics retrieved');
+  });
+
+  /**
+   * @route   POST /api/voice-calls/:callId/transcript
+   * @desc    Store a transcript segment
+   * @access  Private
+   */
+  storeTranscriptSegment = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    const { callId } = req.params;
+    if (!callId) {
+      throw ApiError.badRequest('Call ID is required');
+    }
+
+    const segment = req.body as CallTranscriptSegment;
+    await voiceCallService.storeTranscriptSegment(callId, userId, segment);
+    ApiResponse.created(res, { success: true }, 'Transcript segment stored');
+  });
+
+  /**
+   * @route   GET /api/voice-calls/:callId/transcript
+   * @desc    Get call transcript
+   * @access  Private
+   */
+  getTranscript = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    const { callId } = req.params;
+    if (!callId) {
+      throw ApiError.badRequest('Call ID is required');
+    }
+
+    const segments = await voiceCallService.getTranscript(callId, userId);
+    ApiResponse.success(res, { segments }, 'Transcript retrieved');
   });
 
   /**

@@ -1,6 +1,6 @@
 /**
  * Human Detection Service Unit Tests
- * Regression tests for model switch (gpt-4o-mini), JSON parsing, confidence clamping
+ * Regression tests for model switch (gpt-5.4-mini vision light), JSON parsing, confidence clamping
  */
 
 import { jest } from '@jest/globals';
@@ -9,6 +9,10 @@ jest.mock('../../../src/config/env.config.js', () => ({
   env: {
     openai: {
       apiKey: 'test-api-key',
+    },
+    gemini: {
+      apiKey: '',
+      lightModel: 'gemini-2.5-flash-lite',
     },
   },
 }));
@@ -39,6 +43,8 @@ describe('HumanDetectionService', () => {
   // Inject mock visionClient directly since constructor may run before mocks settle
   beforeEach(() => {
     jest.clearAllMocks();
+    // Ensure no real Gemini HTTP calls
+    (humanDetectionService as any).geminiApiKey = null;
     // Ensure visionClient is set to our mock
     (humanDetectionService as any).visionClient = {
       chat: {
@@ -50,7 +56,7 @@ describe('HumanDetectionService', () => {
   });
 
   describe('model selection', () => {
-    it('should use gpt-4o-mini model (not gpt-5-mini)', async () => {
+    it('should use visionLightModel for human detection', async () => {
       mockCreate.mockResolvedValueOnce({
         choices: [{ message: { content: '{"hasHuman": true, "confidence": 0.9, "reason": "Person visible"}' } }],
       });
@@ -59,12 +65,12 @@ describe('HumanDetectionService', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'gpt-4o-mini',
+          model: 'gpt-5.4-mini',
         })
       );
     });
 
-    it('should use max_tokens (not max_completion_tokens) for gpt-4o-mini', async () => {
+    it('should use max_tokens (not max_completion_tokens) for vision light model', async () => {
       mockCreate.mockResolvedValueOnce({
         choices: [{ message: { content: '{"hasHuman": true, "confidence": 0.9}' } }],
       });

@@ -110,14 +110,20 @@ describe('registerIntelligenceMemoryTools', () => {
   // ──────────────────────────────────────────
 
   describe('Registration', () => {
-    it('should return an array of exactly 3 tools', () => {
-      expect(tools).toHaveLength(3);
+    it('should return an array of exactly 5 tools', () => {
+      expect(tools).toHaveLength(5);
     });
 
-    it('should contain searchUserMemories, createUserMemory, and getMemoryEvidence', () => {
+    it('should contain all five tool names', () => {
       const names = tools.map((t) => t.name);
       expect(names).toEqual(
-        expect.arrayContaining(['searchUserMemories', 'createUserMemory', 'getMemoryEvidence'])
+        expect.arrayContaining([
+          'searchUserMemories',
+          'createUserMemory',
+          'getMemoryEvidence',
+          'updateUserMemory',
+          'deleteUserMemory',
+        ])
       );
     });
 
@@ -137,11 +143,23 @@ describe('registerIntelligenceMemoryTools', () => {
       expect(getTool(tools, 'createUserMemory').mutationType).toBe('create');
     });
 
-    it('should define semanticDelta as a function on createUserMemory only', () => {
-      const create = getTool(tools, 'createUserMemory');
-      expect(typeof create.semanticDelta).toBe('function');
+    it('should set mutationType to "update" for updateUserMemory', () => {
+      expect(getTool(tools, 'updateUserMemory').mutationType).toBe('update');
+    });
 
-      // Other tools should NOT have semanticDelta
+    it('should set mutationType to "delete" for deleteUserMemory', () => {
+      expect(getTool(tools, 'deleteUserMemory').mutationType).toBe('delete');
+    });
+
+    it('should define semanticDelta as a function on mutation tools only', () => {
+      const create = getTool(tools, 'createUserMemory');
+      const update = getTool(tools, 'updateUserMemory');
+      const del = getTool(tools, 'deleteUserMemory');
+      expect(typeof create.semanticDelta).toBe('function');
+      expect(typeof update.semanticDelta).toBe('function');
+      expect(typeof del.semanticDelta).toBe('function');
+
+      // Read-only tools should NOT have semanticDelta
       expect(getTool(tools, 'searchUserMemories').semanticDelta).toBeUndefined();
       expect(getTool(tools, 'getMemoryEvidence').semanticDelta).toBeUndefined();
     });

@@ -19,7 +19,6 @@ import { voiceCallService } from "@/src/shared/services/voice-call.service";
 import { VisionCoachingOverlay } from "../voice-assistant/VisionCoachingOverlay";
 import { AvatarLayer, type AvatarLayerHandle } from "@/components/avatar/AvatarLayer";
 import { VOICE_STATE_TO_AVATAR_STATE } from "@/lib/avatar/vrmMappings";
-import { SESSION_DURATIONS } from "../voice-assistant/SessionTypeSelector";
 import { EmergencyResources } from "../voice-assistant/EmergencyResources";
 import { JarvisLoader } from "@/components/voice-assistant/JarvisLoader";
 import { CiaBrandBadge } from "../voice-assistant/CiaBrandBadge";
@@ -28,6 +27,10 @@ import { TopRightControls } from "../voice-assistant/TopRightControls";
 import { CameraPip } from "../voice-assistant/CameraPip";
 import { AICoachTranscript } from "../voice-assistant/AICoachTranscript";
 import { BottomControlBar } from "../voice-assistant/BottomControlBar";
+import { CallQualityIndicator } from "../voice-assistant/CallQualityIndicator";
+import { AudioDeviceSelector } from "../voice-assistant/AudioDeviceSelector";
+import { ReconnectionOverlay } from "../voice-assistant/ReconnectionOverlay";
+import { VoiceStateAnnouncer } from "../voice-assistant/VoiceStateAnnouncer";
 
 // Coach personality / mood system
 import { useCoachMood } from "@/hooks/useCoachMood";
@@ -43,6 +46,11 @@ import { useVoiceCamera } from "./voice-assistant/useVoiceCamera";
 import { useAvatarUpload } from "./voice-assistant/useAvatarUpload";
 import { SessionSelectorModal } from "./voice-assistant/SessionSelectorModal";
 import { SpeechNotSupported } from "./voice-assistant/SpeechNotSupported";
+import { useCallSession } from "./voice-assistant/useCallSession";
+import { useCallKeyboardShortcuts } from "./voice-assistant/useCallKeyboardShortcuts";
+import { useAudioDevices } from "./voice-assistant/useAudioDevices";
+import { useCallQuality } from "./voice-assistant/useCallQuality";
+import { useCallReconnection } from "./voice-assistant/useCallReconnection";
 import type { SessionTypeOption } from "../voice-assistant/SessionTypeSelector";
 
 export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEnd }: VoiceAssistantTabProps = {}) {
@@ -81,7 +89,6 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   const [showImageModal, setShowImageModal] = useState(false);
   const [imageModalMode] = useState<"camera" | "upload">("upload");
   const [isConversationActive, setIsConversationActive] = useState(false);
-  const [sessionType, setSessionType] = useState<SessionTypeOption | null>(null);
   const [showSessionSelector, setShowSessionSelector] = useState(false);
   const [showEmergencyResources, setShowEmergencyResources] = useState(false);
   const [emergencyResources, setEmergencyResources] = useState<EmergencyResourcesData | undefined>(undefined);
@@ -111,10 +118,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isRestartingRef = useRef<boolean>(false);
   const callMarkedActiveRef = useRef(false);
-  const sessionTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const sessionCountdownRef = useRef<NodeJS.Timeout | null>(null);
-  const [_sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
-  const [_sessionTimeRemaining, setSessionTimeRemaining] = useState<number | null>(null);
+  const onSessionEndRef = useRef<(() => void) | null>(null);
 
   // Keep refs in sync
   useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
@@ -176,6 +180,24 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
 
   // ── Avatar upload hook ──
   useAvatarUpload();
+
+  // ── Call session hook (replaces inline timer logic) ──
+   
+  const onSessionEndStable = useCallback(() => onSessionEndRef.current?.(), []);
+  const { sessionType, startSession: startCallSession, endSession: endCallSession } = useCallSession({ onSessionEnd: onSessionEndStable });
+
+  // ── Audio devices hook ──
+  const audioDevices = useAudioDevices();
+
+  // ── Call quality monitoring ──
+  const callQuality = useCallQuality({ peerConnection: null, callId });
+
+  // ── Call reconnection ──
+  const reconnection = useCallReconnection({
+    callId,
+    isCallActive,
+    connectionState: null,
+  });
 
   // ── Detect mood wrapper ──
   const detectMood = useCallback(
@@ -616,16 +638,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
 
   // ── Stop conversation ──
   const stopConversation = useCallback(() => {
-    if (sessionTimerRef.current) {
-      clearTimeout(sessionTimerRef.current);
-      sessionTimerRef.current = null;
-    }
-    if (sessionCountdownRef.current) {
-      clearInterval(sessionCountdownRef.current);
-      sessionCountdownRef.current = null;
-    }
-    setSessionTimeRemaining(null);
-    setSessionStartTime(null);
+    endCallSession();
     setIsConversationActive(false);
     isConversationActiveRef.current = false;
     isProcessingRef.current = false;
@@ -668,7 +681,10 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
     currentUtteranceRef.current = null;
     isListeningActiveRef.current = false;
     setVoiceState("idle");
-  }, [ttsActions]);
+  }, [ttsActions, endCallSession]);
+
+  // Keep onSessionEnd ref in sync so useCallSession can call stopConversation
+  useEffect(() => { onSessionEndRef.current = stopConversation; }, [stopConversation]);
 
   // Image analysis callback
   const handleImageAnalysisComplete = useCallback(
@@ -772,11 +788,8 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
   // Session selector callback
   const handleSessionSelect = useCallback(
     async (type: SessionTypeOption) => {
-      setSessionType(type);
       setShowSessionSelector(false);
-
-      const durationMinutes = SESSION_DURATIONS[type] || 15;
-      const durationMs = durationMinutes * 60 * 1000;
+      startCallSession(type);
 
       setIsConversationActive(true);
       isConversationActiveRef.current = true;
@@ -787,27 +800,6 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
       isTTSActiveRef.current = false;
       currentUtteranceRef.current = null;
 
-      setSessionStartTime(new Date());
-      setSessionTimeRemaining(durationMs);
-
-      if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
-      if (sessionCountdownRef.current) clearInterval(sessionCountdownRef.current);
-
-      sessionCountdownRef.current = setInterval(() => {
-        setSessionTimeRemaining((prev) => {
-          if (prev === null || prev <= 1000) return 0;
-          return prev - 1000;
-        });
-      }, 1000);
-
-      sessionTimerRef.current = setTimeout(() => {
-        stopConversation();
-        if (sessionCountdownRef.current) clearInterval(sessionCountdownRef.current);
-        setSessionTimeRemaining(null);
-        setSessionStartTime(null);
-        toast.success(`Session completed! Duration: ${durationMinutes} minutes`);
-      }, durationMs);
-
       const greeting = await fetchGreeting(type);
       setAiResponse(greeting);
 
@@ -817,8 +809,58 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         setTimeout(() => recognition.startListening(), 500);
       }
     },
-    [stopConversation, fetchGreeting, isTTSEnabled, ttsActions, recognition],
+    [startCallSession, fetchGreeting, isTTSEnabled, ttsActions, recognition],
   );
+
+  // ── Extracted toggle callbacks (shared by keyboard shortcuts + bottom bar) ──
+  const handleToggleTTS = useCallback(() => {
+    const next = !isTTSEnabled;
+    setIsTTSEnabled(next);
+    if (!next) {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+      if (currentAudioUrlRef.current) {
+        ttsService.revokeAudioUrl(currentAudioUrlRef.current);
+        currentAudioUrlRef.current = null;
+      }
+      isTTSActiveRef.current = false;
+      currentUtteranceRef.current = null;
+      avatarRef.current?.stopSpeaking();
+      if (voiceState === "speaking") setVoiceState("idle");
+    }
+  }, [isTTSEnabled, voiceState]);
+
+  const handleToggleCamera = useCallback(() => {
+    if (camera.showInlineCamera) {
+      camera.setShowInlineCamera(false);
+    } else {
+      camera.setShowInlineCamera(true);
+      camera.setInlineCameraMode("camera");
+    }
+  }, [camera]);
+
+  const handleStop = useCallback(() => {
+    if (isCallActive) {
+      handleEndCall();
+    } else {
+      stopConversation();
+    }
+  }, [isCallActive, handleEndCall, stopConversation]);
+
+  // ── Keyboard shortcuts ──
+  useCallKeyboardShortcuts({
+    onToggleMic: toggleConversation,
+    onToggleTTS: handleToggleTTS,
+    onToggleCamera: handleToggleCamera,
+    onEndCall: handleStop,
+    onSkipResponse: () => ttsActions.stopSpeaking(recognition.startListening),
+    isActive: isConversationActive,
+  });
 
   // ── Render ──
 
@@ -889,9 +931,10 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         <CiaBrandBadge name={assistantName || "Cia"} />
       </div>
 
-      {/* Top-center: Status pill */}
-      <div className="absolute z-20" style={{ top: "39px", left: "50%", transform: "translateX(-50%)" }}>
+      {/* Top-center: Status pill + call quality */}
+      <div className="absolute z-20 flex items-center" style={{ top: "39px", left: "50%", transform: "translateX(-50%)", gap: "8px" }}>
         <StatusPill name={assistantName || "Cia"} voiceState={voiceState} isConversationActive={isConversationActive} />
+        <CallQualityIndicator quality={callQuality.quality} visible={isCallActive && callQuality.isMonitoring} />
       </div>
 
       {/* Top-right: Language + Close */}
@@ -903,7 +946,7 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         />
       </div>
 
-      {/* Camera PIP */}
+      {/* Camera PIP + Audio device selector */}
       <div className="absolute z-20" style={{ top: "125px", right: "71px" }}>
         <CameraPip videoRef={camera.inlineVideoRef} visible={camera.showInlineCamera} isCameraActive={camera.isCameraActive} />
         <canvas ref={camera.inlineCanvasRef} className="hidden" />
@@ -914,6 +957,17 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
           className="hidden"
           onChange={camera.handleInlineFileChange}
         />
+        <div style={{ marginTop: "12px" }}>
+          <AudioDeviceSelector
+            audioInputs={audioDevices.audioInputs}
+            audioOutputs={audioDevices.audioOutputs}
+            selectedInputId={audioDevices.selectedInputId}
+            selectedOutputId={audioDevices.selectedOutputId}
+            onSelectInput={audioDevices.setSelectedInput}
+            onSelectOutput={audioDevices.setSelectedOutput}
+            visible={isConversationActive}
+          />
+        </div>
       </div>
 
       {/* AI Coach transcript card */}
@@ -933,45 +987,12 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
           voiceState={voiceState}
           isConversationActive={isConversationActive}
           isTTSEnabled={isTTSEnabled}
-          onToggleTTS={() => {
-            const next = !isTTSEnabled;
-            setIsTTSEnabled(next);
-            if (!next) {
-              if (typeof window !== "undefined" && "speechSynthesis" in window) {
-                window.speechSynthesis.cancel();
-              }
-              if (currentAudioRef.current) {
-                currentAudioRef.current.pause();
-                currentAudioRef.current = null;
-              }
-              if (currentAudioUrlRef.current) {
-                ttsService.revokeAudioUrl(currentAudioUrlRef.current);
-                currentAudioUrlRef.current = null;
-              }
-              isTTSActiveRef.current = false;
-              currentUtteranceRef.current = null;
-              avatarRef.current?.stopSpeaking();
-              if (voiceState === "speaking") setVoiceState("idle");
-            }
-          }}
+          onToggleTTS={handleToggleTTS}
           showCamera={camera.showInlineCamera}
-          onToggleCamera={() => {
-            if (camera.showInlineCamera) {
-              camera.setShowInlineCamera(false);
-            } else {
-              camera.setShowInlineCamera(true);
-              camera.setInlineCameraMode("camera");
-            }
-          }}
+          onToggleCamera={handleToggleCamera}
           onToggleMic={toggleConversation}
           onOpenKeyboard={() => router.push("/ai-coach")}
-          onStop={() => {
-            if (isCallActive) {
-              handleEndCall();
-            } else {
-              stopConversation();
-            }
-          }}
+          onStop={handleStop}
           onSkip={() => ttsActions.stopSpeaking(recognition.startListening)}
         />
       </div>
@@ -999,6 +1020,26 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
         isOpen={showEmergencyResources}
         onClose={() => setShowEmergencyResources(false)}
         resources={emergencyResources}
+      />
+
+      {/* Reconnection overlay (shown when call connection drops) */}
+      <ReconnectionOverlay
+        isReconnecting={reconnection.isReconnecting}
+        attempt={reconnection.reconnectAttempt}
+        maxAttempts={reconnection.maxAttempts}
+        hasGivenUp={reconnection.hasGivenUp}
+        networkOnline={reconnection.networkOnline}
+        onRetry={reconnection.resetReconnection}
+        onEndCall={handleStop}
+      />
+
+      {/* Screen reader announcements for voice state changes */}
+      <VoiceStateAnnouncer
+        voiceState={voiceState}
+        isConversationActive={isConversationActive}
+        isReconnecting={reconnection.isReconnecting}
+        error={error}
+        transcript={transcript}
       />
     </div>
   );

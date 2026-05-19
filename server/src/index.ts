@@ -322,7 +322,7 @@ async function startServer(): Promise<void> {
       // Start background jobs. Cron-style jobs run only on one worker in cluster mode to avoid N× repetition.
       // Set ENABLE_BACKGROUND_JOBS=false in .env to disable all background jobs (useful for development)
       const backgroundJobsEnabled = process.env.ENABLE_BACKGROUND_JOBS !== 'false';
-      const isSchedulerWorker = !cluster.worker || cluster.worker.id === 0;
+      const isSchedulerWorker = !cluster.worker || cluster.worker.id === 1;
 
       if (isSchedulerWorker && backgroundJobsEnabled) {
         // Lightweight jobs — start immediately

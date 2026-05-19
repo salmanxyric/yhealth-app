@@ -106,6 +106,19 @@ export interface RTCIceCandidate {
   sdpMid: string | null;
 }
 
+export interface CallQualityReport {
+  jitter: number;
+  packetsLost: number;
+  packetsReceived: number;
+  packetLossPercent: number;
+  roundTripTime: number;
+  mos: number;
+  qualityLevel: string;
+  localCandidateType: string | null;
+  remoteCandidateType: string | null;
+  timestamp: number;
+}
+
 // ============================================================================
 // Voice Call Service
 // ============================================================================
@@ -185,5 +198,11 @@ export const voiceCallService = {
    */
   retry: (callId: string) =>
     api.post<{ success: boolean }>(`/voice-calls/${callId}/retry`, {}),
+
+  /**
+   * Report call quality metrics
+   */
+  reportQuality: (callId: string, metrics: CallQualityReport) =>
+    api.post<{ success: boolean }>(`/voice-calls/${callId}/quality-metrics`, metrics),
 };
 

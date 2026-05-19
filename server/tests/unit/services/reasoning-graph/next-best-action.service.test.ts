@@ -72,8 +72,10 @@ function makeAllStates(overrides: Partial<Record<FeatureNodeId, Partial<FeatureN
 describe('NextBestActionService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Re-set mock implementations (resetMocks in jest.config clears them between tests)
     mockRedisGet.mockResolvedValue(null);
     mockRedisSet.mockResolvedValue(undefined);
+    mockRedisDelete.mockResolvedValue(undefined);
   });
 
   describe('getActions', () => {

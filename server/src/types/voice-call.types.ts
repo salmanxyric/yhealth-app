@@ -9,7 +9,7 @@ export interface RTCIceServer {
 
 export type CallStatus = 'initiating' | 'connecting' | 'ringing' | 'active' | 'ended' | 'failed' | 'timeout' | 'cancelled';
 export type CallChannel = 'mobile_app' | 'whatsapp' | 'widget';
-export type CallEventType = 'initiated' | 'signaling_started' | 'ice_candidate_exchanged' | 'connection_established' | 'media_started' | 'ai_response_started' | 'ai_response_completed' | 'user_spoke' | 'call_ended' | 'error_occurred';
+export type CallEventType = 'initiated' | 'signaling_started' | 'ice_candidate_exchanged' | 'connection_established' | 'media_started' | 'ai_response_started' | 'ai_response_completed' | 'user_spoke' | 'call_ended' | 'error_occurred' | 'quality_report' | 'transcript_segment';
 
 export interface VoiceCall {
   id: string;
@@ -144,5 +144,31 @@ export interface RTCIceCandidate {
   candidate: string;
   sdpMLineIndex: number | null;
   sdpMid: string | null;
+}
+
+export interface WebRTCQualityMetrics {
+  timestamp: string;
+  audio: {
+    jitter?: number;
+    packetLoss?: number;
+    roundTripTime?: number;
+    bitrate?: number;
+    codec?: string;
+  };
+  connection: {
+    candidateType?: string;
+    networkType?: string;
+    localAddress?: string;
+    remoteAddress?: string;
+  };
+  mos?: number;
+}
+
+export interface CallTranscriptSegment {
+  speaker: 'user' | 'ai';
+  text: string;
+  timestamp: string;
+  confidence?: number;
+  duration?: number;
 }
 

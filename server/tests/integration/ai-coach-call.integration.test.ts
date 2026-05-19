@@ -161,18 +161,24 @@ describe('AI Coach Scheduled Calling — Integration', () => {
         .mockResolvedValueOnce({ rows: [{ id: 'log-1' }], rowCount: 1, command: '', oid: 0, fields: [] })
         .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
 
-      mockJobAdd.mockResolvedValue({ id: 'ai-call:user-1:2026-05-13:09:00' });
+      mockJobAdd.mockResolvedValue({ id: 'ai-call_user-1_2026-05-13_09-00' });
 
       await aiCoachCallQueueService.scheduleCall('user-1', '09:00', 'Asia/Karachi', '2026-05-13');
 
       expect(scheduledJobs).toHaveLength(1);
-      expect(scheduledJobs[0]!.opts.jobId).toBe('ai-call:user-1:2026-05-13:09:00');
+      expect(scheduledJobs[0]!.opts.jobId).toBe('ai-call_user-1_2026-05-13_09-00');
 
       // Worker phase
       mockQuery
+        // Gate 1: user active check
         .mockResolvedValueOnce({ rows: [{ id: 'user-1', is_active: true }], rowCount: 1, command: '', oid: 0, fields: [] })
+        // Gate 7: preferred_call_times count
+        .mockResolvedValueOnce({ rows: [{ cnt: '1' }], rowCount: 1, command: '', oid: 0, fields: [] })
+        // Gate 7: daily cap count
         .mockResolvedValueOnce({ rows: [{ c: '0' }], rowCount: 1, command: '', oid: 0, fields: [] })
+        // UPDATE status = 'initiated'
         .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
+        // UPDATE chat_call_id
         .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
 
       mockGetPreferences.mockResolvedValue(defaultVoicePrefs());
@@ -190,24 +196,30 @@ describe('AI Coach Scheduled Calling — Integration', () => {
   });
 
   describe('Gate Check Integration', () => {
-    it('offline user is skipped with skipped_offline status', async () => {
+    it('offline user still gets a call (offline gate removed; push notification handles it)', async () => {
       mockQuery
+        // Gate 1: user active check
         .mockResolvedValueOnce({ rows: [{ id: 'user-1', is_active: true }], rowCount: 1, command: '', oid: 0, fields: [] })
+        // Gate 7: preferred_call_times count
+        .mockResolvedValueOnce({ rows: [{ cnt: '1' }], rowCount: 1, command: '', oid: 0, fields: [] })
+        // Gate 7: daily cap count
         .mockResolvedValueOnce({ rows: [{ c: '0' }], rowCount: 1, command: '', oid: 0, fields: [] })
+        // UPDATE status = 'initiated'
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
+        // UPDATE chat_call_id
         .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
 
       mockGetPreferences.mockResolvedValue(defaultVoicePrefs());
       mockGetForUser.mockResolvedValue(defaultCommPrefs());
       mockIsUserConnected.mockReturnValue(false);
+      mockInitiateAICoachCall.mockResolvedValue({ id: 'call-1' });
 
       await processAICoachCallJob(makeWorkerJob());
 
-      expect(mockInitiateAICoachCall).not.toHaveBeenCalled();
-      const updateCall = mockQuery.mock.calls.find(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('SET status')
+      expect(mockInitiateAICoachCall).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ sessionType: 'quick_checkin' }),
       );
-      expect(updateCall).toBeDefined();
-      expect(updateCall![1]).toContain('skipped_offline');
     });
   });
 
@@ -217,13 +229,13 @@ describe('AI Coach Scheduled Calling — Integration', () => {
         .mockResolvedValueOnce({ rows: [], rowCount: 0, command: '', oid: 0, fields: [] })
         .mockResolvedValueOnce({ rows: [{ id: 'log-1' }], rowCount: 1, command: '', oid: 0, fields: [] })
         .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
-      mockJobAdd.mockResolvedValue({ id: 'ai-call:user-1:2026-05-13:09:00' });
+      mockJobAdd.mockResolvedValue({ id: 'ai-call_user-1_2026-05-13_09-00' });
 
       await aiCoachCallQueueService.scheduleCall('user-1', '09:00', 'UTC', '2026-05-13');
       expect(scheduledJobs).toHaveLength(1);
 
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: 'log-1', bullmq_job_id: 'ai-call:user-1:2026-05-13:09:00' }],
+        rows: [{ id: 'log-1', bullmq_job_id: 'ai-call_user-1_2026-05-13_09-00' }],
         rowCount: 1, command: '', oid: 0, fields: [],
       });
 
@@ -267,8 +279,8 @@ describe('AI Coach Scheduled Calling — Integration', () => {
 
       expect(mockRemove).toHaveBeenCalledTimes(1);
       expect(scheduledJobs).toHaveLength(2);
-      expect(scheduledJobs[0]!.opts.jobId).toBe('ai-call:user-1:2026-05-13:08:00');
-      expect(scheduledJobs[1]!.opts.jobId).toBe('ai-call:user-1:2026-05-13:20:00');
+      expect(scheduledJobs[0]!.opts.jobId).toBe('ai-call_user-1_2026-05-13_08-00');
+      expect(scheduledJobs[1]!.opts.jobId).toBe('ai-call_user-1_2026-05-13_20-00');
     });
   });
 });

@@ -1020,7 +1020,7 @@ export function MessagesView({
           setSearchMatchIndex(0);
           setTimeout(() => searchInputRef.current?.focus(), 50);
         }}
-        onUserClick={(userId, userName, userAvatar) => {
+        onUserClick={isAiChat ? undefined : (userId, userName, userAvatar) => {
           setSelectedUser({ id: userId, name: userName, avatar: userAvatar });
         }}
         otherUserId={chat && !chat.isGroupChat && chat.participants
@@ -1118,7 +1118,7 @@ export function MessagesView({
           onPin={handlePin}
           onReaction={handleReaction}
           onViewOnce={handleViewOnce}
-          onUserClick={(userId, userName, userAvatar) => {
+          onUserClick={isAiChat ? undefined : (userId, userName, userAvatar) => {
             setSelectedUser({ id: userId, name: userName, avatar: userAvatar });
           }}
           searchQuery={searchQuery}

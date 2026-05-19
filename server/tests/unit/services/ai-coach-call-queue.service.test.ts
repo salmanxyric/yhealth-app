@@ -73,7 +73,7 @@ describe('AICoachCallQueueService', () => {
         .mockResolvedValueOnce({ rows: [{ id: 'log-1' }], rowCount: 1, command: '', oid: 0, fields: [] })
         .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
 
-      mockJobAdd.mockResolvedValue({ id: 'ai-call:user-1:2026-05-13:09:00' });
+      mockJobAdd.mockResolvedValue({ id: 'ai-call_user-1_2026-05-13_09-00' });
 
       await aiCoachCallQueueService.scheduleCall('user-1', '09:00', 'UTC', '2026-05-13');
 
@@ -83,9 +83,11 @@ describe('AICoachCallQueueService', () => {
           userId: 'user-1',
           scheduledTimeHHMM: '09:00',
           scheduledDate: '2026-05-13',
+          sessionType: 'quick_checkin',
+          attempt: 1,
         }),
         expect.objectContaining({
-          jobId: 'ai-call:user-1:2026-05-13:09:00',
+          jobId: 'ai-call_user-1_2026-05-13_09-00',
         }),
       );
     });

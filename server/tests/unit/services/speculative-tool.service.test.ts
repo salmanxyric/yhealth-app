@@ -5,13 +5,14 @@
  * Covers mapping lookup, speculative execution, result matching, and arg building.
  */
 
-import { speculativeToolService } from '../../../src/services/speculative-tool.service.js';
-import type { SpeculativeResult } from '../../../src/services/speculative-tool.service.js';
+import { jest } from '@jest/globals';
+import { setupLoggerMock } from '../../helpers/mock-services.js';
 import type { IntentClassification, ToolIntent, MessageComplexity } from '../../../src/services/tool-router.service.js';
 
-jest.mock('../../../src/services/logger.service.js', () => ({
-  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-}));
+setupLoggerMock();
+
+const { speculativeToolService } = await import('../../../src/services/speculative-tool.service.js');
+type SpeculativeResult = import('../../../src/services/speculative-tool.service.js').SpeculativeResult;
 
 // ============================================
 // HELPERS

@@ -19,7 +19,7 @@ import { personaFromCoachingStyle } from '@shared/types/domain/coach-persona.js'
 import { buildPersonaDirectiveBlock } from './coach-persona-prompt.service.js';
 import type { ActivityStatusContext, StatusPattern } from '../types/activity-status.types.js';
 import { memoryEngineService } from './memory-engine.service.js';
-import { vectorEmbeddingService } from './vector-embedding.service.js';
+
 import type { IntelligenceContext } from '@shared/types/domain/turn-insights.js';
 
 // ============================================
@@ -2101,25 +2101,9 @@ class ComprehensiveUserContextService {
 
   async getIntelligenceContext(userId: string, userMessage: string): Promise<IntelligenceContext> {
     try {
-      const [structuredMemories, semanticResults] = await Promise.all([
-        memoryEngineService.getMemoriesForContext(userId, userMessage, 10),
-        vectorEmbeddingService.searchSimilar({
-          queryText: userMessage,
-          sourceType: 'insight_extraction',
-          userId,
-          limit: 5,
-          minSimilarity: 0.7,
-        }).catch(() => []),
-      ]);
+      const structuredMemories = await memoryEngineService.getMemoriesForContext(userId, userMessage, 10);
 
-      const semanticInsights = semanticResults.map((r) => ({
-        content: typeof r.content === 'string' ? r.content : JSON.stringify(r.content),
-        similarity: r.similarity,
-        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
-        sourceType: r.sourceType,
-      }));
-
-      return { structuredMemories, semanticInsights };
+      return { structuredMemories, semanticInsights: [] };
     } catch (error) {
       logger.warn('[ComprehensiveContext] Intelligence context retrieval failed', {
         userId,

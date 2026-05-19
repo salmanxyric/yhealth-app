@@ -4,10 +4,11 @@
  *   Gemini → OpenAI (primary pair)
  *   Anthropic and DeepSeek available when enabled via env flags.
  *
- * Three model tiers:
+ * Four model tiers:
  *   - default: Main chatbot, general tasks
  *   - reasoning: Complex analysis, profile generation
  *   - light: Theme extraction, lesson extraction, voice journal
+ *   - nano: Classification, routing, intent detection
  */
 
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
@@ -21,7 +22,7 @@ import { logger } from './logger.service.js';
 // TYPES
 // ============================================
 
-export type ModelTier = 'default' | 'reasoning' | 'light';
+export type ModelTier = 'default' | 'reasoning' | 'light' | 'nano';
 
 export interface ModelOptions {
   tier?: ModelTier;
@@ -51,6 +52,7 @@ const GEMINI_FALLBACK_MODELS: Record<ModelTier, string[]> = {
   default: [env.gemini.model, 'gemini-2.5-flash-lite'],
   reasoning: [env.gemini.reasoningModel, 'gemini-2.5-flash-lite'],
   light: [env.gemini.lightModel, 'gemini-2.5-flash-lite'],
+  nano: [env.gemini.lightModel, 'gemini-2.5-flash-lite'],
 };
 
 const MODEL_MAP: Record<ProviderName, Record<ModelTier, string>> = {
@@ -58,21 +60,25 @@ const MODEL_MAP: Record<ProviderName, Record<ModelTier, string>> = {
     default: env.gemini.model,
     reasoning: env.gemini.reasoningModel,
     light: env.gemini.lightModel,
+    nano: env.gemini.lightModel,
   },
   openai: {
     default: env.openai.model,
-    reasoning: env.openai.model,
-    light: env.openai.model,
+    reasoning: env.openai.reasoningModel,
+    light: env.openai.lightModel,
+    nano: env.openai.nanoModel,
   },
   anthropic: {
     default: env.anthropic.model,
     reasoning: env.anthropic.model,
     light: 'claude-haiku-4-5-20251001',
+    nano: 'claude-haiku-4-5-20251001',
   },
   deepseek: {
     default: env.deepseek.model,
     reasoning: env.deepseek.reasoningModel,
     light: env.deepseek.model,
+    nano: env.deepseek.model,
   },
 };
 
@@ -278,12 +284,22 @@ class ModelFactory {
     }
 
     if (this.isRateLimitError(error)) {
-      this.markCurrentProviderRateLimited(5 * 60 * 1000);
+      const hasOtherProviders = this.providers.some(
+        p => p.available && p.name !== this.lastProviderUsed && !this.isProviderRateLimited(p.name)
+      );
+      this.markCurrentProviderRateLimited(hasOtherProviders ? 5 * 60 * 1000 : 30 * 1000);
       return true;
     }
 
     if (this.isTimeoutError(error)) {
-      this.markCurrentProviderRateLimited(60 * 1000);
+      const hasOtherProviders = this.providers.some(
+        p => p.available && p.name !== this.lastProviderUsed && !this.isProviderRateLimited(p.name)
+      );
+      if (hasOtherProviders) {
+        this.markCurrentProviderRateLimited(60 * 1000);
+      } else {
+        logger.warn(`[ModelFactory] Provider ${this.lastProviderUsed} timed out but is the only provider — not blacklisting`);
+      }
       logger.warn(`[ModelFactory] Provider ${this.lastProviderUsed} timed out; cascading to next provider`, {
         provider: this.lastProviderUsed,
         error: error instanceof Error ? error.message : 'Unknown',

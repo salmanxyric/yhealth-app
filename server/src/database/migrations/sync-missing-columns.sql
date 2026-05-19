@@ -96,6 +96,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'wiki_log_operation') THEN
     CREATE TYPE wiki_log_operation AS ENUM ('ingest', 'update', 'create', 'lint', 'query_filed', 'contradiction_detected', 'stale_marked', 'archived');
   END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'plan_policy') THEN
+    CREATE TYPE plan_policy AS ENUM ('SLIDE_FORWARD', 'FILL_GAPS', 'DROP_OR_COMPRESS');
+  END IF;
 END $$;
 
 -- ============================================
@@ -430,6 +434,18 @@ BEGIN
 
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_plans' AND column_name = 'goal_category') THEN
     ALTER TABLE user_plans ADD COLUMN goal_category goal_category;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_plans' AND column_name = 'plan_policy') THEN
+    ALTER TABLE user_plans ADD COLUMN plan_policy plan_policy DEFAULT 'FILL_GAPS';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_plans' AND column_name = 'last_audit_date') THEN
+    ALTER TABLE user_plans ADD COLUMN last_audit_date DATE;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_plans' AND column_name = 'auto_reschedule_enabled') THEN
+    ALTER TABLE user_plans ADD COLUMN auto_reschedule_enabled BOOLEAN DEFAULT true;
   END IF;
 END $$;
 
@@ -1723,6 +1739,29 @@ CREATE INDEX IF NOT EXISTS idx_chat_calls_status_active
 CREATE INDEX IF NOT EXISTS idx_chat_calls_message
   ON chat_calls(message_id)
   WHERE message_id IS NOT NULL;
+
+-- ============================================
+-- vector_embeddings — content_hash column + unique constraint for UPSERT
+-- ============================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vector_embeddings' AND column_name = 'content_hash') THEN
+    ALTER TABLE vector_embeddings ADD COLUMN content_hash VARCHAR(64);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'vector_embeddings_source_type_source_id_key'
+      AND conrelid = 'vector_embeddings'::regclass
+  ) THEN
+    ALTER TABLE vector_embeddings
+      ADD CONSTRAINT vector_embeddings_source_type_source_id_key
+      UNIQUE (source_type, source_id);
+  END IF;
+END $$;
 
 -- ============================================
 -- MIGRATION COMPLETE

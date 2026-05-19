@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { ragChatbotController } from '../controllers/rag-chatbot.controller.js';
-import { authenticate } from '../middlewares/auth.middleware.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { messagingLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { requireFeature, consumeCredits } from '../middlewares/entitlement.middleware.js';
@@ -207,7 +207,7 @@ router.post('/profile', authenticate, validate(updateProfileSchema), ragChatbotC
  * @access  Private (Admin)
  * @body    { category, subcategory?, title, content, source?, sourceUrl?, tags?, trustScore? }
  */
-router.post('/knowledge', authenticate, validate(addKnowledgeSchema), ragChatbotController.addKnowledge);
+router.post('/knowledge', authenticate, authorize('admin'), validate(addKnowledgeSchema), ragChatbotController.addKnowledge);
 
 /**
  * @route   GET /api/rag-chat/knowledge/search

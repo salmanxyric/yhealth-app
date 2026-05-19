@@ -75,7 +75,7 @@ function isGeminiPartsStreamError(error: unknown): boolean {
 async function lifeAreaRouterLlm(prompt: string): Promise<string> {
   if (!lifeAreaRouterOpenAI) return '';
   try {
-    const model = env.openai.model || 'gpt-4o-mini';
+    const model = env.openai.nanoModel || 'gpt-5.4-nano';
     const res = await lifeAreaRouterOpenAI.chat.completions.create({
       model,
       messages: [
@@ -2170,9 +2170,10 @@ class LangGraphChatbotService {
 
     // Attach intelligence context (requires current message for semantic search)
     if (userMessage) {
-      comprehensiveContext.intelligenceContext = await comprehensiveUserContextService
-        .getIntelligenceContext(userId, userMessage)
-        .catch(() => undefined);
+      comprehensiveContext.intelligenceContext = await Promise.race([
+        comprehensiveUserContextService.getIntelligenceContext(userId, userMessage),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 800)),
+      ]).catch(() => undefined);
     }
 
     // Add comprehensive user context (includes WHOOP, workouts, nutrition, lifestyle, goals, chat history)
@@ -5517,11 +5518,11 @@ I'm listening. What's happening right now?`;
       }
 
       const llmStartTime = Date.now();
-      const LLM_STREAM_TIMEOUT_MS = 30000;
+      const LLM_STREAM_TIMEOUT_MS = 45_000;
       const stream = await Promise.race([
         llmWithTools.stream(messages),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('LLM stream timeout: no response within 30s')), LLM_STREAM_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('LLM stream timeout: no response within 45s')), LLM_STREAM_TIMEOUT_MS)
         ),
       ]);
 

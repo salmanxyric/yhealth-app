@@ -39,6 +39,10 @@ export async function seedSubscriptionPlan(opts: SeedPlanOptions = {}): Promise<
   const trialDays = opts.trialDays ?? 0;
   const monthlyCredits = opts.monthlyCredits ?? 100;
 
+  // Remove any existing plan with the same stripe_price_id to avoid
+  // unique-constraint violations between test runs.
+  await query(`DELETE FROM subscription_plans WHERE stripe_price_id = $1`, [stripePriceId]);
+
   const r = await query<{ id: string; slug: string; tier: number }>(
     `INSERT INTO subscription_plans (
       slug, name, amount_cents, currency, interval, tier,

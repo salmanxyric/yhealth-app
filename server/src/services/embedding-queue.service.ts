@@ -7,12 +7,15 @@ import { logger } from './logger.service.js';
 // Types
 // ============================================================================
 
+export type WellbeingType = 'mood' | 'stress' | 'journal' | 'energy' | 'habits' | 'schedule';
+
 export interface EmbeddingJobData {
   userId: string;
   sourceType: string;
   sourceId: string;
   operation: 'create' | 'update' | 'delete';
   priority?: number;
+  wellbeingType?: WellbeingType;
 }
 
 export interface QueueStats {
@@ -120,7 +123,7 @@ class EmbeddingQueueService {
    */
   async queueWellbeingEmbedding(
     userId: string,
-    _wellbeingType: 'mood' | 'stress' | 'journal' | 'energy' | 'habits' | 'schedule',
+    wellbeingType: WellbeingType,
     entryId: string,
     operation: 'create' | 'update' | 'delete' = 'create'
   ): Promise<void> {
@@ -130,6 +133,7 @@ class EmbeddingQueueService {
       sourceId: entryId,
       operation,
       priority: JobPriorities.MEDIUM,
+      wellbeingType,
     });
   }
 

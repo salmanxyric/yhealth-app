@@ -188,4 +188,35 @@ export const exportLimiter = rateLimit({
   skip: () => env.isTest,
 });
 
+/**
+ * Voice call initiation limiter — 5 call initiations per hour per user
+ */
+export const voiceCallLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Voice call limit reached. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  validate: false,
+  handler: handleRateLimitExceeded,
+  skip: () => env.isTest,
+});
+
+/**
+ * Voice call signaling limiter — 60 signaling requests per minute per user
+ * Covers WebRTC offer, ICE candidate, and status polling endpoints
+ */
+export const voiceCallSignalingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { success: false, message: 'Too many signaling requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  validate: false,
+  handler: handleRateLimitExceeded,
+  skip: () => env.isTest,
+});
+
 export default globalLimiter;

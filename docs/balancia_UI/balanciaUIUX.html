@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balencia UI/UX Vision Questionnaire</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --canvas: #080C10;
+    --surface: #0F1419;
+    --elevated: #161D26;
+    --border: #1E2A36;
+    --border-light: #2A3A4A;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-amber: #D97706;
+    --accent-sky: #0EA5E9;
+    --accent-emerald: #10B981;
+    --accent-purple: #8B5CF6;
+    --accent-rose: #F43F5E;
+    --accent-cyan: #06B6D4;
+    --accent-lime: #84CC16;
+    --accent-indigo: #6366F1;
+    --accent-pink: #EC4899;
+    --accent-orange: #F97316;
+    --gradient-primary: linear-gradient(135deg, #D97706 0%, #0EA5E9 100%);
+    --gradient-cover: linear-gradient(160deg, #0A0A0F 0%, #0F1A2E 40%, #0A0A0F 100%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--canvas);
+    color: var(--text-primary);
+    font-size: 9.5pt;
+    line-height: 1.6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── COVER PAGE ── */
+  .cover {
+    page-break-after: always;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: var(--gradient-cover);
+    position: relative;
+    overflow: hidden;
+    padding: 3rem;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -20%; left: -20%;
+    width: 140%; height: 140%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(217,119,6,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(14,165,233,0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(139,92,246,0.04) 0%, transparent 40%);
+    pointer-events: none;
+  }
+  .cover-brand {
+    position: relative; z-index: 1;
+    text-align: center;
+  }
+  .cover-logo {
+    font-size: 14pt;
+    font-weight: 800;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+  .cover-sub {
+    font-size: 8pt;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 4rem;
+  }
+  .cover-title {
+    font-size: 28pt;
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    max-width: 500px;
+  }
+  .cover-title span {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .cover-desc {
+    font-size: 11pt;
+    color: var(--text-secondary);
+    max-width: 420px;
+    text-align: center;
+    line-height: 1.7;
+    margin-bottom: 4rem;
+  }
+  .cover-meta {
+    display: flex;
+    gap: 2.5rem;
+    font-size: 7.5pt;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .cover-meta-item { text-align: center; }
+  .cover-meta-label { color: var(--text-secondary); font-weight: 600; margin-bottom: 2px; }
+  .cover-line {
+    width: 60px; height: 2px;
+    background: var(--gradient-primary);
+    border-radius: 1px;
+    margin: 2rem auto;
+  }
+
+  /* ── TOC ── */
+  .toc {
+    page-break-after: always;
+    padding: 2rem 0;
+  }
+  .toc h2 {
+    font-size: 18pt;
+    font-weight: 800;
+    margin-bottom: 0.3rem;
+    color: var(--text-primary);
+  }
+  .toc-subtitle {
+    color: var(--text-muted);
+    font-size: 8.5pt;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+  }
+  .toc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 2rem;
+  }
+  .toc-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    text-decoration: none;
+    color: var(--text-primary);
+  }
+  .toc-num {
+    font-weight: 700;
+    font-size: 9pt;
+    min-width: 22px;
+    color: var(--accent-amber);
+  }
+  .toc-label { font-size: 8.5pt; font-weight: 500; }
+  .toc-dots { flex: 1; border-bottom: 1px dotted var(--border-light); margin: 0 0.3rem; min-width: 20px; height: 1em; }
+
+  /* ── SECTION HEADERS ── */
+  .section {
+    page-break-before: always;
+    padding-top: 0.5rem;
+  }
+  .section:first-of-type { page-break-before: avoid; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--border);
+  }
+  .section-num {
+    font-size: 24pt;
+    font-weight: 900;
+    line-height: 1;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .section-title {
+    font-size: 16pt;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  /* ── QUESTIONS ── */
+  .question {
+    margin-bottom: 1.5rem;
+    page-break-inside: avoid;
+  }
+  .q-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .q-num {
+    font-size: 8pt;
+    font-weight: 700;
+    color: var(--accent-sky);
+    min-width: 28px;
+    padding-top: 1px;
+  }
+  .q-title {
+    font-size: 10.5pt;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.4;
+  }
+  .q-context {
+    font-size: 8.5pt;
+    color: var(--text-muted);
+    font-style: italic;
+    margin: 0.25rem 0 0.4rem 0;
+    padding-left: 28px;
+    line-height: 1.5;
+  }
+  .q-options {
+    padding-left: 28px;
+    margin: 0.3rem 0 0.5rem;
+  }
+  .q-options li {
+    font-size: 8.5pt;
+    color: var(--text-secondary);
+    margin-bottom: 0.15rem;
+    list-style: none;
+    padding-left: 1em;
+    text-indent: -1em;
+  }
+  .q-options li::before {
+    content: ''; display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--border-light);
+    margin-right: 0.5em;
+    vertical-align: middle;
+  }
+
+  /* ── ANSWER BLOCKS ── */
+  .answer {
+    margin-left: 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .answer-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 7pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.4rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .answer-label.recommendation {
+    background: rgba(14,165,233,0.12);
+    color: var(--accent-sky);
+  }
+  .answer-label.status-open {
+    background: rgba(217,119,6,0.12);
+    color: var(--accent-amber);
+  }
+  .answer-label.rationale {
+    background: rgba(139,92,246,0.1);
+    color: var(--accent-purple);
+  }
+  .answer p, .answer li {
+    font-size: 8.5pt;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .answer strong { color: var(--text-primary); font-weight: 600; }
+  .answer ul { padding-left: 1.2em; margin: 0.3rem 0; }
+  .answer li { margin-bottom: 0.2rem; }
+  .answer-highlight {
+    background: var(--elevated);
+    border-left: 3px solid var(--accent-amber);
+    padding: 0.5rem 0.75rem;
+    border-radius: 0 6px 6px 0;
+    margin: 0.5rem 0;
+    font-size: 8.5pt;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  /* ── TABLES ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    font-size: 8pt;
+  }
+  th {
+    background: var(--elevated);
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: rgba(15,20,25,0.5); }
+
+  /* ── DOMAIN TAGS ── */
+  .tag {
+    display: inline-block;
+    font-size: 6.5pt;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .tag-full { background: rgba(16,185,129,0.15); color: var(--accent-emerald); }
+  .tag-moderate { background: rgba(14,165,233,0.15); color: var(--accent-sky); }
+  .tag-light { background: rgba(217,119,6,0.15); color: var(--accent-amber); }
+  .tag-later { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+  /* ── MISC ── */
+  .separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1rem 0;
+  }
+  .callout {
+    background: linear-gradient(135deg, rgba(217,119,6,0.06), rgba(14,165,233,0.06));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0 0.5rem 28px;
+  }
+  .callout-title {
+    font-size: 8pt;
+    font-weight: 700;
+    color: var(--accent-amber);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+  .callout p { font-size: 8.5pt; color: var(--text-secondary); }
+  .numbered-steps { counter-reset: step; padding-left: 28px; }
+  .numbered-steps .step { counter-increment: step; margin-bottom: 0.5rem; padding-left: 0; }
+  .numbered-steps .step::before {
+    content: counter(step);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--elevated); border: 1px solid var(--border);
+    font-size: 7pt; font-weight: 700; color: var(--accent-sky);
+    margin-right: 0.4rem;
+  }
+  .step-title { font-weight: 600; color: var(--text-primary); font-size: 8.5pt; }
+  .step-desc { color: var(--text-secondary); font-size: 8pt; }
+
+  @media print {
+    body { background: var(--canvas) !important; }
+    .cover { min-height: 100vh; }
+    .section { page-break-before: always; }
+    .question { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ COVER PAGE ═══════════════ -->
+<div class="cover">
+  <div class="cover-brand">
+    <div class="cover-logo">Balencia</div>
+    <div class="cover-sub">AI Life Coach Platform</div>
+    <div class="cover-line"></div>
+  </div>
+  <h1 class="cover-title">UI/UX Vision <span>Questionnaire</span></h1>
+  <p class="cover-desc">Capturing every design decision before a single screen gets built. This document is the source of truth for the entire UI/UX revamp.</p>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Version</div>
+      <div>1.0</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Date</div>
+      <div>May 19, 2026</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Status</div>
+      <div>Draft &mdash; Awaiting Review</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Prepared by</div>
+      <div>Xyric Engineering</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TABLE OF CONTENTS ═══════════════ -->
+<div class="toc">
+  <h2>Contents</h2>
+  <p class="toc-subtitle">18 sections &middot; 75+ design decisions &middot; Each answer grounded in codebase evidence</p>
+  <div class="toc-grid">
+    <div class="toc-item"><span class="toc-num">01</span><span class="toc-label">Core Philosophy & Identity</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">02</span><span class="toc-label">The AI Coach (SIA) Experience</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">03</span><span class="toc-label">Onboarding & First Experience</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">04</span><span class="toc-label">Navigation & Information Architecture</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">05</span><span class="toc-label">Home Screen / Daily Experience</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">06</span><span class="toc-label">Life Domains & Feature Organization</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">07</span><span class="toc-label">Goals & Plans System</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">08</span><span class="toc-label">Knowledge System & Intelligence</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">09</span><span class="toc-label">Social & Community</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">10</span><span class="toc-label">Gamification & Motivation</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">11</span><span class="toc-label">Subscription & Monetization</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">12</span><span class="toc-label">Visual & Emotional Design</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">13</span><span class="toc-label">Platform & Responsiveness</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">14</span><span class="toc-label">Notifications & Engagement</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">15</span><span class="toc-label">Data, Privacy & Transparency</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">16</span><span class="toc-label">Content & Education</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">17</span><span class="toc-label">Screen Priority Ranking</span><span class="toc-dots"></span></div>
+    <div class="toc-item"><span class="toc-num">18</span><span class="toc-label">Open Questions & Wild Card</span><span class="toc-dots"></span></div>
+  </div>
+
+  <div style="margin-top:2rem; padding:1rem; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+    <p style="font-size:8pt; color:var(--text-muted); margin-bottom:0.5rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em;">Framing</p>
+    <p style="font-size:9pt; color:var(--text-secondary); line-height:1.6;">Balencia is an <strong style="color:var(--text-primary)">AI Life Coach</strong> &mdash; not a health app, not a fitness tracker. It connects every part of a user's life system (career, relationships, spirituality, finance, fitness, creativity, learning) and reveals the connections they can't see themselves.</p>
+    <div style="display:flex; gap:1.5rem; margin-top:0.75rem; font-size:7.5pt; color:var(--text-muted);">
+      <div><strong style="color:var(--text-secondary)">Context:</strong> Direction Reset (2026-03-12) &middot; Old UI/UX meeting (2026-04-23) &middot; Current codebase</div>
+    </div>
+    <div style="display:flex; gap:1.5rem; margin-top:0.35rem; font-size:7.5pt; color:var(--text-muted);">
+      <div><strong style="color:var(--text-secondary)">Codebase:</strong> 10 life domains &middot; 80+ pages &middot; 220+ services &middot; 22 cross-pillar intelligence rules &middot; 40+ proactive message types</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 1: CORE PHILOSOPHY ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">01</div>
+    <div class="section-title">Core Philosophy & Identity</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">1.1</span>
+      <span class="q-title">What is the single sentence that describes what Balencia IS?</span>
+    </div>
+    <p class="q-context">"If you are striving to improve yourself then Balencia is for you. Identity: Life Coach, not Health Coach." &mdash; "Balencia sees what we can't see."</p>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open &mdash; Needs Salman's final wording</div>
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>"Balencia is your AI life coach that connects your fitness, finances, faith, career, and relationships into one system &mdash; and shows you the patterns you'd never spot alone."</strong></p>
+    </div>
+    <div class="answer">
+      <div class="answer-label rationale">Codebase Rationale</div>
+      <p>The cross-pillar intelligence engine has 22 rules detecting connections across sleep, nutrition, exercise, stress, mood, and recovery. The knowledge graph tracks entity relationships across goals, habits, activities, and conditions. The system literally correlates WHOOP recovery data with spending patterns, mood logs with nutrition adherence, and workout consistency with career productivity.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">1.2</span>
+      <span class="q-title">"Balencia sees what we can't see" &mdash; what does this mean concretely in the UI?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open</div>
+      <div class="answer-label recommendation">Recommendation</div>
+      <p>All four approaches, layered by context:</p>
+      <ul>
+        <li><strong>Primary (daily):</strong> SIA proactive messages surface connections in plain language. 40+ proactive message types scored and top 2-3 delivered per day.</li>
+        <li><strong>Secondary (home screen):</strong> "Insight of the Day" card from cross-pillar intelligence (e.g., HIGH_EXERCISE_LOW_SLEEP, NUTRITION_MOOD_CORRELATION).</li>
+        <li><strong>Tertiary (weekly):</strong> Weekly digest summarizing "3 connections spotted this week" with before/after data.</li>
+        <li><strong>Power user (on-demand):</strong> Knowledge Graph with node types (users, goals, habits, activities, exercises, foods, metrics, conditions) and edge types (causes, prevents, supports, conflicts_with).</li>
+      </ul>
+    </div>
+    <div class="callout">
+      <div class="callout-title">The "Holy Shit" Moment</div>
+      <p>The first time SIA tells a user something true about their own life that they didn't consciously know &mdash; like <em>"Your recovery scores drop 30% the week after you overspend."</em> That's the product in one sentence.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">1.3</span>
+      <span class="q-title">What is the emotional arc of a user's first 5 minutes?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open</div>
+      <div class="answer-label recommendation">Recommended Arc</div>
+      <div class="numbered-steps">
+        <div class="step"><span class="step-title">0:00&ndash;0:15 &mdash; "This feels different"</span><br><span class="step-desc">Cinematic motion sequence showing life domains connecting. Dark, premium, 3-5 seconds. "Your life is one system. Let's see it clearly."</span></div>
+        <div class="step"><span class="step-title">0:15&ndash;0:45 &mdash; "It's talking to me"</span><br><span class="step-desc">SIA introduces herself conversationally. Hybrid onboarding &mdash; SIA's personality shows, but UI is structured.</span></div>
+        <div class="step"><span class="step-title">0:45&ndash;2:00 &mdash; "It gets me"</span><br><span class="step-desc">SIA asks 3 focused questions via beautiful tappable domain cards. "What area of your life needs the most attention?"</span></div>
+        <div class="step"><span class="step-title">2:00&ndash;3:30 &mdash; "It's already working"</span><br><span class="step-desc">SIA generates a personalized 12-week life plan in real-time. Domain-colored milestones preview.</span></div>
+        <div class="step"><span class="step-title">3:30&ndash;5:00 &mdash; "I want to come back"</span><br><span class="step-desc">Lands on Today screen with SIA's first greeting, cross-domain insight preview, and 2-3 immediate actions.</span></div>
+      </div>
+      <div class="answer-highlight">Key principle: Never show an empty state. From minute 1, the app should feel alive and personal.</div>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">1.4</span>
+      <span class="q-title">Who is the primary user persona we're designing for?</span>
+    </div>
+    <p class="q-context">"Users range from 'wanting to be a better Muslim' to 'reduce screen time' to 'improve marriage.' 90% are non-technical."</p>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open &mdash; Needs team alignment</div>
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>Primary: Amira, 28.</strong> Muslim professional juggling career growth, marriage, fitness, and faith practice. Comfortable with WhatsApp and Instagram but not "tech-forward." She feels like everything in her life is disconnected. She'd leave if the app feels like a chore or too "health-bro" in tone.</p>
+      <p><strong>Secondary: Khalid, 35.</strong> High-achiever who already tracks fitness with WHOOP. He wants cross-domain intelligence &mdash; the connections he can't see. He'd leave if the AI gives generic advice.</p>
+      <p style="margin-top:0.4rem"><strong>Why this matters:</strong> Amira needs AI-first UX (SIA tells her what to do). Khalid needs data depth on demand. The motivation tier system serves both.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">1.5</span>
+      <span class="q-title">What are the 3 apps whose feel/vibe you want Balencia to channel?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open &mdash; Needs Salman's input</div>
+      <div class="answer-label recommendation">Suggestions</div>
+      <ul>
+        <li><strong>Oura Ring app</strong> &mdash; Premium dark UI, insights as "discoveries," calm confidence. Data-rich but never overwhelming.</li>
+        <li><strong>Calm</strong> &mdash; Emotional warmth, beautiful motion, makes you feel taken care of. Opposite of clinical.</li>
+        <li><strong>Arc Browser</strong> &mdash; Modern, opinionated, AI-first interactions. Feels like using something from the future.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">1.6</span>
+      <span class="q-title">How do you describe Balencia to someone in 10 seconds?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open &mdash; Needs Salman's final wording</div>
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>"Balencia is an AI life coach that connects your fitness, finances, faith, and relationships into one system &mdash; then shows you patterns about yourself you'd never see alone."</strong></p>
+      <p style="margin-top:0.3rem">Shorter (5 seconds): <em>"An AI that coaches your whole life, not just your workouts."</em></p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 2: SIA EXPERIENCE ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">02</div>
+    <div class="section-title">The AI Coach (SIA) Experience</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.1</span>
+      <span class="q-title">What is SIA's personality in 3 adjectives?</span>
+    </div>
+    <p class="q-context">Brand guidelines: grounded, curious, warm, playful, quietly confident. Tone adapts by motivation tier.</p>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: Warm, Perceptive, Direct</div>
+      <ul>
+        <li><strong>Warm</strong> &mdash; Genuinely cares. Remembers your sister's wedding, your Ramadan goals, your shoulder injury.</li>
+        <li><strong>Perceptive</strong> &mdash; The differentiator. Notices patterns: "You always skip evening routine when stressed at work."</li>
+        <li><strong>Direct</strong> &mdash; Doesn't hedge. Clear recommendations adapted by motivation tier: gentle &rarr; structured &rarr; challenging.</li>
+      </ul>
+      <p style="margin-top:0.4rem"><strong>What makes SIA distinct:</strong> Persistent memory (confidence-scored, evidence-based), personal wiki, 22 cross-domain rules, proactive messaging. She doesn't just answer &mdash; she initiates, remembers, and connects.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.2</span>
+      <span class="q-title">What does the SIA chat screen look like?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) Chat with rich inline cards</div>
+      <p>The current chat already supports artifact generation, wiki page linking, check-in cards, memory/context cards, agent timeline, and transparency panel. SIA should show workout cards (tappable), meal plans, progress charts, and goal rings &mdash; all inline.</p>
+      <p><strong>Mobile:</strong> Full-width cards. <strong>Desktop:</strong> Collapsible right panel for persistent context alongside conversation.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.3</span>
+      <span class="q-title">How does SIA connect life domains in conversation?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <ul>
+        <li><strong>Proactively, always.</strong> Cross-domain observations should be the highest-priority message category.</li>
+        <li><strong>Visual domain tags:</strong> Colored pills in messages &mdash; "Your <span style="color:var(--accent-purple)">&#9679; Sleep</span> quality drops 25% after days when your <span style="color:var(--accent-lime)">&#9679; Finance</span> stress is high."</li>
+        <li><strong>Frequency:</strong> 1-2 cross-domain observations per session. Self-regulates via evidence-based rules.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.4</span>
+      <span class="q-title">How does SIA deep-link into features?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: D) All of the above, context-dependent</div>
+      <ul>
+        <li><strong>Information/review &rarr; Rich card.</strong> Tappable card opens relevant screen.</li>
+        <li><strong>Urgent action &rarr; Navigate.</strong> Direct navigation to the needed screen.</li>
+        <li><strong>Future action &rarr; Schedule task.</strong> Creates a scheduled action for later.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.5</span>
+      <span class="q-title">Voice interaction &mdash; how prominent?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: A) Prominent mic button + full-screen voice mode</div>
+      <p>Voice infrastructure is substantial: WebRTC calls, voice assistant page, call coach, Google Cloud TTS, call history, transcription support. Voice is lowest-friction input for the primary persona. The mic button should be prominent in chat, and full-screen voice mode should feel like calling a friend.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.6</span>
+      <span class="q-title">Should SIA have a visual avatar/face?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: B) Simple animated icon/logo that pulses</div>
+      <p>3D avatars are expensive and age quickly. A beautifully animated abstract icon (the continuous stroke line, animated) gives SIA presence without uncanny valley risks. Pulses when listening, animates when thinking, settles when presenting.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.7</span>
+      <span class="q-title">What's the difference between "AI Coach" and "Chat"?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: Merge into one unified SIA experience</div>
+      <p>Both /ai-coach and /chat share backend infrastructure (LangGraph, context injection, memory engine). The distinction confuses users. <strong>One SIA. One conversation. Multiple modes:</strong> text chat (default), voice mode, check-in mode, deep dive mode.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">2.8</span>
+      <span class="q-title">Proactive messages from SIA &mdash; where do they appear?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) Both &mdash; push notification + home card</div>
+      <p>Push notification (short, intriguing) &rarr; tap &rarr; opens home screen card (insight) or SIA chat (conversation starter). Daily cap: 4 messages/day, timezone-aware (6am-10pm). No separate "insights feed" &mdash; that fragments the experience.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 3: ONBOARDING ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">03</div>
+    <div class="section-title">Onboarding & First Experience</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">3.1</span>
+      <span class="q-title">How many screens should onboarding have?</span>
+    </div>
+    <p class="q-context">Old meeting: ~3 screens. Direction Reset: 5-step flow. Current app: 7-step flow.</p>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: 5 screens (down from 7)</div>
+      <div class="numbered-steps">
+        <div class="step"><span class="step-title">Welcome + Name</span> <span class="step-desc">(10 sec) &mdash; SIA greets, captures name</span></div>
+        <div class="step"><span class="step-title">Life Focus</span> <span class="step-desc">(30 sec) &mdash; "What area needs attention?" &rarr; tap domain cards</span></div>
+        <div class="step"><span class="step-title">Quick Assessment</span> <span class="step-desc">(60-90 sec) &mdash; 3-5 conversational questions about chosen domains</span></div>
+        <div class="step"><span class="step-title">Plan Preview</span> <span class="step-desc">(30 sec) &mdash; AI generates plan, user reviews/tweaks</span></div>
+        <div class="step"><span class="step-title">You're In</span> <span class="step-desc">(immediate) &mdash; Land on Today screen, optional integrations as enhancement cards</span></div>
+      </div>
+      <p style="margin-top:0.4rem"><strong>Deferred:</strong> Integrations, detailed preferences, deep assessment, body images &mdash; become "unlock deeper insights" prompts over first week.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">3.2</span>
+      <span class="q-title">Chatbot-driven or traditional screen-based onboarding?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) Hybrid</div>
+      <p>SIA speaks at the top of each screen with personality, but actual input is structured &mdash; beautiful tappable cards, sliders, or simple selections. Best of both: personality + speed.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">3.3</span>
+      <span class="q-title">What information do you absolutely need before the user can start?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>Mandatory:</strong> Name, life areas of interest (1-3 domains), primary life goal.</p>
+      <p><strong>Deferred:</strong> Motivation level (SIA infers in 3-5 days), age/gender (asked when needed), integrations (prompted contextually), subscription.</p>
+      <p><strong>Not needed:</strong> What they've tried before, biggest obstacle (SIA learns organically).</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">3.4</span>
+      <span class="q-title">Should there be an intro video/animation from SIA?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) Cinematic motion sequence &mdash; 5-10 seconds max</div>
+      <p>Abstract life domain icons connecting with the continuous stroke line, resolving into SIA's greeting. Think Apple product reveal, not explainer video. Skippable. The "wow" comes from the first cross-domain insight, not a pre-rendered video.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">3.5</span>
+      <span class="q-title">The AI assessment conversation &mdash; how deep?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: B) 2-3 follow-up questions per goal</div>
+      <p>3 questions per domain &times; 1-2 domains = 3-6 questions total = ~90 seconds. Personal enough for a meaningful plan, fast enough to retain users. Deep assessment offered after 1 week of activity.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">3.6</span>
+      <span class="q-title">How do you handle the "I just want to try it" user?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: D) SIA says "No worries, let's just start"</div>
+      <p>SIA IS the experience. Skip structured onboarding &rarr; land in conversation: "Tell me one thing on your mind today." Conversation insight extractor captures initial context. <strong>Minimum gate:</strong> Name + email only.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 4: NAVIGATION ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">04</div>
+    <div class="section-title">Navigation & Information Architecture</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">4.1</span>
+      <span class="q-title">What are the primary navigation items (max 5)?</span>
+    </div>
+    <p class="q-context">Current app: Sidebar with 30+ items. Old meeting: minimal sidebar, pin system.</p>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <table>
+        <tr><th></th><th>Mobile (Bottom Nav)</th><th>Desktop (Sidebar)</th></tr>
+        <tr><td>1</td><td><strong>Today</strong> &mdash; Home/daily</td><td><strong>Today</strong> &mdash; Home/daily</td></tr>
+        <tr><td>2</td><td><strong>SIA</strong> &mdash; Coach (chat + voice)</td><td><strong>SIA</strong> &mdash; Coach (chat + voice)</td></tr>
+        <tr><td>3</td><td><strong>Goals</strong> &mdash; Life goals</td><td><strong>Goals</strong> &mdash; Life goals</td></tr>
+        <tr><td>4</td><td><strong>Me</strong> &mdash; Profile, settings, explore</td><td><strong>Explore</strong> &mdash; All modules</td></tr>
+        <tr><td>5</td><td>&mdash;</td><td><strong>Me</strong> &mdash; Profile, settings</td></tr>
+      </table>
+      <p style="margin-top:0.4rem">Everything else reachable through SIA, Goals, or Explore. The current 30+ items are the #1 source of overwhelm.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">4.2</span>
+      <span class="q-title">How do 8 life domains organize in the UI?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: D) Hybrid &mdash; goals are primary, domains in Explore</div>
+      <p>Users think in goals, not domains. Each goal card shows domain tags. Domain dashboards available from Explore for those who want depth. SIA personalizes what appears on Today screen.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">4.3</span>
+      <span class="q-title">Pin-to-sidebar system &mdash; still want it?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: Yes, desktop only. Max 5 pins.</div>
+      <p>Default pins based on onboarding choices (Fitness&rarr;Workouts, Nutrition&rarr;Meal Plan, Wellbeing&rarr;Journal, etc.). Max 5 to prevent sidebar creep.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">4.4</span>
+      <span class="q-title">The Explore page &mdash; what does it look like?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) AI-curated recommendations first, full catalog below</div>
+      <p>"Recommended for you" (3-4 cards) at top based on goals + gaps. Full catalog below organized by domain with colored section headers. Search bar at top.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">4.5&ndash;4.6</span>
+      <span class="q-title">Mobile vs Desktop Navigation &amp; Admin Panel</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>Mobile:</strong> Fixed 4-item bottom nav. Does NOT adapt &mdash; consistency builds muscle memory.</p>
+      <p><strong>Desktop:</strong> Collapsible left sidebar with 5 primary + pinned modules. Both: SIA as universal navigation fallback.</p>
+      <p><strong>Admin:</strong> Completely separate layout at /admin, role-gated. Different sidebar, different information density. Small "Admin" link in profile dropdown.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 5: HOME SCREEN ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">05</div>
+    <div class="section-title">Home Screen / Daily Experience</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">5.1</span>
+      <span class="q-title">What IS the home screen?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: B) "Today" view &mdash; SIA's greeting + AI-suggested actions</div>
+      <p>Not a full chat (too aggressive), not a dense dashboard (too overwhelming), not customizable (too complex). A <strong>personal briefing</strong>: SIA's greeting at top, 2-3 suggested actions, one cross-domain insight, quick-access cards.</p>
+      <div class="answer-highlight">Think: Morning briefing from a personal assistant, not a dashboard full of charts.</div>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">5.2</span>
+      <span class="q-title">Top 5 things visible on the home/today screen</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation (in visual priority order)</div>
+      <div class="numbered-steps">
+        <div class="step"><span class="step-title">SIA's greeting / proactive message</span> <span class="step-desc">&mdash; "Good morning, Amira. Recovery is strong &mdash; great day for that postponed workout."</span></div>
+        <div class="step"><span class="step-title">AI-suggested actions</span> <span class="step-desc">&mdash; 2-4 domain-colored tappable cards across all life areas.</span></div>
+        <div class="step"><span class="step-title">Active life goals with progress</span> <span class="step-desc">&mdash; Compact horizontal scroll of goal cards with progress rings.</span></div>
+        <div class="step"><span class="step-title">Quick check-in prompt</span> <span class="step-desc">&mdash; "How are you feeling?" with quick-tap mood options.</span></div>
+        <div class="step"><span class="step-title">Cross-domain insight</span> <span class="step-desc">&mdash; "This week: mood 40% higher on days you prayed all 5 prayers."</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">5.3</span>
+      <span class="q-title">Data density &amp; daily check-in</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: D) Adaptive by motivation tier</div>
+      <ul>
+        <li><strong>Low tier:</strong> Minimal &mdash; SIA's greeting, 1-2 actions, one insight. No charts.</li>
+        <li><strong>Medium tier:</strong> Moderate &mdash; 3-4 actions, goal progress cards, quick check-in.</li>
+        <li><strong>High tier:</strong> Dense &mdash; + health score, WHOOP metrics, schedule, streak stats.</li>
+      </ul>
+      <p style="margin-top:0.4rem"><strong>Daily check-in:</strong> Part of SIA's greeting (conversational, not a form). Quick-tap mood options embedded in greeting card. One tap, done.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">5.5</span>
+      <span class="q-title">Cross-domain connections on the home screen</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: Layered &mdash; A + C + E</div>
+      <ul>
+        <li><strong>Insight of the day card</strong> &mdash; when cross-pillar engine has a high-confidence observation.</li>
+        <li><strong>SIA mentions in greeting</strong> &mdash; "Sleep improved 20% since you resumed evening prayer."</li>
+        <li><strong>Domain-colored tags on actions</strong> &mdash; small colored dots showing which domains each action touches.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 6: LIFE DOMAINS ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">06</div>
+    <div class="section-title">Life Domains & Feature Organization</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">6.1</span>
+      <span class="q-title">How do life domains present in the UI?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: E) Combination of B + C + D</div>
+      <ul>
+        <li><strong>Colored tags everywhere</strong> &mdash; every action, insight, and goal shows domain colors (already defined in codebase).</li>
+        <li><strong>Domain dashboards in Explore</strong> &mdash; drill-deep view for each domain.</li>
+        <li><strong>Life wheel on Goals page</strong> &mdash; radar chart showing all domains with progress scores.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">6.2</span>
+      <span class="q-title">AI-first interaction &mdash; does it apply to ALL domains?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: Yes, with varying AI-to-user ratios</div>
+      <ul>
+        <li><strong>AI-heavy (80%):</strong> Workouts, meal suggestions, daily schedule, learning recommendations.</li>
+        <li><strong>Balanced (50%):</strong> Budget advice, journal prompts, habit suggestions, career actions.</li>
+        <li><strong>User-heavy (20%):</strong> Spirituality, relationships, creative pursuits. SIA reminds and encourages but doesn't prescribe.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">6.5</span>
+      <span class="q-title">Domain v1 priority ranking</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation (based on codebase maturity)</div>
+      <table>
+        <tr><th>Domain</th><th>Priority</th><th>Rationale</th></tr>
+        <tr><td>Fitness & Movement</td><td><span class="tag tag-full">Full</span></td><td>Deepest codebase: 1500+ exercise library, WHOOP, workout plans</td></tr>
+        <tr><td>Nutrition & Diet</td><td><span class="tag tag-full">Full</span></td><td>Meal plans, recipes, macro tracking, shopping lists, diet plans</td></tr>
+        <tr><td>Mental Health & Wellbeing</td><td><span class="tag tag-full">Full</span></td><td>10+ sub-modules: journal, mood, stress, energy, breathing, emotion detection</td></tr>
+        <tr><td>Spirituality & Religion</td><td><span class="tag tag-moderate">Moderate</span></td><td>Core to primary persona. Prayer times, reading, Ramadan. SIA handles depth.</td></tr>
+        <tr><td>Finance & Money</td><td><span class="tag tag-moderate">Moderate</span></td><td>Money Map is newer. Goal-oriented tracking + AI insights.</td></tr>
+        <tr><td>Career & Work</td><td><span class="tag tag-light">Light</span></td><td>Goal tracking + Google Calendar. SIA coaching. No standalone dashboard.</td></tr>
+        <tr><td>Relationships</td><td><span class="tag tag-light">Light</span></td><td>Accountability reminders + SIA coaching. Minimal standalone UI.</td></tr>
+        <tr><td>Learning & Growth</td><td><span class="tag tag-light">Light</span></td><td>Goal tracking + daily actions. SIA delivers content.</td></tr>
+        <tr><td>Creativity</td><td><span class="tag tag-later">Later</span></td><td>Lowest demand. SIA handles ad-hoc creative prompts.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">6.6&ndash;6.7</span>
+      <span class="q-title">Cross-domain intelligence display &amp; Wellbeing consolidation</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>Cross-domain:</strong> E) All channels &mdash; SIA conversation (primary), dedicated insights screen, Knowledge Graph (power user), home screen cards.</p>
+      <p><strong>Wellbeing:</strong> D) Mix. <strong>Standalone:</strong> Journal, Mood & Energy Dashboard, Habits Tracker. <strong>SIA-invoked:</strong> Breathing, stress assessment, energy check-in, yoga, soundscapes.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">6.8&ndash;6.10</span>
+      <span class="q-title">Finance depth, Spirituality, &amp; Features to remove</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>Finance:</strong> B) Goal-oriented tracking tied to life goals. Not full budgeting. SIA connects financial behavior to other domains.</p>
+      <p><strong>Spirituality:</strong> C) Start Islamic, expand later. <span class="answer-label status-open" style="font-size:6pt;">Needs Salman's decision</span></p>
+      <p><strong>Cut entirely:</strong> HIPAA page, Careers page, Blogs (in-app), Webinars.</p>
+      <p><strong>Deprioritize:</strong> Knowledge Graph, Competitions, Leaderboard, Soundscapes, Yoga Library, Vision Board.</p>
+      <p><strong>Simplify:</strong> Quick Notes &rarr; merge into Journal. Voice Calls &rarr; voice mode in unified SIA.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 7: GOALS ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">07</div>
+    <div class="section-title">Goals & Plans System</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">7.1</span>
+      <span class="q-title">Goal decomposition visibility</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) Summary with expandable detail, influenced by tier</div>
+      <p>Default: "7 actions across 3 life areas this week" with progress ring. Tap for full breakdown.</p>
+      <ul>
+        <li><strong>Low:</strong> Today's 2-3 actions only. Expandable to weekly.</li>
+        <li><strong>Medium:</strong> This week's actions + next milestone. Expandable to full plan.</li>
+        <li><strong>High:</strong> Full plan with all milestones, domain breakdown, and reasoning.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">7.2</span>
+      <span class="q-title">Life goal card elements</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Essential elements</div>
+      <p><strong>Mandatory:</strong> Progress ring/bar &middot; Connected domain colors/icons &middot; Next action due (tappable) &middot; AI coaching note (one-line from SIA)</p>
+      <p><strong>Optional:</strong> Current streak (if applicable) &middot; Time since last activity (only if stalled)</p>
+      <p><strong>Not on card:</strong> Motivation tier badge (internal). Full milestone list (expandable).</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">7.3&ndash;7.5</span>
+      <span class="q-title">Motivation tiers in UI, Progress visualization, &amp; Celebrations</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Motivation tiers:</strong> C) Subtle &mdash; same layout, content density adapts. Users shouldn't feel like they're using a "lesser" version.</p>
+      <p><strong>Progress:</strong> E) Multiple views &mdash; per-goal rings (default), life wheel (Life Areas view), per-domain scores (drill-down). No unified Life Score &mdash; oversimplifies.</p>
+      <p><strong>Celebrations (D+E):</strong></p>
+      <table>
+        <tr><th>Milestone Size</th><th>Low Motivation</th><th>Medium</th><th>High</th></tr>
+        <tr><td>Micro (daily action)</td><td>Animation + SIA praise</td><td>Quick acknowledgment</td><td>Silent tracking</td></tr>
+        <tr><td>Medium (weekly goal)</td><td>Celebration card + SIA</td><td>Toast + SIA message</td><td>Toast</td></tr>
+        <tr><td>Major (goal complete)</td><td>Full-screen celebration</td><td>Full-screen celebration</td><td>SIA + data summary</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 8: KNOWLEDGE ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">08</div>
+    <div class="section-title">Knowledge System & Intelligence</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">8.1</span>
+      <span class="q-title">Knowledge Graph &mdash; user-facing or behind the scenes?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) Power-user feature in Explore</div>
+      <p>Technically impressive but visually complex. Available for power users; not promoted. The real value is what it enables &mdash; SIA's cross-domain insights. Users experience the graph through SIA, not the visualization.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">8.2</span>
+      <span class="q-title">Personal Wiki &mdash; visible to the user?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: C) Partially &mdash; "What SIA knows about me"</div>
+      <p>Simplified view: key facts, preferences, patterns. E.g., "Prefers morning workouts," "Energy dips on Tuesdays." Each item has delete and "This is wrong" buttons (feeds to memory engine's processUserFeedback).</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">8.3&ndash;8.4</span>
+      <span class="q-title">Cross-domain insight delivery &amp; Memory transparency</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Insights:</strong> E) All channels &mdash; SIA conversation, home card, weekly digest, insights page archive.</p>
+      <p><strong>Memory:</strong> A) Full transparency with delete control. "What SIA remembers" page: browse all memories grouped by category, see confidence indicators, delete/correct/verify. Builds trust &mdash; transparency is a feature, not a risk.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 9: SOCIAL ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">09</div>
+    <div class="section-title">Social & Community</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">9.1&ndash;9.4</span>
+      <span class="q-title">Social prominence, Leaderboard, Competitions, &amp; Accountability</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Social:</strong> C) Minimal for v1. Basic accountability partner only. No feed, no public profiles.</p>
+      <p><strong>Leaderboard:</strong> D) Remove for v1. Multi-domain ranking is nonsensical and potentially harmful.</p>
+      <p><strong>Competitions:</strong> C) Deprioritize. Keep sophisticated backend intact; remove from primary nav.</p>
+      <p><strong>Accountability:</strong> A) AI-driven for v1 (SIA already has commitment follow-ups, streak risk alerts, plan non-adherence). Social accountability in v2.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 10: GAMIFICATION ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">10</div>
+    <div class="section-title">Gamification & Motivation</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">10.1&ndash;10.4</span>
+      <span class="q-title">Streaks, Achievements, Micro-wins, &amp; Tier-adaptive gamification</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Streaks:</strong> B) Present but not central. One master streak on home; per-domain streaks in domain dashboards. "Balencia sees what you can't see" is the value prop, not "maintain your streak."</p>
+      <p><strong>Achievements:</strong> Both cross-domain (unique to Balencia &mdash; "Life Connector," "Life Balanced," "Pattern Spotter") AND domain-specific ("30-Day Prayer Streak"). Cross-domain achievements celebrated more prominently.</p>
+      <p><strong>Micro-wins:</strong> D) Adapted by tier. Low = celebrate immediately. Medium = SIA acknowledges naturally. High = batch at end of day.</p>
+      <p><strong>Tier-adaptive gamification:</strong> Yes, confirmed. Low = heavy gamification (needs external motivation). Medium = moderate. High = light (self-motivated, focus on data). Transition between tiers is gradual.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 11: MONETIZATION ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">11</div>
+    <div class="section-title">Subscription & Monetization</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">11.1</span>
+      <span class="q-title">Free vs paid access</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open &mdash; Needs business decision</div>
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>Free:</strong> 10 messages/day with SIA &middot; Full Today screen &middot; 2 life domains &middot; Basic journal/mood/habits &middot; 1 cross-domain insight/week</p>
+      <p><strong>Paid:</strong> Unlimited SIA &middot; Voice mode &middot; All 10 domains &middot; Full intelligence &middot; Integrations &middot; Analytics &middot; Proactive messaging &middot; Knowledge Graph</p>
+      <div class="answer-highlight">Key: Free tier delivers enough "holy shit" moments (1/week) to prove the concept and drive upgrades.</div>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">11.2&ndash;11.4</span>
+      <span class="q-title">Pricing model, Locked features, &amp; AI limits</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Model:</strong> A) Pre-built tiers. Free / Pro ($9.99/mo) / Premium ($19.99/mo). Modular pricing undermines cross-domain value prop.</p>
+      <p><strong>Locked features:</strong> E+D. SIA mentions naturally (consultative selling) + lock icon as fallback. Never hide features entirely &mdash; build desire.</p>
+      <p><strong>AI limits:</strong> D) Tiered. Free = 10 messages/day (subtle counter). Paid = unlimited, no visible limits. Credit systems add cognitive load that undermines the SIA relationship.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 12: VISUAL DESIGN ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">12</div>
+    <div class="section-title">Visual & Emotional Design</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">12.1&ndash;12.2</span>
+      <span class="q-title">Dark mode depth &amp; Light mode</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Dark mode:</strong> C) Mix. Pure dark backgrounds (--canvas: #080C10) for depth and premium feel; warmer surfaces (--surface: #0F1419, --elevated: #161D26) for approachability. Domain gradient colors pop beautifully against near-black.</p>
+      <p><strong>Light mode:</strong> B) Available as toggle, dark is default. Some users need it; but dark IS the brand identity for all marketing and demos.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">12.3</span>
+      <span class="q-title">Animation and motion levels</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <table>
+        <tr><th>Area</th><th>Level</th><th>Rationale</th></tr>
+        <tr><td>Landing page</td><td><strong>Cinematic</strong></td><td>First impression. GSAP scroll reveals, particle backgrounds, 3D effects.</td></tr>
+        <tr><td>Onboarding</td><td><strong>Polished</strong></td><td>Smooth transitions, spring physics. Don't distract from questions.</td></tr>
+        <tr><td>Home/Dashboard</td><td><strong>Polished</strong></td><td>Smooth card transitions, progress rings. Fast &mdash; no delays.</td></tr>
+        <tr><td>SIA chat</td><td><strong>Minimal</strong></td><td>Fast and responsive. Subtle typing indicators only.</td></tr>
+        <tr><td>Feature screens</td><td><strong>Minimal</strong></td><td>Functional. Smooth transitions, no flourish.</td></tr>
+        <tr><td>Settings/Profile</td><td><strong>Minimal</strong></td><td>Utility screens. Standard transitions.</td></tr>
+        <tr><td>Celebrations</td><td><strong>Cinematic</strong></td><td>Confetti, particle effects, animated badges. Make moments special.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">12.4&ndash;12.6</span>
+      <span class="q-title">Continuous stroke line, Visual style, &amp; Icons</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Stroke line:</strong> Onboarding (connecting domains), SIA's animated icon, achievement celebrations (traces between domains), loading states (instead of spinners). Not on home/feature/settings screens.</p>
+      <p><strong>Visual style:</strong> D) Mix. Landing = warm photography. Onboarding = custom illustrations. In-app = abstract gradients/glassmorphism. Empty states = friendly illustrations.</p>
+      <p><strong>Icons:</strong> Outlined default (2px stroke, brand guidelines), filled for active/selected states. Clear visual distinction without relying on color alone.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 13: PLATFORM ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">13</div>
+    <div class="section-title">Platform & Responsiveness</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">13.1&ndash;13.3</span>
+      <span class="q-title">Primary platform, Platform-specific features, &amp; Native feel</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Platform:</strong> D) Mobile-first, SIA voice primary on mobile, desktop gets full dashboards + side panels + knowledge graph.</p>
+      <p><strong>Mobile-optimized:</strong> Voice mode, quick check-ins, camera emotion detection, push notifications.</p>
+      <p><strong>Desktop-optimized:</strong> Knowledge Graph, admin panel, detailed analytics, side-by-side SIA + context panel.</p>
+      <p><strong>Native feel:</strong> Yes. Bottom tab bar, swipe gestures, pull-to-refresh, smooth transitions, PWA support. User shouldn't tell it's not native.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 14: NOTIFICATIONS ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">14</div>
+    <div class="section-title">Notifications & Engagement</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">14.1&ndash;14.3</span>
+      <span class="q-title">Top notifications, Push balance, &amp; AI timing</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Top 3 notifications:</strong> 1) SIA proactive AI insights (core product). 2) Streak alerts (time-sensitive). 3) Daily check-in prompt (drives habit).</p>
+      <p><strong>Push balance:</strong> B+C. User configures per category; tier-based defaults. Low = 1/day. Medium = 2-3/day. High = 3-5/day. Never aggressive.</p>
+      <p><strong>Proactive timing:</strong> Yes, already built. Runs every 3 hours, caps at 4/day, timezone-aware (6am-10pm), scores all types and picks top 2-3. Refine scoring to weight cross-domain insights highest.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 15: PRIVACY ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">15</div>
+    <div class="section-title">Data, Privacy & Transparency</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">15.1&ndash;15.3</span>
+      <span class="q-title">AI transparency, Data export, &amp; Integration display</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Transparency:</strong> "Show me the data" expandable on every SIA insight. Tap to see: data sources, time period, confidence level. Builds trust and differentiates from black-box AI.</p>
+      <p><strong>Data export:</strong> Yes, essential. JSON + CSV export of all data. Required for GDPR, builds trust. Settings &rarr; Privacy &rarr; Export My Data.</p>
+      <p><strong>Integrations:</strong> Both. Connected Services dashboard in Settings (status, sync time, connect/disconnect). Integration data silently woven into SIA's understanding and displayed in relevant contexts.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 16: CONTENT ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">16</div>
+    <div class="section-title">Content & Education</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">16.1&ndash;16.3</span>
+      <span class="q-title">Blogs, Webinars, &amp; Help center</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Blogs:</strong> Separate &mdash; marketing site for SEO. SIA links to relevant articles contextually.</p>
+      <p><strong>Webinars:</strong> Cut for v1. If they return, recorded library only (on-demand).</p>
+      <p><strong>Help:</strong> C) Both. SIA-powered as primary help channel + traditional help page for self-service. Product tour tooltips for first-time feature discovery (already built).</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 17: PRIORITY RANKING ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">17</div>
+    <div class="section-title">Screen Priority Ranking</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">17</span>
+      <span class="q-title">Redesign priority order</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <table>
+        <tr><th>#</th><th>Screen Group</th><th>Rationale</th></tr>
+        <tr><td style="color:var(--accent-amber);font-weight:700">1</td><td><strong>Onboarding flow</strong></td><td>First impression. If onboarding fails, nothing else matters.</td></tr>
+        <tr><td style="color:var(--accent-amber);font-weight:700">2</td><td><strong>AI Coach (SIA) chat + voice</strong></td><td>The core product experience. Must be exceptional.</td></tr>
+        <tr><td style="color:var(--accent-amber);font-weight:700">3</td><td><strong>Home / Today</strong></td><td>Daily return experience. The screen users see most.</td></tr>
+        <tr><td style="color:var(--accent-sky);font-weight:700">4</td><td><strong>Goals & Plans</strong></td><td>User's personal roadmap. Core to retention.</td></tr>
+        <tr><td style="color:var(--accent-sky);font-weight:700">5</td><td><strong>Landing page</strong></td><td>Public marketing site drives acquisition.</td></tr>
+        <tr><td style="color:var(--accent-sky);font-weight:700">6</td><td><strong>Life Areas overview</strong></td><td>Holistic life wheel &mdash; key differentiator visualization.</td></tr>
+        <tr><td>7</td><td>Wellbeing hub</td><td>Journal + mood + habits: high-frequency daily use.</td></tr>
+        <tr><td>8</td><td>Profile & Settings</td><td>Account management, integrations, preferences.</td></tr>
+        <tr><td>9</td><td>Fitness & Workouts</td><td>Deep feature, high engagement domain.</td></tr>
+        <tr><td>10</td><td>Nutrition</td><td>Deep feature, daily tracking use.</td></tr>
+        <tr><td>11</td><td>Subscription & Billing</td><td>Revenue-critical. Must be clear and trustworthy.</td></tr>
+        <tr><td>12</td><td>Explore page</td><td>Module discovery. Important but not daily.</td></tr>
+        <tr><td>13</td><td>Schedule & Calendar</td><td>Nice to have, not core to initial experience.</td></tr>
+        <tr><td>14</td><td>Spirituality features</td><td>Important for persona, moderate scope.</td></tr>
+        <tr><td>15</td><td>Finance / Money Map</td><td>Newer feature, moderate priority.</td></tr>
+        <tr><td style="color:var(--text-muted)">16</td><td style="color:var(--text-muted)">Admin panel</td><td style="color:var(--text-muted)">Internal tool. Functional &gt; beautiful.</td></tr>
+        <tr><td style="color:var(--text-muted)">17</td><td style="color:var(--text-muted)">Community & Social</td><td style="color:var(--text-muted)">Deprioritized for v1.</td></tr>
+        <tr><td style="color:var(--text-muted)">18</td><td style="color:var(--text-muted)">Knowledge Graph</td><td style="color:var(--text-muted)">Power user. Low priority.</td></tr>
+        <tr><td style="color:var(--text-muted)">19</td><td style="color:var(--text-muted)">Learning features</td><td style="color:var(--text-muted)">Light implementation for v1.</td></tr>
+        <tr><td style="color:var(--text-muted)">20</td><td style="color:var(--text-muted)">Creativity features</td><td style="color:var(--text-muted)">Later version.</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ SECTION 18: WILD CARD ═══════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">18</div>
+    <div class="section-title">Open Questions & Wild Card</div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">Q5</span>
+      <span class="q-title">Community-created modules &mdash; scope for v1?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation: No.</div>
+      <p>Requires module framework/SDK, moderation tools, quality control, distribution, permissions. Massive distraction from core AI coaching. Revisit v2/v3 after product-market fit.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">18.1</span>
+      <span class="q-title">What experience should Balencia pioneer?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>Cross-life-domain causal intelligence &mdash; already built, just needs to surface beautifully.</strong></p>
+      <p>No app connects sleep &rarr; finance &rarr; relationships &rarr; career &rarr; spirituality and reveals causal patterns across all of them. The 22 cross-pillar rules, knowledge graph, memory engine, daily analysis, and conversation insight extractor are all built. The pioneering experience is making it <strong>visible</strong> in a way that feels magical, not clinical.</p>
+      <div class="answer-highlight">The pioneer moment: A user tracks 3+ domains for 2 weeks, then SIA says something so insightful about their life patterns that they think, "How did it know that?" &mdash; no other app delivers that.</div>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">18.2&ndash;18.3</span>
+      <span class="q-title">What to keep &amp; What must change</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label status-open">&#9679; Open &mdash; Needs Salman's input</div>
+      <div class="answer-label recommendation">Recommendations</div>
+      <p><strong>Keep:</strong> The depth of AI intelligence backend &mdash; memory engine, cross-pillar intelligence, proactive messaging, comprehensive user context, knowledge graph. 220+ services of intelligence infrastructure. This is the moat.</p>
+      <p><strong>Change:</strong> Navigation and feature density. 30+ sidebar items, 8 dashboard tabs, 10+ wellbeing sub-modules, two AI chat entry points. Reduce visible surface area by 70% while keeping 100% of capability &mdash; accessible through SIA and progressive disclosure.</p>
+    </div>
+  </div>
+
+  <div class="question">
+    <div class="q-header">
+      <span class="q-num">18.5</span>
+      <span class="q-title">What makes a user tell a friend about Balencia?</span>
+    </div>
+    <div class="answer">
+      <div class="answer-label recommendation">Recommendation</div>
+      <p><strong>"It told me something about myself that I didn't know."</strong></p>
+      <p>The moment SIA says: <em>"I noticed that every time you skip your morning prayer, your productivity drops for the entire day &mdash; and three days later, you overspend online. These three things are connected."</em></p>
+      <p>That requires: 2+ weeks of multi-domain data, real cross-domain intelligence, SIA surfacing at the right time in the right tone, and a visual that makes the connection tangible.</p>
+      <div class="answer-highlight">Everything in this questionnaire should be designed to make this moment happen faster and more often.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ NEXT STEPS ═══════════════ -->
+<div class="section" style="page-break-before:always;">
+  <div class="section-header">
+    <div class="section-num" style="font-size:18pt;">&rarr;</div>
+    <div class="section-title">Next Steps</div>
+  </div>
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:1.25rem;">
+    <div class="numbered-steps">
+      <div class="step"><span class="step-title">Review & Finalize</span><br><span class="step-desc">Salman reviews all answers. Items marked <span style="color:var(--accent-amber)">OPEN</span> need final decisions. Lock each as FINAL when confirmed.</span></div>
+      <div class="step"><span class="step-title">Screen Design Specs</span><br><span class="step-desc">Use finalized answers as input to create detailed screen specs, starting with Priority 1: Onboarding flow.</span></div>
+      <div class="step"><span class="step-title">Design Implementation</span><br><span class="step-desc">Priority 1: Onboarding &rarr; Priority 2: SIA chat + voice &rarr; Priority 3: Home/Today.</span></div>
+    </div>
+    <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border); font-size:7.5pt; color:var(--text-muted);">
+      <strong>Prepared by:</strong> Xyric Engineering &middot; <strong>For:</strong> Balencia UI/UX Revamp &middot; <strong>Date:</strong> May 19, 2026 &middot; <strong>Status:</strong> Draft v1.0
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -32,7 +32,7 @@ const routerLlmClient: OpenAI | null = env.openai.apiKey
 async function routerLlm(prompt: string): Promise<string> {
   if (!routerLlmClient) return '';
   try {
-    const model = env.openai.model || 'gpt-4o-mini';
+    const model = env.openai.nanoModel || 'gpt-5.4-nano';
     const res = await routerLlmClient.chat.completions.create({
       model,
       messages: [
@@ -874,7 +874,7 @@ class RAGChatbotController {
   // ============================================================================
 
   getUserFiles = asyncHandler(async (req: any, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw new ApiError(401, 'Authentication required');
 
     const { fileType, includeArchived } = req.query;
@@ -886,7 +886,7 @@ class RAGChatbotController {
   });
 
   createUserFile = asyncHandler(async (req: any, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw new ApiError(401, 'Authentication required');
 
     const { fileType, title, content, isPinned } = req.body;
@@ -899,7 +899,7 @@ class RAGChatbotController {
   });
 
   updateUserFile = asyncHandler(async (req: any, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw new ApiError(401, 'Authentication required');
 
     const { fileId } = req.params;
@@ -909,7 +909,7 @@ class RAGChatbotController {
   });
 
   archiveUserFile = asyncHandler(async (req: any, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw new ApiError(401, 'Authentication required');
 
     const { fileId } = req.params;
@@ -923,7 +923,7 @@ class RAGChatbotController {
   // ============================================================================
 
   respondToCheckIn = asyncHandler(async (req: any, res: Response) => {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw new ApiError(401, 'Authentication required');
 
     const { checkInId } = req.params;

@@ -1,16 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { jest } from '@jest/globals';
 
-vi.mock('../../config/database.config.js', () => ({
-  query: vi.fn(),
+// --- Register all mocks BEFORE dynamic imports ---
+
+const mockQuery = jest.fn();
+jest.unstable_mockModule('../../config/database.config.js', () => ({
+  query: (...args: unknown[]) => mockQuery(...args),
 }));
-vi.mock('../logger.service.js', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+
+jest.unstable_mockModule('../logger.service.js', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 
-import { communicationPreferencesService } from '../communication-preferences.service.js';
-import { query } from '../../config/database.config.js';
-
-const mockQuery = vi.mocked(query);
+// --- Dynamic imports AFTER mocks are registered ---
+const { communicationPreferencesService } = await import('../communication-preferences.service.js');
 
 const baseRow = {
   user_id: 'u1',
@@ -38,7 +40,7 @@ const emptyWrite = { rows: [], rowCount: 1, command: '', oid: 0, fields: [] } as
 
 describe('CommunicationPreferencesService', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   describe('recordMiss', () => {
