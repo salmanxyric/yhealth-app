@@ -3,6 +3,7 @@
 import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VoiceAssistantTab } from "../dashboard/components/tabs/VoiceAssistantTab";
+import { VoiceAssistantErrorBoundary } from "@/app/components/voice/VoiceAssistantErrorBoundary";
 import { useAuth } from "@/app/context/AuthContext";
 import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -52,10 +53,12 @@ function VoiceAssistantPageInner() {
       {/* Full-width voice assistant — no sidebar */}
       <div className="min-h-screen overflow-x-hidden">
         <div className="relative h-screen">
-          <VoiceAssistantTab
-            callId={searchParams.get("callId") || null}
-            callPurpose={searchParams.get("purpose") || null}
-          />
+          <VoiceAssistantErrorBoundary>
+            <VoiceAssistantTab
+              callId={searchParams.get("callId") || null}
+              callPurpose={searchParams.get("purpose") || null}
+            />
+          </VoiceAssistantErrorBoundary>
         </div>
       </div>
     </div>
