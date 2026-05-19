@@ -1,38 +1,38 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { jest } from '@jest/globals';
 
-const mockOpenAICreate = vi.fn();
-vi.mock('openai', () => {
-  return {
-    default: class MockOpenAI {
-      chat = {
-        completions: {
-          create: mockOpenAICreate,
-        },
-      };
-    },
-  };
-});
+// --- Register all mocks BEFORE dynamic imports ---
 
-const mockQuery = vi.fn();
-vi.mock('../../config/database.config.js', () => ({
-  query: (...args: unknown[]) => mockQuery(...args),
-}));
-
-vi.mock('../../config/env.config.js', () => ({
-  env: {
-    openai: { apiKey: 'test-key', model: 'gpt-4o-mini' },
+const mockOpenAICreate = jest.fn();
+jest.unstable_mockModule('openai', () => ({
+  default: class MockOpenAI {
+    chat = {
+      completions: {
+        create: mockOpenAICreate,
+      },
+    };
   },
 }));
 
-vi.mock('../logger.service.js', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+const mockQuery = jest.fn();
+jest.unstable_mockModule('../../config/database.config.js', () => ({
+  query: (...args: unknown[]) => mockQuery(...args),
 }));
 
-const mockGetMemoriesForContext = vi.fn().mockResolvedValue([]);
-const mockFindSimilarMemories = vi.fn().mockResolvedValue([]);
-const mockReinforceMemory = vi.fn().mockResolvedValue(undefined);
-const mockFindOrCreatePattern = vi.fn().mockResolvedValue({ memory: { id: 'promoted-mem-1' }, wasReinforced: false });
-vi.mock('../memory-engine.service.js', () => ({
+jest.unstable_mockModule('../../config/env.config.js', () => ({
+  env: {
+    openai: { apiKey: 'test-key', model: 'gpt-5.4-mini' },
+  },
+}));
+
+jest.unstable_mockModule('../logger.service.js', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+}));
+
+const mockGetMemoriesForContext = jest.fn();
+const mockFindSimilarMemories = jest.fn();
+const mockReinforceMemory = jest.fn();
+const mockFindOrCreatePattern = jest.fn();
+jest.unstable_mockModule('../memory-engine.service.js', () => ({
   memoryEngineService: {
     getMemoriesForContext: mockGetMemoriesForContext,
     findSimilarMemories: mockFindSimilarMemories,
@@ -41,25 +41,24 @@ vi.mock('../memory-engine.service.js', () => ({
   },
 }));
 
-const mockEnqueueEmbedding = vi.fn().mockResolvedValue(undefined);
-const mockIsAvailable = vi.fn().mockReturnValue(true);
-vi.mock('../embedding-queue.service.js', () => ({
+const mockEnqueueEmbedding = jest.fn();
+const mockIsAvailable = jest.fn();
+jest.unstable_mockModule('../embedding-queue.service.js', () => ({
   embeddingQueueService: {
     enqueueEmbedding: mockEnqueueEmbedding,
     isAvailable: mockIsAvailable,
   },
 }));
 
-const mockUpdateValue = vi.fn().mockResolvedValue({});
-vi.mock('../core-profile-kernel.service.js', () => ({
+const mockUpdateValue = jest.fn();
+jest.unstable_mockModule('../core-profile-kernel.service.js', () => ({
   coreProfileKernelService: {
     updateValue: mockUpdateValue,
   },
 }));
 
-const { conversationInsightExtractorService } = await import(
-  '../conversation-insight-extractor.service.js'
-);
+// --- Dynamic imports AFTER mocks are registered ---
+const { conversationInsightExtractorService } = await import('../conversation-insight-extractor.service.js');
 
 function makeLLMResponse(insights: Record<string, unknown>) {
   return {
@@ -76,10 +75,14 @@ const baseParams = {
 
 describe('ConversationInsightExtractor — Integration', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     mockQuery.mockResolvedValue({ rows: [] });
     mockFindSimilarMemories.mockResolvedValue([]);
     mockGetMemoriesForContext.mockResolvedValue([]);
+    mockReinforceMemory.mockResolvedValue(undefined);
+    mockFindOrCreatePattern.mockResolvedValue({ memory: { id: 'promoted-mem-1' }, wasReinforced: false });
+    mockEnqueueEmbedding.mockResolvedValue(undefined);
+    mockUpdateValue.mockResolvedValue({});
     mockIsAvailable.mockReturnValue(true);
   });
 
@@ -114,7 +117,7 @@ describe('ConversationInsightExtractor — Integration', () => {
 
       await conversationInsightExtractorService.extractAndPersist(baseParams);
 
-      expect(mockOpenAICreate).toHaveBeenCalledOnce();
+      expect(mockOpenAICreate).toHaveBeenCalledTimes(1);
 
       // Channel 1: Memory candidates → pending signals INSERT
       expect(mockFindSimilarMemories).toHaveBeenCalledWith('user-integration-1', 'fitness', 'Morning running habit', 5);
@@ -128,20 +131,14 @@ describe('ConversationInsightExtractor — Integration', () => {
         'user-integration-1', 'preferences', 'exercise_time', 'morning', null
       );
 
-      // Channel 3: Vector embedding enqueue
-      expect(mockEnqueueEmbedding).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId: 'user-integration-1',
-          sourceType: 'insight_extraction',
-          operation: 'create',
-        })
-      );
+      // Channel 3: Vector embedding enqueue (removed — insight_extraction had no worker handler)
+      expect(mockEnqueueEmbedding).not.toHaveBeenCalled();
 
-      // Channel 4: Daily analysis upsert
-      const dailyCalls = mockQuery.mock.calls.filter(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('daily_analysis_reports')
+      // Channel 4: Conversation claims insert (no longer writes to daily_analysis_reports)
+      const claimCalls = mockQuery.mock.calls.filter(
+        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('conversation_claims')
       );
-      expect(dailyCalls.length).toBe(1);
+      expect(claimCalls.length).toBe(1);
 
       // Channel 5: Mood log insert with mode='deep' and happiness_rating
       const moodCalls = mockQuery.mock.calls.filter(
@@ -394,8 +391,8 @@ describe('ConversationInsightExtractor — Integration', () => {
     });
   });
 
-  describe('Daily analysis routing', () => {
-    it('upserts claims into daily_analysis_reports', async () => {
+  describe('Conversation claims routing', () => {
+    it('inserts claims into conversation_claims table (not daily_analysis_reports)', async () => {
       const insights = {
         mood: null,
         intent: 'sharing',
@@ -412,17 +409,21 @@ describe('ConversationInsightExtractor — Integration', () => {
 
       await conversationInsightExtractorService.extractAndPersist(baseParams);
 
+      const claimCalls = mockQuery.mock.calls.filter(
+        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('conversation_claims')
+      );
+      expect(claimCalls.length).toBe(1);
+      const params = claimCalls[0][1] as string[];
+      expect(params).toContain('Sleeps 7 hours');
+      expect(params).toContain('Takes melatonin');
+
       const dailyCalls = mockQuery.mock.calls.filter(
         (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('daily_analysis_reports')
       );
-      expect(dailyCalls.length).toBe(1);
-      const claimsJson = JSON.parse(dailyCalls[0][1][1] as string);
-      expect(claimsJson).toHaveLength(2);
-      expect(claimsJson[0]).toEqual({ claim: 'Sleeps 7 hours', category: 'sleep', evidence: 'User reports 7h sleep' });
-      expect(claimsJson[1]).toEqual({ claim: 'Takes melatonin', category: 'sleep', evidence: 'Uses melatonin supplement' });
+      expect(dailyCalls.length).toBe(0);
     });
 
-    it('skips daily analysis when no memory candidates', async () => {
+    it('skips claims insert when no memory candidates', async () => {
       const insights = {
         mood: { state: 'calm', intensity: 0.5, triggers: [] },
         intent: 'chatting',
@@ -436,15 +437,15 @@ describe('ConversationInsightExtractor — Integration', () => {
 
       await conversationInsightExtractorService.extractAndPersist(baseParams);
 
-      const dailyCalls = mockQuery.mock.calls.filter(
-        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('daily_analysis_reports')
+      const claimCalls = mockQuery.mock.calls.filter(
+        (c: unknown[]) => typeof c[0] === 'string' && (c[0] as string).includes('conversation_claims')
       );
-      expect(dailyCalls.length).toBe(0);
+      expect(claimCalls.length).toBe(0);
     });
   });
 
   describe('Vector embedding routing', () => {
-    it('enqueues embedding when content is substantial', async () => {
+    it('no longer enqueues insight_extraction embeddings (no worker handler exists)', async () => {
       const insights = {
         mood: { state: 'happy', intensity: 0.8, triggers: [] },
         intent: 'sharing',
@@ -452,33 +453,6 @@ describe('ConversationInsightExtractor — Integration', () => {
         behavioral_signals: null,
         memory_candidates: [
           { title: 'Yoga enthusiast', description: 'User does yoga regularly', category: 'fitness', memoryType: 'pattern', confidence: 0.9 },
-        ],
-        core_profile_updates: [],
-      };
-
-      mockOpenAICreate.mockResolvedValueOnce(makeLLMResponse(insights));
-
-      await conversationInsightExtractorService.extractAndPersist(baseParams);
-
-      expect(mockEnqueueEmbedding).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId: 'user-integration-1',
-          sourceType: 'insight_extraction',
-          operation: 'create',
-        })
-      );
-    });
-
-    it('skips embedding when embedding service is unavailable', async () => {
-      mockIsAvailable.mockReturnValue(false);
-
-      const insights = {
-        mood: { state: 'happy', intensity: 0.8, triggers: [] },
-        intent: 'sharing',
-        entities: {},
-        behavioral_signals: null,
-        memory_candidates: [
-          { title: 'Runs daily', description: 'User runs every day', category: 'fitness', memoryType: 'pattern', confidence: 0.9 },
         ],
         core_profile_updates: [],
       };

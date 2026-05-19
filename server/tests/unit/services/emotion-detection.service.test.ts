@@ -4,7 +4,7 @@ jest.unstable_mockModule('../../../src/config/env.config.js', () => ({
   env: {
     gemini: { apiKey: '' },
     deepseek: { apiKey: '', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
-    openai: { apiKey: '', model: 'gpt-4o-mini' },
+    openai: { apiKey: '', model: 'gpt-5.4-mini', nanoModel: 'gpt-5.4-nano' },
   },
 }));
 

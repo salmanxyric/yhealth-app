@@ -56,7 +56,16 @@ function makeCoreProfileRow(overrides: Record<string, unknown> = {}) {
 // ============================================
 
 describe('CoreProfileKernelService', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Reset the private table-existence cache so each test starts fresh
+    (coreProfileKernelService as any).tableExistsCache = null;
+  });
+
+  /** Mock the hasCoreProfileTable() check so it returns true */
+  function mockTableExists() {
+    mockQuery.mockResolvedValueOnce(pgResult([{ exists: true }]));
+  }
 
   // ------------------------------------------
   // getProfile
@@ -68,6 +77,7 @@ describe('CoreProfileKernelService', () => {
         makeCoreProfileRow({ id: 'row-002', section: 'biometrics', key: 'weight_kg', value: 75, unit: 'kg' }),
         makeCoreProfileRow({ id: 'row-003', section: 'targets', key: 'daily_calories', value: 2200, unit: 'kcal' }),
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const profile = await coreProfileKernelService.getProfile(USER_ID);
@@ -86,6 +96,7 @@ describe('CoreProfileKernelService', () => {
         makeCoreProfileRow({ section: 'biometrics', key: 'resting_hr' }),
         makeCoreProfileRow({ id: 'row-002', section: 'biometrics', key: 'weight_kg' }),
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const profile = await coreProfileKernelService.getProfile(USER_ID);
@@ -98,6 +109,7 @@ describe('CoreProfileKernelService', () => {
     });
 
     it('should return all sections empty for a user with no profile data', async () => {
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgEmpty());
 
       const profile = await coreProfileKernelService.getProfile(USER_ID);
@@ -122,6 +134,7 @@ describe('CoreProfileKernelService', () => {
         makeCoreProfileRow({ section: 'biometrics', key: 'resting_hr' }),
         makeCoreProfileRow({ id: 'row-002', section: 'biometrics', key: 'weight_kg' }),
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const entries = await coreProfileKernelService.getProfileSection(USER_ID, 'biometrics');
@@ -136,6 +149,7 @@ describe('CoreProfileKernelService', () => {
     });
 
     it('should return empty array for section with no entries', async () => {
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgEmpty());
 
       const entries = await coreProfileKernelService.getProfileSection(USER_ID, 'medical');
@@ -154,6 +168,7 @@ describe('CoreProfileKernelService', () => {
         { section: 'biometrics', key: 'weight_kg', value: 75, unit: 'kg', confidence: 0.9 },
         { section: 'targets', key: 'daily_calories', value: 2200, unit: 'kcal', confidence: 0.7 },
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const summary = await coreProfileKernelService.getProfileSummary(USER_ID);
@@ -169,6 +184,7 @@ describe('CoreProfileKernelService', () => {
       const rows = [
         { section: 'biometrics', key: 'avg_hrv', value: 45, unit: 'ms', confidence: 0.4 },
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const summary = await coreProfileKernelService.getProfileSummary(USER_ID);
@@ -180,6 +196,7 @@ describe('CoreProfileKernelService', () => {
       const rows = [
         { section: 'biometrics', key: 'resting_hr', value: 62, unit: 'bpm', confidence: 0.85 },
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const summary = await coreProfileKernelService.getProfileSummary(USER_ID);
@@ -188,6 +205,7 @@ describe('CoreProfileKernelService', () => {
     });
 
     it('should return placeholder when no profile data exists', async () => {
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgEmpty());
 
       const summary = await coreProfileKernelService.getProfileSummary(USER_ID);
@@ -199,6 +217,7 @@ describe('CoreProfileKernelService', () => {
       const rows = [
         { section: 'constraints', key: 'injuries', value: { type: 'knee', severity: 'mild' }, unit: null, confidence: 0.9 },
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const summary = await coreProfileKernelService.getProfileSummary(USER_ID);
@@ -210,6 +229,7 @@ describe('CoreProfileKernelService', () => {
       const rows = [
         { section: 'biometrics', key: 'age', value: 30, unit: null, confidence: 0.9 },
       ];
+      mockTableExists();
       mockQuery.mockResolvedValueOnce(pgResult(rows));
 
       const summary = await coreProfileKernelService.getProfileSummary(USER_ID);

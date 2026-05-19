@@ -6,14 +6,23 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ErrorState } from '@/components/common/error-state';
 
-// Mock framer-motion to avoid animation issues in tests
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
-      <div {...props}>{children}</div>
-    ),
-  },
-}));
+jest.mock('framer-motion', () => {
+  function forwardMotion(Tag: string) {
+    function MotionStub({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) {
+      const { animate: _a, initial: _i, exit: _e, transition: _t, variants: _v, whileHover: _wh, whileTap: _wt, whileFocus: _wf, whileInView: _wi, ...safe } = props;
+      return <Tag {...safe}>{children}</Tag>;
+    }
+    MotionStub.displayName = `motion.${Tag}`;
+    return MotionStub;
+  }
+  return {
+    motion: {
+      div: forwardMotion('div'),
+      h1: forwardMotion('h1'),
+      p: forwardMotion('p'),
+    },
+  };
+});
 
 describe('ErrorState', () => {
   it('renders with default title', () => {
@@ -77,7 +86,7 @@ describe('ErrorState', () => {
 
   it('applies dark variant classes by default', () => {
     const { container } = render(<ErrorState message="Error" />);
-    expect(container.firstChild).toHaveClass('bg-slate-950');
+    expect(container.firstChild).toHaveClass('bg-[#060a0f]');
   });
 
   it('applies light variant classes', () => {

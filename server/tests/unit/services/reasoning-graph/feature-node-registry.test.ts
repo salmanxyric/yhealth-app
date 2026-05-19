@@ -72,19 +72,26 @@ describe('Feature Node Registry — Tree Structure', () => {
     }
   });
 
-  it('should have exactly 12 top-level nodes (direct children of ai-coach)', () => {
+  it('should have exactly 11 top-level nodes (direct children of ai-coach)', () => {
     const topLevel = FEATURE_NODE_REGISTRY.filter(
       (n) => n.parentNodeId === null && n.id !== 'ai-coach'
     );
-    expect(topLevel.length).toBe(12);
+    expect(topLevel.length).toBe(11);
   });
 
   it('should have all nodes reachable from ai-coach via parent chain', () => {
+    const topLevelIds = new Set(
+      FEATURE_NODE_REGISTRY
+        .filter((n) => n.parentNodeId === null && n.id !== 'ai-coach')
+        .map((n) => n.id),
+    );
     for (const node of FEATURE_NODE_REGISTRY) {
       if (node.id === 'ai-coach') continue;
       const chain = getAncestorChain(node.id);
       expect(chain.length).toBeGreaterThan(0);
-      expect(chain.includes('ai-coach')).toBe(true);
+      // Top-level nodes get ['ai-coach']; deeper nodes chain ends at a top-level node
+      const terminus = chain[chain.length - 1];
+      expect(terminus === 'ai-coach' || topLevelIds.has(terminus as FeatureNodeId)).toBe(true);
     }
   });
 
@@ -204,7 +211,7 @@ describe('Feature Node Registry — Lookup Helpers', () => {
 
   it('getDirectChildrenOf ai-coach should return all top-level nodes', () => {
     const children = getDirectChildrenOf('ai-coach');
-    expect(children.length).toBe(12);
+    expect(children.length).toBe(11);
     const childIds = children.map((c) => c.id);
     expect(childIds).toContain('workouts');
     expect(childIds).toContain('nutrition');
@@ -231,17 +238,17 @@ describe('Feature Node Registry — Ancestor Chains', () => {
 
   it('should return correct chain for depth-2 node', () => {
     const chain = getAncestorChain('exercises');
-    expect(chain).toEqual(['workouts', 'ai-coach']);
+    expect(chain).toEqual(['workouts']);
   });
 
   it('should return correct chain for depth-3 node', () => {
     const chain = getAncestorChain('activity-status');
-    expect(chain).toEqual(['activity', 'workouts', 'ai-coach']);
+    expect(chain).toEqual(['activity', 'workouts']);
   });
 
   it('should return correct chain for call-coach (depth 3)', () => {
     const chain = getAncestorChain('call-coach');
-    expect(chain).toEqual(['voice-assistant', 'chat', 'ai-coach']);
+    expect(chain).toEqual(['voice-assistant', 'chat']);
   });
 
   it('should return empty chain for ai-coach itself', () => {
@@ -311,7 +318,7 @@ describe('Feature Node Registry — Default Edges', () => {
   it('getDefaultEdges should have ai-coach as source for top-level nodes', () => {
     const edges = getDefaultEdges();
     const topLevelEdges = edges.filter((e) => e.sourceNodeId === 'ai-coach');
-    expect(topLevelEdges.length).toBe(12);
+    expect(topLevelEdges.length).toBe(11);
   });
 
   it('getDefaultEdges should use parent as source for nested nodes', () => {

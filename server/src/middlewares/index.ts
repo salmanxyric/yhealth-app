@@ -23,6 +23,8 @@ export {
   apiLimiter,
   uploadLimiter,
   createRateLimiter,
+  voiceCallLimiter,
+  voiceCallSignalingLimiter,
 } from './rateLimiter.middleware.js';
 
 // Request tracking

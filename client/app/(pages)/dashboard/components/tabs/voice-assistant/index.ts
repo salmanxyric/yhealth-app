@@ -10,6 +10,12 @@ export { useVoiceRecognition } from "./useVoiceRecognition";
 export { useVoiceTTS } from "./useVoiceTTS";
 export { useVoiceCamera } from "./useVoiceCamera";
 export { useAvatarUpload } from "./useAvatarUpload";
+export { useCallQuality } from "./useCallQuality";
+export type { QualityLevel, QualityMetrics } from "./useCallQuality";
+export { useAudioDevices } from "./useAudioDevices";
+export { useCallKeyboardShortcuts } from "./useCallKeyboardShortcuts";
+export { useCallReconnection } from "./useCallReconnection";
+export { useCallSession } from "./useCallSession";
 
 // Components
 export { SessionSelectorModal } from "./SessionSelectorModal";

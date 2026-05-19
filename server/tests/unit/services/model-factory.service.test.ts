@@ -27,11 +27,13 @@ const mockEnv = {
     visionModel: 'gemini-2.5-flash-lite',
   },
   anthropic: {
+    enabled: true,
     apiKey: 'fake-anthropic-key',
     model: 'claude-sonnet-4-6',
     maxTokens: 1000,
   },
   deepseek: {
+    enabled: false,
     apiKey: '',
     model: 'deepseek-chat',
     reasoningModel: 'deepseek-reasoner',
@@ -39,7 +41,13 @@ const mockEnv = {
   },
   openai: {
     apiKey: '',
-    model: 'gpt-5-mini',
+    model: 'gpt-5.4-mini',
+    reasoningModel: 'gpt-5.5',
+    lightModel: 'gpt-5.4-mini',
+    nanoModel: 'gpt-5.4-nano',
+    visionModel: 'gpt-5.5',
+    visionLightModel: 'gpt-5.4-mini',
+    realtimeModel: 'gpt-realtime-2',
     maxTokens: 1000,
   },
 };
@@ -73,12 +81,21 @@ jest.unstable_mockModule('@langchain/openai', () => ({
 const modelFactoryModule = await import('../../../src/services/model-factory.service.js');
 const { modelFactory } = modelFactoryModule;
 
+// Import mock constructors so we can re-set them after resetMocks clears implementations
+const { ChatGoogleGenerativeAI } = await import('@langchain/google-genai') as any;
+const { ChatAnthropic } = await import('@langchain/anthropic') as any;
+const { ChatOpenAI } = await import('@langchain/openai') as any;
+
 // ============================================
 // TESTS
 // ============================================
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Re-set mock constructor return values (resetMocks in jest.config clears them between tests)
+  (ChatGoogleGenerativeAI as jest.Mock).mockReturnValue(mockGeminiInstance);
+  (ChatAnthropic as jest.Mock).mockReturnValue(mockAnthropicInstance);
+  (ChatOpenAI as jest.Mock).mockReturnValue({ invoke: jest.fn<any>(), _type: 'openai' });
 });
 
 describe('getModel', () => {

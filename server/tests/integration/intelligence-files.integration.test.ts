@@ -257,29 +257,30 @@ describe('Intelligence Files API Integration Tests', () => {
 
   describe('GET /folders', () => {
     it('should return 200 with folder summaries', async () => {
-      // The controller fires 6 parallel COUNT queries
+      // The controller fires 7 parallel COUNT queries
       mockQuery
         .mockResolvedValueOnce(pgResult([makeFolderCountRow(5)]))   // memories
         .mockResolvedValueOnce(pgResult([makeFolderCountRow(2)]))   // artifacts
         .mockResolvedValueOnce(pgResult([makeFolderCountRow(1)]))   // plans
         .mockResolvedValueOnce(pgResult([makeFolderCountRow(3)]))   // core
         .mockResolvedValueOnce(pgResult([makeFolderCountRow(10)])) // logs
-        .mockResolvedValueOnce(pgResult([makeFolderCountRow(0, null)])); // notes
+        .mockResolvedValueOnce(pgResult([makeFolderCountRow(0, null)])) // notes
+        .mockResolvedValueOnce(pgResult([makeFolderCountRow(4)]));  // wiki
 
       const res = await request.get(`${BASE}/folders`).expect(200);
 
       expect(res.body.success).toBe(true);
-      expect(res.body.data.folders).toHaveLength(6);
+      expect(res.body.data.folders).toHaveLength(7);
 
       const ids = res.body.data.folders.map((f: any) => f.id);
-      expect(ids).toEqual(expect.arrayContaining(['memories', 'artifacts', 'plans', 'core', 'logs', 'notes']));
+      expect(ids).toEqual(expect.arrayContaining(['memories', 'artifacts', 'plans', 'core', 'logs', 'notes', 'wiki']));
 
       const memories = res.body.data.folders.find((f: any) => f.id === 'memories');
       expect(memories.itemCount).toBe(5);
     });
 
     it('should handle empty database (all counts zero)', async () => {
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 7; i++) {
         mockQuery.mockResolvedValueOnce(pgResult([makeFolderCountRow(0, null)]));
       }
 

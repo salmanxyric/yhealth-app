@@ -1,38 +1,18 @@
 import { logger } from './logger.service.js';
-import { env } from '../config/env.config.js';
 import type { WebRTCOffer, WebRTCAnswer, RTCIceServer } from '../types/voice-call.types.js';
 
-/**
- * WebRTC Signaling Service
- * Handles WebRTC offer/answer exchange and ICE candidate management
- * 
- * Delegates offer processing to a configured signaling backend.
- */
 class WebRTCSignalingService {
-  /**
-   * Get ICE servers configuration
-   * Returns STUN/TURN servers for WebRTC connection
-   */
+  private readonly defaultIceServers: RTCIceServer[] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+  ];
+
   getIceServers(): RTCIceServer[] {
-    const defaultServers: RTCIceServer[] = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ];
-
-    // If Twilio is configured, use Twilio TURN servers
-    if (env.twilio.accountSid && env.twilio.authToken) {
-      // TODO: Generate Twilio token and add TURN servers
-      // For now, return default STUN servers
-      logger.info('[WebRTCSignaling] Using default STUN servers (Twilio TURN not yet configured)');
-      return defaultServers;
-    }
-
-    return defaultServers;
+    return this.defaultIceServers;
   }
 
-  /**
-   * Process WebRTC offer and generate answer.
-   */
   async processOffer(offer: WebRTCOffer, callId: string): Promise<WebRTCAnswer> {
     try {
       logger.info('[WebRTCSignaling] Processing offer', { callId, offerType: offer.type });
@@ -65,22 +45,6 @@ class WebRTCSignalingService {
     }
   }
 
-  /**
-   * Generate Twilio access token for TURN servers
-   * This is used when Twilio is configured
-   */
-  async generateTwilioToken(identity: string, roomName: string): Promise<string> {
-    if (!env.twilio.accountSid || !env.twilio.authToken || !env.twilio.apiKey || !env.twilio.apiSecret) {
-      throw new Error('Twilio credentials not configured');
-    }
-
-    logger.info('[WebRTCSignaling] Generating Twilio token', { identity, roomName });
-    throw new Error('Twilio token generation requires Twilio SDK integration');
-  }
-
-  /**
-   * Get signaling URL for a call
-   */
   getSignalingUrl(callId: string): string {
     return `/api/voice-calls/${callId}/signaling`;
   }

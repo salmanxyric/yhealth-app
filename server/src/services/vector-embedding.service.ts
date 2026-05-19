@@ -666,18 +666,27 @@ class VectorEmbeddingService {
     content: string;
     contentType?: string;
     metadata?: Record<string, unknown>;
+    contentHash?: string;
   }): Promise<string> {
-    const { sourceType, sourceId, userId, content, contentType = 'message', metadata = {} } = params;
+    const { sourceType, sourceId, userId, content, contentType = 'message', metadata = {}, contentHash } = params;
 
     const embedding = await this.embedText(content);
     const embeddingStr = `[${embedding.join(',')}]`;
 
     const result = await query<{ id: string }>(
       `INSERT INTO vector_embeddings
-        (source_type, source_id, user_id, content, content_type, embedding, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (source_type, source_id, user_id, content, content_type, embedding, metadata, content_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (source_type, source_id)
+       DO UPDATE SET
+         content = EXCLUDED.content,
+         content_type = EXCLUDED.content_type,
+         embedding = EXCLUDED.embedding,
+         metadata = EXCLUDED.metadata,
+         content_hash = EXCLUDED.content_hash,
+         updated_at = CURRENT_TIMESTAMP
        RETURNING id`,
-      [sourceType, sourceId, userId ?? null, content, contentType, embeddingStr, JSON.stringify(metadata)]
+      [sourceType, sourceId, userId ?? null, content, contentType, embeddingStr, JSON.stringify(metadata), contentHash ?? null]
     );
 
     logger.debug('Stored embedding', { id: result.rows[0].id, sourceType });

@@ -45,6 +45,9 @@ CREATE INDEX IF NOT EXISTS idx_wiki_pages_user_status_updated ON wiki_pages(user
 CREATE INDEX IF NOT EXISTS idx_wiki_pages_parent ON wiki_pages(user_id, parent_slug) WHERE parent_slug IS NOT NULL;
 
 -- pgvector embedding columns (optional — only if pgvector extension is available)
+-- NOTE: summary_embedding (TEXT), body_embedding (TEXT), summary_embedding_vec,
+-- and body_embedding_vec are UNUSED as of 2026-05-18. Wiki search uses ILIKE.
+-- Retained for future semantic wiki search implementation.
 DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
         ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS summary_embedding_vec vector(1536);

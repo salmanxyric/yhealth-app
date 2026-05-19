@@ -101,15 +101,16 @@ describe('Plans API Integration Tests', () => {
     });
 
     describe('GET /api/plans/active', () => {
-      it('should return 404 when no active plan exists', async () => {
+      it('should return 200 with null plan when no active plan exists', async () => {
         const newUser = await createAuthenticatedUser();
 
         const response = await request(app)
           .get('/api/plans/active')
           .set('Authorization', `Bearer ${newUser.accessToken}`)
-          .expect(404);
+          .expect(200);
 
-        expect(response.body.success).toBe(false);
+        expect(response.body.success).toBe(true);
+        expect(response.body.data.plan).toBeNull();
       });
     });
 

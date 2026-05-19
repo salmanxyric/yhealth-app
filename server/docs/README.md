@@ -1,63 +1,82 @@
-# YHealth Server Documentation
+# Balencia Server
 
-## Overview
-
-YHealth is a comprehensive health and wellness platform backend built with Node.js, Express 5, TypeScript, and MongoDB. This documentation covers the Epic 01: Onboarding & Assessment module implementation.
-
-## Table of Contents
-
-1. [Getting Started](#getting-started)
-2. [Project Structure](#project-structure)
-3. [Environment Configuration](#environment-configuration)
-4. [API Reference](#api-reference)
-5. [Authentication](#authentication)
-6. [Testing](#testing)
-7. [Architecture](#architecture)
+Express 5 backend API for the Balencia AI Life Coach platform.
 
 ---
 
-## Getting Started
+## Tech Stack
 
-### Prerequisites
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js 20+ (with cluster mode for production) |
+| Framework | Express.js 5 |
+| Language | TypeScript 5.8 |
+| Database | PostgreSQL 14+ with pgvector extension |
+| ORM | Prisma 5 |
+| Cache | Redis (ioredis) + in-memory (node-cache) |
+| Job Queue | BullMQ (Redis-backed) |
+| AI/LLM | LangChain (Anthropic, OpenAI, Google GenAI) |
+| Real-time | Socket.io |
+| Auth | JWT (access + refresh tokens) + bcrypt |
+| Payments | Stripe + PayPal |
+| Email | Nodemailer + EJS templates |
+| SMS/WhatsApp | Twilio |
+| File Storage | AWS S3 |
+| Validation | Zod |
+| Testing | Jest 30 + Supertest |
 
-- Node.js >= 20.0.0
-- MongoDB >= 6.0
-- npm >= 10.0.0
+---
 
-### Installation
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd yhealth/server
-
 # Install dependencies
 npm install
 
-# Copy environment file
+# Set up environment
 cp .env.example .env
+# Edit .env — at minimum: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET
 
-# Edit .env with your configuration
-# (See Environment Configuration section)
+# Create tables and run migrations
+npm run db:setup
+npm run db:migrate
 
 # Start development server
 npm run dev
 ```
 
-### Available Scripts
+Server starts at [http://localhost:5000](http://localhost:5000).
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server with hot reload |
-| `npm run build` | Compile TypeScript to JavaScript |
-| `npm start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run lint:fix` | Fix ESLint issues |
-| `npm run typecheck` | Run TypeScript type checking |
-| `npm test` | Run all tests |
-| `npm run test:unit` | Run unit tests only |
-| `npm run test:integration` | Run integration tests only |
-| `npm run test:coverage` | Run tests with coverage report |
+---
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start with hot reload (nodemon + tsx) |
+| `npm run build` | Compile TypeScript + resolve path aliases |
+| `npm start` | Start compiled production server |
+| `npm run start:prod` | Start in production mode (NODE_ENV=production) |
+| `npm run typecheck` | Type-check without emitting files |
+| `npm run lint` | Run ESLint (0 errors policy) |
+| `npm run lint:fix` | Auto-fix ESLint issues |
+| `npm run test:unit` | Run unit tests |
+| `npm run test:integration` | Run integration tests (requires PostgreSQL) |
+| `npm run test:coverage` | Run all tests with coverage |
+| `npm run test:ci` | CI mode (serial execution, coverage) |
+| `npm run db:setup` | Create all database tables |
+| `npm run db:migrate` | Run pending SQL migrations |
+| `npm run db:migrate:auto` | Auto-detect and run new migrations |
+| `npm run db:migrate:verify` | Verify migration state |
+
+### Filtering Tests
+
+```bash
+# Run tests matching a pattern
+npm run test:unit -- --testPathPatterns="ai-coach"
+```
+
+> Note: Use `--testPathPatterns` (plural), not `--testPathPattern`.
 
 ---
 
@@ -66,82 +85,165 @@ npm run dev
 ```
 server/
 ├── src/
-│   ├── config/          # Configuration files
-│   │   └── env.config.ts
-│   ├── controllers/     # Request handlers
+│   ├── index.ts              # Entry point (clustering, job orchestration, graceful shutdown)
+│   ├── app.ts                # Express setup (middleware stack, security, CORS, rate limiting)
+│   ├── config/
+│   │   ├── env.config.ts     # Zod-validated environment configuration
+│   │   └── database.config.ts # Connection pooling, session store
+│   ├── controllers/          # 76 request handlers
+│   │   ├── base.controller.ts # Base class (auth helpers, response formatting)
 │   │   ├── auth.controller.ts
-│   │   ├── assessment.controller.ts
-│   │   ├── integration.controller.ts
-│   │   ├── preferences.controller.ts
+│   │   ├── ai-coach.controller.ts
 │   │   ├── plan.controller.ts
-│   │   └── health.controller.ts
-│   ├── middlewares/     # Express middlewares
-│   │   ├── auth.middleware.ts
-│   │   ├── error.middleware.ts
-│   │   ├── validate.middleware.ts
-│   │   └── rateLimiter.middleware.ts
-│   ├── models/          # Mongoose models
-│   │   ├── user.model.ts
-│   │   ├── assessment.model.ts
-│   │   ├── integration.model.ts
-│   │   ├── preferences.model.ts
-│   │   └── plan.model.ts
-│   ├── routes/          # API routes
+│   │   └── ...
+│   ├── services/             # 217+ business logic services
+│   │   ├── ai-coach/         # AI coaching engine
+│   │   │   ├── core/         # Provider abstraction, model factory
+│   │   │   └── image/        # Image analysis service
+│   │   ├── langgraph-chatbot.service.ts    # LangGraph agent pipeline
+│   │   ├── conversation-insight-extractor.service.ts
+│   │   ├── memory-engine.service.ts        # Conversation memory
+│   │   ├── knowledge-graph.service.ts      # Knowledge graph
+│   │   ├── vector-embedding.service.ts     # pgvector embeddings
+│   │   ├── cross-pillar-intelligence.service.ts  # Cross-domain insights
+│   │   ├── comprehensive-user-context.service.ts
+│   │   ├── model-factory.service.ts        # LLM provider routing
+│   │   ├── chat-call.service.ts            # Voice call management
+│   │   ├── emotion-detection.service.ts
+│   │   ├── mental-recovery-score.service.ts
+│   │   ├── health-profile-access.service.ts
+│   │   ├── embedding-queue.service.ts
+│   │   ├── water-intake.service.ts
+│   │   ├── subscription.service.ts         # Stripe/PayPal billing
+│   │   └── ...
+│   ├── routes/               # 99 API route files
 │   │   ├── auth.routes.ts
-│   │   ├── assessment.routes.ts
-│   │   ├── integration.routes.ts
-│   │   ├── preferences.routes.ts
-│   │   └── plan.routes.ts
-│   ├── services/        # Business logic
-│   │   ├── cache.service.ts
-│   │   ├── email.service.ts
-│   │   ├── sms.service.ts
-│   │   ├── oauth.service.ts
-│   │   └── logger.service.ts
-│   ├── types/           # TypeScript types
-│   ├── utils/           # Utility functions
-│   │   ├── ApiError.ts
-│   │   ├── ApiResponse.ts
-│   │   └── asyncHandler.ts
-│   ├── validators/      # Request validation schemas
-│   ├── app.ts           # Express app configuration
-│   └── index.ts         # Server entry point
+│   │   ├── ai-coach.routes.ts
+│   │   ├── rag-chatbot.routes.ts
+│   │   ├── fitness.routes.ts
+│   │   ├── nutrition.routes.ts
+│   │   ├── wellness.routes.ts
+│   │   ├── knowledge-graph.routes.ts
+│   │   ├── community.routes.ts
+│   │   ├── subscription.routes.ts
+│   │   └── ...
+│   ├── jobs/                 # 42 background jobs
+│   │   ├── daily-scoring.job.ts
+│   │   ├── streak-validation.job.ts
+│   │   ├── insights-computation.job.ts
+│   │   ├── memory-extraction.job.ts
+│   │   ├── wiki-synthesis.job.ts
+│   │   ├── whoop-sync.job.ts
+│   │   ├── nutrition-analysis.job.ts
+│   │   └── ...
+│   ├── workers/              # Async task processors (BullMQ)
+│   │   ├── embedding-worker.ts
+│   │   └── ...
+│   ├── database/
+│   │   ├── tables/           # Table DDL (numbered for dependency order)
+│   │   ├── migrations/       # SQL migrations (YYYYMMDDHHMMSS_description.sql)
+│   │   ├── setup.ts          # Full schema creation
+│   │   └── run-migrations.ts # Migration runner
+│   ├── middlewares/
+│   │   ├── auth.middleware.ts      # JWT verification + role-based authorization
+│   │   ├── error.middleware.ts     # Centralized error handler
+│   │   ├── validate.middleware.ts  # Zod schema validation
+│   │   ├── rateLimiter.middleware.ts
+│   │   └── request-id.middleware.ts
+│   ├── validators/           # Zod request schemas
+│   ├── types/                # TypeScript types (IJwtPayload, domain types)
+│   ├── lib/                  # External integration clients
+│   ├── helpers/              # Utility functions
+│   ├── models/               # Prisma schema index
+│   └── mails/                # EJS email templates
+│
 ├── tests/
-│   ├── unit/            # Unit tests
-│   ├── integration/     # Integration tests
-│   ├── helpers/         # Test utilities
-│   └── setup.ts         # Jest setup
+│   ├── unit/                 # Fast, isolated tests with mocked dependencies
+│   ├── integration/          # Tests with real PostgreSQL
+│   ├── load/                 # k6 load test scenarios (ramp-up, sustained, spike, soak)
+│   └── helpers/              # Test utilities
+│       ├── controller-harness.js   # createAuthReq, createRes, callHandler
+│       ├── db-mock.js              # setupDbMock()
+│       ├── logger-mock.js          # setupLoggerMock()
+│       └── cache-mock.js           # setupCacheMock()
+│
 ├── docs/
-│   ├── postman/         # Postman collection
-│   └── README.md        # This file
-├── .env.example         # Environment template
-├── jest.config.js       # Jest configuration
-├── tsconfig.json        # TypeScript configuration
+│   ├── postman/              # Postman API collection
+│   └── README.md             # This file
+├── .env.example              # Environment variable template
+├── jest.config.js            # Jest configuration
+├── tsconfig.json             # TypeScript configuration
 └── package.json
 ```
 
 ---
 
-## Environment Configuration
+## Architecture
 
-### Required Variables
+### Request Flow
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NODE_ENV` | Environment mode | `development` |
-| `PORT` | Server port | `5000` |
-| `MONGODB_URI` | MongoDB connection string | `mongodb://localhost:27017/yhealth` |
-| `JWT_SECRET` | JWT signing secret (min 32 chars) | `your-secret-key` |
-| `JWT_REFRESH_SECRET` | Refresh token secret | `your-refresh-secret` |
+```
+Client Request
+    ↓
+Express Router  →  Middleware Chain  →  Controller  →  Service  →  Database
+                   (auth, validate,      (HTTP       (business     (PostgreSQL
+                    rate limit,           handling)    logic)        + Redis)
+                    request ID)
+                        ↓
+                   Error Middleware  →  Formatted Error Response
+```
 
-### Optional Variables
+### Design Patterns
 
-See `.env.example` for complete list including:
-- AWS S3 configuration
-- SMTP email settings
-- OAuth providers (Google, Apple)
-- Payment gateways (Stripe, PayPal)
-- Third-party integrations (WHOOP, Fitbit, etc.)
+| Pattern | Usage |
+|---------|-------|
+| Controller-Service | Controllers handle HTTP; services contain business logic |
+| Middleware Pipeline | Auth, validation, rate limiting, error handling as composable middleware |
+| Job Queue | BullMQ for async work (embeddings, analysis, notifications) |
+| Cron Scheduling | node-cron for periodic tasks (scoring, syncing, cleanup) |
+| Cluster Mode | Node.js cluster for multi-core production deployments |
+| Graceful Shutdown | Clean connection/job draining on SIGTERM/SIGINT |
+
+### Authentication
+
+JWT-based with dual tokens:
+
+| Token | Lifetime | Purpose |
+|-------|----------|---------|
+| Access Token | 15 minutes | API authentication (Bearer header or cookie) |
+| Refresh Token | 7 days | Token renewal |
+
+JWT payload type: `IJwtPayload` with fields `userId`, `email`, `role`, `sessionId`.
+
+Roles: `user`, `admin`, `moderator`, `doctor`, `patient`
+
+Authorization: `authorize(...roles)` middleware from `auth.middleware.ts`.
+
+### AI/LLM Integration
+
+The AI coaching system uses LangChain with multiple provider support:
+
+- **Model Factory** (`model-factory.service.ts`) — Routes requests to Anthropic, OpenAI, or Google GenAI based on task type and availability
+- **LangGraph Chatbot** (`langgraph-chatbot.service.ts`) — Stateful conversation agent with tool use
+- **Memory Engine** (`memory-engine.service.ts`) — Extracts and stores conversation memories with deduplication
+- **Vector Embeddings** (`vector-embedding.service.ts`) — pgvector for semantic search and RAG
+- **Cross-Pillar Intelligence** (`cross-pillar-intelligence.service.ts`) — Correlates data across life domains
+
+### Background Jobs
+
+42 background jobs handle async processing:
+
+| Category | Examples |
+|----------|---------|
+| **Scoring** | Daily scoring, streak validation, engagement scoring |
+| **AI Processing** | Insights computation, memory extraction/decay, wiki synthesis/lint |
+| **Data Sync** | WHOOP sync, calendar sync, data source sync |
+| **Notifications** | Reminder jobs, email digest, accountability triggers |
+| **Maintenance** | Stale reservation cleanup, grace expiration, dunning retry |
+| **Analytics** | Leaderboard materialization, correlation computation, status analysis |
+| **Coaching** | Coaching profile generation, check-in calls, obstacle detection |
+
+Jobs use BullMQ with `UnrecoverableError` for non-retryable failures.
 
 ---
 
@@ -155,277 +257,215 @@ http://localhost:5000/api
 
 ### Response Format
 
-All API responses follow this structure:
-
 ```json
 {
   "success": true,
   "message": "Success message",
-  "data": { },
+  "data": {},
   "meta": {
     "page": 1,
     "limit": 10,
     "total": 100,
     "totalPages": 10
   },
-  "timestamp": "2024-01-15T10:30:00.000Z"
+  "timestamp": "2026-01-15T10:30:00.000Z"
 }
 ```
 
-### Error Response
+### Core Endpoints
 
-```json
-{
-  "success": false,
-  "message": "Error message",
-  "errors": [
-    {
-      "field": "email",
-      "message": "Invalid email format"
-    }
-  ],
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
+#### Health
 
-### Endpoints Summary
-
-#### Health Check
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Server health status |
-| GET | `/health/live` | Liveness probe |
-| GET | `/health/ready` | Readiness probe |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/health` | No | Server health status |
+| GET | `/health/live` | No | Liveness probe |
+| GET | `/health/ready` | No | Readiness probe |
 
 #### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/register` | Register new user |
-| POST | `/auth/login` | Login with credentials |
-| POST | `/auth/social` | Social authentication |
-| GET | `/auth/me` | Get current user |
-| POST | `/auth/consent` | Record user consent |
-| POST | `/auth/whatsapp/enroll` | Enroll WhatsApp |
-| POST | `/auth/whatsapp/verify` | Verify WhatsApp |
-| POST | `/auth/refresh` | Refresh tokens |
-| POST | `/auth/logout` | Logout |
 
-#### Assessment
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/assessment/goal-categories` | Get goal categories |
-| POST | `/assessment/goals` | Create goal |
-| GET | `/assessment/goals` | Get all goals |
-| GET | `/assessment/goals/:id` | Get goal by ID |
-| PATCH | `/assessment/goals/:id` | Update goal |
-| POST | `/assessment/quick/start` | Start quick assessment |
-| POST | `/assessment/quick/:id/submit` | Submit quick assessment |
-| POST | `/assessment/deep/start` | Start deep assessment |
-| POST | `/assessment/deep/:id/message` | Send message |
-| POST | `/assessment/switch-mode` | Switch assessment mode |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/auth/register` | No | Register new user |
+| POST | `/auth/login` | No | Login with credentials |
+| POST | `/auth/social` | No | Social authentication (Google) |
+| GET | `/auth/me` | Yes | Get current user |
+| POST | `/auth/refresh` | No | Refresh access token |
+| POST | `/auth/logout` | Yes | Logout (invalidate tokens) |
 
-#### Integrations
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/integrations/available` | Get available integrations |
-| GET | `/integrations` | Get user integrations |
-| POST | `/integrations/oauth/initiate` | Start OAuth flow |
-| GET | `/integrations/sync/status` | Get sync dashboard |
-| POST | `/integrations/:provider/sync` | Trigger manual sync |
-| DELETE | `/integrations/:provider` | Disconnect integration |
+#### AI Coach
 
-#### Preferences
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/preferences` | Get all preferences |
-| PATCH | `/preferences/notifications` | Update notifications |
-| PATCH | `/preferences/coaching` | Update coaching |
-| GET | `/preferences/coaching/styles` | Get coaching styles |
-| PATCH | `/preferences/display` | Update display |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/ai-coach/chat` | Yes | Send message to SIA (SSE streaming) |
+| GET | `/ai-coach/sessions` | Yes | List coaching sessions |
+| POST | `/ai-coach/voice` | Yes | Voice interaction |
+| POST | `/ai-coach/image` | Yes | Image analysis |
 
-#### Plans
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/plans/generate` | Generate plan preview |
-| GET | `/plans` | Get all plans |
-| POST | `/plans` | Create plan |
-| GET | `/plans/:id` | Get plan by ID |
-| POST | `/plans/:id/activate` | Activate plan |
-| GET | `/plans/today` | Get today's activities |
-| POST | `/plans/:id/activities/:activityId/log` | Log activity |
-| POST | `/plans/complete-onboarding` | Complete onboarding |
+#### Goals & Plans
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/plans/generate` | Yes | AI-generate plan preview |
+| GET | `/plans` | Yes | List user plans |
+| POST | `/plans` | Yes | Create plan |
+| POST | `/plans/:id/activate` | Yes | Activate plan |
+| GET | `/plans/today` | Yes | Today's activities |
+
+#### Fitness
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/fitness/workouts` | Yes | List workouts |
+| POST | `/fitness/workouts` | Yes | Create workout |
+| POST | `/fitness/exercises/log` | Yes | Log exercise activity |
+| GET | `/fitness/activity` | Yes | Activity dashboard |
+
+#### Nutrition
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/nutrition/plans` | Yes | Diet plans |
+| POST | `/nutrition/meals/log` | Yes | Log meal |
+| GET | `/nutrition/macros` | Yes | Macro summary |
+
+#### Wellness
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/wellness/mood` | Yes | Log mood |
+| POST | `/wellness/journal` | Yes | Create journal entry |
+| GET | `/wellness/habits` | Yes | Habit tracking |
+| POST | `/wellness/checkin` | Yes | Emotional check-in |
+
+See the full Postman collection at `docs/postman/YHealth_API_Collection.json` for all 99 route files.
 
 ---
 
-## Authentication
+## Environment Configuration
 
-### JWT Authentication
+### Required
 
-The API uses JWT (JSON Web Tokens) for authentication.
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | JWT signing secret (min 32 chars) |
+| `JWT_REFRESH_SECRET` | Refresh token secret |
+| `PORT` | Server port (default: 5000) |
 
-#### Token Types
+### Optional (grouped by feature)
 
-1. **Access Token**: Short-lived (15 minutes), used for API requests
-2. **Refresh Token**: Long-lived (7 days), used to get new access tokens
+| Group | Variables |
+|-------|----------|
+| **Redis** | `REDIS_URL` |
+| **AWS S3** | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET` |
+| **SMTP** | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` |
+| **OAuth** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| **Payments** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PAYPAL_CLIENT_ID` |
+| **SMS** | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` |
+| **AI/LLM** | `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
+| **Wearables** | `WHOOP_CLIENT_ID`, `FITBIT_CLIENT_ID`, `GARMIN_KEY`, `STRAVA_CLIENT_ID` |
+| **Feature Flags** | `WHATSAPP_COACHING`, `AI_ASSESSMENT`, `WEARABLE_SYNC`, `VOICE_CALLS` |
 
-#### Using Tokens
-
-Include the access token in the Authorization header:
-
-```http
-Authorization: Bearer <access_token>
-```
-
-Or as a cookie:
-```http
-Cookie: access_token=<access_token>
-```
-
-#### Token Refresh Flow
-
-```http
-POST /api/auth/refresh
-Content-Type: application/json
-
-{
-  "refreshToken": "<refresh_token>"
-}
-```
-
-### Role-Based Access Control
-
-Available roles:
-- `user` - Standard user
-- `admin` - Administrator
-- `moderator` - Content moderator
-- `doctor` - Healthcare provider
-- `patient` - Patient user
+See `.env.example` for the complete list with descriptions.
 
 ---
 
 ## Testing
 
+### Test Pyramid
+
+```
+       /\
+      /E2E\         10% — Load tests (k6)
+     /------\
+    /Integr. \       20% — Integration tests (real PostgreSQL)
+   /----------\
+  /    Unit    \     70% — Unit tests (mocked dependencies)
+  /------------\
+```
+
 ### Running Tests
 
 ```bash
-# Run all tests
-npm test
-
-# Run unit tests only
-npm run test:unit
-
-# Run integration tests only
-npm run test:integration
-
-# Run with coverage
-npm run test:coverage
-
-# Run in watch mode
-npm run test:watch
+npm run test:unit                # Unit tests only
+npm run test:integration         # Integration tests (requires PostgreSQL)
+npm run test:coverage            # All tests with coverage report
+npm run test:ci                  # CI mode (serial, coverage)
 ```
 
-### Test Structure
+### Test Helpers
 
-```
-tests/
-├── unit/
-│   ├── services/
-│   │   ├── cache.service.test.ts
-│   │   └── sms.service.test.ts
-│   ├── middlewares/
-│   │   └── auth.middleware.test.ts
-│   ├── validators/
-│   │   └── auth.validator.test.ts
-│   ├── models/
-│   │   └── user.model.test.ts
-│   └── utils/
-│       ├── ApiError.test.ts
-│       └── ApiResponse.test.ts
-├── integration/
-│   ├── auth.integration.test.ts
-│   ├── health.integration.test.ts
-│   └── assessment.integration.test.ts
-├── helpers/
-│   ├── testUtils.ts
-│   └── mocks.ts
-└── setup.ts
-```
+| Helper | Purpose |
+|--------|---------|
+| `createAuthReq(userId)` | Create authenticated mock request |
+| `createRes()` | Create mock response with spy methods |
+| `callHandler(handler, req, res)` | Execute controller handler |
+| `setupDbMock()` | Mock database pool |
+| `setupLoggerMock()` | Mock logger |
+| `setupCacheMock()` | Mock cache service |
 
-### Test Configuration
-
-Tests use:
-- **Jest** - Test runner
-- **Supertest** - HTTP assertions
-- **mongodb-memory-server** - In-memory MongoDB for isolation
-- **@faker-js/faker** - Test data generation
-
----
-
-## Architecture
-
-### Design Patterns
-
-1. **Controller-Service Pattern**: Controllers handle HTTP, services handle business logic
-2. **Repository Pattern**: Models abstract database operations
-3. **Middleware Pattern**: Cross-cutting concerns (auth, validation, logging)
-4. **Singleton Pattern**: Services instantiated once (cache, logger)
-
-### Data Flow
-
-```
-Request → Router → Middleware → Controller → Service → Model → Database
-                                    ↓
-Response ← Controller ← Service ←────┘
-```
-
-### Error Handling
-
-All errors flow through the centralized error handler:
+### ESM Mocking Pattern
 
 ```typescript
-// Throw ApiError anywhere
-throw ApiError.notFound('User not found');
-
-// Error middleware catches and formats response
+jest.unstable_mockModule('path', () => ({
+  myFunction: jest.fn(),
+}));
+const { myFunction } = await import('path');
 ```
 
-### Validation
+### Coverage Thresholds
 
-Request validation using Zod schemas:
+| Metric | Target |
+|--------|--------|
+| Branches | 85% |
+| Functions | 90% |
+| Lines | 90% |
+| Statements | 90% |
 
-```typescript
-// Define schema
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+### Load Testing
 
-// Use in routes
-router.post('/register', validate(registerSchema), controller.register);
+k6 scenarios for AI Coach SSE pipeline — see [`tests/load/README.md`](../tests/load/README.md).
+
+---
+
+## Database
+
+### PostgreSQL + pgvector
+
+Tables are defined as numbered SQL files in `src/database/tables/` for dependency ordering. Vector embeddings use the pgvector extension for semantic search.
+
+### Migrations
+
+New migrations use the format `YYYYMMDDHHMMSS_description.sql` in `src/database/migrations/`.
+
+```bash
+npm run db:setup           # Create all tables
+npm run db:migrate         # Run pending migrations
+npm run db:migrate:auto    # Auto-detect and run new migrations
+npm run db:migrate:verify  # Verify migration state
 ```
 
----
+### Dynamic Tables
 
-## Postman Collection
-
-Import the Postman collection from `docs/postman/YHealth_API_Collection.json` to test all endpoints.
-
-### Setup
-
-1. Import collection into Postman
-2. Set `baseUrl` variable to `http://localhost:5000/api`
-3. Run "Register" or "Login" to get tokens (auto-saved)
-4. All subsequent requests use the saved token
+Some tables are created at runtime via `ensureTable()` in services:
+- `cross_pillar_contradictions`
+- `daily_analysis_reports`
+- `conversation_claims`
 
 ---
 
-## Support
+## Docker
 
-For questions or issues, please:
-1. Check existing documentation
-2. Review test files for usage examples
-3. Open an issue on GitHub
+Multi-stage Dockerfile optimized for production:
 
----
+1. **Dependencies** — `npm ci --legacy-peer-deps`
+2. **Builder** — TypeScript compilation + path alias resolution
+3. **Runner** — Non-root user, health checks, email templates + migration files
 
-*Generated for YHealth Server v1.0.0*
+```bash
+docker build -f Dockerfile.server -t balencia-server .
+docker run -p 5000:5000 -e DATABASE_URL=... balencia-server
+```
+
+Health check: `GET http://localhost:5000/api/health`

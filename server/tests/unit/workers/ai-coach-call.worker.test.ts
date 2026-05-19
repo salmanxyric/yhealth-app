@@ -116,16 +116,20 @@ function makeJob(overrides: Record<string, unknown> = {}) {
 
 function defaultMocks() {
   mockQuery
+    // Gate 1: user active check
     .mockResolvedValueOnce({
       rows: [{ id: 'user-1', is_active: true }],
       rowCount: 1, command: '', oid: 0, fields: [],
     })
+    // Gate 7: preferred_call_times count
+    .mockResolvedValueOnce({
+      rows: [{ cnt: '1' }],
+      rowCount: 1, command: '', oid: 0, fields: [],
+    })
+    // Gate 7: daily cap count
     .mockResolvedValueOnce({
       rows: [{ c: '0' }],
       rowCount: 1, command: '', oid: 0, fields: [],
-    })
-    .mockResolvedValueOnce({
-      rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
 
   mockGetPreferences.mockResolvedValue({
@@ -154,6 +158,11 @@ function defaultMocks() {
 describe('AI Coach Call Worker', () => {
   it('initiates a call when all gates pass', async () => {
     defaultMocks();
+    // UPDATE status = 'initiated'
+    mockQuery.mockResolvedValueOnce({
+      rows: [], rowCount: 1, command: '', oid: 0, fields: [],
+    });
+    // UPDATE chat_call_id
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
@@ -239,15 +248,23 @@ describe('AI Coach Call Worker', () => {
     expect(mockInitiateAICoachCall).not.toHaveBeenCalled();
   });
 
-  it('skips when user is offline and logs skipped_offline', async () => {
+  it('proceeds when user is offline (offline gate removed; push notification handles it)', async () => {
     defaultMocks();
     mockIsUserConnected.mockReturnValue(false);
+    // UPDATE status = 'initiated'
+    mockQuery.mockResolvedValueOnce({
+      rows: [], rowCount: 1, command: '', oid: 0, fields: [],
+    });
+    // UPDATE chat_call_id
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });
 
     await processAICoachCallJob(makeJob());
-    expect(mockInitiateAICoachCall).not.toHaveBeenCalled();
+    expect(mockInitiateAICoachCall).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ sessionType: 'quick_checkin' }),
+    );
   });
 
   it('skips when miss threshold exceeded for scheduled hour', async () => {
@@ -268,14 +285,22 @@ describe('AI Coach Call Worker', () => {
 
   it('skips when daily cap is reached', async () => {
     mockQuery
+      // Gate 1: user active check
       .mockResolvedValueOnce({
         rows: [{ id: 'user-1', is_active: true }],
         rowCount: 1, command: '', oid: 0, fields: [],
       })
+      // Gate 7: preferred_call_times count
+      .mockResolvedValueOnce({
+        rows: [{ cnt: '1' }],
+        rowCount: 1, command: '', oid: 0, fields: [],
+      })
+      // Gate 7: daily cap count (already at cap)
       .mockResolvedValueOnce({
         rows: [{ c: '3' }],
         rowCount: 1, command: '', oid: 0, fields: [],
       })
+      // UPDATE status = 'skipped'
       .mockResolvedValueOnce({
         rows: [], rowCount: 1, command: '', oid: 0, fields: [],
       });
@@ -320,6 +345,11 @@ describe('AI Coach Call Worker', () => {
   it('records error in log when call initiation fails', async () => {
     defaultMocks();
     mockInitiateAICoachCall.mockRejectedValue(new Error('WebRTC failed'));
+    // UPDATE status = 'initiated'
+    mockQuery.mockResolvedValueOnce({
+      rows: [], rowCount: 1, command: '', oid: 0, fields: [],
+    });
+    // UPDATE status = 'skipped' (error path)
     mockQuery.mockResolvedValueOnce({
       rows: [], rowCount: 1, command: '', oid: 0, fields: [],
     });

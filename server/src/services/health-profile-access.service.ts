@@ -42,7 +42,7 @@ export async function checkHealthProfileAccess(
   if (visibility === 'friends') {
     const friendCheck = await query<{ id: string }>(
       `SELECT id FROM user_follows
-       WHERE follower_id = $1 AND following_id = $2 AND status = 'accepted'
+       WHERE requester_id = $1 AND recipient_id = $2 AND status = 'accepted'
        LIMIT 1`,
       [viewerId, targetUserId],
     );
@@ -50,7 +50,7 @@ export async function checkHealthProfileAccess(
     if (friendCheck.rows.length === 0) {
       const reverseCheck = await query<{ id: string }>(
         `SELECT id FROM user_follows
-         WHERE follower_id = $1 AND following_id = $2 AND status = 'accepted'
+         WHERE requester_id = $1 AND recipient_id = $2 AND status = 'accepted'
          LIMIT 1`,
         [targetUserId, viewerId],
       );

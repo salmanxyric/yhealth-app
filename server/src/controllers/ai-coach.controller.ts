@@ -35,7 +35,7 @@ const routerLlmClient: OpenAI | null = env.openai.apiKey
 async function routerLlm(prompt: string): Promise<string> {
   if (!routerLlmClient) return '';
   try {
-    const model = env.openai.model || 'gpt-4o-mini';
+    const model = env.openai.nanoModel || 'gpt-5.4-nano';
     const res = await routerLlmClient.chat.completions.create({
       model,
       messages: [

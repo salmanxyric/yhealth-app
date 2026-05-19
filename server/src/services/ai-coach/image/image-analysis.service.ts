@@ -59,7 +59,7 @@ Respond with ONLY the category name in lowercase (e.g., "nutrition_label", "food
 
       if (!classificationText && this.provider.visionClient) {
         try {
-          const model = env.openai.model || 'gpt-4o-mini';
+          const model = env.openai.visionLightModel || 'gpt-5.4-mini';
           const response = await this.provider.visionClient.chat.completions.create({
             model,
             ...this.provider.getTokenParameter(model, 200),
@@ -403,7 +403,7 @@ IMPORTANT: The analysis text MUST follow the exact structure with ## headers as 
 
       if (!content && this.provider.visionClient) {
         try {
-          const openaiModel = env.openai.model || 'gpt-4o-mini';
+          const openaiModel = env.openai.visionModel || 'gpt-5.5';
           response = await this.provider.visionClient.chat.completions.create({
             model: openaiModel,
             ...this.provider.getTokenParameter(openaiModel, maxTokens),

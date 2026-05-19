@@ -53,7 +53,7 @@ function requiresMaxCompletionTokens(model: string): boolean {
  */
 function isReasoningModel(model: string): boolean {
   const modelLower = model.toLowerCase();
-  return modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower === 'gpt-5';
+  return modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower.startsWith('gpt-5.5');
 }
 
 /**
@@ -192,13 +192,8 @@ class EmotionDetectionService {
     const model = env.gemini.emotionModel || 'gemini-2.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiApiKey}`;
 
-    // Gemini 2.5+ thinking models consume tokens for internal reasoning,
-    // so we need a higher budget to avoid truncated output
-    const isThinkingModel = model.includes('2.5') || model.includes('thinking');
-    const effectiveMaxTokens = isThinkingModel ? Math.max(maxTokens, 500) : maxTokens;
-
     const generationConfig: Record<string, unknown> = {
-      maxOutputTokens: effectiveMaxTokens,
+      maxOutputTokens: maxTokens,
       temperature,
     };
     // JSON mode prevents markdown wrapping and ensures valid JSON output
@@ -266,7 +261,7 @@ class EmotionDetectionService {
 
     this.geminiTransientFailureCount += 1;
     if (this.geminiTransientFailureCount >= 2) {
-      const backoffMs = Math.min(60_000, 10_000 * this.geminiTransientFailureCount);
+      const backoffMs = Math.min(120_000, 30_000 * this.geminiTransientFailureCount);
       this.geminiUnavailableUntil = Date.now() + backoffMs;
       logger.warn('[EmotionDetection] Temporarily disabling Gemini emotion classification after transient failures', {
         backoffMs,
@@ -343,7 +338,7 @@ Respond with ONLY a JSON object in this exact format:
       // Fallback to OpenAI
       if (!content && this.openaiClient) {
         try {
-          const model = env.openai.model || 'gpt-4o-mini';
+          const model = env.openai.nanoModel || 'gpt-5.4-nano';
           const classificationResponse = await this.openaiClient.chat.completions.create({
             model,
             messages: [

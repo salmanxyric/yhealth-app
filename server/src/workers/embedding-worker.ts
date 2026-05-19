@@ -1,9 +1,15 @@
+// Single embedding worker for all source types including wellbeing.
+// Supported: user_goal, user_plan, diet_plan, workout_plan, user_task, meal_log,
+// workout_log, progress_record, user_preferences, user_profile, activity_log,
+// schedule, schedule_item, rag_message, wellbeing.
+import { createHash } from 'crypto';
 import { Worker, Job, UnrecoverableError } from 'bullmq';
 import { redisConnection, QueueNames } from '../config/queue.config.js';
 import { vectorEmbeddingService, EmbeddingAuthError } from '../services/vector-embedding.service.js';
+import { wellbeingEmbeddingService } from '../services/wellbeing-embedding.service.js';
 import { query } from '../config/database.config.js';
 import { logger } from '../services/logger.service.js';
-import type { EmbeddingJobData } from '../services/embedding-queue.service.js';
+import type { EmbeddingJobData, WellbeingType } from '../services/embedding-queue.service.js';
 
 // ============================================================================
 // Job Processor
@@ -35,12 +41,16 @@ async function processEmbeddingJobInner(job: Job<EmbeddingJobData>): Promise<voi
     operation,
   });
 
-  // Skip wellbeing source types - they are handled by the wellbeing embedding worker
+  // Handle wellbeing embeddings inline (the separate wellbeing worker was never started)
   if (sourceType === 'wellbeing') {
-    logger.debug('[EmbeddingWorker] Skipping wellbeing embedding - handled by wellbeing worker', {
-      jobId: job.id,
-      sourceId,
-    });
+    const type = job.data.wellbeingType ?? await determineWellbeingType(userId, sourceId);
+    if (!type) {
+      throw new UnrecoverableError(
+        `[EmbeddingWorker] Could not determine wellbeing type for sourceId=${sourceId}, userId=${userId}`
+      );
+    }
+    await wellbeingEmbeddingService.processEmbedding(userId, type, sourceId, operation);
+    logger.info('[EmbeddingWorker] Wellbeing embedding processed', { sourceId, wellbeingType: type, operation });
     return;
   }
 
@@ -84,6 +94,17 @@ async function processEmbeddingJobInner(job: Job<EmbeddingJobData>): Promise<voi
     return;
   }
 
+  // Content-hash dedup: skip re-embedding when content hasn't changed
+  const contentHash = createHash('sha256').update(content).digest('hex');
+  const existing = await query<{ content_hash: string | null }>(
+    `SELECT content_hash FROM vector_embeddings WHERE source_type = $1 AND source_id = $2`,
+    [sourceType, sourceId]
+  );
+  if (existing.rows.length > 0 && existing.rows[0].content_hash === contentHash) {
+    logger.debug('[EmbeddingWorker] Content unchanged, skipping embedding', { sourceType, sourceId });
+    return;
+  }
+
   // Handle create/update operations
   if (sourceType === 'user_preferences' || sourceType === 'user_profile') {
     // User preferences and profile go to user_health_embeddings table (versioned)
@@ -95,16 +116,7 @@ async function processEmbeddingJobInner(job: Job<EmbeddingJobData>): Promise<voi
       metadata: { source_id: sourceId, embedded_at: new Date().toISOString() },
     });
   } else {
-    // All other types go to vector_embeddings table
-    // For updates, delete old embedding first
-    if (operation === 'update') {
-      await query(
-        `DELETE FROM vector_embeddings WHERE source_type = $1 AND source_id = $2`,
-        [sourceType, sourceId]
-      );
-    }
-
-    // Store new embedding
+    // All other types go to vector_embeddings table (UPSERT handles create + update)
     await vectorEmbeddingService.storeEmbedding({
       sourceType,
       sourceId,
@@ -112,6 +124,7 @@ async function processEmbeddingJobInner(job: Job<EmbeddingJobData>): Promise<voi
       content,
       contentType: getContentType(sourceType),
       metadata: { embedded_at: new Date().toISOString() },
+      contentHash,
     });
   }
 
@@ -432,6 +445,33 @@ function getContentType(sourceType: string): string {
     activity_log: 'activity_history',
   };
   return typeMap[sourceType] || 'document';
+}
+
+// ============================================================================
+// Wellbeing Type Fallback (for in-flight jobs missing wellbeingType)
+// ============================================================================
+
+async function determineWellbeingType(
+  userId: string,
+  entryId: string
+): Promise<WellbeingType | null> {
+  const checks: Array<{ table: string; type: WellbeingType }> = [
+    { table: 'mood_logs', type: 'mood' },
+    { table: 'stress_logs', type: 'stress' },
+    { table: 'journal_entries', type: 'journal' },
+    { table: 'energy_logs', type: 'energy' },
+    { table: 'habits', type: 'habits' },
+    { table: 'schedule_items', type: 'schedule' },
+  ];
+
+  for (const check of checks) {
+    const result = await query(
+      `SELECT id FROM ${check.table} WHERE id = $1 AND user_id = $2 LIMIT 1`,
+      [entryId, userId]
+    );
+    if (result.rows.length > 0) return check.type;
+  }
+  return null;
 }
 
 // ============================================================================

@@ -111,7 +111,7 @@ describe('FollowService', () => {
       ];
 
       mockQuery.mockImplementation(async (sql: string) => {
-        if (typeof sql === 'string' && (sql.includes('CREATE TABLE') || sql.includes('CREATE INDEX'))) {
+        if (typeof sql === 'string' && (sql.includes('CREATE TABLE') || sql.includes('CREATE INDEX') || sql.includes('ALTER TABLE'))) {
           return pgResult([]);
         }
         const result = businessResults[businessCallIndex] ?? pgResult([]);
