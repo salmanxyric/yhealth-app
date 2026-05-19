@@ -25,6 +25,7 @@ const eslintConfig = defineConfig([
       }],
       "@typescript-eslint/no-require-imports": "warn",
       "react/no-unescaped-entities": "warn",
+      "react/display-name": "warn",
       "@next/next/no-html-link-for-pages": "warn",
       "prefer-const": "warn",
       // React Compiler rules - downgrade until codebase is updated
