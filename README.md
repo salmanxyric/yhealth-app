@@ -1,366 +1,387 @@
-# yHealth - AI-Powered Fitness & Wellness Platform
-
 <div align="center">
 
-![yHealth Logo](https://via.placeholder.com/200x60/10b981/ffffff?text=yHealth)
+# Balencia
 
-**A comprehensive SaaS platform for fitness tracking, nutrition planning, wellbeing management, and AI-powered coaching.**
+**AI Life Coach Platform**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16.0-black.svg)](https://nextjs.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+A full-stack SaaS platform that connects every part of a user's life system — career, relationships, spirituality, finance, fitness, creativity, and learning — through AI-powered coaching that reveals the connections humans can't see themselves.
+
+[![CI](https://github.com/xyric-ai/yhealth-app/actions/workflows/ci.yml/badge.svg)](https://github.com/xyric-ai/yhealth-app/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](./LICENSE)
 
 </div>
 
 ---
 
-## 📋 Table of Contents
+## Overview
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Development Workflow](#development-workflow)
-- [Project Structure](#project-structure)
-- [Deployment](#deployment)
-- [Versioning](#versioning)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
+Balencia is an AI-first life coaching platform built as a monorepo with a Next.js frontend and Express.js API backend. It spans **8 life domains** — Fitness, Nutrition, Mental Health, Finance, Career, Relationships, Spirituality, and Learning — and uses cross-domain intelligence to surface insights users can't discover on their own.
 
-## 🎯 Overview
+### Key Capabilities
 
-yHealth is a modern, full-stack SaaS application designed to help users achieve their fitness and wellness goals through:
+| Domain | What It Does |
+|--------|-------------|
+| **AI Coach (SIA)** | Conversational AI coach with text, voice, and image analysis. Adapts tone by motivation tier. 18+ proactive message types. |
+| **Cross-Domain Intelligence** | Correlates data across all life domains. "Your spending increases on days you skip exercise." |
+| **Fitness & Movement** | AI-generated workout plans, sport-specific coaching, WHOOP/Fitbit/Garmin/Strava sync, exercise library |
+| **Nutrition & Diet** | Adaptive meal plans, macro tracking, nutrition learning system, calorie optimization |
+| **Mental Health** | Journaling, mood tracking, stress management, breathing exercises, emotional check-ins, guided soundscapes |
+| **Finance** | Budget tracking, spending pattern analysis, financial goal connection to life goals |
+| **Spirituality** | Prayer tracking, spiritual practice logging, faith-aware coaching |
+| **Community** | Competitions, leaderboards, accountability buddies, team challenges |
+| **Knowledge System** | Personal wiki, knowledge graph, memory engine, vector embeddings for semantic recall |
+| **Gamification** | Streaks, achievements, micro-wins, XP system — intensity adapts by motivation tier |
 
-- **Fitness Tracking**: Workout planning, progress monitoring, and performance analytics
-- **Nutrition Management**: Meal planning, macro tracking, and dietary recommendations
-- **Wellbeing Dashboard**: Mood tracking, energy monitoring, stress management, and habit building
-- **AI Coaching**: Personalized workout and nutrition recommendations powered by AI
-- **Community Features**: Social sharing, challenges, and leaderboards
+---
 
-## 🏗️ Architecture
-
-This is a monorepo containing:
-
-- **`client/`** - Next.js 16 frontend application (App Router, React 19, TypeScript)
-- **`server/`** - Express.js backend API (Node.js, TypeScript, PostgreSQL)
-- **`shared/`** - Shared TypeScript types and utilities
-
-### System Architecture
+## Architecture
 
 ```
-┌─────────────────┐
-│   Next.js App   │  (Client - Port 3000)
-│   (Frontend)    │
-└────────┬────────┘
-         │ HTTP/REST
-         │ WebSocket
-┌────────▼────────┐
-│  Express API    │  (Server - Port 5000)
-│   (Backend)     │
-└────────┬────────┘
-         │
-┌────────▼────────┐
-│   PostgreSQL    │  (Database)
-│   + Redis       │  (Cache/Sessions)
-└─────────────────┘
+                            ┌──────────────────────────────┐
+                            │       Next.js 16 Client      │
+                            │     React 19 · App Router     │
+                            │  Shadcn/UI · Redux · RQ · 3D  │
+                            └──────────────┬───────────────┘
+                                           │ REST / WebSocket / SSE
+                            ┌──────────────▼───────────────┐
+                            │      Express 5 API Server     │
+                            │   TypeScript · Node.js 20+    │
+                            │  76 Controllers · 99 Routes   │
+                            │       217+ Services           │
+                            └──┬──────┬──────┬──────┬──────┘
+                               │      │      │      │
+                 ┌─────────────▼┐ ┌───▼────┐ │  ┌───▼──────────┐
+                 │  PostgreSQL  │ │ Redis  │ │  │   BullMQ     │
+                 │  + pgvector  │ │ Cache  │ │  │  Job Queue   │
+                 │  (Primary)   │ │Sessions│ │  │  42 Workers  │
+                 └──────────────┘ └────────┘ │  └──────────────┘
+                                             │
+              ┌──────────────────────────────┘
+              │
+    ┌─────────▼──────────┐   ┌──────────────────┐   ┌─────────────────┐
+    │  LangChain + LLMs  │   │  External APIs   │   │   AWS S3        │
+    │  Anthropic · OpenAI │   │  Stripe · PayPal │   │   File Storage  │
+    │  Google GenAI       │   │  Twilio · SMTP   │   │                 │
+    └─────────────────────┘   │  WHOOP · Fitbit  │   └─────────────────┘
+                              │  Garmin · Strava │
+                              └──────────────────┘
 ```
 
-## 🛠️ Tech Stack
+### Scale
 
-### Frontend
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript 5
-- **UI Library**: React 19
-- **Styling**: TailwindCSS 4
-- **Animations**: Framer Motion
-- **Charts**: Recharts
-- **State Management**: React Query (TanStack Query)
-- **Forms**: React Hook Form + Zod
-- **UI Components**: Radix UI + shadcn/ui
+| Component | Count |
+|-----------|-------|
+| API Routes | 99 route files |
+| Backend Services | 217+ |
+| Controllers | 76 |
+| Background Jobs | 42 (cron + queue) |
+| Client Pages | 60+ |
+| React Components (.tsx) | 1,369 |
+| Database Migrations | 40+ |
 
-### Backend
-- **Runtime**: Node.js 18+
-- **Framework**: Express.js
-- **Language**: TypeScript 5
-- **Database**: PostgreSQL
-- **ORM**: Custom SQL queries with connection pooling
-- **Authentication**: JWT + NextAuth.js
-- **Validation**: Zod
-- **Testing**: Jest
+---
 
-### DevOps
-- **CI/CD**: GitHub Actions
-- **Containerization**: Docker
-- **Deployment**: Railway / Vercel
-- **Monitoring**: (To be configured)
+## Tech Stack
 
-## 🚀 Getting Started
+### Frontend (`client/`)
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router) |
+| UI Library | React 19 |
+| Language | TypeScript 5 |
+| Component System | Radix UI + Shadcn/UI |
+| Styling | Tailwind CSS 4 |
+| State Management | Redux Toolkit + TanStack React Query |
+| Forms | React Hook Form + Zod |
+| Animation | Framer Motion |
+| 3D Rendering | Three.js + React Three Fiber |
+| Charts | Recharts + Chart.js + D3.js |
+| Rich Text | TipTap |
+| Graph Visualization | Graphology + React Sigma |
+| Auth | NextAuth.js (Google OAuth) |
+| Testing | Jest + React Testing Library |
+
+### Backend (`server/`)
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js 20+ (with cluster mode) |
+| Framework | Express.js 5 |
+| Language | TypeScript 5.8 |
+| Database | PostgreSQL 14+ with pgvector |
+| ORM | Prisma 5 |
+| Cache | Redis (ioredis) + node-cache |
+| Job Queue | BullMQ |
+| AI/LLM | LangChain (Anthropic, OpenAI, Google GenAI) |
+| Real-time | Socket.io |
+| Auth | JWT + bcrypt |
+| Payments | Stripe + PayPal |
+| Email | Nodemailer + EJS templates |
+| SMS | Twilio |
+| File Storage | AWS S3 |
+| Validation | Zod |
+| Testing | Jest + Supertest |
+
+### Infrastructure
+
+| Concern | Technology |
+|---------|-----------|
+| CI/CD | GitHub Actions (lint, typecheck, test, build, Trivy scan) |
+| Containers | Docker (multi-stage builds) |
+| Deployment | Railway |
+| Monitoring | Health check endpoints + structured logging |
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- **Node.js** 18+ and npm
-- **PostgreSQL** 14+ (or Docker)
+- **Node.js** 20+ and npm
+- **PostgreSQL** 14+
+- **Redis** (optional for dev, required for production)
 - **Git** 2.30+
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-org/yhealth-app.git
-   cd yhealth-app
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/xyric-ai/yhealth-app.git
+cd yhealth-app
 
-2. **Install dependencies**
-   ```bash
-   # Install root dependencies (if any)
-   npm install
+# Install server dependencies
+cd server
+npm install
 
-   # Install client dependencies
-   cd client
-   npm install
+# Install client dependencies
+cd ../client
+npm install
+```
 
-   # Install server dependencies
-   cd ../server
-   npm install
-   ```
+### Environment Setup
 
-3. **Set up environment variables**
-   ```bash
-   # Client
-   cd client
-   cp .env.example .env.local
-   # Edit .env.local with your values
+```bash
+# Server environment
+cd server
+cp .env.example .env
+# Edit .env — at minimum set DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET
 
-   # Server
-   cd ../server
-   cp .env.example .env
-   # Edit .env with your values
-   ```
+# Client environment
+cd ../client
+cp .env.example .env.local
+# Edit .env.local — set NEXT_PUBLIC_API_URL, NEXTAUTH_URL, NEXTAUTH_SECRET
+```
 
-4. **Set up the database**
-   ```bash
-   cd server
-   npm run db:setup
-   npm run db:migrate
-   ```
+### Database Setup
 
-5. **Start development servers**
-   ```bash
-   # Terminal 1: Start server
-   cd server
-   npm run dev
+```bash
+cd server
 
-   # Terminal 2: Start client
-   cd client
-   npm run dev
-   ```
+# Create tables and run migrations
+npm run db:setup
+npm run db:migrate
+```
 
-6. **Open the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000/api
+### Start Development
 
-## 🔄 Development Workflow
+```bash
+# Terminal 1 — API server (port 5000)
+cd server
+npm run dev
+
+# Terminal 2 — Next.js client (port 3000)
+cd client
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+## Development
+
+### Commands
+
+#### Server
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server with hot reload (nodemon + tsx) |
+| `npm run build` | Compile TypeScript + resolve path aliases |
+| `npm run typecheck` | Type-check without emitting |
+| `npm run lint` | Run ESLint |
+| `npm run test:unit` | Run unit tests |
+| `npm run test:integration` | Run integration tests (requires PostgreSQL) |
+| `npm run test:coverage` | Run all tests with coverage report |
+| `npm run db:setup` | Create database tables |
+| `npm run db:migrate` | Run pending migrations |
+
+#### Client
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Next.js dev server |
+| `npm run build` | Production build |
+| `npm run lint` | Run ESLint |
+| `npm run test` | Run Jest tests |
+| `npm run test:coverage` | Tests with coverage |
 
 ### Branching Strategy
 
-We follow **Git Flow** with the following branches:
+| Branch | Purpose |
+|--------|---------|
+| `main` | Production (protected) |
+| `develop` | Staging / integration |
+| `feature/*` | New features |
+| `fix/*` | Bug fixes |
+| `hotfix/*` | Critical production fixes |
 
-- **`main`** - Production branch (protected)
-- **`develop`** - Staging/development branch
-- **`feature/*`** - New features (e.g., `feature/wellbeing-dashboard`)
-- **`fix/*`** - Bug fixes (e.g., `fix/auth-token-expiry`)
-- **`hotfix/*`** - Critical production fixes (e.g., `hotfix/security-patch`)
+### Commit Convention
 
-### Workflow Steps
-
-1. **Create a feature branch**
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make changes and commit**
-   ```bash
-   git add .
-   git commit -m "feat: add wellbeing dashboard analytics"
-   ```
-
-3. **Push and create PR**
-   ```bash
-   git push origin feature/your-feature-name
-   # Create PR on GitHub: feature/your-feature-name → develop
-   ```
-
-4. **After review and merge to develop**
-   - Code is tested on staging
-   - Merge to `main` via release process
-
-### Commit Message Format
-
-We use [Conventional Commits](https://www.conventionalcommits.org/):
+[Conventional Commits](https://www.conventionalcommits.org/) format:
 
 ```
 <type>(<scope>): <subject>
-
-<body>
-
-<footer>
 ```
 
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Adding/updating tests
-- `chore`: Maintenance tasks
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
-**Examples:**
+Examples:
 ```bash
-feat(wellbeing): add KPI dashboard with analytics charts
-fix(auth): resolve token refresh race condition
-docs(readme): update installation instructions
-refactor(api): optimize database query performance
+feat(ai-coach): add voice call with real-time transcription
+fix(nutrition): correct macro calculation for custom meals
+test(wellbeing): add integration tests for mood tracking
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
+---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 yhealth-app/
-├── client/                 # Next.js frontend application
-│   ├── app/                # App Router pages and layouts
-│   ├── components/         # React components
-│   ├── hooks/              # Custom React hooks
-│   ├── lib/                # Utilities and helpers
-│   └── public/             # Static assets
+├── client/                      # Next.js 16 frontend
+│   ├── app/                     # App Router (60+ page routes)
+│   │   ├── (pages)/             # Authenticated pages
+│   │   │   ├── dashboard/       # Main dashboard
+│   │   │   ├── ai-coach/        # SIA AI coach interface
+│   │   │   ├── chat/            # Chat & messaging
+│   │   │   ├── goals/           # Life goal tracking
+│   │   │   ├── schedule/        # Calendar & scheduling
+│   │   │   ├── nutrition/       # Meal plans & logging
+│   │   │   ├── workouts/        # Exercise & fitness
+│   │   │   ├── wellness/        # Mental health hub
+│   │   │   ├── knowledge-graph/ # Interactive knowledge visualization
+│   │   │   ├── community/       # Social features
+│   │   │   ├── voice-assistant/ # Voice interaction
+│   │   │   ├── admin/           # Admin panel (19+ sub-routes)
+│   │   │   └── ...
+│   │   └── auth/                # Authentication pages
+│   ├── components/              # React components (30+ groups)
+│   │   ├── ui/                  # Shadcn/UI base components
+│   │   ├── dashboard/           # Dashboard widgets
+│   │   ├── chat/                # Chat interfaces
+│   │   ├── ai-coach/            # AI coach UI
+│   │   ├── voice-assistant/     # Voice interaction UI
+│   │   └── ...
+│   ├── hooks/                   # Custom React hooks
+│   ├── lib/                     # Utilities (API client, auth, etc.)
+│   └── store/                   # Redux store & slices
 │
-├── server/                 # Express.js backend API
+├── server/                      # Express 5 backend API
 │   ├── src/
-│   │   ├── controllers/   # Route controllers
-│   │   ├── services/      # Business logic
-│   │   ├── routes/        # API routes
-│   │   ├── database/      # Database migrations and queries
-│   │   ├── middlewares/   # Express middlewares
-│   │   └── utils/         # Utility functions
-│   └── tests/             # Test files
+│   │   ├── controllers/         # 76 request handlers
+│   │   ├── services/            # 217+ business logic services
+│   │   │   ├── ai-coach/        # AI coaching engine
+│   │   │   ├── langgraph-*.ts   # LangGraph agent pipelines
+│   │   │   ├── memory-engine.*  # Conversation memory system
+│   │   │   ├── knowledge-*.ts   # Knowledge graph services
+│   │   │   ├── vector-*.ts      # Vector embedding services
+│   │   │   └── ...
+│   │   ├── routes/              # 99 API route files
+│   │   ├── jobs/                # 42 background jobs (cron + BullMQ)
+│   │   ├── workers/             # Async task processors
+│   │   ├── database/            # Migrations, table DDL, setup scripts
+│   │   ├── middlewares/         # Auth, validation, rate limiting, error handling
+│   │   ├── validators/          # Zod request schemas
+│   │   ├── config/              # Environment config (Zod-validated)
+│   │   ├── types/               # TypeScript type definitions
+│   │   ├── lib/                 # External integration clients
+│   │   ├── helpers/             # Utility functions
+│   │   └── mails/               # EJS email templates
+│   └── tests/
+│       ├── unit/                # Unit tests (mocked dependencies)
+│       ├── integration/         # Integration tests (real PostgreSQL)
+│       ├── load/                # k6 load test scenarios
+│       └── helpers/             # Test utilities & harnesses
 │
-├── shared/                 # Shared TypeScript types
-│   └── types/              # Domain types and interfaces
-│
-├── .github/                # GitHub Actions workflows
-│   └── workflows/
-│       └── ci.yml         # CI/CD pipeline
-│
-├── docs/                   # Project documentation
-├── CONTRIBUTING.md         # Contribution guidelines
-├── CODE_OF_CONDUCT.md      # Code of conduct
-└── README.md               # This file
+├── .github/workflows/ci.yml    # CI pipeline (lint, typecheck, test, build, security)
+├── docker-compose.yml           # Docker orchestration
+├── Dockerfile.client            # Multi-stage client build
+├── Dockerfile.server            # Multi-stage server build
+├── CONTRIBUTING.md              # Contribution guidelines
+├── CODE_OF_CONDUCT.md           # Code of conduct
+├── SECURITY.md                  # Security policy
+└── railway.toml                 # Railway deployment config
 ```
 
-## 🚢 Deployment
+---
 
-### Staging (develop branch)
+## Docker Deployment
 
-Automatically deployed to staging environment on merge to `develop`.
+Both services use optimized multi-stage Docker builds (95%+ context reduction via `.dockerignore`).
 
-### Production (main branch)
+```bash
+# Build and start all services
+docker compose up --build
 
-1. **Create a release branch**
-   ```bash
-   git checkout main
-   git pull origin main
-   git checkout -b release/v1.2.0
-   ```
+# Run in background
+docker compose up -d
+```
 
-2. **Update version numbers**
-   - Update `package.json` versions
-   - Update CHANGELOG.md
+| Service | Port | Health Check |
+|---------|------|-------------|
+| Client | 3000 | `GET /` |
+| Server | 5000 | `GET /api/health` |
 
-3. **Merge to main**
-   ```bash
-   git checkout main
-   git merge release/v1.2.0
-   git tag v1.2.0
-   git push origin main --tags
-   ```
+Services run on a shared `balencia-network` with automatic restarts and health monitoring.
 
-4. **Deploy**
-   - Production deployment is triggered automatically via GitHub Actions
-   - Or manually deploy via Railway/Vercel dashboard
+---
 
-### Environment-Specific Configuration
+## CI/CD Pipeline
 
-- **Development**: Local development with hot reload
-- **Staging**: `develop` branch → Staging environment
-- **Production**: `main` branch → Production environment
+GitHub Actions runs on every push and PR:
 
-## 📦 Versioning
+1. **Client** — ESLint, TypeScript check, Jest tests, Next.js build
+2. **Server** — ESLint, TypeScript check, Jest tests (with PostgreSQL service), build
+3. **Security** — Trivy vulnerability scanning
+4. **Gate** — All checks must pass before merge
 
-We follow [Semantic Versioning](https://semver.org/) (SemVer):
+Build artifacts are retained for 1 day. Concurrent runs on the same branch are automatically cancelled.
 
-- **MAJOR** (1.0.0): Breaking changes
-- **MINOR** (0.1.0): New features (backward compatible)
-- **PATCH** (0.0.1): Bug fixes (backward compatible)
+---
 
-Version format: `MAJOR.MINOR.PATCH` (e.g., `1.2.3`)
+## Contributing
 
-## 🤝 Contributing
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, coding standards, PR process, and commit message guidelines.
 
-We welcome contributions! Please read our [CONTRIBUTING.md](./CONTRIBUTING.md) for:
+## Security
 
-- Code of conduct
-- Development setup
-- Pull request process
-- Coding standards
-- Commit message guidelines
+**Do not** open public issues for security vulnerabilities. Email **support@xyric.ai** directly. See [SECURITY.md](./SECURITY.md) for details.
 
-## 🔒 Security
+## License
 
-### Reporting Security Issues
-
-**DO NOT** create a public GitHub issue for security vulnerabilities.
-
-Instead, email: **security@yhealth.app**
-
-We take security seriously and will respond promptly.
-
-### Security Best Practices
-
-- Never commit secrets or API keys
-- Use environment variables for sensitive data
-- Keep dependencies updated
-- Follow secure coding practices
-- See [SECURITY.md](./SECURITY.md) for details
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
-
-## 📞 Support
-
-- **Documentation**: [docs/](./docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/yhealth-app/issues)
-- **Email**: support@yhealth.app
-
-## 🙏 Acknowledgments
-
-- Built with [Next.js](https://nextjs.org/)
-- UI components from [shadcn/ui](https://ui.shadcn.com/)
-- Icons from [Lucide](https://lucide.dev/)
+[ISC](./LICENSE)
 
 ---
 
 <div align="center">
 
-**Made with ❤️ by the yHealth Team**
-
-[Website](https://yhealth.app) • [Documentation](./docs/) • [Changelog](./CHANGELOG.md)
+**Built by [Xyric AI](https://xyric.ai)**
 
 </div>
-
