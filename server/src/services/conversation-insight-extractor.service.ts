@@ -3,7 +3,7 @@ import { query } from '../config/database.config.js';
 import { env } from '../config/env.config.js';
 import { logger } from './logger.service.js';
 import { memoryEngineService } from './memory-engine.service.js';
-import { embeddingQueueService } from './embedding-queue.service.js';
+
 import { coreProfileKernelService } from './core-profile-kernel.service.js';
 import type { MemoryEvidence } from '@shared/types/domain/intelligence-files.js';
 import type {
@@ -275,35 +275,17 @@ class ConversationInsightExtractorService {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async routeVectorEmbedding(
-    userId: string,
-    conversationId: string,
-    insights: TurnInsights
+    _userId: string,
+    _conversationId: string,
+    _insights: TurnInsights
   ): Promise<void> {
-    if (!embeddingQueueService.isAvailable()) return;
-
-    try {
-      const textContent = [
-        insights.mood ? `Mood: ${insights.mood.state} (${insights.mood.intensity})` : '',
-        `Intent: ${insights.intent}`,
-        ...insights.memory_candidates.map(c => `${c.category}: ${c.title} - ${c.description}`),
-        ...insights.core_profile_updates.map(u => `${u.section}.${u.key}: ${u.value}`),
-      ].filter(Boolean).join('\n');
-
-      if (textContent.length < 20) return;
-
-      await embeddingQueueService.enqueueEmbedding({
-        userId,
-        sourceType: 'insight_extraction',
-        sourceId: `${conversationId}-${Date.now()}`,
-        operation: 'create',
-      });
-    } catch (error) {
-      logger.debug('[InsightExtractor] Embedding queue failed', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown',
-      });
-    }
+    // Insight data flows through memory candidates + daily analysis.
+    // Embedding enqueue was never wired to a worker handler and used a
+    // non-UUID sourceId that would fail at INSERT. Removed in pipeline
+    // hardening — see embedding-worker.ts for supported source types.
+    return;
   }
 
   private async routeToDailyAnalysis(
@@ -319,17 +301,19 @@ class ConversationInsightExtractorService {
     if (claims.length === 0) return;
 
     try {
+      const values = claims.map((_, i) => {
+        const offset = i * 4;
+        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`;
+      });
+      const params = claims.flatMap(c => [userId, c.claim, c.category, c.evidence]);
+
       await query(
-        `INSERT INTO daily_analysis_reports (user_id, report_date, snapshot, insights, cross_domain_insights)
-         VALUES ($1, CURRENT_DATE, '{}'::jsonb, $2::jsonb, '[]'::jsonb)
-         ON CONFLICT (user_id, report_date)
-         DO UPDATE SET
-           insights = COALESCE(daily_analysis_reports.insights, '[]'::jsonb) || $2::jsonb,
-           updated_at = NOW()`,
-        [userId, JSON.stringify(claims)]
+        `INSERT INTO conversation_claims (user_id, claim, category, evidence)
+         VALUES ${values.join(', ')}`,
+        params
       );
     } catch (error) {
-      logger.debug('[InsightExtractor] Daily analysis upsert failed', {
+      logger.debug('[InsightExtractor] Conversation claims insert failed', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown',
       });

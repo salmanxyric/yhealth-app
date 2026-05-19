@@ -537,6 +537,17 @@ class MentalRecoveryScoreService {
    */
   private async saveRecoveryScore(score: RecoveryScore): Promise<void> {
     try {
+      const userExists = await query<{ id: string }>(
+        `SELECT id FROM users WHERE id = $1`,
+        [score.userId]
+      );
+      if (userExists.rows.length === 0) {
+        logger.warn('[MentalRecoveryScore] Skipping save — user does not exist', {
+          userId: score.userId,
+        });
+        return;
+      }
+
       await query(
         `INSERT INTO mental_recovery_scores (
           user_id, score_date, recovery_score, components, emotion_contribution,

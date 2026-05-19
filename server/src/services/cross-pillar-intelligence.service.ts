@@ -860,20 +860,28 @@ class CrossPillarIntelligenceService {
   /**
    * Resolve a contradiction (user acted on it or it's no longer relevant).
    */
-  async resolveContradiction(contradictionId: string, status: 'resolved' | 'dismissed' = 'resolved'): Promise<void> {
+  async resolveContradiction(contradictionId: string, status: 'resolved' | 'dismissed' = 'resolved', userId?: string): Promise<boolean> {
     await this.ensureTable();
     try {
-      await query(
+      const params: string[] = [status, contradictionId];
+      let whereClause = 'WHERE id = $2';
+      if (userId) {
+        whereClause += ' AND user_id = $3';
+        params.push(userId);
+      }
+      const result = await query(
         `UPDATE cross_pillar_contradictions
          SET status = $1, resolved_at = NOW()
-         WHERE id = $2`,
-        [status, contradictionId]
+         ${whereClause}`,
+        params
       );
+      return (result.rowCount ?? 0) > 0;
     } catch (error) {
       logger.error('[CrossPillarIntelligence] Error resolving contradiction', {
         contradictionId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      return false;
     }
   }
 

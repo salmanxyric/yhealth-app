@@ -15,8 +15,11 @@ import type {
   RTCIceServer,
   VoiceCallEvent,
   SessionType,
+  WebRTCQualityMetrics,
+  CallTranscriptSegment,
 } from '../types/voice-call.types.js';
 import { vectorEmbeddingService } from './vector-embedding.service.js';
+import { callSummaryService } from './call-summary.service.js';
 
 
 const RETRY_CONFIG = {
@@ -726,7 +729,7 @@ class VoiceCallService {
             summary = conversation.conversation.title || 'Call completed';
           } else {
             // Generate summary from conversation messages
-            summary = await this.generateCallSummary(callId, call.session_id);
+            summary = await this.generateCallSummary(callId, call.session_id, userId, callDuration);
           }
         }
       } catch (error) {
@@ -997,22 +1000,211 @@ class VoiceCallService {
   }
 
   /**
-   * Generate call summary using AI
+   * Generate call summary using AI via callSummaryService
    */
-  private async generateCallSummary(callId: string, sessionId: string): Promise<string> {
+  private async generateCallSummary(
+    callId: string,
+    sessionId: string,
+    userId?: string,
+    callDuration?: number
+  ): Promise<string> {
     try {
       const conversation = await vectorEmbeddingService.getConversation(sessionId, 50);
       if (!conversation?.messages || conversation.messages.length === 0) {
         return 'Call completed - no conversation data available';
       }
 
-      // Use AI to generate summary from conversation
-      // For now, return a simple summary
-      const messageCount = conversation.messages.length;
-      return `Call completed with ${messageCount} messages exchanged.`;
+      if (!userId) {
+        return `Call completed with ${conversation.messages.length} messages exchanged.`;
+      }
+
+      const callRecord = await query<{ session_type: string }>(
+        `SELECT session_type FROM voice_calls WHERE id = $1`,
+        [callId]
+      );
+      const sessionType = (callRecord.rows[0]?.session_type || 'health_coach') as SessionType;
+
+      const result = await callSummaryService.generateSummary({
+        callId,
+        userId,
+        sessionType,
+        depthMode: 'light',
+        conversationId: sessionId,
+        duration: callDuration || 0,
+      });
+
+      return result.summary;
     } catch (error) {
       logger.error('[VoiceCallService] Error generating call summary', { error, callId });
       return 'Call completed';
+    }
+  }
+
+  /**
+   * Report WebRTC quality metrics for an active call
+   */
+  async reportQualityMetrics(
+    callId: string,
+    userId: string,
+    metrics: WebRTCQualityMetrics
+  ): Promise<void> {
+    try {
+      const callResult = await query<VoiceCall>(
+        `SELECT id, status FROM voice_calls WHERE id = $1 AND user_id = $2`,
+        [callId, userId]
+      );
+
+      if (callResult.rows.length === 0) {
+        throw ApiError.notFound('Call not found');
+      }
+
+      const call = callResult.rows[0];
+      if (call.status !== 'active' && call.status !== 'connecting') {
+        throw ApiError.badRequest('Quality metrics can only be reported for active calls');
+      }
+
+      await this.logCallEvent(callId, 'quality_report', {
+        ...metrics,
+        reported_at: new Date().toISOString(),
+      });
+
+      // Update aggregate quality metrics on the call record
+      await query(
+        `UPDATE voice_calls
+         SET quality_metrics = COALESCE(quality_metrics, '[]'::jsonb) || $1::jsonb,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [JSON.stringify([metrics]), callId]
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      logger.error('[VoiceCallService] Error reporting quality metrics', { error, callId });
+      throw ApiError.internal('Failed to report quality metrics');
+    }
+  }
+
+  /**
+   * Get aggregated quality metrics for a call
+   */
+  async getQualityMetrics(
+    callId: string,
+    userId: string
+  ): Promise<{ metrics: WebRTCQualityMetrics[]; summary: { avgJitter?: number; avgPacketLoss?: number; avgRoundTripTime?: number; avgMos?: number } }> {
+    try {
+      const callResult = await query<{ quality_metrics: WebRTCQualityMetrics[] | null }>(
+        `SELECT quality_metrics FROM voice_calls WHERE id = $1 AND user_id = $2`,
+        [callId, userId]
+      );
+
+      if (callResult.rows.length === 0) {
+        throw ApiError.notFound('Call not found');
+      }
+
+      const raw = callResult.rows[0].quality_metrics;
+      const metrics: WebRTCQualityMetrics[] = Array.isArray(raw) ? raw : [];
+
+      const audioMetrics = metrics.filter(m => m.audio);
+      const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : undefined;
+
+      const summary = {
+        avgJitter: avg(audioMetrics.map(m => m.audio.jitter).filter((v): v is number => v != null)),
+        avgPacketLoss: avg(audioMetrics.map(m => m.audio.packetLoss).filter((v): v is number => v != null)),
+        avgRoundTripTime: avg(audioMetrics.map(m => m.audio.roundTripTime).filter((v): v is number => v != null)),
+        avgMos: avg(metrics.map(m => m.mos).filter((v): v is number => v != null)),
+      };
+
+      return { metrics, summary };
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      logger.error('[VoiceCallService] Error getting quality metrics', { error, callId });
+      throw ApiError.internal('Failed to get quality metrics');
+    }
+  }
+
+  /**
+   * Store a transcript segment for a call
+   */
+  async storeTranscriptSegment(
+    callId: string,
+    userId: string,
+    segment: CallTranscriptSegment
+  ): Promise<void> {
+    try {
+      const callResult = await query<VoiceCall>(
+        `SELECT id, status FROM voice_calls WHERE id = $1 AND user_id = $2`,
+        [callId, userId]
+      );
+
+      if (callResult.rows.length === 0) {
+        throw ApiError.notFound('Call not found');
+      }
+
+      await query(
+        `INSERT INTO call_transcripts (call_id, speaker, content, spoken_at, confidence, duration_ms)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          callId,
+          segment.speaker,
+          segment.text,
+          segment.timestamp,
+          segment.confidence ?? null,
+          segment.duration ? Math.round(segment.duration * 1000) : null,
+        ]
+      );
+
+      await this.logCallEvent(callId, 'transcript_segment', {
+        speaker: segment.speaker,
+        length: segment.text.length,
+      });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      logger.error('[VoiceCallService] Error storing transcript segment', { error, callId });
+      throw ApiError.internal('Failed to store transcript');
+    }
+  }
+
+  /**
+   * Get full transcript for a call
+   */
+  async getTranscript(
+    callId: string,
+    userId: string
+  ): Promise<CallTranscriptSegment[]> {
+    try {
+      const callResult = await query<{ id: string }>(
+        `SELECT id FROM voice_calls WHERE id = $1 AND user_id = $2`,
+        [callId, userId]
+      );
+
+      if (callResult.rows.length === 0) {
+        throw ApiError.notFound('Call not found');
+      }
+
+      const result = await query<{
+        speaker: 'user' | 'ai';
+        content: string;
+        spoken_at: Date;
+        confidence: number | null;
+        duration_ms: number | null;
+      }>(
+        `SELECT speaker, content, spoken_at, confidence, duration_ms
+         FROM call_transcripts
+         WHERE call_id = $1
+         ORDER BY spoken_at ASC`,
+        [callId]
+      );
+
+      return result.rows.map(row => ({
+        speaker: row.speaker,
+        text: row.content,
+        timestamp: row.spoken_at.toISOString(),
+        confidence: row.confidence ?? undefined,
+        duration: row.duration_ms ? row.duration_ms / 1000 : undefined,
+      }));
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      logger.error('[VoiceCallService] Error getting transcript', { error, callId });
+      throw ApiError.internal('Failed to get transcript');
     }
   }
 

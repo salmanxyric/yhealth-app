@@ -112,7 +112,8 @@ class IntelligenceController {
     const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized('Authentication required');
 
-    await crossPillarIntelligenceService.resolveContradiction(req.params.id, 'resolved');
+    const updated = await crossPillarIntelligenceService.resolveContradiction(req.params.id, 'resolved', userId);
+    if (!updated) throw ApiError.notFound('Contradiction not found');
     ApiResponse.success(res, {}, 'Contradiction resolved', undefined, req);
   });
 
@@ -124,7 +125,8 @@ class IntelligenceController {
     const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized('Authentication required');
 
-    await crossPillarIntelligenceService.resolveContradiction(req.params.id, 'dismissed');
+    const updated = await crossPillarIntelligenceService.resolveContradiction(req.params.id, 'dismissed', userId);
+    if (!updated) throw ApiError.notFound('Contradiction not found');
     ApiResponse.success(res, {}, 'Contradiction dismissed', undefined, req);
   });
 

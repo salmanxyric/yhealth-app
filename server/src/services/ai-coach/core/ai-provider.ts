@@ -109,7 +109,7 @@ export class AIProvider {
 
   isReasoningModel(model: string): boolean {
     const modelLower = model.toLowerCase();
-    return modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower.startsWith('gpt-5');
+    return modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower.startsWith('gpt-5.5');
   }
 
   getTokenParameter(model: string, maxTokens: number): { max_tokens?: number; max_completion_tokens?: number } {
@@ -122,9 +122,9 @@ export class AIProvider {
 
   supportsCustomTemperature(model: string): boolean {
     const modelLower = model.toLowerCase();
-    if (modelLower.includes('mini')) return true;
-    const restrictedModels = ['gpt-4o', 'gpt-5'];
-    return !restrictedModels.some(prefix => modelLower.startsWith(prefix));
+    if (modelLower.includes('mini') || modelLower.includes('nano')) return true;
+    const restrictedPrefixes = ['gpt-4o', 'gpt-5.5'];
+    return !restrictedPrefixes.some(prefix => modelLower.startsWith(prefix));
   }
 
   getTemperatureParameter(model: string, temperature: number): { temperature?: number } {

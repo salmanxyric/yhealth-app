@@ -1057,7 +1057,7 @@ export const getRecentActivities = asyncHandler(async (req: AuthenticatedRequest
 });
 
 const createActivityLog = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const userId = req.user?.id;
+  const userId = req.user?.userId;
   if (!userId) throw new ApiError(401, 'Authentication required');
 
   const { type, title, description, duration, pillar, completedAt } = req.body;

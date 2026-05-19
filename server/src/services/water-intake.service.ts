@@ -241,8 +241,13 @@ class WaterIntakeService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    // Get today's log
-    const todayLog = await this.getTodayLog(userId);
+    // Read-only fetch — don't auto-create a log for stats queries
+    const todayStr = today.toISOString().split('T')[0];
+    const todayResult = await pool.query(
+      `SELECT * FROM water_intake_logs WHERE user_id = $1 AND log_date = $2`,
+      [userId, todayStr]
+    );
+    const todayLog = todayResult.rows.length > 0 ? this.mapLogRow(todayResult.rows[0]) : null;
 
     // Get last 7 days
     const history = await this.getHistory(

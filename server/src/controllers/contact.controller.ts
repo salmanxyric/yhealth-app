@@ -124,7 +124,7 @@ export const getAdminContactById = asyncHandler(
 
     // Mark as read if it was new
     if (contact.status === 'new') {
-      await updateContact(id, { status: 'read' }, req.user?.id);
+      await updateContact(id, { status: 'read' }, req.user?.userId);
     }
 
     ApiResponse.success(res, contact, 'Contact submission fetched successfully');
@@ -140,7 +140,7 @@ export const updateContactSubmission = asyncHandler(
     const { id } = req.params;
     const input: UpdateContactInput = req.body;
 
-    const contact = await updateContact(id, input, req.user?.id);
+    const contact = await updateContact(id, input, req.user?.userId);
     ApiResponse.success(res, contact, 'Contact submission updated successfully');
   }
 );
@@ -176,7 +176,7 @@ export const bulkDeleteContactsPost = asyncHandler(
 export const bulkUpdateContactStatusPost = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     const { ids, status } = req.body;
-    await bulkUpdateContactStatus(ids, status, req.user?.id);
+    await bulkUpdateContactStatus(ids, status, req.user?.userId);
     ApiResponse.success(
       res,
       null,
@@ -211,11 +211,11 @@ export const sendContactReply = asyncHandler(
     let adminName: string | undefined;
     let adminEmail: string | undefined;
 
-    if (req.user?.id) {
+    if (req.user?.userId) {
       try {
         const adminResult = await query<{ first_name: string; last_name: string; email: string }>(
           `SELECT first_name, last_name, email FROM users WHERE id = $1`,
-          [req.user.id]
+          [req.user.userId]
         );
         if (adminResult.rows[0]) {
           const admin = adminResult.rows[0];
@@ -244,7 +244,7 @@ export const sendContactReply = asyncHandler(
 
     // Optionally update contact status to "in_progress" if it's still "new" or "read"
     if (contact.status === 'new' || contact.status === 'read') {
-      await updateContact(id, { status: 'in_progress' }, req.user?.id);
+      await updateContact(id, { status: 'in_progress' }, req.user?.userId);
     }
 
     ApiResponse.success(res, { sent: true }, 'Reply email sent successfully');

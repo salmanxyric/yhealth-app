@@ -146,7 +146,7 @@ Does this image contain a human person? Respond with JSON only.`,
         try {
           const dataUrl = `data:${mimeType};base64,${base64Image}`;
           const response = await this.visionClient.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: env.openai.visionLightModel || 'gpt-5.4-mini',
             max_tokens: 100,
             messages: [
               {
