@@ -118,6 +118,10 @@ export function HealthOrbitSection() {
       {/* Ambient background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full" style={{ background: "radial-gradient(circle, rgba(14,165,233,0.04) 0%, rgba(16,185,129,0.02) 35%, transparent 65%)" }} />
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px]"
+          style={{ background: "radial-gradient(ellipse 50% 50% at 50% 50%, rgba(6,182,212,0.05) 0%, rgba(14,165,233,0.02) 30%, transparent 60%)" }}
+        />
       </div>
 
       {/* Header */}
@@ -126,7 +130,13 @@ export function HealthOrbitSection() {
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs font-medium text-sky-300">Real-time health intelligence</span>
         </div>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4">
+        <p className="text-[10px] sm:text-xs font-semibold tracking-[0.25em] uppercase text-sky-400/60 mb-3">
+          Your Health Ecosystem
+        </p>
+        <h2
+          className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4"
+          style={{ fontFamily: "var(--font-instrument-serif, serif)" }}
+        >
           Your Life Universe
         </h2>
         <p className="text-base sm:text-lg text-white/50 max-w-xl mx-auto">
@@ -138,22 +148,26 @@ export function HealthOrbitSection() {
       <div className="relative max-w-[520px] sm:max-w-[600px] md:max-w-[680px] mx-auto aspect-square px-4">
 
         {/* Orbit ring guides */}
-        <motion.div className="absolute inset-[20%] rounded-full border border-dashed border-white/[0.04]"
+        <motion.div
+          className="absolute inset-[20%] rounded-full border border-dashed border-white/[0.04]"
+          style={{ background: "radial-gradient(circle, transparent 60%, rgba(14,165,233,0.03) 80%, transparent 100%)" }}
           animate={{ rotate: 360 }}
           transition={{ duration: 90, repeat: Infinity, ease: "linear" }}
         />
-        <motion.div className="absolute inset-[5%] rounded-full border border-dashed border-white/[0.03]"
+        <motion.div
+          className="absolute inset-[5%] rounded-full border border-dashed border-white/[0.03]"
+          style={{ background: "radial-gradient(circle, transparent 55%, rgba(6,182,212,0.02) 75%, transparent 100%)" }}
           animate={{ rotate: -360 }}
           transition={{ duration: 120, repeat: Infinity, ease: "linear" }}
         />
 
         {/* ── SVG connection lines ── */}
-        <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 1 }}>
+        <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 1, mixBlendMode: "screen" }}>
           <defs>
             {metrics.map((m) => (
               <linearGradient key={`lg-${m.id}`} id={`lg-${m.id}`} x1="50%" y1="50%" x2="50%" y2="0%">
-                <stop offset="0%" stopColor="rgba(14,165,233,0.3)" />
-                <stop offset="100%" stopColor={m.color} stopOpacity="0.2" />
+                <stop offset="0%" stopColor="rgba(14,165,233,0.15)" />
+                <stop offset="100%" stopColor={m.color} stopOpacity="0.1" />
               </linearGradient>
             ))}
           </defs>
@@ -183,7 +197,7 @@ export function HealthOrbitSection() {
             return (
               <motion.line key={`oline-${m.id}`}
                 x1="50%" y1="50%" x2={`${pos[0]}%`} y2={`${pos[1]}%`}
-                stroke={m.color} strokeWidth="1" strokeOpacity="0.08"
+                stroke={m.color} strokeWidth="1" strokeOpacity="0.05"
                 initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
                 transition={{ duration: 1, delay: 1.0 + i * 0.08 }}
               />
@@ -207,21 +221,40 @@ export function HealthOrbitSection() {
 
         {/* ── Center "You" Node ── */}
         <div className="orbit-node absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-          <motion.div className="absolute -inset-6 rounded-full border border-sky-500/10"
-            animate={{ scale: [1, 1.3], opacity: [0.3, 0] }}
-            transition={{ duration: 2.5, repeat: Infinity }}
+          {/* Outer breathing pulse ring */}
+          <motion.div className="absolute -inset-10 rounded-full border border-sky-500/10"
+            animate={{ scale: [1, 1.4], opacity: [0.25, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeOut" }}
           />
-          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex flex-col items-center justify-center"
+          {/* Inner breathing pulse ring */}
+          <motion.div className="absolute -inset-6 rounded-full border border-sky-400/15"
+            animate={{ scale: [1, 1.25], opacity: [0.4, 0] }}
+            transition={{ duration: 2.5, repeat: Infinity, delay: 0.4 }}
+          />
+          {/* Ambient glow behind node */}
+          <motion.div
+            className="absolute -inset-12 rounded-full"
+            style={{ background: "radial-gradient(circle, rgba(14,165,233,0.12) 0%, rgba(6,182,212,0.04) 40%, transparent 70%)" }}
+            animate={{ opacity: [0.6, 1, 0.6] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex flex-col items-center justify-center"
+            animate={{ boxShadow: [
+              "0 0 60px rgba(14,165,233,0.25), 0 0 120px rgba(14,165,233,0.08), inset 0 0 20px rgba(14,165,233,0.1)",
+              "0 0 80px rgba(14,165,233,0.35), 0 0 160px rgba(14,165,233,0.12), inset 0 0 30px rgba(14,165,233,0.15)",
+              "0 0 60px rgba(14,165,233,0.25), 0 0 120px rgba(14,165,233,0.08), inset 0 0 20px rgba(14,165,233,0.1)",
+            ] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
             style={{
               background: "radial-gradient(circle at 40% 35%, rgba(14,165,233,0.5), rgba(14,165,233,0.12) 65%, rgba(6,182,212,0.04))",
               border: "2px solid rgba(14,165,233,0.4)",
-              boxShadow: "0 0 50px rgba(14,165,233,0.2), 0 0 100px rgba(14,165,233,0.06)",
             }}
           >
             <ProgressRing percent={score} color="#0ea5e9" size={96} />
             <span className="text-white font-bold text-sm sm:text-base relative z-10">You</span>
             <span className="text-sky-300 text-[10px] sm:text-xs font-medium relative z-10">{score}%</span>
-          </div>
+          </motion.div>
         </div>
 
         {/* ── Inner Ring (4 primary metrics) ── */}
@@ -242,9 +275,11 @@ export function HealthOrbitSection() {
               {/* Node with progress ring */}
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center"
                 style={{
-                  background: `radial-gradient(circle at 38% 32%, ${m.color}35, ${m.color}10 65%, transparent)`,
+                  background: `radial-gradient(circle at 38% 32%, ${m.color}35, ${m.color}10 65%, rgba(255,255,255,0.02))`,
                   border: `2px solid ${m.color}40`,
-                  boxShadow: `0 0 24px ${m.color}20, inset 0 0 12px ${m.color}08`,
+                  boxShadow: `0 0 24px ${m.color}20, inset 0 1px 1px rgba(255,255,255,0.08), inset 0 0 12px ${m.color}08`,
+                  backdropFilter: "blur(12px)",
+                  WebkitBackdropFilter: "blur(12px)",
                 }}
               >
                 <ProgressRing percent={m.ring} color={m.color} size={64} />
@@ -280,9 +315,11 @@ export function HealthOrbitSection() {
             >
               <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center"
                 style={{
-                  background: `radial-gradient(circle at 38% 32%, ${m.color}25, ${m.color}08 65%, transparent)`,
+                  background: `radial-gradient(circle at 38% 32%, ${m.color}25, ${m.color}08 65%, rgba(255,255,255,0.015))`,
                   border: `1.5px solid ${m.color}30`,
-                  boxShadow: `0 0 16px ${m.color}12`,
+                  boxShadow: `0 0 16px ${m.color}12, inset 0 1px 1px rgba(255,255,255,0.06)`,
+                  backdropFilter: "blur(12px)",
+                  WebkitBackdropFilter: "blur(12px)",
                 }}
               >
                 <ProgressRing percent={m.ring} color={m.color} size={48} />
@@ -299,13 +336,23 @@ export function HealthOrbitSection() {
       </div>
 
       {/* Bottom stats bar */}
-      <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 mt-10 sm:mt-14 px-4">
+      <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 mt-10 sm:mt-14 px-4 relative z-10">
         {[
           { label: "Data Points", value: "10+" },
           { label: "AI Insights", value: "Real-time" },
           { label: "Connected Sources", value: "8+" },
         ].map((stat) => (
-          <div key={stat.label} className="orbit-stat text-center">
+          <div
+            key={stat.label}
+            className="orbit-stat text-center px-5 sm:px-6 py-3 sm:py-4 rounded-xl"
+            style={{
+              background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              boxShadow: "0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+            }}
+          >
             <div className="text-lg sm:text-xl font-bold text-white">{stat.value}</div>
             <div className="text-[10px] sm:text-xs text-white/40">{stat.label}</div>
           </div>

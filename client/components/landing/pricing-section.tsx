@@ -145,6 +145,7 @@ function PricingCard({
             ? "bg-card border-2 border-primary shadow-xl shadow-primary/10"
             : "bg-card/80 border border-border hover:border-primary/30 hover:shadow-lg"
         )}
+        style={!plan.popular ? { background: "linear-gradient(to bottom, rgba(255,255,255,0.04), rgba(255,255,255,0.01))", boxShadow: "0 4px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)" } : undefined}
         animate={plan.popular ? { y: [0, -6, 0] } : {}}
         transition={plan.popular ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : {}}
       >
@@ -311,6 +312,9 @@ export function PricingSection() {
       <div className="absolute top-0 left-1/4 w-48 sm:w-72 md:w-96 h-48 sm:h-72 md:h-96 bg-primary/5 rounded-full blur-3xl" />
       <div className="absolute bottom-0 right-1/4 w-40 sm:w-64 md:w-80 h-40 sm:h-64 md:h-80 bg-[#7C3AED]/5 rounded-full blur-3xl" />
 
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent z-10" />
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent z-10" />
+
       <div className="container mx-auto px-4 relative z-10">
         {/* Header */}
         <GSAPScrollReveal
@@ -320,12 +324,14 @@ export function PricingSection() {
           staggerSelector=".pricing-header-item"
           className="text-center max-w-3xl mx-auto mb-8 sm:mb-10 md:mb-12"
         >
+          <p className="pricing-header-item text-xs tracking-[0.25em] uppercase mb-4" style={{ color: "hsl(40 80% 60%)" }}>FLEXIBLE PLANS</p>
+
           <div className="pricing-header-item inline-flex items-center gap-2 glass-card px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium mb-4 sm:mb-6">
             <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
             <span>Simple Pricing</span>
           </div>
 
-          <h2 className="pricing-header-item text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6">
+          <h2 className="pricing-header-item text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4 md:mb-6" style={{ fontFamily: "var(--font-instrument-serif, serif)", fontStyle: "italic" }}>
             Invest in Your <span className="gradient-text-animated">Health Journey</span>
           </h2>
 
@@ -336,17 +342,19 @@ export function PricingSection() {
 
         {/* Billing Toggle */}
         <GSAPScrollReveal direction="up" distance={20} delay={0.3}>
-          <div className="flex items-center justify-center gap-2 sm:gap-3 md:gap-4 mb-8 sm:mb-10 md:mb-12">
-            <span className={cn("text-xs sm:text-sm font-medium transition-colors", !isYearly ? "text-foreground" : "text-muted-foreground")}>
-              Monthly
-            </span>
-            <Switch checked={isYearly} onCheckedChange={setIsYearly} className="data-[state=checked]:bg-primary" />
-            <span className={cn("text-xs sm:text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2", isYearly ? "text-foreground" : "text-muted-foreground")}>
-              Yearly
-              <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] sm:text-xs font-medium">
-                Save 20%
+          <div className="flex items-center justify-center mb-8 sm:mb-10 md:mb-12">
+            <div className="inline-flex items-center gap-2 sm:gap-3 md:gap-4 rounded-full px-6 py-3 border border-white/[0.08]" style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(12px)" }}>
+              <span className={cn("text-xs sm:text-sm font-medium transition-colors", !isYearly ? "text-foreground" : "text-muted-foreground")}>
+                Monthly
               </span>
-            </span>
+              <Switch checked={isYearly} onCheckedChange={setIsYearly} className="data-[state=checked]:bg-primary" />
+              <span className={cn("text-xs sm:text-sm font-medium transition-colors flex items-center gap-1.5 sm:gap-2", isYearly ? "text-foreground" : "text-muted-foreground")}>
+                Yearly
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] sm:text-xs font-medium">
+                  Save 20%
+                </span>
+              </span>
+            </div>
           </div>
         </GSAPScrollReveal>
 
@@ -376,7 +384,7 @@ export function PricingSection() {
               { icon: Zap, text: "Cancel anytime" },
               { icon: Check, text: "No hidden fees" },
             ].map((badge) => (
-              <div key={badge.text} className="flex items-center justify-center gap-2 text-xs sm:text-sm text-muted-foreground">
+              <div key={badge.text} className="flex items-center justify-center gap-2 text-xs sm:text-sm text-muted-foreground" style={{ textShadow: "0 0 20px rgba(14,165,233,0.15)" }}>
                 <badge.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                 <span>{badge.text}</span>
               </div>

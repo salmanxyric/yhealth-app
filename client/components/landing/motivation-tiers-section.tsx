@@ -284,11 +284,12 @@ export function MotivationTiersSection() {
           duration={0.7}
           className="text-center max-w-4xl mx-auto mb-8 md:mb-10"
         >
+          <p className="text-xs tracking-[0.25em] uppercase mb-4" style={{ color: "hsl(40 80% 60%)" }}>PERSONALIZED INTENSITY</p>
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-xs sm:text-sm font-medium text-primary mb-6">
             <Sparkles className="w-3.5 h-3.5" />
             Adaptive Coaching
           </div>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.1]">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.1]" style={{ fontFamily: "var(--font-instrument-serif, serif)" }}>
             Coaching that{" "}
             <span className="bg-gradient-to-r from-sky-400 via-cyan-400 to-orange-400 bg-clip-text text-transparent">
               meets you where you are
@@ -340,7 +341,8 @@ export function MotivationTiersSection() {
             return (
               <motion.div
                 key={tier.title}
-                className="tier-card group relative rounded-3xl border border-white/[0.08] bg-white/[0.015] backdrop-blur-sm overflow-hidden transition-all duration-500 hover:border-white/20"
+                className="tier-card group relative rounded-3xl border border-white/[0.08] bg-gradient-to-b from-white/[0.04] to-white/[0.01] backdrop-blur-md overflow-hidden transition-all duration-500 hover:border-white/20"
+                style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)" }}
                 whileHover={{
                   y: -8,
                   boxShadow: `0 0 80px -20px ${tier.glowColor}, 0 0 0 1px rgba(255,255,255,0.12)`,
