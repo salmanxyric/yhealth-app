@@ -656,7 +656,7 @@ export function AICoachTab() {
                       </p>
                       <p className="text-xs text-slate-500 truncate">
                         {conv.lastMessagePreview
-                          ? `${conv.lastMessageRole === 'assistant' ? 'Cia: ' : 'You: '}${conv.lastMessagePreview}`
+                          ? `${conv.lastMessageRole === 'assistant' ? 'SIA: ' : 'You: '}${conv.lastMessagePreview}`
                           : `${conv.messageCount} messages`}
                       </p>
                     </div>
@@ -728,9 +728,9 @@ export function AICoachTab() {
             <Bot className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-white truncate">Cia</h3>
+            <h3 className="font-semibold text-white truncate">SIA</h3>
             <p className="text-xs text-slate-400 truncate">
-              Powered by RAG • Always here to help
+              Powered by RAG • Your life intelligence.
             </p>
           </div>
           <button
@@ -754,7 +754,7 @@ export function AICoachTab() {
                 How can I help you today?
               </h3>
               <p className="text-slate-400 max-w-md">
-                I&apos;m Cia, your AI health coach. Ask me about nutrition, workouts,
+                I&apos;m SIA, your AI health coach. Ask me about nutrition, workouts,
                 wellness, or any health-related questions.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8 w-full max-w-md">
@@ -922,7 +922,7 @@ export function AICoachTab() {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Cia..."
+                placeholder="Ask SIA..."
                 rows={1}
                 className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
               />
