@@ -142,10 +142,10 @@ interface RecentActivity {
 // SYSTEM PROMPT
 // ============================================
 
-const BASE_HUMAN_LIKE_PROMPT = `You are **Cia**, an advanced AI life coach helping users improve every dimension of their life — health, fitness, nutrition, career, finances, relationships, faith, education, creativity, and personal growth.
+const BASE_HUMAN_LIKE_PROMPT = `You are **SIA**, an advanced AI life intelligence helping users improve every dimension of their life — health, fitness, nutrition, career, finances, relationships, faith, education, creativity, and personal growth.
 
 ## IDENTITY & ROLE
-- You are Cia — a long-term life coaching partner, not a generic assistant.
+- You are SIA — a long-term life coaching partner, not a generic assistant.
 - Health, fitness, and nutrition are your data-rich specialties (wearables, workout logs, meal data). But you coach across ALL life domains.
 - Think of yourself as a trusted friend who is an expert in personal development.
 - Proactively check on progress, celebrate wins, and provide accountability for ALL goals (fitness, financial, faith, career, etc.).
@@ -956,11 +956,11 @@ class LangGraphChatbotService {
         ? result.rows[0].voice_assistant_name.trim()
         : null;
 
-      // Return user-assigned name or default to "Cia"
-      return assistantName || 'Cia';
+      // Return user-assigned name or default to "SIA"
+      return assistantName || 'SIA';
     } catch (error) {
       logger.error('[LangGraphChatbot] Error getting assistant name', { userId, error });
-      return 'Cia'; // Default fallback
+      return 'SIA'; // Default fallback
     }
   }
 
@@ -1468,7 +1468,7 @@ class LangGraphChatbotService {
 
   /**
    * Build a system prompt section from the pre-computed daily analysis report.
-   * This gives Cia ready-made insights so she doesn't need to "look into it".
+   * This gives SIA ready-made insights so she doesn't need to "look into it".
    */
   private buildDailyAnalysisSection(report: DailyAnalysisReport): string {
     const sections: string[] = [];
@@ -1939,7 +1939,7 @@ class LangGraphChatbotService {
 
     const defaults = {
       userName: null as string | null,
-      assistantName: 'Cia',
+      assistantName: 'SIA',
       userTimezone: 'UTC',
       recentActivity: {} as RecentActivity,
       comprehensiveContext: emptyContext,
@@ -2149,11 +2149,11 @@ class LangGraphChatbotService {
     const personalizedContext = contextParts.join(' ');
 
     // Build full system prompt with user-assigned assistant name
-    // Replace "Cia" with the user's assigned name in the base prompt
-    let systemPrompt = BASE_HUMAN_LIKE_PROMPT.replace(/Cia/g, assistantName).replace(/\*\*Cia\*\*/g, `**${assistantName}**`);
+    // Replace "SIA" with the user's assigned name in the base prompt
+    let systemPrompt = BASE_HUMAN_LIKE_PROMPT.replace(/SIA/g, assistantName).replace(/\*\*SIA\*\*/g, `**${assistantName}**`);
 
     // Add assistant name context with multilingual support
-    systemPrompt += `\n\nYour name is ${assistantName}. Never use "Cia" or any other name. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
+    systemPrompt += `\n\nYour name is ${assistantName}. Never use "SIA" or any other name unless that IS your name. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
 
     // Camera/Vision capability — the user can share live camera frames with you
     systemPrompt += `\n\nCAMERA CAPABILITY: You have the ability to see the user through their camera when they share an image frame with their message. When a camera frame is attached to a message, you CAN see the user. Analyze the image and describe what you observe — the person, their posture, exercise form, food items, environment, etc. NEVER say "I can't see you" or "I don't have visual access" when an image is provided. You ARE a multimodal AI that can process images.`;
@@ -2387,12 +2387,12 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   private async getFallbackSystemPrompt(userId: string): Promise<string> {
     const [userName, assistantName, userTimezone] = await Promise.all([
       this.getUserName(userId).catch(() => null),
-      this.getAssistantName(userId).catch(() => 'Cia'),
+      this.getAssistantName(userId).catch(() => 'SIA'),
       this.getUserTimezone(userId).catch(() => 'UTC'),
     ]);
     const currentLocalDate = getUserLocalDateISO(userTimezone);
     const currentLocalDateTime = formatUserLocalDateTime(userTimezone);
-    let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/Cia/g, assistantName).replace(/\*\*Cia\*\*/g, `**${assistantName}**`);
+    let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/SIA/g, assistantName).replace(/\*\*SIA\*\*/g, `**${assistantName}**`);
     prompt += `\n\nYour name is ${assistantName}. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
     prompt += `\n\nCURRENT DATE & TIME (AUTHORITATIVE): User timezone ${userTimezone}. Today is ${currentLocalDate} (${currentLocalDateTime}). For schedule tools, omit the date for today or pass "today"; never use an older explicit date unless the user named it.`;
     if (userName) {
