@@ -13,7 +13,7 @@ import {
   getShortDayName,
   formatScheduleTime as formatTime,
 } from "@/src/shared/services/voice-schedule.service";
-import { useRingtone, type RingtoneOption } from "@/hooks/use-ringtone";
+import { useRingtone } from "@/hooks/use-ringtone";
 
 // ============================================
 // Ringtone waveform bars (decorative visualizer)
@@ -275,7 +275,7 @@ export function VoiceAssistantSettingsSection({
               onChange={(e) => setAssistantName(e.target.value)}
               onBlur={async () => {
                 try {
-                  await api.patch("/preferences", { voiceAssistant: { assistantName: assistantName.trim() || "Cia" } });
+                  await api.patch("/preferences", { voiceAssistant: { assistantName: assistantName.trim() || "SIA" } });
                   toast.success("Assistant name saved");
                 } catch (err) {
                   console.error("Failed to save assistant name:", err);

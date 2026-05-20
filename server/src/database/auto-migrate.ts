@@ -257,6 +257,7 @@ const EXPECTED_TABLES = [
   'intelligence_session_context',
   'intelligence_feedback',
   'intelligence_pending_signals',
+  'conversation_claims',
   // Entitlement & subscription hardening
   'entitlement_shadow_log',
   'user_entitlements_cache',
@@ -1063,6 +1064,14 @@ const SUPPLEMENTARY_MIGRATIONS: readonly string[] = [
   '20260513_ai_coach_call_log.sql',
   'add-voice-schedule-prefs.sql',
   '20260513_intelligence_pending_signals.sql',
+  '20260402120000_add-health-data-dedup-constraint.sql',
+  '20260402130000_add-finance-module.sql',
+  '20260507000000_bootstrap_required_data.sql',
+  '20260518000000_conversation_claims.sql',
+  '20260519000000_vector_embeddings_dedup_constraint.sql',
+  '20260519100000_vector_embeddings_content_hash.sql',
+  '20260519200000_voice_quality_metrics_and_transcripts.sql',
+  'add-intelligence-session-updated-at.sql',
 ];
 
 async function runSupplementaryMigrations(): Promise<void> {
@@ -1169,6 +1178,8 @@ export async function autoMigrate(): Promise<{
       const migrationTableMap: Record<string, string> = {
         'user_feature_state': '20260428000000_reasoning_graph.sql',
         'reasoning_edges': '20260428000000_reasoning_graph.sql',
+        'intelligence_pending_signals': '20260513_intelligence_pending_signals.sql',
+        'conversation_claims': '20260518000000_conversation_claims.sql',
       };
 
       for (const table of missingTables) {
@@ -1458,6 +1469,9 @@ export async function verifySchema(): Promise<{
 const STARTUP_TABLE_MIGRATIONS: readonly string[] = [
   '20260512000000_chat_calls.sql',
   '20260513_ai_coach_call_log.sql',
+  '20260513_intelligence_pending_signals.sql',
+  '20260518000000_conversation_claims.sql',
+  'add-intelligence-session-updated-at.sql',
 ];
 
 /**

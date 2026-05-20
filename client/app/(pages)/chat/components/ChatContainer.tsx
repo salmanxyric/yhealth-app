@@ -298,7 +298,7 @@ export function ChatContainer({ className }: ChatContainerProps) {
         {/* Header */}
         {activeConversationId && (
           <ChatHeader
-            title={activeConversation?.title || 'Cia'}
+            title={activeConversation?.title || 'SIA'}
             subtitle="Your personal AI health and fitness coach"
           />
         )}
@@ -310,8 +310,8 @@ export function ChatContainer({ className }: ChatContainerProps) {
           </div>
         ) : messages.length === 0 ? (
           <EmptyState
-            title="Cia"
-            description="I'm Cia, your personal AI-powered health and fitness coach. Ask me anything about nutrition, workouts, sleep, stress management, and more."
+            title="SIA"
+            description="I'm SIA, your personal AI-powered health and fitness coach. Ask me anything about nutrition, workouts, sleep, stress management, and more."
             suggestions={WELCOME_SUGGESTIONS}
             onSuggestionClick={handleSuggestionClick}
           />

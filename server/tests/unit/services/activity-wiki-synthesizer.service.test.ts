@@ -15,11 +15,13 @@ import type { ActivityDomain, ActivityEvent } from '../../../src/services/activi
 const mockGetPage = jest.fn<any>();
 const mockUpdatePage = jest.fn<any>();
 const mockCreatePage = jest.fn<any>();
+const mockAddSources = jest.fn<any>();
 
 const mockWikiService = {
   getPage: mockGetPage,
   updatePage: mockUpdatePage,
   createPage: mockCreatePage,
+  addSources: mockAddSources,
 };
 
 const mockLogger = { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
@@ -393,6 +395,50 @@ describe('ActivityWikiSynthesizerService', () => {
         expect(body).not.toContain('```');
         expect(body).toContain('# Sleep Profile');
       }
+    });
+  });
+
+  describe('source tracking', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      // Reset cooldowns for each test
+      (activityWikiSynthesizer as any).cooldowns = new Map();
+    });
+
+    it('should call addSources after updating domain wiki page', async () => {
+      mockGetPage.mockResolvedValue(makeExistingPage());
+      mockLlmInvoke.mockResolvedValue({ content: '# Updated fitness profile\n\nNew content here with enough chars.' });
+      mockUpdatePage.mockResolvedValue(undefined);
+      mockAddSources.mockResolvedValue(undefined);
+
+      await activityWikiSynthesizer.synthesize(makeEvent({
+        domain: 'workout',
+        eventType: 'workout_completed',
+        summary: 'Completed a 45min strength workout',
+      }));
+
+      expect(mockAddSources).toHaveBeenCalledWith(
+        'page-1',
+        [expect.objectContaining({
+          sourceType: 'activity_event',
+          sourceTable: 'activity_events',
+        })]
+      );
+    });
+
+    it('should not call addSources when page is newly created', async () => {
+      mockGetPage.mockResolvedValue(null);
+      mockLlmInvoke.mockResolvedValue({ content: '# New fitness profile\n\nBrand new content here enough.' });
+      mockCreatePage.mockResolvedValue(undefined);
+      mockAddSources.mockResolvedValue(undefined);
+
+      await activityWikiSynthesizer.synthesize(makeEvent({
+        domain: 'workout',
+        eventType: 'workout_completed',
+        summary: 'First workout logged',
+      }));
+
+      expect(mockAddSources).not.toHaveBeenCalled();
     });
   });
 });

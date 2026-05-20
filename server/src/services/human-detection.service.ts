@@ -6,6 +6,7 @@
 
 import OpenAI from 'openai';
 import { env } from '../config/env.config.js';
+import { getTokenParameter } from '../utils/openai-tokens.util.js';
 import { logger } from './logger.service.js';
 
 export interface HumanDetectionResult {
@@ -145,9 +146,10 @@ Does this image contain a human person? Respond with JSON only.`,
       if (!content && this.visionClient) {
         try {
           const dataUrl = `data:${mimeType};base64,${base64Image}`;
+          const visionModel = env.openai.visionLightModel || 'gpt-5.4-mini';
           const response = await this.visionClient.chat.completions.create({
-            model: env.openai.visionLightModel || 'gpt-5.4-mini',
-            max_tokens: 100,
+            model: visionModel,
+            ...getTokenParameter(visionModel, 100),
             messages: [
               {
                 role: 'system',

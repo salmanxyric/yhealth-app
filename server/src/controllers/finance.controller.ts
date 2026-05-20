@@ -253,12 +253,10 @@ User's financial context: ${context}`;
 export const scanReceipt = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   getUserId(req); // auth check
 
-  const { imageBase64 } = req.body as { imageBase64: string };
-  if (!imageBase64) throw ApiError.badRequest('imageBase64 is required');
+  const { imageBase64, statementText } = req.body as { imageBase64?: string; statementText?: string };
+  if (!imageBase64 && !statementText) throw ApiError.badRequest('imageBase64 or statementText is required');
 
-  // Use Gemini Vision to extract receipt data
-  const result = await aiProviderService.generateCompletion({
-    systemPrompt: `You are a receipt OCR system. Extract structured data from receipt images.
+  const systemPrompt = `You are a receipt/statement OCR system. Extract structured data from receipt or bank statement content.
 Return ONLY valid JSON (no markdown fences):
 {
   "vendor": "store/restaurant name",
@@ -271,12 +269,17 @@ Return ONLY valid JSON (no markdown fences):
   "taxAmount": number or null,
   "confidence": number (0-100, how confident you are in the extraction)
 }
-If the image is not a receipt or is unreadable, return:
-{ "error": "not_a_receipt", "message": "description of what you see instead" }`,
-    userPrompt: 'Extract all data from this receipt image.',
-    maxTokens: 2000,
+If the content is not a receipt/statement or is unreadable, return:
+{ "error": "not_a_receipt", "message": "description of what you see instead" }`;
+
+  const result = await aiProviderService.generateCompletion({
+    systemPrompt,
+    userPrompt: statementText
+      ? `Extract all transactions from this bank statement data:\n\n${statementText}`
+      : 'Extract all data from this receipt/statement.',
+    maxTokens: statementText ? 4000 : 2000,
     temperature: 0.1,
-    imageBase64,
+    ...(imageBase64 ? { imageBase64 } : {}),
   });
 
   // Parse AI response

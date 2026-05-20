@@ -150,7 +150,7 @@ export function ConversationSidebar({
             </div>
             <div>
               <p className="text-sm font-medium text-zinc-400">No conversations yet</p>
-              <p className="text-xs text-zinc-600 mt-1">Start chatting with Cia</p>
+              <p className="text-xs text-zinc-600 mt-1">Start chatting with SIA</p>
             </div>
           </div>
         ) : (
@@ -257,7 +257,7 @@ function ConversationItem({
 
         {/* Last message preview */}
         <p className="truncate text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
-          {isAssistant && <span className="text-emerald-500/70">Cia: </span>}
+          {isAssistant && <span className="text-emerald-500/70">SIA: </span>}
           {!isAssistant && stripMarkdownForPreview(conversation.lastMessagePreview) && <span className="text-zinc-400">You: </span>}
           {preview}
         </p>

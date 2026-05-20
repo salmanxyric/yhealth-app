@@ -14,7 +14,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { transformMessageForSocket } from '../utils/message-transform.util.js';
 import { communicationPreferencesService } from './communication-preferences.service.js';
 import { pushNotificationService } from './push-notification.service.js';
-import { getUserLocalHour } from '../lib/user-timezone.js';
+import { getUserLocalHour, resolveTimeZone } from '../lib/user-timezone.js';
 
 type ChatCallType = 'voice' | 'video';
 type ChatCallStatus = 'ringing' | 'active' | 'ended' | 'declined' | 'missed' | 'cancelled';
@@ -687,7 +687,7 @@ class ChatCallService {
         await communicationPreferencesService.recordAnswer(targetUserId, localHour);
 
       } else if (status === 'missed' || status === 'declined' || status === 'cancelled') {
-        const logResult = await query<{ id: string; scheduled_time: string; followup_message_id: string | null }>(
+        const logResult = await query<{ id: string; followup_message_id: string | null }>(
           `UPDATE ai_coach_call_log
            SET status = $1, chat_call_id = $2, ended_at = NOW(), updated_at = NOW()
            WHERE id = (
@@ -696,7 +696,7 @@ class ChatCallService {
                    (user_id = $3 AND status = 'initiated' AND scheduled_date = CURRENT_DATE)
              LIMIT 1
            )
-           RETURNING id, scheduled_time::text, followup_message_id`,
+           RETURNING id, followup_message_id`,
           [
             status === 'cancelled' ? 'missed' : status,
             call.id,
@@ -708,7 +708,7 @@ class ChatCallService {
 
         const logRow = logResult.rows[0];
         if (logRow && !logRow.followup_message_id) {
-          await this.sendMissedCallFollowUp(targetUserId, call, userTimezone, logRow.scheduled_time);
+          await this.sendMissedCallFollowUp(targetUserId, call, userTimezone);
         }
       }
     } catch (error) {
@@ -723,27 +723,18 @@ class ChatCallService {
     userId: string,
     call: ChatCallSession,
     userTimezone: string,
-    scheduledTime?: string,
   ): Promise<void> {
     try {
       const chatId = call.chatId;
       const localHour = getUserLocalHour(userTimezone);
 
-      let timeStr: string;
-      if (scheduledTime) {
-        // scheduledTime is "HH:MM:SS" from DB — format as user-facing time
-        const [h, m] = scheduledTime.split(':').map(Number);
-        const hour12 = h! % 12 || 12;
-        const ampm = h! < 12 ? 'AM' : 'PM';
-        timeStr = `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
-      } else {
-        timeStr = call.createdAt.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-          timeZone: userTimezone,
-        });
-      }
+      const tz = resolveTimeZone(userTimezone);
+      const timeStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }).format(call.createdAt);
 
       const prefs = await communicationPreferencesService.getForUser(userId);
       const missCount = prefs.checkin_miss_count_by_hour?.[String(localHour)] || 0;

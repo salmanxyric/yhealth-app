@@ -34,7 +34,7 @@ function FloatingMetricCard({
       transition={{ duration: 5 + animDelay, repeat: Infinity, ease: "easeInOut", delay: animDelay }}
       className={`absolute hidden lg:block ${className}`}
     >
-      <div className="glass-card rounded-xl p-3 border border-white/10 shadow-2xl backdrop-blur-md flex items-center gap-3">
+      <div className="glass-card rounded-xl p-3 border border-white/[0.12] shadow-2xl backdrop-blur-md flex items-center gap-3" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)" }}>
         <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${color} flex items-center justify-center shrink-0`}>
           <Icon className="w-5 h-5 text-white" />
         </div>
@@ -231,7 +231,8 @@ export function CTASection() {
       <div className="container mx-auto px-4 relative z-10">
         <div
           ref={containerRef}
-          className="relative rounded-3xl p-8 sm:p-10 md:p-16 border border-white/10 shadow-2xl overflow-hidden"
+          className="relative rounded-3xl p-8 sm:p-10 md:p-16 border border-white/[0.12] shadow-2xl backdrop-blur-xl overflow-hidden"
+          style={{ boxShadow: "0 8px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)" }}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         >
@@ -306,6 +307,7 @@ export function CTASection() {
           {/* Content */}
           <div className="relative z-10 text-center max-w-3xl mx-auto">
             <FadeUp>
+              <p className="text-xs tracking-[0.25em] uppercase mb-3" style={{ color: "hsl(40 80% 60%)" }}>YOUR JOURNEY BEGINS</p>
               <div className="inline-flex items-center gap-2 glass-card px-4 py-2 rounded-full text-sm font-medium mb-6 border border-primary/20">
                 <Sparkles className="w-4 h-4 text-primary" />
                 <span>Limited Time -- Start Free for 14 Days</span>
@@ -313,7 +315,7 @@ export function CTASection() {
             </FadeUp>
 
             <FadeUp delay={0.1}>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 overflow-hidden">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6 overflow-hidden" style={{ fontFamily: "var(--font-instrument-serif, serif)" }}>
                 {["Your", "Best", "Life"].map((word) => (
                   <span key={word} className="cta-word inline-block mr-[0.3em]">
                     {word}
@@ -364,7 +366,7 @@ export function CTASection() {
               <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mt-8 sm:mt-10 text-sm text-muted-foreground">
                 {["No credit card required", "Cancel anytime, no questions asked", "Full premium access for 14 days"].map((text) => (
                   <div key={text} className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-500" />
+                    <Check className="w-4 h-4 text-emerald-500" style={{ filter: "drop-shadow(0 0 4px rgba(16,185,129,0.4))" }} />
                     <span>{text}</span>
                   </div>
                 ))}

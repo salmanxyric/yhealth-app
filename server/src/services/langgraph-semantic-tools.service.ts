@@ -272,7 +272,19 @@ async function handleMealManager(userId: string, params: z.infer<typeof MealMana
            totalCalories, totalProtein, totalCarbs, totalFat,
            data.notes || null, eatenAt]
         );
-        return JSON.stringify({ success: true, meal: result.rows[0], message: 'Meal logged successfully' });
+        const meal = result.rows[0];
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'meal',
+            userId,
+            eventType: 'meal_logged',
+            summary: `${data.mealType || 'snack'}: ${mealName} — ${totalCalories} cal, ${totalProtein}g protein, ${totalCarbs}g carbs, ${totalFat}g fat`,
+            payload: { mealId: meal.id, mealType: data.mealType, calories: totalCalories, protein: totalProtein, carbs: totalCarbs, fat: totalFat },
+          })
+        ).catch(() => {});
+
+        return JSON.stringify({ success: true, meal, message: 'Meal logged successfully' });
       }
 
       case 'update': {
@@ -380,6 +392,17 @@ async function handleGoalManager(
         if (row?.id) {
           await linkEntityToActiveLifeArea(userId, toolCtx, 'goal', row.id);
         }
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'goal',
+            userId,
+            eventType: 'goal_created',
+            summary: `Goal: ${data.name} (${data.category || 'general'})`,
+            payload: { goalId: row?.id, title: data.name, category: data.category || 'general' },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, goal: result.rows[0], message: 'Goal created' });
       }
 
@@ -473,6 +496,17 @@ async function handleMoodManager(userId: string, params: z.infer<typeof MoodMana
            JSON.stringify(data.emotionTags || []), data.contextNote || null, data.mode,
            data.loggedAt || new Date().toISOString()]
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'mood',
+            userId,
+            eventType: 'mood_logged',
+            summary: `Mood: ${data.descriptor || 'unspecified'} — happiness ${data.happinessRating ?? 'N/A'}/10, energy ${data.energyRating ?? 'N/A'}/10`,
+            payload: { moodLogId: result.rows[0]?.id, descriptor: data.descriptor, happinessRating: data.happinessRating, energyRating: data.energyRating },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, moodLog: result.rows[0], message: 'Mood logged' });
       }
 
@@ -589,6 +623,17 @@ async function handleStressManager(userId: string, params: z.infer<typeof Stress
           [userId, data.stressRating, triggers, data.otherTrigger || null,
            data.note || null, data.checkInType || 'on_demand', data.loggedAt || new Date().toISOString()]
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'stress',
+            userId,
+            eventType: 'stress_logged',
+            summary: `Stress: ${data.stressRating}/10 — triggers: ${Array.isArray(data.triggers) && data.triggers.length > 0 ? data.triggers.join(', ') : 'none'}`,
+            payload: { stressLogId: result.rows[0]?.id, stressRating: data.stressRating, triggers: data.triggers },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, stressLog: result.rows[0], message: 'Stress logged' });
       }
 
@@ -734,6 +779,17 @@ async function handleJournalManager(userId: string, params: z.infer<typeof Journ
             loggedAt,
           });
           logger.info('[JournalManager] CREATE succeeded via journalService', { entryId: entry.id });
+
+          import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+            activityWikiSynthesizer.synthesize({
+              domain: 'mood',
+              userId,
+              eventType: 'journal_created',
+              summary: `Journal: ${entryText.slice(0, 100)}${entryText.length > 100 ? '...' : ''}`,
+              payload: { journalEntryId: entry.id, mode, promptCategory: safeCategory },
+            })
+          ).catch(() => {});
+
           return JSON.stringify({ success: true, journalEntry: { id: entry.id, prompt: entry.prompt, entryText: entry.entryText, loggedAt: entry.loggedAt }, message: 'Journal entry created successfully' });
         } catch (svcError: any) {
           logger.warn('[JournalManager] CREATE via journalService failed, trying fallback', { error: svcError?.message });
@@ -748,6 +804,17 @@ async function handleJournalManager(userId: string, params: z.infer<typeof Journ
             [userId, prompt, safeCategory, entryText, wordCount, mode, loggedAt]
           );
           logger.info('[JournalManager] CREATE succeeded via fallback INSERT', { entryId: result.rows[0]?.id });
+
+          import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+            activityWikiSynthesizer.synthesize({
+              domain: 'mood',
+              userId,
+              eventType: 'journal_created',
+              summary: `Journal: ${entryText.slice(0, 100)}${entryText.length > 100 ? '...' : ''}`,
+              payload: { journalEntryId: result.rows[0]?.id, mode, promptCategory: safeCategory },
+            })
+          ).catch(() => {});
+
           return JSON.stringify({ success: true, journalEntry: result.rows[0], message: 'Journal entry created' });
         } catch (sqlError: any) {
           logger.warn('[JournalManager] CREATE fallback with enum failed, trying without category', { error: sqlError?.message });
@@ -762,6 +829,17 @@ async function handleJournalManager(userId: string, params: z.infer<typeof Journ
             [userId, prompt, entryText, wordCount, mode, loggedAt]
           );
           logger.info('[JournalManager] CREATE succeeded via minimal INSERT (no category)', { entryId: result.rows[0]?.id });
+
+          import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+            activityWikiSynthesizer.synthesize({
+              domain: 'mood',
+              userId,
+              eventType: 'journal_created',
+              summary: `Journal: ${entryText.slice(0, 100)}${entryText.length > 100 ? '...' : ''}`,
+              payload: { journalEntryId: result.rows[0]?.id, mode, promptCategory: safeCategory },
+            })
+          ).catch(() => {});
+
           return JSON.stringify({ success: true, journalEntry: result.rows[0], message: 'Journal entry created' });
         } catch (minError: any) {
           logger.error('[JournalManager] ALL CREATE attempts failed', { error: minError?.message });
@@ -924,6 +1002,17 @@ async function handleEnergyManager(userId: string, params: z.infer<typeof Energy
           [userId, data.energyRating, contextTag, data.note || null,
            data.loggedAt || new Date().toISOString()]
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'energy',
+            userId,
+            eventType: 'energy_logged',
+            summary: `Energy: ${data.energyRating}/10${contextTag ? ` (${contextTag})` : ''}`,
+            payload: { energyLogId: result.rows[0]?.id, energyRating: data.energyRating, contextTag },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, energyLog: result.rows[0], message: 'Energy logged' });
       }
 
@@ -1068,6 +1157,17 @@ async function handleHabitManager(userId: string, params: z.infer<typeof HabitMa
            VALUES ($1, $2, $3, $4) RETURNING *`,
           [identifier.id, userId, data?.completedAt || new Date().toISOString(), data?.notes || null]
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'habit',
+            userId,
+            eventType: 'habit_logged',
+            summary: `Habit completed: ${identifier.id}`,
+            payload: { habitLogId: result.rows[0]?.id, habitId: identifier.id },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, log: result.rows[0], message: 'Habit completion logged' });
       }
 
@@ -1355,9 +1455,19 @@ async function handleScheduleManager(
             await linkEntityToActiveLifeArea(userId, toolCtx, 'schedule', schedule.id as string);
           }
 
+          import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+            activityWikiSynthesizer.synthesize({
+              domain: 'schedule',
+              userId,
+              eventType: 'schedule_created',
+              summary: `Schedule: ${data?.title || 'Daily Schedule'} for ${scheduleDate} (${createdItems.length} items)`,
+              payload: { scheduleId: schedule.id, scheduleDate, itemsCreated: createdItems.length },
+            })
+          ).catch(() => {});
+
           // Return a clear, actionable response that the AI can understand
           const finalMessage = `${isUpdate ? 'Updated' : 'Created'} schedule for ${scheduleDate} with ${createdItems.length} items${itemErrors.length > 0 ? ` (${itemErrors.length} items failed)` : ''}. Schedule ID: ${schedule.id}. ${itemErrors.length === 0 ? 'All items saved successfully to database.' : 'Some items may need to be added manually.'}`;
-          
+
           return JSON.stringify({
             ...response,
             message: finalMessage,
@@ -1580,6 +1690,17 @@ async function handleWorkoutManager(userId: string, params: z.infer<typeof Worko
            JSON.stringify(data?.exercises || []), data?.durationMinutes || null,
            data?.notes || null, 'completed']
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'workout',
+            userId,
+            eventType: 'workout_logged',
+            summary: `Workout: ${data?.name || 'unnamed'}${data?.durationMinutes ? ` — ${data.durationMinutes} min` : ''}`,
+            payload: { workoutLogId: result.rows[0]?.id, workoutName: data?.name, durationMinutes: data?.durationMinutes },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, workoutLog: result.rows[0], message: 'Workout logged' });
       }
 
@@ -1872,6 +1993,17 @@ async function handleWaterIntakeManager(userId: string, params: z.infer<typeof W
            VALUES ($1, $2, $3, $4, $5) RETURNING *`,
           [userId, date, data?.totalMl || 0, data?.goalMl || 2000, '[]']
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'water',
+            userId,
+            eventType: 'water_logged',
+            summary: `Water: ${data?.totalMl || 0}ml consumed, target ${data?.goalMl || 2000}ml`,
+            payload: { waterLogId: result.rows[0]?.id, mlConsumed: data?.totalMl || 0, targetMl: data?.goalMl || 2000 },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, waterLog: result.rows[0], message: 'Water log created' });
       }
 
@@ -1994,6 +2126,17 @@ async function handleProgressManager(userId: string, params: z.infer<typeof Prog
            VALUES ($1, $2, $3, $4, $5) RETURNING *`,
           [userId, data.recordType, data.value || null, notes, recordDate]
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'body-stats',
+            userId,
+            eventType: 'progress_logged',
+            summary: `Progress: ${data.recordType}${data.value != null ? ` — ${data.value}` : ''}${data.measurements ? ` (${JSON.stringify(data.measurements)})` : ''}`,
+            payload: { progressRecordId: result.rows[0]?.id, recordType: data.recordType, value: data.value, measurements: data.measurements },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, record: result.rows[0], message: 'Progress recorded' });
       }
 
@@ -2974,6 +3117,17 @@ async function handleSleepManager(userId: string, params: {
           [userId, sleepDate, params.bedtime || null, params.wakeTime || null,
            durationHours, params.quality || null, params.notes || null, params.tags || null]
         );
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'sleep',
+            userId,
+            eventType: 'sleep_logged',
+            summary: `Sleep: ${durationHours != null ? `${durationHours}h` : 'duration unknown'}${params.quality ? `, quality ${params.quality}/10` : ''}`,
+            payload: { sleepLogId: result.rows[0].id, durationHours, quality: params.quality, sleepDate },
+          })
+        ).catch(() => {});
+
         return JSON.stringify({ success: true, id: result.rows[0].id, sleepDate });
       }
 

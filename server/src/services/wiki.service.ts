@@ -148,6 +148,48 @@ function parseWikiLinks(body: string): string[] {
 }
 
 // ============================================
+// SEARCH HELPERS
+// ============================================
+
+const DOMAIN_KEYWORD_MAP: Record<string, string[]> = {
+  'fitness-profile':   ['workout', 'exercise', 'gym', 'run', 'running', 'walk', 'walking', 'cardio', 'strength', 'training', 'pushup', 'squat', 'bench', 'deadlift', 'yoga', 'pilates', 'crossfit', 'hiit', 'steps', 'active', 'sports', 'cycling', 'swimming', 'muscle', 'reps', 'sets'],
+  'nutrition-profile': ['meal', 'food', 'eat', 'eating', 'ate', 'breakfast', 'lunch', 'dinner', 'snack', 'calories', 'calorie', 'protein', 'carbs', 'fat', 'diet', 'nutrition', 'omelette', 'roti', 'rice', 'chicken', 'vegetable', 'fruit', 'fasting', 'macro', 'fiber', 'sugar', 'vitamin', 'cook', 'cooked'],
+  'sleep-profile':     ['sleep', 'slept', 'sleeping', 'nap', 'insomnia', 'bedtime', 'wakeup', 'alarm', 'rest', 'tired', 'fatigue', 'drowsy', 'melatonin', 'dream'],
+  'mental-wellbeing':  ['stress', 'stressed', 'anxious', 'anxiety', 'mood', 'sad', 'happy', 'depressed', 'depression', 'meditation', 'mindful', 'therapy', 'mental', 'emotional', 'overwhelmed', 'burnout', 'energy', 'motivation', 'lonely', 'panic', 'calm', 'relax', 'wellbeing'],
+  'lifestyle-context': ['work', 'job', 'office', 'commute', 'travel', 'routine', 'schedule', 'lifestyle', 'hobby', 'social', 'family', 'relationship', 'weekend', 'vacation'],
+  'goals-strategy':    ['goal', 'goals', 'target', 'plan', 'progress', 'milestone', 'achievement', 'track', 'tracking', 'improve', 'challenge', 'accountability', 'strategy'],
+  'behavioral-patterns': ['pattern', 'habit', 'behavior', 'consistent', 'inconsistent', 'streak', 'skip', 'skipped', 'discipline', 'willpower', 'trigger', 'coping', 'procrastinate', 'binge', 'overeat'],
+};
+
+const STOP_WORDS = new Set([
+  'i', 'me', 'my', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+  'of', 'with', 'by', 'from', 'is', 'was', 'are', 'were', 'be', 'been', 'being', 'have',
+  'had', 'has', 'do', 'did', 'does', 'will', 'would', 'could', 'should', 'may', 'might',
+  'shall', 'can', 'it', 'its', 'this', 'that', 'these', 'those', 'am', 'not', 'no', 'so',
+  'if', 'then', 'than', 'too', 'very', 'just', 'about', 'up', 'out', 'some', 'also',
+  'each', 'which', 'their', 'there', 'here', 'when', 'where', 'how', 'what', 'who', 'why',
+]);
+
+export function extractDomainSlugs(text: string): string[] {
+  const lower = text.toLowerCase();
+  const slugs: string[] = [];
+  for (const [slug, keywords] of Object.entries(DOMAIN_KEYWORD_MAP)) {
+    if (keywords.some(kw => lower.includes(kw))) {
+      slugs.push(slug);
+    }
+  }
+  return slugs;
+}
+
+export function extractKeywords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+}
+
+// ============================================
 // WIKI SERVICE CLASS
 // ============================================
 
@@ -372,11 +414,22 @@ class WikiService {
       conditions.push(`status != 'archived'`);
     }
 
-    const pattern = `%${queryText}%`;
-    const patternParam = paramIdx;
-    conditions.push(`(title ILIKE $${patternParam} OR summary ILIKE $${patternParam} OR body ILIKE $${patternParam})`);
-    params.push(pattern);
-    paramIdx++;
+    const domainSlugs = extractDomainSlugs(queryText);
+    const keywords = extractKeywords(queryText);
+
+    const slugsParam = paramIdx++;
+    params.push(domainSlugs.length > 0 ? domainSlugs : ['__no_match__']);
+
+    const keywordsParam = paramIdx++;
+    params.push(keywords.length > 0 ? keywords : ['__no_match__']);
+
+    conditions.push(`(
+      slug = ANY($${slugsParam})
+      OR category = ANY($${slugsParam})
+      OR EXISTS (SELECT 1 FROM unnest($${keywordsParam}::text[]) kw WHERE title ILIKE '%' || kw || '%')
+      OR EXISTS (SELECT 1 FROM unnest($${keywordsParam}::text[]) kw WHERE summary ILIKE '%' || kw || '%')
+      OR EXISTS (SELECT 1 FROM unnest($${keywordsParam}::text[]) kw WHERE body ILIKE '%' || kw || '%')
+    )`);
 
     if (filters?.pageType) {
       conditions.push(`page_type = $${paramIdx++}`);
@@ -396,11 +449,12 @@ class WikiService {
 
     const result = await query<Record<string, unknown>>(
       `SELECT *,
-              CASE
-                WHEN title ILIKE $${patternParam} THEN 1.0
-                WHEN summary ILIKE $${patternParam} THEN 0.8
-                ELSE 0.5
-              END AS similarity
+        (
+          CASE WHEN slug = ANY($${slugsParam}) OR category = ANY($${slugsParam}) THEN 2.0 ELSE 0 END
+          + CASE WHEN EXISTS (SELECT 1 FROM unnest($${keywordsParam}::text[]) kw WHERE title ILIKE '%' || kw || '%') THEN 1.0 ELSE 0 END
+          + CASE WHEN EXISTS (SELECT 1 FROM unnest($${keywordsParam}::text[]) kw WHERE summary ILIKE '%' || kw || '%') THEN 0.6 ELSE 0 END
+          + CASE WHEN EXISTS (SELECT 1 FROM unnest($${keywordsParam}::text[]) kw WHERE body ILIKE '%' || kw || '%') THEN 0.3 ELSE 0 END
+        ) AS similarity
        FROM wiki_pages
        WHERE ${where}
        ORDER BY similarity DESC, updated_at DESC
@@ -537,6 +591,14 @@ class WikiService {
     );
 
     logger.debug(`Added ${sources.length} sources to page ${pageId}`);
+
+    // Sync evidence_count on the parent wiki page
+    await query(
+      `UPDATE wiki_pages SET evidence_count = (
+        SELECT COUNT(*) FROM wiki_page_sources WHERE page_id = $1
+      ) WHERE id = $1`,
+      [pageId]
+    );
   }
 
   // ------------------------------------------
