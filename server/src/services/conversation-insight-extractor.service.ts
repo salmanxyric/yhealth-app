@@ -401,6 +401,47 @@ class ConversationInsightExtractorService {
       });
     }
   }
+  async routeConfirmationFeedback(
+    userId: string,
+    confirmationType: 'confirmed' | 'partially' | 'denied' | 'unsure',
+    emotionalContext: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      if (confirmationType === 'confirmed') {
+        const similar = await memoryEngineService.findSimilarMemories(
+          userId,
+          'behavioral',
+          JSON.stringify(emotionalContext),
+        );
+        if (similar.length > 0) {
+          await memoryEngineService.reinforceMemory(similar[0].id, userId, [{
+            source_table: 'confirmation_feedback',
+            source_id: `confirm-${Date.now()}`,
+            date: new Date().toISOString(),
+            summary: 'User confirmed emotional interpretation',
+          }]);
+        }
+      } else if (confirmationType === 'denied') {
+        await memoryEngineService.createMemory(userId, {
+          title: 'Emotional calibration correction',
+          description: `User denied emotional interpretation. Context: ${JSON.stringify(emotionalContext)}`,
+          category: 'behavioral',
+          memoryType: 'learned_rule',
+          evidence: [{
+            source_table: 'confirmation_feedback',
+            source_id: `deny-${Date.now()}`,
+            date: new Date().toISOString(),
+            summary: 'User denied SIA emotional interpretation',
+          }],
+        });
+      }
+    } catch (error) {
+      logger.warn('[InsightExtractor] Confirmation feedback routing failed', {
+        error: error instanceof Error ? error.message : 'Unknown',
+        userId,
+      });
+    }
+  }
 }
 
 export const conversationInsightExtractorService = new ConversationInsightExtractorService();
