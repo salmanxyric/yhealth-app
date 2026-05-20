@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { query } from '../config/database.config.js';
 import { env } from '../config/env.config.js';
+import { getTokenParameter } from '../utils/openai-tokens.util.js';
 import { logger } from './logger.service.js';
 import { memoryEngineService } from './memory-engine.service.js';
 
@@ -36,7 +37,32 @@ Extract insights as JSON matching this schema exactly:
   "entities": { "goals": [string], "habits": [string], "preferences": [string], "issues": [string] },
   "behavioral_signals": { "pattern": string, "sentiment_trend": "improving"|"stable"|"declining", "commitment_level": "high"|"medium"|"low" } | null,
   "memory_candidates": [{ "title": string, "description": string, "category": "fitness"|"nutrition"|"sleep"|"wellbeing"|"lifestyle"|"behavioral"|"cross_domain", "memoryType": "pattern"|"preference"|"context"|"feedback"|"relationship"|"learned_rule", "confidence": number 0-1 }],
-  "core_profile_updates": [{ "section": "biometrics"|"targets"|"constraints"|"preferences"|"medical"|"lifestyle", "key": string, "value": any, "unit": string|null, "source": string }]
+  "core_profile_updates": [{ "section": "biometrics"|"targets"|"constraints"|"preferences"|"medical"|"lifestyle", "key": string, "value": any, "unit": string|null, "source": string }],
+  "emotional_context": {
+    "primaryEmotion": string,
+    "secondaryEmotion": string|null,
+    "emotionalIntensity": number 0-100,
+    "confidence": number 0-1,
+    "toneMarkers": [string],
+    "hiddenStates": [string],
+    "behavioralPatterns": [{ "type": string, "frequency": number, "lastOccurrence": string, "confidence": number }],
+    "riskLevel": "none"|"low"|"moderate"|"high"|"critical",
+    "riskFlags": [{ "severity": "low"|"medium"|"high", "category": string, "description": string }],
+    "energyEstimate": "low"|"moderate"|"high",
+    "cognitiveLoad": "light"|"heavy"|"overloaded",
+    "motivationState": "seeking"|"present"|"declining"|"absent",
+    "needsEmpathy": boolean,
+    "needsChallenge": boolean,
+    "needsStructure": boolean,
+    "needsSilence": boolean,
+    "isAvoidingTruth": boolean,
+    "isSelfSabotaging": boolean,
+    "isEmotionallyOverwhelmed": boolean,
+    "moodTrajectory": "improving"|"stable"|"declining"|"volatile",
+    "comparedToBaseline": "above"|"at"|"below",
+    "engagementLevel": "high"|"moderate"|"low"|"withdrawing",
+    "responseComplexity": "expanding"|"stable"|"shrinking"
+  }
 }
 
 Rules:
@@ -46,6 +72,12 @@ Rules:
 - mood: null if no emotional signal detected
 - behavioral_signals: null if no behavioral pattern detected
 - If the turn is purely transactional (navigation, commands), return empty arrays for memory_candidates and core_profile_updates
+- emotional_context: ALWAYS populate. Analyze the user's emotional state, tone, hidden states, and needs. Consider conversation history for trajectory and engagement patterns.
+  - toneMarkers: detect passive, deflecting, aggressive, flat, warm, guarded, performative, desperate, resigned, intellectualizing, minimizing, catastrophizing
+  - hiddenStates: detect masking (positive words + negative signals), suppressing, contradicting, avoiding, dissociating, people_pleasing, emotional_shutdown, hypervigilance
+  - Detect self-sabotage: repeated goal-set then abandon patterns
+  - Detect emotional shutdown: progressively shorter responses, flat tone, withdrawal
+  - responseComplexity: compare current message length/detail to conversation history
 - Respond with valid JSON only, no prose`;
 
 class ConversationInsightExtractorService {
@@ -126,7 +158,35 @@ class ConversationInsightExtractorService {
         { role: 'user', content: prompt },
       ],
       temperature: 0,
-      max_tokens: 1000,
+      ...getTokenParameter(env.openai.model || 'gpt-4o-mini', 1000),
+    });
+
+    const content = response.choices[0]?.message?.content ?? '';
+    return JSON.parse(content) as TurnInsights;
+  }
+
+  async extractInsightsOnly(
+    userMessage: string,
+    coachResponse: string,
+    existingMemoryTitles: string,
+  ): Promise<TurnInsights> {
+    if (!this.openai) {
+      throw new Error('OpenAI not configured');
+    }
+
+    const prompt = EXTRACTION_PROMPT
+      .replace('{existingMemoryTitles}', existingMemoryTitles || '(none)')
+      .replace('{userMessage}', userMessage)
+      .replace('{coachResponse}', coachResponse);
+
+    const response = await this.openai.chat.completions.create({
+      model: env.openai.model || 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'Respond with strict JSON only, no prose.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0,
+      ...getTokenParameter(env.openai.model || 'gpt-4o-mini', 1500),
     });
 
     const content = response.choices[0]?.message?.content ?? '';
