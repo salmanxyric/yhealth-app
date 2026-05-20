@@ -184,11 +184,15 @@ CREATE TABLE IF NOT EXISTS intelligence_session_context (
     confidence_breakdown JSONB,
     was_helpful BOOLEAN,
     correction TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_intel_session_conv ON intelligence_session_context(conversation_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_intel_session_msg ON intelligence_session_context(message_id) WHERE message_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_intel_session_conv_msg_unique
+  ON intelligence_session_context(conversation_id, message_id)
+  WHERE message_id IS NOT NULL;
 
 -- 8. INTELLIGENCE FEEDBACK
 CREATE TABLE IF NOT EXISTS intelligence_feedback (
