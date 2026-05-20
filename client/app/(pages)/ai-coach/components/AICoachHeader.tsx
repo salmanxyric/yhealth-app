@@ -18,7 +18,7 @@ export function AICoachHeader({ onToggleSidebar, isSidebarOpen, onOpenIntelligen
       className="relative flex items-center justify-between h-[90px] px-6 lg:px-10 border-b border-white/20 overflow-hidden"
       style={{ background: "#02000f" }}
     >
-      {/* Left: Sidebar toggle + Avatar + Cia info */}
+      {/* Left: Sidebar toggle + Avatar + SIA info */}
       <div className="flex items-center gap-4">
         {/* Sidebar toggle — only visible when sidebar is closed */}
         {!isSidebarOpen && (
