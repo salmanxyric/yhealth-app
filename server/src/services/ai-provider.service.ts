@@ -44,6 +44,10 @@ interface GeminiResponse {
     };
     finishReason?: string;
   }>;
+  promptFeedback?: {
+    blockReason?: string;
+    safetyRatings?: Array<{ category: string; probability: string }>;
+  };
 }
 
 // ============================================
@@ -332,8 +336,13 @@ class AIProviderService {
                   { text: request.userPrompt },
                   ...(request.imageBase64 ? [{
                     inlineData: {
-                      mimeType: request.imageBase64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
-                      data: request.imageBase64.replace(/^data:image\/[a-z]+;base64,/, ''),
+                      mimeType: (() => {
+                        const b64 = request.imageBase64!;
+                        if (b64.startsWith('data:application/pdf')) return 'application/pdf';
+                        if (b64.startsWith('data:image/png')) return 'image/png';
+                        return 'image/jpeg';
+                      })(),
+                      data: request.imageBase64.replace(/^data:[^;]+;base64,/, ''),
                     },
                   }] : []),
                 ],
@@ -363,14 +372,26 @@ class AIProviderService {
         }
 
         const data = await response.json() as GeminiResponse;
+        const finishReason = data.candidates?.[0]?.finishReason;
+        const blockReason = data.promptFeedback?.blockReason;
         const parts = data.candidates?.[0]?.content?.parts || [];
         const content = parts.map(p => p.text || '').join('');
 
         if (!content) {
-          throw new Error('Empty response from Gemini');
+          const detail = blockReason
+            ? `blocked by safety filter: ${blockReason}`
+            : finishReason
+              ? `finishReason: ${finishReason}`
+              : 'no candidates returned';
+          logger.warn(`[AIProvider] Gemini empty response`, {
+            model: geminiModel,
+            detail,
+            blockReason,
+            finishReason,
+            safetyRatings: data.promptFeedback?.safetyRatings,
+          });
+          throw new Error(`Empty response from Gemini (${detail})`);
         }
-
-        const finishReason = data.candidates?.[0]?.finishReason;
         if (finishReason === 'MAX_TOKENS') {
           logger.warn(`[AIProvider] Gemini response truncated (MAX_TOKENS)`, { model: geminiModel, maxTokens: request.maxTokens });
           // If truncated and we have a fallback with higher limits, DON'T retry — return what we have
