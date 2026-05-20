@@ -71,16 +71,16 @@ export function ActTwo() {
     <section ref={sectionRef} className="relative h-[120vh] flex items-center justify-center">
       <GlassPanel
         ref={panelRef}
-        className="max-w-xl w-full mx-8 p-10 md:p-12"
+        className="max-w-xl w-full mx-8 p-10 md:p-14"
         style={{ opacity: 0 }}
       >
         {/* SIA identity mark */}
-        <div className="flex justify-center mb-8">
-          <SiaIdentityMark size={40} />
+        <div className="flex justify-center mb-10">
+          <SiaIdentityMark size={48} />
         </div>
 
         {/* Dialogue lines */}
-        <div ref={linesRef} className="space-y-6 text-center">
+        <div ref={linesRef} className="space-y-7 text-center">
           {LINES.map((line, i) => (
             <div
               key={i}
@@ -88,10 +88,12 @@ export function ActTwo() {
               style={{
                 opacity: 0,
                 color: line.style === "cta" ? "var(--cin-sia-accent, #D4A574)" : "var(--cin-text-primary, #F5F5F7)",
-                fontSize: line.style === "cta" ? "1.125rem" : "1.5rem",
+                fontSize: line.style === "cta" ? "1.125rem" : "1.375rem",
                 fontStyle: line.style === "cta" ? "italic" : "normal",
                 fontFamily: line.style === "cta" ? "var(--font-instrument-serif, serif)" : "inherit",
-                fontWeight: 400,
+                fontWeight: line.style === "thesis" ? 500 : 400,
+                lineHeight: 1.6,
+                letterSpacing: line.style === "cta" ? "0.02em" : "0.01em",
               }}
             >
               {line.text}
@@ -100,16 +102,17 @@ export function ActTwo() {
         </div>
 
         {/* Mini domain network */}
-        <div ref={domainsRef} className="flex justify-center gap-2 mt-8">
+        <div ref={domainsRef} className="flex justify-center gap-3 mt-10">
           {DOMAINS.slice(0, 5).map((d) => (
             <div
               key={d.id}
               className="domain-dot rounded-full"
               style={{
-                width: 10,
-                height: 10,
+                width: 8,
+                height: 8,
                 backgroundColor: d.color,
                 opacity: 0,
+                boxShadow: `0 0 8px ${d.color}60`,
               }}
             />
           ))}

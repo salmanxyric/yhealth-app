@@ -47,23 +47,32 @@ export function IntensityCard({ option, selected, onSelect, exiting }: Intensity
   return (
     <motion.button
       onClick={onSelect}
-      className="relative border p-6 text-left cursor-pointer w-full"
+      className="relative border p-7 text-left cursor-pointer w-full overflow-hidden"
       style={{
         background: option.atmosphere,
         borderColor: selected ? "#D4A57480" : "rgba(255,255,255,0.06)",
         borderRadius: option.radius,
         backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        boxShadow: selected
+          ? "0 0 30px rgba(212,165,116,0.1), inset 0 1px 0 rgba(255,255,255,0.08)"
+          : "inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
-      whileHover={!selected && !exiting ? { y: -6, borderColor: "#D4A57440", transition: spring } : undefined}
+      whileHover={!selected && !exiting ? {
+        y: -5,
+        borderColor: "#D4A57440",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)",
+        transition: spring,
+      } : undefined}
       animate={
         selected ? { flex: 1 } : exiting ? { opacity: 0, x: -100 } : { opacity: 1, x: 0 }
       }
       transition={spring}
     >
-      <h3 className="text-lg font-medium mb-2" style={{ color: "var(--cin-text-primary, #F5F5F7)" }}>
+      <h3 className="text-lg font-medium mb-2" style={{ color: "var(--cin-text-primary, #F5F5F7)", letterSpacing: "0.01em" }}>
         {option.title}
       </h3>
-      <p className="text-sm" style={{ color: "var(--cin-text-secondary, rgba(245,245,247,0.6))" }}>
+      <p className="text-sm leading-relaxed" style={{ color: "var(--cin-text-secondary, rgba(245,245,247,0.6))" }}>
         {option.description}
       </p>
     </motion.button>

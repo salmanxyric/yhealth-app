@@ -11,16 +11,17 @@ interface ActionCardProps {
 }
 
 export function ActionCard({ title, duration, domainColor, variant, delay = 0 }: ActionCardProps) {
-  const opacityMap = { primary: 1, secondary: 0.7, tertiary: 0.5 };
+  const opacityMap = { primary: 1, secondary: 0.8, tertiary: 0.6 };
   return (
     <motion.div
-      className="rounded-xl border p-4"
+      className="rounded-xl border p-4 overflow-hidden"
       style={{
-        background: `rgba(${hexToRgb(domainColor)}, 0.08)`,
-        borderColor: `rgba(${hexToRgb(domainColor)}, 0.15)`,
+        background: `linear-gradient(135deg, rgba(${hexToRgb(domainColor)}, 0.08) 0%, rgba(${hexToRgb(domainColor)}, 0.02) 100%)`,
+        borderColor: `rgba(${hexToRgb(domainColor)}, 0.12)`,
         borderLeftWidth: 3,
         borderLeftColor: domainColor,
         opacity: opacityMap[variant],
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: opacityMap[variant], y: 0 }}
@@ -32,8 +33,12 @@ export function ActionCard({ title, duration, domainColor, variant, delay = 0 }:
           {title}
         </span>
         <span
-          className="text-xs px-2 py-1 rounded"
-          style={{ background: `rgba(${hexToRgb(domainColor)}, 0.15)`, color: domainColor }}
+          className="text-[11px] px-2.5 py-1 rounded-md font-medium"
+          style={{
+            background: `rgba(${hexToRgb(domainColor)}, 0.15)`,
+            color: domainColor,
+            letterSpacing: "0.02em",
+          }}
         >
           {duration}
         </span>
