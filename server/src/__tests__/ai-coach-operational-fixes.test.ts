@@ -42,6 +42,19 @@ describe('AI Coach operational fixes', () => {
     expect(source.match(/this\.enqueueWikiMaintenance\(userId, message, responseContent, activeConversationId\);/g)).toHaveLength(2);
   });
 
+  it('wires ingestFromConversation into wiki maintenance pipeline', () => {
+    const source = readSource('services/langgraph-chatbot.service.ts');
+
+    expect(source).toContain('ingestFromConversation');
+  });
+
+  it('triggers activityWikiSynthesizer after meal creation', () => {
+    const source = readSource('services/langgraph-semantic-tools.service.ts');
+
+    expect(source).toContain('activity-wiki-synthesizer');
+    expect(source).toContain("domain: 'meal'");
+  });
+
   it('guards optional entitlement shadow logging table', () => {
     const source = readSource('middlewares/entitlement.middleware.ts');
 

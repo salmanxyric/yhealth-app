@@ -272,7 +272,19 @@ async function handleMealManager(userId: string, params: z.infer<typeof MealMana
            totalCalories, totalProtein, totalCarbs, totalFat,
            data.notes || null, eatenAt]
         );
-        return JSON.stringify({ success: true, meal: result.rows[0], message: 'Meal logged successfully' });
+        const meal = result.rows[0];
+
+        import('./activity-wiki-synthesizer.service.js').then(({ activityWikiSynthesizer }) =>
+          activityWikiSynthesizer.synthesize({
+            domain: 'meal',
+            userId,
+            eventType: 'meal_logged',
+            summary: `${data.mealType || 'snack'}: ${mealName} — ${totalCalories} cal, ${totalProtein}g protein, ${totalCarbs}g carbs, ${totalFat}g fat`,
+            payload: { mealId: meal.id, mealType: data.mealType, calories: totalCalories, protein: totalProtein, carbs: totalCarbs, fat: totalFat },
+          })
+        ).catch(() => {});
+
+        return JSON.stringify({ success: true, meal, message: 'Meal logged successfully' });
       }
 
       case 'update': {

@@ -13,6 +13,7 @@ import {
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { modelFactory } from './model-factory.service.js';
 import { logger } from './logger.service.js';
+import { getTokenParameter } from '../utils/openai-tokens.util.js';
 import { vectorEmbeddingService } from './vector-embedding.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
 import { createTools } from './langgraph-tools.service.js';
@@ -83,7 +84,7 @@ async function lifeAreaRouterLlm(prompt: string): Promise<string> {
         { role: 'user', content: prompt },
       ],
       temperature: 0,
-      max_tokens: 200,
+      ...getTokenParameter(model, 200),
     });
     return res.choices[0]?.message?.content ?? '';
   } catch {
@@ -583,6 +584,12 @@ class LangGraphChatbotService {
       .initializeDomainPages(userId)
       .catch((error) => {
         logger.warn('[LangGraphChatbot] Wiki init failed (non-critical)', { error, userId });
+      });
+
+    wikiIngestService
+      .ingestFromConversation(userId, conversationId)
+      .catch((error) => {
+        logger.warn('[LangGraphChatbot] Wiki conversation ingest failed (non-critical)', { error, userId });
       });
   }
 
