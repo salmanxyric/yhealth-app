@@ -1,25 +1,25 @@
-import { jest } from '@jest/globals';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// --- Register all mocks BEFORE dynamic imports ---
+const mockQuery = vi.fn();
 
-const mockQuery = jest.fn();
-jest.unstable_mockModule('../../config/database.config.js', () => ({
+vi.mock('../../config/database.config.js', () => ({
   query: (...args: unknown[]) => mockQuery(...args),
 }));
 
-jest.unstable_mockModule('../logger.service.js', () => ({
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+vi.mock('../logger.service.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-// --- Dynamic imports AFTER mocks are registered ---
 const { memoryEngineService } = await import('../memory-engine.service.js');
 
 describe('memoryEngineService.findSimilarMemories', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('returns matching memories by title similarity within category', async () => {
+    // First call: hasMemoryTable check (cache may or may not be set from prior runs)
+    // Mock both to be safe; extra resolved values are ignored.
     mockQuery
       .mockResolvedValueOnce({ rows: [{ exists: true }] }) // hasMemoryTable
       .mockResolvedValueOnce({

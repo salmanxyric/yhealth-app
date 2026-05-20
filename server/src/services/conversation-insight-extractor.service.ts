@@ -4,6 +4,7 @@ import { env } from '../config/env.config.js';
 import { getTokenParameter } from '../utils/openai-tokens.util.js';
 import { logger } from './logger.service.js';
 import { memoryEngineService } from './memory-engine.service.js';
+import { embeddingQueueService } from './embedding-queue.service.js';
 
 import { coreProfileKernelService } from './core-profile-kernel.service.js';
 import type { MemoryEvidence } from '@shared/types/domain/intelligence-files.js';
@@ -335,17 +336,35 @@ class ConversationInsightExtractorService {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async routeVectorEmbedding(
-    _userId: string,
-    _conversationId: string,
-    _insights: TurnInsights
+    userId: string,
+    conversationId: string,
+    insights: TurnInsights
   ): Promise<void> {
-    // Insight data flows through memory candidates + daily analysis.
-    // Embedding enqueue was never wired to a worker handler and used a
-    // non-UUID sourceId that would fail at INSERT. Removed in pipeline
-    // hardening — see embedding-worker.ts for supported source types.
-    return;
+    if (!embeddingQueueService.isAvailable()) return;
+
+    try {
+      const textContent = [
+        insights.mood ? `Mood: ${insights.mood.state} (${insights.mood.intensity})` : '',
+        `Intent: ${insights.intent}`,
+        ...insights.memory_candidates.map(c => `${c.category}: ${c.title} - ${c.description}`),
+        ...insights.core_profile_updates.map(u => `${u.section}.${u.key}: ${u.value}`),
+      ].filter(Boolean).join('\n');
+
+      if (textContent.length < 20) return;
+
+      await embeddingQueueService.enqueueEmbedding({
+        userId,
+        sourceType: 'insight_extraction',
+        sourceId: `${conversationId}-${Date.now()}`,
+        operation: 'create',
+      });
+    } catch (error) {
+      logger.debug('[InsightExtractor] Embedding queue failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+    }
   }
 
   private async routeToDailyAnalysis(

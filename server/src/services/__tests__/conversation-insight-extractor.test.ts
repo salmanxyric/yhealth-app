@@ -1,37 +1,39 @@
-import { jest } from '@jest/globals';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// --- Register all mocks BEFORE dynamic imports ---
+// --- Mock all dependencies ---
 
-const mockOpenAICreate = jest.fn();
-jest.unstable_mockModule('openai', () => ({
-  default: class MockOpenAI {
-    chat = {
-      completions: {
-        create: mockOpenAICreate,
-      },
-    };
-  },
-}));
+const mockOpenAICreate = vi.fn();
+vi.mock('openai', () => {
+  return {
+    default: class MockOpenAI {
+      chat = {
+        completions: {
+          create: mockOpenAICreate,
+        },
+      };
+    },
+  };
+});
 
-const mockQuery = jest.fn();
-jest.unstable_mockModule('../../config/database.config.js', () => ({
+const mockQuery = vi.fn();
+vi.mock('../../config/database.config.js', () => ({
   query: (...args: unknown[]) => mockQuery(...args),
 }));
 
-jest.unstable_mockModule('../../config/env.config.js', () => ({
+vi.mock('../../config/env.config.js', () => ({
   env: {
-    openai: { apiKey: 'test-key', model: 'gpt-5.4-mini' },
+    openai: { apiKey: 'test-key', model: 'gpt-4o-mini' },
   },
 }));
 
-jest.unstable_mockModule('../logger.service.js', () => ({
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+vi.mock('../logger.service.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const mockGetMemoriesForContext = jest.fn();
-const mockFindSimilarMemories = jest.fn();
-const mockFindOrCreatePattern = jest.fn();
-jest.unstable_mockModule('../memory-engine.service.js', () => ({
+const mockGetMemoriesForContext = vi.fn().mockResolvedValue([]);
+const mockFindSimilarMemories = vi.fn().mockResolvedValue([]);
+const mockFindOrCreatePattern = vi.fn().mockResolvedValue({ memory: { id: 'mem-1' }, wasReinforced: false });
+vi.mock('../memory-engine.service.js', () => ({
   memoryEngineService: {
     getMemoriesForContext: mockGetMemoriesForContext,
     findSimilarMemories: mockFindSimilarMemories,
@@ -39,33 +41,29 @@ jest.unstable_mockModule('../memory-engine.service.js', () => ({
   },
 }));
 
-const mockEnqueueEmbedding = jest.fn();
-jest.unstable_mockModule('../embedding-queue.service.js', () => ({
+const mockEnqueueEmbedding = vi.fn().mockResolvedValue(undefined);
+vi.mock('../embedding-queue.service.js', () => ({
   embeddingQueueService: {
     enqueueEmbedding: mockEnqueueEmbedding,
-    isAvailable: jest.fn().mockReturnValue(true),
+    isAvailable: vi.fn().mockReturnValue(true),
   },
 }));
 
-const mockUpdateValue = jest.fn();
-jest.unstable_mockModule('../core-profile-kernel.service.js', () => ({
+const mockUpdateValue = vi.fn().mockResolvedValue({});
+vi.mock('../core-profile-kernel.service.js', () => ({
   coreProfileKernelService: {
     updateValue: mockUpdateValue,
   },
 }));
 
-// --- Dynamic imports AFTER mocks are registered ---
-const { conversationInsightExtractorService } = await import('../conversation-insight-extractor.service.js');
+const { conversationInsightExtractorService } = await import(
+  '../conversation-insight-extractor.service.js'
+);
 
 describe('conversationInsightExtractorService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockQuery.mockResolvedValue({ rows: [] });
-    mockGetMemoriesForContext.mockResolvedValue([]);
-    mockFindSimilarMemories.mockResolvedValue([]);
-    mockFindOrCreatePattern.mockResolvedValue({ memory: { id: 'mem-1' }, wasReinforced: false });
-    mockEnqueueEmbedding.mockResolvedValue(undefined);
-    mockUpdateValue.mockResolvedValue({});
   });
 
   it('extracts insights and routes memory candidates to pending signals', async () => {
@@ -96,7 +94,7 @@ describe('conversationInsightExtractorService', () => {
     mockQuery.mockResolvedValueOnce({ rows: [] }); // findSimilar pending signal
     mockQuery.mockResolvedValueOnce({ rows: [{ id: 'sig-1' }] }); // INSERT pending signal
     mockQuery.mockResolvedValueOnce({ rows: [] }); // INSERT mood_logs
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // INSERT conversation_claims
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // UPSERT daily_analysis_reports
 
     await conversationInsightExtractorService.extractAndPersist({
       userId: 'user-1',
@@ -106,10 +104,10 @@ describe('conversationInsightExtractorService', () => {
     });
 
     // Should have called OpenAI for extraction
-    expect(mockOpenAICreate).toHaveBeenCalledTimes(1);
+    expect(mockOpenAICreate).toHaveBeenCalledOnce();
     expect(mockOpenAICreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'gpt-5.4-mini',
+        model: 'gpt-4o-mini',
         temperature: 0,
       })
     );
