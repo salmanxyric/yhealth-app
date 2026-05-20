@@ -89,7 +89,49 @@ export function MonthComparisonBanner({ current, previous }: MonthComparisonBann
 
       {/* Category comparisons */}
       {topCategories.length === 0 ? (
-        <div className="py-8 text-center text-xs text-slate-500">No expense categories to compare</div>
+        <div className="flex flex-col items-center py-8 gap-5">
+          {/* Animated comparison empty state */}
+          <div className="relative flex items-center gap-6">
+            {/* Left bar group */}
+            <div className="flex flex-col items-end gap-2">
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={`l-${i}`}
+                  className="h-2 rounded-full bg-emerald-500/10 border border-emerald-500/10"
+                  animate={{ width: [40 - i * 8, 56 - i * 8, 40 - i * 8] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: i * 0.3 }}
+                />
+              ))}
+            </div>
+            {/* Center VS icon */}
+            <motion.div
+              className="w-12 h-12 rounded-xl bg-gradient-to-br from-white/[0.04] to-white/[0.02] border border-white/[0.06] flex items-center justify-center"
+              animate={{ scale: [1, 1.08, 1], rotate: [0, 3, -3, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <motion.svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500">
+                <motion.path d="M18 20V10" animate={{ pathLength: [0.3, 1, 0.3] }} transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }} />
+                <motion.path d="M12 20V4" animate={{ pathLength: [0.3, 1, 0.3] }} transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.3 }} />
+                <motion.path d="M6 20v-6" animate={{ pathLength: [0.3, 1, 0.3] }} transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.6 }} />
+              </motion.svg>
+            </motion.div>
+            {/* Right bar group */}
+            <div className="flex flex-col items-start gap-2">
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={`r-${i}`}
+                  className="h-2 rounded-full bg-sky-500/10 border border-sky-500/10"
+                  animate={{ width: [32 - i * 6, 48 - i * 6, 32 - i * 6] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 0.5 + i * 0.3 }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-1.5">
+            <p className="text-sm font-medium text-white/40">No comparisons yet</p>
+            <p className="text-xs text-slate-600 text-center max-w-[220px]">Expense categories will appear here once you add transactions</p>
+          </div>
+        </div>
       ) : (
         <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-4">
           {topCategories.map(({ category, currentAmount, previousAmount }) => {

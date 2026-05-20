@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FileSpreadsheet, Upload, X, Loader2, CheckCircle2, AlertCircle,
+  FileSpreadsheet, Upload, X, CheckCircle2, AlertCircle,
   Sparkles, RotateCcw, Check,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { api } from "@/lib/api-client";
 import {
   FINANCE_CATEGORY_ICONS,
@@ -47,6 +48,54 @@ interface StatementScanModalProps {
 
 type ScanState = "upload" | "scanning" | "result" | "importing" | "done" | "error";
 
+function normalizeDate(raw?: string): string {
+  const fallback = new Date().toISOString().split("T")[0];
+  if (!raw) return fallback;
+  const trimmed = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{2}-\d{2}$/.test(trimmed)) return `${new Date().getFullYear()}-${trimmed}`;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+    const [m, d, y] = trimmed.split("/");
+    return `${y}-${m}-${d}`;
+  }
+  if (/^\d{2}\/\d{2}$/.test(trimmed)) {
+    const [m, d] = trimmed.split("/");
+    return `${new Date().getFullYear()}-${m}-${d}`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
+  return fallback;
+}
+
+const SCAN_STEPS = [
+  "Detecting document layout...",
+  "Extracting transactions...",
+  "Categorizing entries...",
+  "Almost there...",
+];
+
+function ScanProgressText() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setStep((s) => (s + 1) % SCAN_STEPS.length), 2400);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <AnimatePresence mode="wait">
+      <motion.p
+        key={step}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.3 }}
+        className="text-xs text-slate-500"
+      >
+        {SCAN_STEPS[step]}
+      </motion.p>
+    </AnimatePresence>
+  );
+}
+
 export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanModalProps) {
   const [state, setState] = useState<ScanState>("upload");
   const [transactions, setTransactions] = useState<ExtractedTransaction[]>([]);
@@ -68,12 +117,6 @@ export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanM
   const processImage = useCallback(async (base64: string) => {
     setState("scanning");
     try {
-      const _res = await api.post<{ receipt: ReceiptScanResult }>("/finance/receipts/scan", {
-        imageBase64: base64,
-      });
-
-      // The receipt endpoint works for statements too — we send a different prompt
-      // Actually, let's use a dedicated statement extraction
       const stmtRes = await api.post<{ receipt: ReceiptScanResult }>("/finance/receipts/scan", {
         imageBase64: base64,
       });
@@ -86,15 +129,13 @@ export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanM
           return;
         }
 
-        // Map items as individual transactions
         const items = r.items || [];
         if (items.length === 0 && r.total) {
-          // Single transaction from receipt
           items.push({ name: r.vendor || "Statement entry", price: r.total, quantity: 1 });
         }
 
         const mapped: ExtractedTransaction[] = items.map((item: ReceiptScanItem) => ({
-          date: r.date || new Date().toISOString().split("T")[0],
+          date: normalizeDate(r.date),
           description: item.name || "Unknown",
           amount: Math.abs(item.price || 0),
           type: (item.price || 0) >= 0 ? "expense" as const : "income" as const,
@@ -114,12 +155,66 @@ export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanM
     }
   }, []);
 
+  const processSpreadsheet = useCallback(async (file: File) => {
+    setState("scanning");
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const csvText = XLSX.utils.sheet_to_csv(sheet);
+
+      const res = await api.post<{ receipt: ReceiptScanResult }>("/finance/receipts/scan", {
+        statementText: csvText,
+      });
+
+      if (res.success && res.data?.receipt) {
+        const r = res.data.receipt;
+        if (r.error) {
+          setErrorMessage(r.message || "Could not read statement");
+          setState("error");
+          return;
+        }
+        const items = r.items || [];
+        if (items.length === 0 && r.total) {
+          items.push({ name: r.vendor || "Statement entry", price: r.total, quantity: 1 });
+        }
+        const mapped: ExtractedTransaction[] = items.map((item: ReceiptScanItem) => ({
+          date: normalizeDate(r.date),
+          description: item.name || "Unknown",
+          amount: Math.abs(item.price || 0),
+          type: (item.price || 0) >= 0 ? "expense" as const : "income" as const,
+          category: (r.category || "other") as FinanceCategory,
+          selected: true,
+        }));
+        setTransactions(mapped);
+        setState("result");
+      } else {
+        setErrorMessage("Failed to scan statement");
+        setState("error");
+      }
+    } catch {
+      setErrorMessage("Failed to process spreadsheet. Please try again.");
+      setState("error");
+    }
+  }, []);
+
   const handleFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
+    const isImage = file.type.startsWith("image/");
+    const isPdf = file.type === "application/pdf";
+    const isSpreadsheet = file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      || file.type === "application/vnd.ms-excel"
+      || file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+
+    if (isSpreadsheet) {
+      processSpreadsheet(file);
+      return;
+    }
+
+    if (!isImage && !isPdf) return;
     const reader = new FileReader();
     reader.onload = (e) => processImage(e.target?.result as string);
     reader.readAsDataURL(file);
-  }, [processImage]);
+  }, [processImage, processSpreadsheet]);
 
   const toggleTransaction = (idx: number) => {
     setTransactions(prev => prev.map((t, i) => i === idx ? { ...t, selected: !t.selected } : t));
@@ -214,10 +309,10 @@ export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanM
                     <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/15 flex items-center justify-center">
                       <Upload className="w-7 h-7 text-violet-400" />
                     </div>
-                    <p className="text-sm font-medium text-white">Upload bank statement image</p>
-                    <p className="text-xs text-slate-500">Supports photos of printed or digital statements</p>
+                    <p className="text-sm font-medium text-white">Upload bank statement</p>
+                    <p className="text-xs text-slate-500">Supports images, PDF, XLS, and XLSX files</p>
                   </div>
-                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+                  <input ref={fileInputRef} type="file" accept="image/*,.pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
                 </div>
 
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-violet-500/5 border border-violet-500/10">
@@ -231,11 +326,99 @@ export function StatementScanModal({ isOpen, onClose, onImport }: StatementScanM
 
             {/* Scanning */}
             {state === "scanning" && (
-              <div className="py-10 flex flex-col items-center gap-4">
-                <Loader2 className="h-10 w-10 text-violet-400 animate-spin" />
-                <p className="text-sm font-medium text-white">Reading statement...</p>
-                <p className="text-xs text-slate-500">Extracting transactions & categories</p>
-              </div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="py-10 flex flex-col items-center gap-6"
+              >
+                {/* Animated scanner orb */}
+                <div className="relative w-28 h-28 flex items-center justify-center">
+                  {/* Outer glow pulse */}
+                  <motion.div
+                    className="absolute inset-0 rounded-full bg-violet-500/10"
+                    animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0, 0.3] }}
+                    transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                  {/* Rotating outer ring */}
+                  <motion.svg
+                    className="absolute inset-0 w-full h-full"
+                    viewBox="0 0 112 112"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                  >
+                    <defs>
+                      <linearGradient id="scanRing1" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.8" />
+                        <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.1" />
+                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="56" cy="56" r="52" fill="none" stroke="url(#scanRing1)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="80 240" />
+                  </motion.svg>
+                  {/* Counter-rotating inner ring */}
+                  <motion.svg
+                    className="absolute inset-2 w-[calc(100%-16px)] h-[calc(100%-16px)]"
+                    viewBox="0 0 96 96"
+                    animate={{ rotate: -360 }}
+                    transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
+                  >
+                    <defs>
+                      <linearGradient id="scanRing2" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#c4b5fd" stopOpacity="0" />
+                        <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.6" />
+                        <stop offset="100%" stopColor="#7c3aed" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="48" cy="48" r="44" fill="none" stroke="url(#scanRing2)" strokeWidth="1" strokeLinecap="round" strokeDasharray="50 230" />
+                  </motion.svg>
+                  {/* Inner glass orb */}
+                  <motion.div
+                    className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 via-purple-500/10 to-fuchsia-500/20 border border-violet-400/20 backdrop-blur-xl flex items-center justify-center shadow-[0_0_40px_rgba(139,92,246,0.15)]"
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    {/* Scan line sweep */}
+                    <motion.div
+                      className="absolute inset-0 rounded-2xl overflow-hidden"
+                      style={{ maskImage: "linear-gradient(to bottom, transparent, white, transparent)" }}
+                    >
+                      <motion.div
+                        className="absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-violet-400/80 to-transparent"
+                        animate={{ top: ["0%", "100%", "0%"] }}
+                        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                      />
+                    </motion.div>
+                    {/* Document icon */}
+                    <FileSpreadsheet className="w-7 h-7 text-violet-300" />
+                  </motion.div>
+                  {/* Orbiting particles */}
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute w-1.5 h-1.5 rounded-full bg-violet-400"
+                      style={{ top: "50%", left: "50%" }}
+                      animate={{
+                        x: [0, Math.cos((i * 2 * Math.PI) / 3) * 48, 0],
+                        y: [0, Math.sin((i * 2 * Math.PI) / 3) * 48, 0],
+                        opacity: [0, 0.8, 0],
+                        scale: [0.5, 1, 0.5],
+                      }}
+                      transition={{
+                        duration: 3,
+                        repeat: Infinity,
+                        delay: i * 1,
+                        ease: "easeInOut",
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Text with shimmer */}
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-sm font-semibold text-white">Reading statement...</p>
+                  <ScanProgressText />
+                </div>
+              </motion.div>
             )}
 
             {/* Result */}
