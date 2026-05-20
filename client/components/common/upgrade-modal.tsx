@@ -6,7 +6,6 @@ import {
   Sparkles,
   Zap,
   X,
-  Check,
   ArrowRight,
   MessageSquare,
   Brain,
@@ -30,50 +29,106 @@ const REASON_CONFIG: Record<
     title: string;
     subtitle: string;
     icon: typeof Crown;
-    gradient: string;
-    bgGradient: string;
-    border: string;
+    accentHsl: string;
     cta: string;
   }
 > = {
   credits_exhausted: {
-    title: "You've Used All Your Tokens",
-    subtitle:
-      "You started with 100 free tokens to explore the full platform. Upgrade to keep the momentum going!",
+    title: "Your Tokens Have Run Out",
+    subtitle: "You explored brilliantly. Upgrade to keep the momentum going.",
     icon: Zap,
-    gradient: "from-amber-500 to-orange-500",
-    bgGradient: "from-amber-500/10 to-orange-500/10",
-    border: "border-amber-500/30",
+    accentHsl: "36 80% 55%",
     cta: "Upgrade Now",
   },
   feature_disabled: {
-    title: "Premium Feature",
-    subtitle:
-      "This feature requires an active subscription. Upgrade to unlock the full power of your AI health coach.",
+    title: "Unlock This Experience",
+    subtitle: "This capability lives in Pro. Upgrade to unlock SIA’s full intelligence.",
     icon: Crown,
-    gradient: "from-violet-500 to-purple-500",
-    bgGradient: "from-violet-500/10 to-purple-500/10",
-    border: "border-violet-500/30",
+    accentHsl: "30 40% 64%",
     cta: "View Plans",
   },
   limit_reached: {
-    title: "Daily Limit Reached",
-    subtitle:
-      "You've reached your daily usage limit. Upgrade for unlimited access to all features.",
+    title: "You’ve Reached Today’s Limit",
+    subtitle: "Upgrade for unlimited access to everything SIA can do.",
     icon: Sparkles,
-    gradient: "from-cyan-500 to-blue-500",
-    bgGradient: "from-cyan-500/10 to-blue-500/10",
-    border: "border-cyan-500/30",
+    accentHsl: "200 70% 55%",
     cta: "Upgrade Now",
   },
 };
 
 const PRO_FEATURES = [
-  { icon: MessageSquare, label: "Unlimited AI coaching" },
-  { icon: Brain, label: "Advanced analytics & insights" },
-  { icon: Mic, label: "Voice AI assistant" },
-  { icon: BarChart3, label: "Full workout & nutrition plans" },
+  { icon: MessageSquare, label: "Unlimited coaching conversations", desc: "No daily caps" },
+  { icon: Brain, label: "Deep analytics & insights", desc: "Cross-domain intelligence" },
+  { icon: Mic, label: "Voice sessions with SIA", desc: "Real-time coaching calls" },
+  { icon: BarChart3, label: "Personalized action plans", desc: "Workout, nutrition & more" },
 ];
+
+function OrbitalRing({ size, duration, delay, accent }: { size: number; duration: number; delay: number; accent: string }) {
+  return (
+    <motion.div
+      className="absolute rounded-full"
+      style={{
+        width: size,
+        height: size,
+        top: "50%",
+        left: "50%",
+        marginTop: -size / 2,
+        marginLeft: -size / 2,
+        border: `1px solid hsl(${accent} / 0.12)`,
+      }}
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={{ opacity: 1, scale: 1, rotate: 360 }}
+      transition={{
+        opacity: { delay, duration: 0.6 },
+        scale: { delay, duration: 0.8, type: "spring", damping: 20 },
+        rotate: { delay, duration, repeat: Infinity, ease: "linear" },
+      }}
+    >
+      <motion.div
+        className="absolute w-1.5 h-1.5 rounded-full"
+        style={{
+          background: `hsl(${accent})`,
+          boxShadow: `0 0 8px 2px hsl(${accent} / 0.5)`,
+          top: -3,
+          left: "50%",
+          marginLeft: -3,
+        }}
+        animate={{ opacity: [0.4, 1, 0.4] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </motion.div>
+  );
+}
+
+function AnimatedCounter({ value, suffix = "" }: { value: string; suffix?: string }) {
+  return (
+    <span className="tabular-nums font-medium text-[hsl(30,40%,64%)]">
+      {value}{suffix}
+    </span>
+  );
+}
+
+function PulseBeacon({ accent }: { accent: string }) {
+  return (
+    <div className="absolute inset-0 rounded-full pointer-events-none">
+      {[0, 1, 2].map((i) => (
+        <motion.div
+          key={i}
+          className="absolute inset-0 rounded-full"
+          style={{ border: `1px solid hsl(${accent} / 0.3)` }}
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{ scale: [1, 2.2], opacity: [0.4, 0] }}
+          transition={{
+            duration: 3,
+            repeat: Infinity,
+            delay: i * 1,
+            ease: "easeOut",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export function UpgradeModal({
   isOpen,
@@ -84,206 +139,283 @@ export function UpgradeModal({
   const router = useRouter();
   const config = REASON_CONFIG[reason];
   const Icon = config.icon;
+  const accent = config.accentHsl;
 
   const handleUpgrade = () => {
     onClose();
     router.push("/subscription");
   };
 
+  const spring = { type: "spring" as const, damping: 28, stiffness: 260 };
+  const softSpring = { type: "spring" as const, damping: 30, stiffness: 200 };
+
   return (
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — deep blur with grain */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
+            className="fixed inset-0 z-50"
+            style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px) saturate(0.8)" }}
           />
 
-          {/* Modal */}
+          {/* Modal container */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.85, y: 30 }}
+            initial={{ opacity: 0, scale: 0.88, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.85, y: 30 }}
-            transition={{ type: "spring", damping: 22, stiffness: 280 }}
+            exit={{ opacity: 0, scale: 0.92, y: 20 }}
+            transition={spring}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
             <div
-              className={`
-                relative w-full max-w-md pointer-events-auto
-                bg-slate-900/95 backdrop-blur-xl rounded-3xl
-                border ${config.border} shadow-2xl overflow-hidden
-              `}
+              className="relative w-full max-w-[380px] pointer-events-auto overflow-hidden"
+              style={{
+                background: "linear-gradient(170deg, #141416 0%, #0A0A0B 40%, #0D0B09 100%)",
+                borderRadius: 20,
+                border: `1px solid hsl(${accent} / 0.1)`,
+                boxShadow: `
+                  0 0 0 1px rgba(255,255,255,0.03),
+                  0 24px 80px -12px rgba(0,0,0,0.7),
+                  0 0 120px -40px hsl(${accent} / 0.15)
+                `,
+              }}
             >
-              {/* Gradient glow */}
+              {/* Top accent line */}
+              <motion.div
+                className="absolute top-0 left-0 right-0 h-[1px]"
+                style={{
+                  background: `linear-gradient(90deg, transparent 10%, hsl(${accent} / 0.5) 50%, transparent 90%)`,
+                }}
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ delay: 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+              />
+
+              {/* Ambient warm glow — top right */}
               <div
-                className={`absolute inset-0 bg-gradient-to-br ${config.bgGradient} opacity-40`}
+                className="absolute -top-32 -right-32 w-64 h-64 rounded-full blur-3xl pointer-events-none"
+                style={{ background: `radial-gradient(circle, hsl(${accent} / 0.08) 0%, transparent 70%)` }}
               />
 
-              {/* Animated orbs */}
-              <motion.div
-                animate={{
-                  scale: [1, 1.3, 1],
-                  opacity: [0.2, 0.4, 0.2],
-                }}
-                transition={{ duration: 4, repeat: Infinity }}
-                className={`absolute -top-24 -right-24 w-48 h-48 bg-gradient-to-br ${config.gradient} rounded-full blur-3xl`}
-              />
-              <motion.div
-                animate={{
-                  scale: [1.2, 1, 1.2],
-                  opacity: [0.15, 0.3, 0.15],
-                }}
-                transition={{ duration: 5, repeat: Infinity }}
-                className={`absolute -bottom-24 -left-24 w-48 h-48 bg-gradient-to-br ${config.gradient} rounded-full blur-3xl`}
-              />
-
-              {/* Close button */}
-              <button
+              {/* Close */}
+              <motion.button
                 onClick={onClose}
-                className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors z-10"
+                className="absolute top-3.5 right-3.5 z-10 p-1.5 rounded-full transition-colors"
+                style={{ background: "rgba(255,255,255,0.04)" }}
+                whileHover={{ background: "rgba(255,255,255,0.08)", scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <X className="w-4 h-4 text-slate-400" />
-              </button>
+                <X className="w-4 h-4" style={{ color: "rgba(245,245,247,0.35)" }} />
+              </motion.button>
 
               {/* Content */}
-              <div className="relative p-8">
-                {/* Icon */}
-                <motion.div
-                  initial={{ scale: 0, rotate: -180 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{
-                    type: "spring",
-                    delay: 0.1,
-                    damping: 12,
-                  }}
-                  className="mx-auto mb-5 w-20 h-20 relative"
-                >
+              <div className="relative px-7 pt-8 pb-6">
+
+                {/* === Orbital icon system === */}
+                <div className="relative mx-auto mb-6 w-[100px] h-[100px]">
+                  <OrbitalRing size={100} duration={20} delay={0.1} accent={accent} />
+                  <OrbitalRing size={74} duration={14} delay={0.25} accent={accent} />
+
+                  <PulseBeacon accent={accent} />
+
+                  {/* Core icon */}
                   <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 10,
-                      repeat: Infinity,
-                      ease: "linear",
+                    className="absolute flex items-center justify-center"
+                    style={{
+                      width: 52,
+                      height: 52,
+                      top: "50%",
+                      left: "50%",
+                      marginTop: -26,
+                      marginLeft: -26,
+                      borderRadius: 16,
+                      background: `linear-gradient(135deg, hsl(${accent} / 0.2) 0%, hsl(${accent} / 0.05) 100%)`,
+                      border: `1px solid hsl(${accent} / 0.2)`,
+                      boxShadow: `0 0 30px hsl(${accent} / 0.15), inset 0 1px 0 hsl(${accent} / 0.1)`,
                     }}
-                    className={`absolute inset-0 rounded-full border-2 border-dashed ${config.border}`}
-                  />
-                  <div
-                    className={`absolute inset-2 rounded-full bg-gradient-to-br ${config.gradient} flex items-center justify-center shadow-lg`}
+                    initial={{ scale: 0, rotate: -30 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ ...softSpring, delay: 0.15 }}
                   >
-                    <Icon className="w-8 h-8 text-white" />
-                  </div>
-                </motion.div>
+                    <motion.div
+                      animate={{ scale: [1, 1.08, 1] }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <Icon className="w-6 h-6" style={{ color: `hsl(${accent})` }} />
+                    </motion.div>
+                  </motion.div>
+                </div>
 
-                {/* Title */}
-                <motion.h2
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 }}
-                  className="text-xl font-bold text-white text-center mb-2"
-                >
-                  {config.title}
-                </motion.h2>
-
+                {/* Feature badge */}
                 {featureName && (
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                     className="flex justify-center mb-3"
                   >
                     <span
-                      className={`text-xs font-medium px-3 py-1 rounded-full bg-gradient-to-r ${config.gradient} text-white/90`}
+                      className="text-[10px] font-semibold uppercase tracking-[0.12em] px-3 py-1 rounded-full"
+                      style={{
+                        color: `hsl(${accent})`,
+                        background: `hsl(${accent} / 0.08)`,
+                        border: `1px solid hsl(${accent} / 0.15)`,
+                      }}
                     >
                       {featureName}
                     </span>
                   </motion.div>
                 )}
 
-                <motion.p
+                {/* Title */}
+                <motion.h2
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="text-sm text-slate-400 text-center mb-6 leading-relaxed"
+                  transition={{ delay: 0.18, ...softSpring }}
+                  className="text-center mb-2"
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 600,
+                    color: "#F5F5F7",
+                    letterSpacing: "-0.01em",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {config.title}
+                </motion.h2>
+
+                <motion.p
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.22 }}
+                  className="text-center mb-6"
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                    color: "rgba(245,245,247,0.45)",
+                  }}
                 >
                   {config.subtitle}
                 </motion.p>
 
-                {/* Pro features */}
+                {/* === Feature cards === */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.25 }}
-                  className="bg-white/5 rounded-2xl p-4 mb-6 space-y-3"
+                  transition={{ delay: 0.26 }}
+                  className="mb-6 space-y-2"
                 >
-                  <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Pro includes
-                  </p>
                   {PRO_FEATURES.map((feat, i) => (
                     <motion.div
                       key={feat.label}
-                      initial={{ opacity: 0, x: -10 }}
+                      initial={{ opacity: 0, x: -12 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + i * 0.06 }}
-                      className="flex items-center gap-3"
+                      transition={{ delay: 0.3 + i * 0.07, ...softSpring }}
+                      className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-colors cursor-default"
+                      style={{
+                        background: "rgba(255,255,255,0.02)",
+                        border: "1px solid rgba(255,255,255,0.04)",
+                      }}
                     >
                       <div
-                        className={`w-7 h-7 rounded-lg bg-gradient-to-br ${config.gradient} flex items-center justify-center flex-shrink-0`}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{
+                          background: `hsl(${accent} / 0.08)`,
+                          border: `1px solid hsl(${accent} / 0.1)`,
+                        }}
                       >
-                        <feat.icon className="w-3.5 h-3.5 text-white" />
+                        <feat.icon className="w-4 h-4" style={{ color: `hsl(${accent} / 0.8)` }} />
                       </div>
-                      <span className="text-sm text-slate-300">
-                        {feat.label}
-                      </span>
-                      <Check className="w-4 h-4 text-emerald-400 ml-auto flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium" style={{ color: "rgba(245,245,247,0.85)" }}>
+                          {feat.label}
+                        </p>
+                        <p className="text-[11px]" style={{ color: "rgba(245,245,247,0.3)" }}>
+                          {feat.desc}
+                        </p>
+                      </div>
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: 0.5 + i * 0.08, type: "spring", damping: 15, stiffness: 300 }}
+                        className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{
+                          background: `hsl(${accent} / 0.12)`,
+                          border: `1px solid hsl(${accent} / 0.2)`,
+                        }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <motion.path
+                            d="M2 5.5L4 7.5L8 3"
+                            stroke={`hsl(${accent})`}
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ delay: 0.6 + i * 0.08, duration: 0.4, ease: "easeOut" }}
+                          />
+                        </svg>
+                      </motion.div>
                     </motion.div>
                   ))}
                 </motion.div>
 
-                {/* CTA buttons */}
-                <div className="flex flex-col gap-3">
-                  <motion.button
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleUpgrade}
-                    className={`
-                      w-full py-3.5 rounded-xl font-semibold text-white text-sm
-                      bg-gradient-to-r ${config.gradient}
-                      shadow-lg hover:shadow-xl transition-shadow
-                      flex items-center justify-center gap-2
-                    `}
-                  >
-                    {config.cta}
-                    <ArrowRight className="w-4 h-4" />
-                  </motion.button>
+                {/* === CTA Button === */}
+                <motion.button
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.55, ...softSpring }}
+                  whileHover={{ scale: 1.015, y: -1 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleUpgrade}
+                  className="relative w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 overflow-hidden"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${accent}) 0%, hsl(${accent} / 0.85) 100%)`,
+                    color: "#0A0A0B",
+                    boxShadow: `0 4px 24px hsl(${accent} / 0.25), 0 1px 3px hsl(${accent} / 0.3)`,
+                  }}
+                >
+                  {/* Shimmer sweep */}
+                  <motion.div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.2) 50%, transparent 60%)",
+                    }}
+                    initial={{ x: "-100%" }}
+                    animate={{ x: "200%" }}
+                    transition={{ delay: 1.2, duration: 1.2, ease: "easeInOut", repeat: Infinity, repeatDelay: 4 }}
+                  />
+                  <span className="relative z-10">{config.cta}</span>
+                  <ArrowRight className="w-4 h-4 relative z-10" />
+                </motion.button>
 
-                  <motion.button
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.45 }}
-                    onClick={onClose}
-                    className="w-full py-2.5 text-sm text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    Maybe later
-                  </motion.button>
-                </div>
+                {/* Dismiss */}
+                <motion.button
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.6 }}
+                  onClick={onClose}
+                  className="w-full mt-2.5 py-2 text-[12px] transition-colors text-center"
+                  style={{ color: "rgba(245,245,247,0.2)" }}
+                >
+                  Maybe later
+                </motion.button>
 
-                {/* Starting price */}
+                {/* Price anchor */}
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className="text-center text-xs text-slate-500 mt-3"
+                  transition={{ delay: 0.65 }}
+                  className="text-center mt-1.5"
+                  style={{ fontSize: 11, color: "rgba(245,245,247,0.18)" }}
                 >
-                  Starting at{" "}
-                  <span className="text-slate-300 font-medium">$9.99/mo</span>{" "}
-                  &middot; Cancel anytime
+                  From <AnimatedCounter value="$9.99" suffix="/mo" /> &middot; Cancel anytime
                 </motion.p>
               </div>
             </div>
