@@ -282,9 +282,23 @@ function CentralHub({ activeIndex }: { activeIndex: number }) {
 
       {/* Core hub */}
       <div className="relative z-10">
+        {/* Outer bloom — large soft glow */}
         <motion.div
-          className="absolute -inset-6 rounded-full blur-[30px] bg-primary/20"
-          animate={{ opacity: [0.3, 0.6, 0.3], scale: [0.9, 1.1, 0.9] }}
+          className="absolute -inset-16 rounded-full blur-[80px] bg-primary/15"
+          animate={{ opacity: [0.15, 0.35, 0.15], scale: [0.85, 1.15, 0.85] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        />
+        {/* Inner bloom — tighter, brighter */}
+        <motion.div
+          className="absolute -inset-6 rounded-full blur-[30px] bg-primary/25"
+          animate={{ opacity: [0.4, 0.7, 0.4], scale: [0.9, 1.1, 0.9] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        />
+
+        {/* Outer ring pulse */}
+        <motion.div
+          className="absolute -inset-4 rounded-full border border-primary/20"
+          animate={{ scale: [1, 1.25, 1], opacity: [0.4, 0, 0.4] }}
           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         />
 
@@ -362,12 +376,17 @@ function IntegrationCard({
         "integration-card group relative rounded-2xl border overflow-hidden cursor-pointer transition-all duration-500",
         isActive
           ? "border-white/20 bg-white/[0.07]"
-          : "border-white/[0.12] bg-white/[0.07] hover:border-white/15"
+          : "border-white/[0.12] bg-white/[0.07] hover:border-white/20"
       )}
+      style={{
+        boxShadow: isActive
+          ? `0 0 30px -5px ${integration.accent}40, inset 0 1px 0 rgba(255,255,255,0.06)`
+          : "inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
       onClick={onClick}
       whileHover={{
         y: -4,
-        boxShadow: `0 0 40px -10px ${integration.accent}33, 0 0 0 1px rgba(255,255,255,0.08)`,
+        boxShadow: `0 0 40px -10px ${integration.accent}55, 0 0 0 1px rgba(255,255,255,0.12), inset 0 1px 0 rgba(255,255,255,0.06)`,
       }}
       transition={{ duration: 0.25 }}
     >
@@ -416,6 +435,10 @@ function IntegrationCard({
               </h4>
               <motion.div
                 className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"
+                style={{
+                  boxShadow:
+                    "0 0 4px rgba(16,185,129,0.6), 0 0 8px rgba(16,185,129,0.3)",
+                }}
                 animate={{
                   scale: [1, 1.3, 1],
                   opacity: [0.7, 1, 0.7],
@@ -526,6 +549,11 @@ export function IntegrationsSection() {
       ref={sectionRef}
       className="relative py-24 md:py-32 lg:py-40 overflow-hidden"
     >
+      {/* Section divider — top */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+      {/* Section divider — bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+
       {/* Background */}
       <div className="absolute inset-0 -z-10">
         <AnimatedGradientMesh intensity={0.15} blur={120} />
@@ -542,11 +570,20 @@ export function IntegrationsSection() {
           duration={0.7}
           className="text-center max-w-4xl mx-auto mb-10 md:mb-14"
         >
+          <p
+            className="text-[11px] sm:text-xs font-semibold tracking-[0.25em] uppercase mb-4"
+            style={{ color: "hsl(40 80% 60%)" }}
+          >
+            Connected Ecosystem
+          </p>
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-xs sm:text-sm font-medium text-primary mb-6">
             <Link2 className="w-3.5 h-3.5" />
             Integrations
           </div>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.1]">
+          <h2
+            className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.1]"
+            style={{ fontFamily: "var(--font-instrument-serif, serif)" }}
+          >
             Your life data,{" "}
             <span className="bg-gradient-to-r from-primary via-purple-400 to-pink-400 bg-clip-text text-transparent">
               unified

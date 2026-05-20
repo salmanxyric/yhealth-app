@@ -190,6 +190,16 @@ Return ONLY the updated page body in markdown.`;
       }
     }
 
+    const pageId = existingPage?.id;
+    if (pageId) {
+      await wikiService.addSources(pageId, [{
+        sourceType: 'activity_event',
+        sourceId: `${event.domain}-${event.eventType}-${Date.now()}`,
+        sourceTable: 'activity_events',
+        extractSummary: `${event.domain}: ${event.summary}`.slice(0, 500),
+      }]);
+    }
+
     logger.info('[ActivitySynth] Domain wiki updated', {
       userId: event.userId,
       domain: event.domain,

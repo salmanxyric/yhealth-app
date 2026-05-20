@@ -13,6 +13,7 @@ import {
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { modelFactory } from './model-factory.service.js';
 import { logger } from './logger.service.js';
+import { getTokenParameter } from '../utils/openai-tokens.util.js';
 import { vectorEmbeddingService } from './vector-embedding.service.js';
 import { embeddingQueueService } from './embedding-queue.service.js';
 import { createTools } from './langgraph-tools.service.js';
@@ -48,7 +49,10 @@ import OpenAI from 'openai';
 import { env } from '../config/env.config.js';
 import { routeCoachIntent } from './life-area-intent-router.service.js';
 import type { ToolTurnContext } from '../types/tool-turn-context.js';
-import { buildPersonaDirectiveBlock } from './coach-persona-prompt.service.js';
+import { buildPersonaDirectiveBlock, buildDynamicPersonaPrompt } from './coach-persona-prompt.service.js';
+import { emotionalIntelligenceService } from './emotional-intelligence.service.js';
+import { personaSelectorService } from './persona-selector.service.js';
+import type { EmotionalContext, PersonaDirective } from '@shared/types/domain/emotional-intelligence.js';
 import { adaptiveCoachingLoopService } from './adaptive-coaching-loop.service.js';
 import {
   formatUserLocalDateTime,
@@ -83,7 +87,7 @@ async function lifeAreaRouterLlm(prompt: string): Promise<string> {
         { role: 'user', content: prompt },
       ],
       temperature: 0,
-      max_tokens: 200,
+      ...getTokenParameter(model, 200),
     });
     return res.choices[0]?.message?.content ?? '';
   } catch {
@@ -141,10 +145,10 @@ interface RecentActivity {
 // SYSTEM PROMPT
 // ============================================
 
-const BASE_HUMAN_LIKE_PROMPT = `You are **Cia**, an advanced AI life coach helping users improve every dimension of their life — health, fitness, nutrition, career, finances, relationships, faith, education, creativity, and personal growth.
+const BASE_HUMAN_LIKE_PROMPT = `You are **SIA**, an advanced AI life intelligence helping users improve every dimension of their life — health, fitness, nutrition, career, finances, relationships, faith, education, creativity, and personal growth.
 
 ## IDENTITY & ROLE
-- You are Cia — a long-term life coaching partner, not a generic assistant.
+- You are SIA — a long-term life coaching partner, not a generic assistant.
 - Health, fitness, and nutrition are your data-rich specialties (wearables, workout logs, meal data). But you coach across ALL life domains.
 - Think of yourself as a trusted friend who is an expert in personal development.
 - Proactively check on progress, celebrate wins, and provide accountability for ALL goals (fitness, financial, faith, career, etc.).
@@ -584,6 +588,12 @@ class LangGraphChatbotService {
       .catch((error) => {
         logger.warn('[LangGraphChatbot] Wiki init failed (non-critical)', { error, userId });
       });
+
+    wikiIngestService
+      .ingestFromConversation(userId, conversationId)
+      .catch((error) => {
+        logger.warn('[LangGraphChatbot] Wiki conversation ingest failed (non-critical)', { error, userId });
+      });
   }
 
   // ============================================================
@@ -949,11 +959,11 @@ class LangGraphChatbotService {
         ? result.rows[0].voice_assistant_name.trim()
         : null;
 
-      // Return user-assigned name or default to "Cia"
-      return assistantName || 'Cia';
+      // Return user-assigned name or default to "SIA"
+      return assistantName || 'SIA';
     } catch (error) {
       logger.error('[LangGraphChatbot] Error getting assistant name', { userId, error });
-      return 'Cia'; // Default fallback
+      return 'SIA'; // Default fallback
     }
   }
 
@@ -1329,6 +1339,27 @@ class LangGraphChatbotService {
   }
 
   /**
+   * Classify the broad topic domain of a user message for persona selection.
+   */
+  private classifyTopicDomain(message: string): string {
+    const lower = message.toLowerCase();
+    const domainKeywords: Record<string, string[]> = {
+      fitness: ['workout', 'exercise', 'gym', 'run', 'lift', 'training', 'muscle', 'cardio'],
+      nutrition: ['meal', 'food', 'diet', 'calories', 'macro', 'protein', 'eat', 'cook', 'recipe'],
+      health: ['sleep', 'recovery', 'hrv', 'rest', 'fatigue', 'energy', 'sick', 'pain'],
+      career: ['work', 'job', 'career', 'boss', 'interview', 'promotion', 'business', 'startup', 'founder'],
+      finance: ['money', 'budget', 'saving', 'invest', 'expense', 'income', 'debt', 'financial'],
+      spirituality: ['meaning', 'purpose', 'faith', 'prayer', 'spiritual', 'meditat', 'values', 'existential'],
+      productivity: ['focus', 'productiv', 'procrastinat', 'time manage', 'deep work', 'schedule', 'todo'],
+    };
+
+    for (const [domain, keywords] of Object.entries(domainKeywords)) {
+      if (keywords.some(k => lower.includes(k))) return domain;
+    }
+    return 'general';
+  }
+
+  /**
    * Generate professional off-topic response
    */
   private generateOffTopicResponse(userName: string | null): string {
@@ -1461,7 +1492,7 @@ class LangGraphChatbotService {
 
   /**
    * Build a system prompt section from the pre-computed daily analysis report.
-   * This gives Cia ready-made insights so she doesn't need to "look into it".
+   * This gives SIA ready-made insights so she doesn't need to "look into it".
    */
   private buildDailyAnalysisSection(report: DailyAnalysisReport): string {
     const sections: string[] = [];
@@ -1926,13 +1957,14 @@ class LangGraphChatbotService {
     wellnessQuestion?: { question: string; type: string; context?: string },
     promptTier: 'minimal' | 'standard' | 'deep' = 'deep',
     userMessage?: string,
+    personaDirective?: PersonaDirective,
   ): Promise<string> {
     const startTime = Date.now();
     const emptyContext = this.getEmptyComprehensiveContext();
 
     const defaults = {
       userName: null as string | null,
-      assistantName: 'Cia',
+      assistantName: 'SIA',
       userTimezone: 'UTC',
       recentActivity: {} as RecentActivity,
       comprehensiveContext: emptyContext,
@@ -2142,11 +2174,11 @@ class LangGraphChatbotService {
     const personalizedContext = contextParts.join(' ');
 
     // Build full system prompt with user-assigned assistant name
-    // Replace "Cia" with the user's assigned name in the base prompt
-    let systemPrompt = BASE_HUMAN_LIKE_PROMPT.replace(/Cia/g, assistantName).replace(/\*\*Cia\*\*/g, `**${assistantName}**`);
+    // Replace "SIA" with the user's assigned name in the base prompt
+    let systemPrompt = BASE_HUMAN_LIKE_PROMPT.replace(/SIA/g, assistantName).replace(/\*\*SIA\*\*/g, `**${assistantName}**`);
 
     // Add assistant name context with multilingual support
-    systemPrompt += `\n\nYour name is ${assistantName}. Never use "Cia" or any other name. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
+    systemPrompt += `\n\nYour name is ${assistantName}. Never use "SIA" or any other name unless that IS your name. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
 
     // Camera/Vision capability — the user can share live camera frames with you
     systemPrompt += `\n\nCAMERA CAPABILITY: You have the ability to see the user through their camera when they share an image frame with their message. When a camera frame is attached to a message, you CAN see the user. Analyze the image and describe what you observe — the person, their posture, exercise form, food items, environment, etc. NEVER say "I can't see you" or "I don't have visual access" when an image is provided. You ARE a multimodal AI that can process images.`;
@@ -2275,7 +2307,9 @@ class LangGraphChatbotService {
         systemPrompt += `\n\nUSER COMMUNICATION PREFERENCES (respect these strictly):\n${prefParts.join('\n')}`;
       }
 
-      if (userPrefs.aiCoachPersona) {
+      if (personaDirective) {
+        systemPrompt += `\n\n---\nADAPTIVE COACHING PERSONA (dynamically selected based on user's current emotional state):\n${buildDynamicPersonaPrompt(personaDirective)}`;
+      } else if (userPrefs.aiCoachPersona) {
         systemPrompt += `\n\n---\nUSER-SELECTED COACH PERSONA (overrides generic adaptive-tone guidance when they conflict):\n${buildPersonaDirectiveBlock(userPrefs.aiCoachPersona)}`;
       }
     }
@@ -2380,12 +2414,12 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
   private async getFallbackSystemPrompt(userId: string): Promise<string> {
     const [userName, assistantName, userTimezone] = await Promise.all([
       this.getUserName(userId).catch(() => null),
-      this.getAssistantName(userId).catch(() => 'Cia'),
+      this.getAssistantName(userId).catch(() => 'SIA'),
       this.getUserTimezone(userId).catch(() => 'UTC'),
     ]);
     const currentLocalDate = getUserLocalDateISO(userTimezone);
     const currentLocalDateTime = formatUserLocalDateTime(userTimezone);
-    let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/Cia/g, assistantName).replace(/\*\*Cia\*\*/g, `**${assistantName}**`);
+    let prompt = BASE_HUMAN_LIKE_PROMPT.replace(/SIA/g, assistantName).replace(/\*\*SIA\*\*/g, `**${assistantName}**`);
     prompt += `\n\nYour name is ${assistantName}. Respond in whatever language the user writes in. Always use ${assistantName} when introducing yourself.`;
     prompt += `\n\nCURRENT DATE & TIME (AUTHORITATIVE): User timezone ${userTimezone}. Today is ${currentLocalDate} (${currentLocalDateTime}). For schedule tools, omit the date for today or pass "today"; never use an older explicit date unless the user named it.`;
     if (userName) {
@@ -3540,6 +3574,36 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
         };
       }
 
+      // ── Emotional Intelligence Analysis ──
+      let eiContext: EmotionalContext | undefined;
+      let personaDirective: PersonaDirective | undefined;
+      try {
+        const recentMoodLogs = await query<{ state: string; intensity: number; created_at: string }>(
+          `SELECT state, intensity, created_at FROM mood_logs
+           WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5`,
+          [userId],
+        ).then(r => r.rows).catch(() => []);
+
+        eiContext = await emotionalIntelligenceService.analyze({
+          userId,
+          message,
+          conversationHistory: (conversationDataForContext?.messages || [])
+            .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+            .slice(-10)
+            .map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' })),
+          recentMoodLogs,
+          timeOfDay: new Date().getHours(),
+        });
+
+        const topicDomain = this.classifyTopicDomain(message);
+        personaDirective = personaSelectorService.select(eiContext, { domain: topicDomain });
+      } catch (error) {
+        logger.warn('[LangGraphChatbot] EI analysis failed (non-critical)', {
+          error: error instanceof Error ? error.message : 'Unknown',
+          userId,
+        });
+      }
+
       // Retrieve call purpose if callId is provided
       let callPurpose: string | undefined;
       if (callId) {
@@ -3561,7 +3625,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
       (async () => {
         try {
           const trackingResult = await wellbeingAutoTrackerService.extractWellbeingInfo(userId, message);
-          
+
           // Auto-create entries for simple types
           if (trackingResult.entries.length > 0) {
             await wellbeingAutoTrackerService.autoCreateEntries(userId, trackingResult.entries);
@@ -3575,7 +3639,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
           );
           if (isQuestionResponse.isResponse) {
             await this.trackQuestionResponse(userId, true, isQuestionResponse.questionType);
-            
+
             // Enhanced auto-tracking: Extract wellness data from question response
             // This ensures we capture data when users respond to wellness questions
             const responseTrackingResult = await wellbeingAutoTrackerService.extractWellbeingInfo(userId, message);
@@ -3704,6 +3768,7 @@ Respond in the user's language. Always use ${assistantName} as your name in any 
               undefined,
               'deep',
               message,
+              personaDirective,
             );
           } catch (error) {
             logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
@@ -5012,6 +5077,36 @@ I'm listening. What's happening right now?`;
         };
       }
 
+      // ── Emotional Intelligence Analysis ──
+      let streamEiContext: EmotionalContext | undefined;
+      let streamPersonaDirective: PersonaDirective | undefined;
+      try {
+        const recentMoodLogs = await query<{ state: string; intensity: number; created_at: string }>(
+          `SELECT state, intensity, created_at FROM mood_logs
+           WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5`,
+          [userId],
+        ).then(r => r.rows).catch(() => []);
+
+        streamEiContext = await emotionalIntelligenceService.analyze({
+          userId,
+          message,
+          conversationHistory: (conversationDataForContext?.messages || [])
+            .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+            .slice(-10)
+            .map((m: any) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' })),
+          recentMoodLogs,
+          timeOfDay: new Date().getHours(),
+        });
+
+        const topicDomain = this.classifyTopicDomain(message);
+        streamPersonaDirective = personaSelectorService.select(streamEiContext, { domain: topicDomain });
+      } catch (error) {
+        logger.warn('[LangGraphChatbot] EI analysis failed in stream (non-critical)', {
+          error: error instanceof Error ? error.message : 'Unknown',
+          userId,
+        });
+      }
+
       // Use callPurpose from params, or retrieve from callId if not provided (fallback)
       let effectiveCallPurpose = callPurpose;
       if (!effectiveCallPurpose && callId) {
@@ -5033,7 +5128,7 @@ I'm listening. What's happening right now?`;
       (async () => {
         try {
           const trackingResult = await wellbeingAutoTrackerService.extractWellbeingInfo(userId, message);
-          
+
           // Auto-create entries for simple types
           if (trackingResult.entries.length > 0) {
             await wellbeingAutoTrackerService.autoCreateEntries(userId, trackingResult.entries);
@@ -5102,6 +5197,8 @@ I'm listening. What's happening right now?`;
               language,
               undefined, undefined,
               'minimal',
+              undefined,
+              streamPersonaDirective,
             ).catch((error) => {
               logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
               return this.getFallbackSystemPrompt(userId);
@@ -5126,6 +5223,8 @@ I'm listening. What's happening right now?`;
               language,
               undefined, undefined,
               'standard',
+              undefined,
+              streamPersonaDirective,
             ).catch((error) => {
               logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
               return this.getFallbackSystemPrompt(userId);
@@ -5163,6 +5262,7 @@ I'm listening. What's happening right now?`;
               undefined,
               'deep',
               message,
+              streamPersonaDirective,
             ).catch((error) => {
               logger.error('[LangGraphChatbot] buildPersonalizedSystemPrompt failed in stream, using fallback', { userId, error: error instanceof Error ? error.message : 'Unknown' });
               return this.getFallbackSystemPrompt(userId);

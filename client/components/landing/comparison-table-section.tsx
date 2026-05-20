@@ -161,9 +161,13 @@ function Cell({ value, isBalenciaCol }: { value: CellValue; isBalenciaCol?: bool
           className={cn(
             "inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full transition-colors",
             isBalenciaCol
-              ? "bg-primary/20 text-primary shadow-[0_0_12px_-2px_hsl(var(--primary)/0.4)]"
-              : "bg-primary/15 text-primary"
+              ? "bg-gradient-to-br from-primary/25 to-emerald-500/15 text-primary"
+              : "bg-emerald-500/10 text-emerald-400"
           )}
+          style={isBalenciaCol
+            ? { boxShadow: "0 0 14px -2px hsl(var(--primary) / 0.45), inset 0 1px 0 rgba(255,255,255,0.08)" }
+            : { boxShadow: "0 0 10px -3px rgba(52,211,153,0.3)" }
+          }
         >
           <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={2.5} />
         </span>
@@ -173,7 +177,10 @@ function Cell({ value, isBalenciaCol }: { value: CellValue; isBalenciaCol?: bool
   if (value === false) {
     return (
       <td className={cn("p-3 sm:p-4 text-center", isBalenciaCol && "bg-primary/[0.04]")}>
-        <span className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/[0.07] text-muted-foreground/70">
+        <span
+          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-red-500/[0.07] text-red-400/60"
+          style={{ boxShadow: "0 0 8px -3px rgba(239,68,68,0.15)" }}
+        >
           <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </span>
       </td>
@@ -223,11 +230,15 @@ function MobileCategoryCard({ category, index }: { category: Category; index: nu
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-30px" }}
       transition={{ delay: index * 0.08, duration: 0.4 }}
-      className="rounded-2xl border border-white/10 bg-white/[0.07] backdrop-blur-sm overflow-hidden"
+      className="rounded-2xl border border-white/[0.12] bg-gradient-to-b from-white/[0.06] to-white/[0.02] backdrop-blur-md overflow-hidden"
+      style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)" }}
     >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 p-4 text-left"
+        className={cn(
+          "w-full flex items-center gap-3 p-4 text-left transition-colors duration-200",
+          open && "bg-white/[0.03]"
+        )}
       >
         <div className={cn("w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center shrink-0", category.color)}>
           <Icon className="w-4 h-4 text-white" />
@@ -252,21 +263,27 @@ function MobileCategoryCard({ category, index }: { category: Category; index: nu
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           transition={{ duration: 0.3 }}
-          className="border-t border-white/10"
+          className="border-t border-white/[0.08] bg-white/[0.015]"
         >
           {category.rows.map((row) => (
             <div
               key={row.feature}
-              className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.03] last:border-0"
+              className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/[0.03] last:border-0 border-l-2 border-l-primary/20"
             >
               <span className="text-sm text-foreground/80 flex-1">{row.feature}</span>
               <div className="flex items-center gap-1.5 shrink-0">
                 {row.balencia === true ? (
-                  <span className="w-6 h-6 rounded-full bg-primary/20 text-primary inline-flex items-center justify-center">
+                  <span
+                    className="w-6 h-6 rounded-full bg-gradient-to-br from-primary/25 to-emerald-500/15 text-primary inline-flex items-center justify-center"
+                    style={{ boxShadow: "0 0 10px -2px hsl(var(--primary) / 0.4)" }}
+                  >
                     <Check className="w-3 h-3" strokeWidth={3} />
                   </span>
                 ) : (
-                  <span className="w-6 h-6 rounded-full bg-white/[0.07] text-muted-foreground/70 inline-flex items-center justify-center">
+                  <span
+                    className="w-6 h-6 rounded-full bg-red-500/[0.07] text-red-400/60 inline-flex items-center justify-center"
+                    style={{ boxShadow: "0 0 6px -3px rgba(239,68,68,0.15)" }}
+                  >
                     <X className="w-3 h-3" />
                   </span>
                 )}
@@ -365,7 +382,14 @@ export function ComparisonTableSection() {
             Feature Comparison
           </div>
 
-          <h2 className="ct-header-item text-3xl sm:text-4xl md:text-5xl font-bold mb-5 tracking-tight">
+          <p className="ct-header-item text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/60 mb-3">
+            Head-to-head breakdown
+          </p>
+
+          <h2
+            className="ct-header-item text-3xl sm:text-4xl md:text-5xl font-bold mb-5 tracking-tight italic"
+            style={{ fontFamily: "var(--font-instrument-serif, serif)" }}
+          >
             Why <span className="gradient-text-animated">Balencia</span> wins
           </h2>
 
@@ -391,9 +415,10 @@ export function ComparisonTableSection() {
               className={cn(
                 "score-card relative rounded-2xl p-4 sm:p-5 text-center transition-all overflow-hidden",
                 comp.highlight
-                  ? "bg-gradient-to-b from-primary/15 to-primary/5 border-2 border-primary/30 shadow-lg shadow-primary/10"
-                  : "bg-white/[0.03] border border-white/10"
+                  ? "bg-gradient-to-br from-primary/20 via-primary/10 to-emerald-500/5 border-2 border-primary/30"
+                  : "bg-gradient-to-b from-white/[0.05] to-white/[0.02] border border-white/10"
               )}
+              style={comp.highlight ? { boxShadow: "0 0 30px -5px hsl(var(--primary) / 0.25), 0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)" } : { boxShadow: "0 4px 16px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.04)" }}
             >
               {comp.highlight && (
                 <>
@@ -423,7 +448,10 @@ export function ComparisonTableSection() {
 
         {/* Desktop Table */}
         <div className="hidden md:block" ref={tableRef}>
-          <div className="relative overflow-x-auto overflow-y-visible rounded-2xl border border-white/10 bg-white/[0.015] backdrop-blur-sm shadow-2xl shadow-black/10">
+          <div
+            className="relative overflow-x-auto overflow-y-visible rounded-2xl border border-white/[0.12] bg-gradient-to-b from-white/[0.04] to-white/[0.01] backdrop-blur-md shadow-2xl shadow-black/20"
+            style={{ boxShadow: "0 8px 40px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(255,255,255,0.02)" }}
+          >
             {/* Balencia column glow */}
             <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: "calc(200px + (100% - 200px) * 0 / 5)", width: "calc((100% - 200px) / 5)" }}>
               <div className="absolute inset-0 bg-primary/[0.03]" />
@@ -442,7 +470,11 @@ export function ComparisonTableSection() {
                   </th>
                   <th className="p-4 sm:p-5 text-center min-w-[120px]">
                     <div className="flex flex-col items-center gap-1.5">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/15 text-primary text-sm font-bold">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary/70 mb-0.5">Best</span>
+                      <span
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-primary/25 to-emerald-500/15 text-primary text-sm font-bold border border-primary/20"
+                        style={{ boxShadow: "0 0 16px -2px hsl(var(--primary) / 0.3)" }}
+                      >
                         <Crown className="w-3.5 h-3.5" />
                         Balencia
                       </span>
@@ -499,7 +531,8 @@ function CategoryGroup({ category }: { category: Category }) {
         <tr
           key={row.feature}
           className={cn(
-            "comparison-row border-b border-white/[0.04] transition-colors duration-200 hover:bg-white/[0.03] group",
+            "comparison-row border-b border-white/[0.04] transition-all duration-200 hover:bg-white/[0.03] group",
+            "border-l-2 border-l-transparent hover:border-l-primary/50",
             i === category.rows.length - 1 && "border-b-white/10"
           )}
         >

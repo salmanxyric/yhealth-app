@@ -55,7 +55,7 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   isLoading = false,
-  placeholder = 'Ask Cia...',
+  placeholder = 'Ask SIA...',
   disabled = false,
   chatId,
   replyTo,
@@ -84,8 +84,10 @@ export function ChatInput({
 
   useEffect(() => {
     if (editingMessage) {
-      setMessage(editingMessage.content);
-      setTimeout(() => textareaRef.current?.focus(), 0);
+      setTimeout(() => {
+        setMessage(editingMessage.content);
+        textareaRef.current?.focus();
+      }, 0);
     }
   }, [editingMessage]);
 

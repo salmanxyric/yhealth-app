@@ -174,6 +174,7 @@ beforeEach(async () => {
 
   jest.unstable_mockModule('../../../src/lib/user-timezone.js', () => ({
     getUserLocalHour: (...args: unknown[]) => mockGetUserLocalHour(...args),
+    resolveTimeZone: (tz: unknown) => (typeof tz === 'string' && tz) || 'UTC',
   }));
 
   jest.unstable_mockModule('../../../src/utils/ApiError.js', () => {

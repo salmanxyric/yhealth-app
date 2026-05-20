@@ -254,11 +254,12 @@ export function LifeGoalsSection() {
           duration={0.7}
           className="text-center max-w-4xl mx-auto mb-16 md:mb-20"
         >
+          <p className="text-xs tracking-[0.25em] uppercase mb-4" style={{ color: "hsl(40 80% 60%)" }}>LIFE INTELLIGENCE</p>
           <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs sm:text-sm font-medium text-white/70 mb-8 backdrop-blur-sm">
             <Sparkles className="w-3.5 h-3.5 text-primary" />
             Goal Intelligence Engine
           </div>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 tracking-tight leading-[1.08]">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 tracking-tight leading-[1.08]" style={{ fontFamily: "var(--font-instrument-serif, serif)" }}>
             Dream big.{" "}
             <br className="hidden sm:block" />
             <TypewriterText />

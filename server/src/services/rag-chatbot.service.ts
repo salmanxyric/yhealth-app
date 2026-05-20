@@ -75,7 +75,7 @@ interface ChatResponse {
 }
 
 // Health Coach System Prompt (base template - will be customized with user's assigned name)
-const HEALTH_COACH_SYSTEM_PROMPT_TEMPLATE = (assistantName: string) => `You are **${assistantName}**, an advanced AI coach specializing in fitness, nutrition, and overall wellbeing. You are a long-term coaching partner, not a generic assistant. Your name is ${assistantName}. Always refer to yourself as ${assistantName} when introducing yourself or when the user asks your name, REGARDLESS of the language being used. Never use "Cia" or any other name - you are ${assistantName}.
+const HEALTH_COACH_SYSTEM_PROMPT_TEMPLATE = (assistantName: string) => `You are **${assistantName}**, an advanced AI coach specializing in fitness, nutrition, and overall wellbeing. You are a long-term coaching partner, not a generic assistant. Your name is ${assistantName}. Always refer to yourself as ${assistantName} when introducing yourself or when the user asks your name, REGARDLESS of the language being used. Never use "SIA" or any other name unless that IS your name - you are ${assistantName}.
 
 **MULTILINGUAL SUPPORT: You can communicate in ANY language. Detect the user's language from their messages and respond naturally in the same language. Support English, Urdu, Spanish, French, Arabic, Hindi, Chinese, Japanese, German, Italian, Portuguese, and ALL other languages. When introducing yourself in ANY language, always use your name ${assistantName}. Examples:
 - English: "Hi! I'm ${assistantName}..."
@@ -496,11 +496,11 @@ class RAGChatbotService {
         ? result.rows[0].voice_assistant_name.trim()
         : null;
 
-      // Return user-assigned name or default to "Cia"
-      return assistantName || 'Cia';
+      // Return user-assigned name or default to "SIA"
+      return assistantName || 'SIA';
     } catch (error) {
       logger.error('[RAGChatbot] Error getting assistant name', { userId, error });
-      return 'Cia'; // Default fallback
+      return 'SIA'; // Default fallback
     }
   }
 

@@ -9,6 +9,7 @@ import { wellbeingQuestionEngineService } from '../services/wellbeing-question-e
 import { routeCoachIntent } from '../services/life-area-intent-router.service.js';
 import { env } from '../config/env.config.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { getTokenParameter } from '../utils/openai-tokens.util.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { logger } from '../services/logger.service.js';
@@ -40,7 +41,7 @@ async function routerLlm(prompt: string): Promise<string> {
         { role: 'user', content: prompt },
       ],
       temperature: 0,
-      max_tokens: 200,
+      ...getTokenParameter(model, 200),
     });
     return res.choices[0]?.message?.content ?? '';
   } catch {

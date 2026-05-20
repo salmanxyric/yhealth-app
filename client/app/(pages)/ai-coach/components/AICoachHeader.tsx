@@ -18,7 +18,7 @@ export function AICoachHeader({ onToggleSidebar, isSidebarOpen, onOpenIntelligen
       className="relative flex items-center justify-between h-[90px] px-6 lg:px-10 border-b border-white/20 overflow-hidden"
       style={{ background: "#02000f" }}
     >
-      {/* Left: Sidebar toggle + Avatar + Cia info */}
+      {/* Left: Sidebar toggle + Avatar + SIA info */}
       <div className="flex items-center gap-4">
         {/* Sidebar toggle — only visible when sidebar is closed */}
         {!isSidebarOpen && (
@@ -34,18 +34,18 @@ export function AICoachHeader({ onToggleSidebar, isSidebarOpen, onOpenIntelligen
 
         {/* Robot icon */}
         <div className="relative w-[34px] h-[34px] shrink-0">
-          <Image src="/chatai/fi_18525350.svg" alt="Cia" fill className="object-contain" />
+          <Image src="/chatai/fi_18525350.svg" alt="SIA" fill className="object-contain" />
         </div>
 
         {/* Name + subtitle */}
         <div className="flex flex-col gap-1">
           <span className="text-[24px] font-medium italic text-white leading-none">
-            Cia
+            SIA
           </span>
           <div className="flex items-center gap-1 text-[14px] text-white/50 leading-[1.2]">
             <span>Powered by Balancia</span>
             <span>.</span>
-            <span>Always here to help</span>
+            <span>Your life intelligence.</span>
           </div>
         </div>
       </div>

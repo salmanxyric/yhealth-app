@@ -21,7 +21,7 @@ import { AvatarLayer, type AvatarLayerHandle } from "@/components/avatar/AvatarL
 import { VOICE_STATE_TO_AVATAR_STATE } from "@/lib/avatar/vrmMappings";
 import { EmergencyResources } from "../voice-assistant/EmergencyResources";
 import { JarvisLoader } from "@/components/voice-assistant/JarvisLoader";
-import { CiaBrandBadge } from "../voice-assistant/CiaBrandBadge";
+import { SiaBrandBadge } from "../voice-assistant/CiaBrandBadge";
 import { StatusPill } from "../voice-assistant/StatusPill";
 import { TopRightControls } from "../voice-assistant/TopRightControls";
 import { CameraPip } from "../voice-assistant/CameraPip";
@@ -928,12 +928,12 @@ export function VoiceAssistantTab({ callId: initialCallId, callPurpose, onCallEn
 
       {/* Top-left: Brand badge */}
       <div className="absolute z-20" style={{ top: "39px", left: "108px" }}>
-        <CiaBrandBadge name={assistantName || "Cia"} />
+        <SiaBrandBadge name={assistantName || "SIA"} />
       </div>
 
       {/* Top-center: Status pill + call quality */}
       <div className="absolute z-20 flex items-center" style={{ top: "39px", left: "50%", transform: "translateX(-50%)", gap: "8px" }}>
-        <StatusPill name={assistantName || "Cia"} voiceState={voiceState} isConversationActive={isConversationActive} />
+        <StatusPill name={assistantName || "SIA"} voiceState={voiceState} isConversationActive={isConversationActive} />
         <CallQualityIndicator quality={callQuality.quality} visible={isCallActive && callQuality.isMonitoring} />
       </div>
 

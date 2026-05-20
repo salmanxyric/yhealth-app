@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import OpenAI from 'openai';
 import { BaseController } from './base.controller.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { getTokenParameter } from '../utils/openai-tokens.util.js';
 import { ApiError } from '../utils/ApiError.js';
 import {
   aiCoachService,
@@ -43,7 +44,7 @@ async function routerLlm(prompt: string): Promise<string> {
         { role: 'user', content: prompt },
       ],
       temperature: 0,
-      max_tokens: 200,
+      ...getTokenParameter(model, 200),
     });
     return res.choices[0]?.message?.content ?? '';
   } catch {

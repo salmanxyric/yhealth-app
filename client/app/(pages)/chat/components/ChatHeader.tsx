@@ -76,7 +76,7 @@ export function ChatHeader({
   onOpenSettings: _onOpenSettings,
 }: ChatHeaderProps) {
   const router = useRouter();
-  const isAICoach = isAICoachProp ?? (title === 'AI Coach' || title === 'Cia');
+  const isAICoach = isAICoachProp ?? (title === 'AI Coach' || title === 'SIA');
 
   const iconBtnClass = "h-9 w-9 rounded-xl text-slate-500 hover:text-white hover:bg-white/[0.06] border border-transparent hover:border-white/[0.08] transition-all duration-200";
 
