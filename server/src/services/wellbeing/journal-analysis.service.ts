@@ -94,7 +94,7 @@ Return ONLY valid JSON with this structure:
   "growthSignals": ["positive behavioral changes, insights, or breakthroughs"],
   "riskIndicators": ["burnout signals, isolation, negative spirals, etc."],
   "lifePatterns": ["recurring patterns: work-life imbalance, avoidance, perfectionism, etc."],
-  "coachReflection": "A 2-3 sentence empathetic coaching reflection — acknowledge what they shared, highlight a key insight, and offer one gentle observation. Write as Cia the coach, in first person.",
+  "coachReflection": "A 2-3 sentence empathetic coaching reflection — acknowledge what they shared, highlight a key insight, and offer one gentle observation. Write as SIA the coach, in first person.",
   "wikiSummary": "One sentence factual summary of what this entry reveals about the user's current life state."
 }`;
 

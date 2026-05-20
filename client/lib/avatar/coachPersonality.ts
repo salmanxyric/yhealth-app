@@ -52,7 +52,7 @@ export interface MoodProfile {
   ttsRate: number;
   /** TTS pitch multiplier (1.0 = normal) */
   ttsPitch: number;
-  /** Short system-prompt addendum describing how Cia should speak in this mood */
+  /** Short system-prompt addendum describing how SIA should speak in this mood */
   promptAddendum: string;
   /** Label shown in UI / telemetry */
   label: string;

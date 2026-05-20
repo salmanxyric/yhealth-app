@@ -634,7 +634,7 @@ class ComprehensiveUserContextService {
           user_info AS (
             SELECT
               (u.first_name || ' ' || u.last_name) AS user_name,
-              COALESCE(up.voice_assistant_name, 'Cia') AS assistant_name,
+              COALESCE(up.voice_assistant_name, 'SIA') AS assistant_name,
               COALESCE(NULLIF(TRIM(up.ai_coach_persona), ''), 'gentle_friend') AS ai_coach_persona
             FROM users u
             LEFT JOIN user_preferences up ON up.user_id = u.id

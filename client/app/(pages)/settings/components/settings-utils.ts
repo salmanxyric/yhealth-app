@@ -103,7 +103,7 @@ export function localToApiPreferences(localPrefs: UserPreferences, assistantName
       healthProfileAllowedUsers: localPrefs.privacy.healthProfileAllowedUsers,
     },
     voiceAssistant: assistantName ? {
-      assistantName: assistantName.trim() || 'Cia',
+      assistantName: assistantName.trim() || 'SIA',
     } : undefined,
   };
 }

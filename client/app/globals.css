@@ -141,6 +141,27 @@
   --color-cyan-800: #155e75;
   --color-cyan-900: #164e63;
   --color-cyan-950: #083344;
+
+  /* ── Cinematic Landing Tokens ── */
+  --cin-void: #000000;
+  --cin-surface: #0A0A0B;
+  --cin-elevated: #141416;
+  --cin-border: rgba(255, 255, 255, 0.06);
+  --cin-text-primary: #F5F5F7;
+  --cin-text-secondary: rgba(245, 245, 247, 0.6);
+  --cin-sia-accent: #D4A574;
+
+  /* Domain colors (cinematic) */
+  --cin-domain-mental: #8B5CF6;
+  --cin-domain-physical: #10B981;
+  --cin-domain-career: #3B82F6;
+  --cin-domain-relationships: #F43F5E;
+  --cin-domain-financial: #F59E0B;
+  --cin-domain-growth: #D97706;
+  --cin-domain-spiritual: #6366F1;
+  --cin-domain-recreation: #FB7185;
+  --cin-domain-environment: #6EE7B7;
+  --cin-domain-community: #14B8A6;
 }
 
 :root {

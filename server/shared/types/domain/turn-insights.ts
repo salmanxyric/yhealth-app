@@ -5,6 +5,7 @@ import type {
   IntelligenceMemory,
   CoreSection,
 } from './intelligence-files.js';
+import type { EmotionalContext } from './emotional-intelligence.js';
 
 export interface ExtractedMood {
   state: string;
@@ -50,6 +51,7 @@ export interface TurnInsights {
   behavioral_signals: BehavioralSignals | null;
   memory_candidates: MemoryCandidate[];
   core_profile_updates: CoreProfileUpdate[];
+  emotional_context?: EmotionalContext;
 }
 
 export interface SemanticInsight {

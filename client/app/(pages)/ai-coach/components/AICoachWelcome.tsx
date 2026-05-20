@@ -72,7 +72,7 @@ export function AICoachWelcome({ onSuggestionClick }: AICoachWelcomeProps) {
 
         {/* Description */}
         <p className="text-[18px] text-[#9EA2AE] text-center leading-[26px] tracking-[-0.72px] w-full">
-          I&apos;m <span className="italic">Cia</span>, your AI life coach. Ask me about health, fitness, nutrition, finances, career, habits, or anything that matters to you.
+          I&apos;m <span className="italic">SIA</span>, your AI life coach. Ask me about health, fitness, nutrition, finances, career, habits, or anything that matters to you.
         </p>
       </div>
 

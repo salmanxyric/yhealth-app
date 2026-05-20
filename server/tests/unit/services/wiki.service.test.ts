@@ -22,7 +22,7 @@ jest.unstable_mockModule('../../../src/services/logger.service.js', () => ({
   logger: mockLogger,
 }));
 
-const { wikiService } = await import('../../../src/services/wiki.service.js');
+const { wikiService, extractDomainSlugs, extractKeywords } = await import('../../../src/services/wiki.service.js');
 
 // ============================================
 // HELPERS
@@ -128,6 +128,7 @@ describe('WikiService', () => {
       const row = makePageRow();
       mockDbQuery
         .mockResolvedValueOnce({ rows: [row] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] });
 
       await wikiService.createPage('user-1', {
@@ -145,7 +146,7 @@ describe('WikiService', () => {
         }],
       });
 
-      expect(mockDbQuery).toHaveBeenCalledTimes(2);
+      expect(mockDbQuery).toHaveBeenCalledTimes(3);
       expect(mockDbQuery.mock.calls[1][0]).toContain('wiki_page_sources');
     });
 
@@ -376,15 +377,18 @@ describe('WikiService', () => {
   // ------------------------------------------
 
   describe('searchPages', () => {
-    it('should search by ILIKE pattern in title, summary, and body', async () => {
-      const row = { ...makePageRow(), similarity: 1.0 };
+    it('should search by domain keyword routing and keyword matching', async () => {
+      const row = { ...makePageRow(), similarity: 2.0 };
       mockDbQuery.mockResolvedValue({ rows: [row] });
 
-      const results = await wikiService.searchPages('user-1', 'fitness');
+      const results = await wikiService.searchPages('user-1', 'fitness workout');
 
       expect(results).toHaveLength(1);
       expect(results[0].page.slug).toBe('fitness-profile');
-      expect(results[0].similarity).toBe(1.0);
+      expect(results[0].similarity).toBe(2.0);
+      const sql = mockDbQuery.mock.calls[0][0] as string;
+      expect(sql).toContain('slug = ANY');
+      expect(sql).toContain('unnest');
     });
 
     it('should exclude archived pages by default', async () => {
@@ -696,6 +700,83 @@ describe('WikiService', () => {
       const map = await wikiService.resolveLinks('user-1', []);
 
       expect(map.size).toBe(0);
+    });
+  });
+
+  // ------------------------------------------
+  // SEARCH HELPERS
+  // ------------------------------------------
+
+  describe('extractDomainSlugs', () => {
+    it('should map meal-related text to nutrition-profile', () => {
+      const slugs = extractDomainSlugs('I had 1 omelette and 2 rotis for breakfast');
+      expect(slugs).toContain('nutrition-profile');
+    });
+
+    it('should map exercise text to fitness-profile', () => {
+      const slugs = extractDomainSlugs('I went for a run this morning');
+      expect(slugs).toContain('fitness-profile');
+    });
+
+    it('should return multiple slugs for multi-domain text', () => {
+      const slugs = extractDomainSlugs('After my workout I ate chicken and rice');
+      expect(slugs).toContain('fitness-profile');
+      expect(slugs).toContain('nutrition-profile');
+    });
+
+    it('should return empty array for unrelated text', () => {
+      const slugs = extractDomainSlugs('hello how are you');
+      expect(slugs).toHaveLength(0);
+    });
+  });
+
+  describe('extractKeywords', () => {
+    it('should strip stop words and return meaningful tokens', () => {
+      const kw = extractKeywords('I had 1 omelette and 2 rotis for breakfast');
+      expect(kw).toContain('omelette');
+      expect(kw).toContain('rotis');
+      expect(kw).toContain('breakfast');
+      expect(kw).not.toContain('and');
+      expect(kw).not.toContain('for');
+    });
+
+    it('should lowercase all tokens', () => {
+      const kw = extractKeywords('Running in the Morning');
+      expect(kw).toContain('running');
+      expect(kw).toContain('morning');
+    });
+
+    it('should filter tokens shorter than 3 chars', () => {
+      const kw = extractKeywords('I am ok at it');
+      expect(kw).toHaveLength(0);
+    });
+  });
+
+  // ------------------------------------------
+  // ADD SOURCES
+  // ------------------------------------------
+
+  describe('addSources', () => {
+    it('should insert sources and sync evidence_count on wiki_pages', async () => {
+      mockDbQuery.mockResolvedValueOnce({ rows: [] }); // INSERT sources
+      mockDbQuery.mockResolvedValueOnce({ rows: [] }); // UPDATE evidence_count
+
+      await wikiService.addSources('page-1', [
+        { sourceType: 'conversation', sourceId: 'conv-1', sourceTable: 'rag_messages', extractSummary: 'test' },
+      ]);
+
+      expect(mockDbQuery).toHaveBeenCalledTimes(2);
+
+      // Second call should be the evidence_count sync
+      const syncCall = mockDbQuery.mock.calls[1];
+      expect(syncCall[0]).toContain('UPDATE wiki_pages');
+      expect(syncCall[0]).toContain('evidence_count');
+      expect(syncCall[1]).toEqual(['page-1']);
+    });
+
+    it('should skip when sources array is empty', async () => {
+      await wikiService.addSources('page-1', []);
+      expect(mockDbQuery).not.toHaveBeenCalled();
     });
   });
 });
